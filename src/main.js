@@ -196,23 +196,51 @@ function updateBadges() {
 
 const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView" };
 
-function setView(view) {
-  if (!Object.hasOwn(viewIds, view)) view = "home";
-  state.view = view;
-  for (const [name, id] of Object.entries(viewIds)) $(id).hidden = name !== view;
-  // 빠른 검색창은 홈과 매물 찾기에서 함께 쓰므로 지금 화면 쪽으로 옮긴다
-  const dockSlot = $(view === "home" ? "searchSlotHome" : "searchSlotBrowse");
-  const dock = $("machineSearch");
-  if ((view === "home" || view === "browse") && dockSlot && dock && dock.previousElementSibling !== dockSlot) dockSlot.after(dock);
+// 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
+const MAIN_PAGE_VIEWS = ["home", "browse"];
+let scrollSpyPausedUntil = 0;
+
+function markNav(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
     const active = button.dataset.view === view;
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
+}
+
+function setView(view) {
+  if (!Object.hasOwn(viewIds, view)) view = "home";
+  state.view = view;
+  const onMainPage = MAIN_PAGE_VIEWS.includes(view);
+  for (const [name, id] of Object.entries(viewIds)) {
+    $(id).hidden = onMainPage ? !MAIN_PAGE_VIEWS.includes(name) : name !== view;
+  }
+  markNav(view);
   persist();
   if (view === "owner") renderOwner();
-  window.scrollTo({ top: 0 });
+  // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
+  scrollSpyPausedUntil = Date.now() + 1000;
+  if (view === "browse") $("market").scrollIntoView({ behavior: "smooth" });
+  else window.scrollTo({ top: 0 });
+}
+
+// 스크롤 위치에 따라 상단 메뉴의 홈/매물 찾기 표시를 바꾼다
+function initMainPageScrollSpy() {
+  const banner = $("bannerCarousel");
+  const header = document.querySelector(".sidebar");
+  if (!banner) return;
+  const update = () => {
+    if (!MAIN_PAGE_VIEWS.includes(state.view) || Date.now() < scrollSpyPausedUntil) return;
+    const headerHeight = header ? header.offsetHeight : 0;
+    const passedBanner = banner.getBoundingClientRect().bottom - headerHeight < 120;
+    const next = passedBanner ? "browse" : "home";
+    if (next !== state.view) {
+      state.view = next;
+      markNav(next);
+    }
+  };
+  window.addEventListener("scroll", update, { passive: true });
 }
 
 function setTransaction(type) {
@@ -1427,9 +1455,8 @@ function bindEvents() {
     renderListings();
   });
   $("quickSearchBtn")?.addEventListener("click", () => {
-    if (state.view !== "browse") setView("browse");
     renderListings();
-    $("market").scrollIntoView({ behavior: "smooth" });
+    setView("browse");
   });
   $("loginButton")?.addEventListener("click", () => {
     toast("로그인은 준비 중이에요. 지금은 로그인 없이 모든 기능을 써볼 수 있어요.");
@@ -1690,6 +1717,7 @@ function initBannerCarousel() {
 
 bindEvents();
 initBannerCarousel();
+initMainPageScrollSpy();
 setTransaction(state.transaction);
 setView("home");
 renderAll();

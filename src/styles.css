@@ -303,7 +303,7 @@ img {
   width: min(1400px, calc(100% - 2 * var(--gutter)));
   margin-inline: auto;
 }
-#browseView, #homeView { margin-top: -30px; }
+#homeView { margin-top: -30px; }
 
 .hero-card {
   min-height: clamp(370px, 38vw, 545px);
@@ -2633,12 +2633,9 @@ img {
   cursor: pointer;
 }
 .login-button:hover { background: #21653C; }
-/* 매물 찾기 화면에서는 배너가 없으므로 검색창을 위로 겹치지 않게 */
-#browseView .search-dock { margin-top: 58px; }
 @media (max-width: 700px) {
   .nav-item { min-height: 44px; padding: 0 4px; font-size: clamp(11px, 3.15vw, 14px); border-bottom-width: 2px; }
   .topbar-left { gap: 6px; }
   .login-button { min-height: 40px; padding: 0 12px; font-size: 13px; }
   .region-pill { min-height: 40px; padding: 4px 10px; }
-  #browseView .search-dock { margin-top: 46px; }
 }

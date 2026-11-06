@@ -1316,17 +1316,21 @@ async function sendAiQuestion(event) {
       const title = document.createElement("strong");
       title.textContent = "추천 매물 비교";
       comparison.append(title);
-      const shorten = (value) => String(value || "").replace(/\\s+/g, " ").trim().slice(0, 55);
+      const shorten = (value) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 38);
       for (const item of matched) {
         const line = document.createElement("div");
         line.className = "ai-rec-comparison-item";
         const name = document.createElement("strong");
-        name.textContent = "• " + item.title + ":";
+        name.textContent = "• " + (item.id || item.title) + ":";
         line.append(name);
         // Favor short, factual equipment and pickup details over an AI paragraph.
         const features = [shorten(item.included), shorten(item.pickup)].filter(Boolean);
         if (!features.length && result.summaries?.[item.id]) features.push(shorten(result.summaries[item.id]));
-        line.append(document.createTextNode(features.length ? " " + features.join(" · ") : " 상세 정보는 매물 카드에서 확인해 주세요."));
+        line.append(document.createTextNode(features.length ? " " + features.join(" · ") : " 상세 보기에서 확인"));
+        const price = document.createElement("span");
+        price.className = "ai-rec-price";
+        price.textContent = money(item.price) + (item.type === "rent" ? "/일" : "");
+        line.append(price);
         comparison.append(line);
       }
       const info = document.createElement("div");

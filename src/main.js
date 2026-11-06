@@ -1708,11 +1708,25 @@ function bindEvents() {
 
   $("newListingButton").addEventListener("click", openNewListing);
   $("aiLauncher").addEventListener("click", openAiPanel);
-  $("aiClose").addEventListener("click", () => {
+  const closeAiPanel = ({ returnFocus = true } = {}) => {
+    if ($("aiPanel").hidden) return;
     $("aiPanel").hidden = true;
     $("aiLauncher").setAttribute("aria-expanded", "false");
-    $("aiLauncher").focus();
+    if (returnFocus) $("aiLauncher").focus();
+  };
+  $("aiClose").addEventListener("click", () => closeAiPanel());
+  // 농농 상담창 밖의 화면을 누르면 상담창을 자동으로 닫는다
+  // (상담창에서 연 매물 상세·필터 창 안을 누를 때는 닫지 않는다)
+  document.addEventListener("pointerdown", (event) => {
+    if ($("aiPanel").hidden) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("#aiPanel, #aiLauncher, .dialog-backdrop, #toast")) return;
+    closeAiPanel({ returnFocus: false });
   });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !$("aiPanel").hidden && !document.querySelector(".dialog-backdrop:not([hidden])")) closeAiPanel();
+  }, true);
   const aiInput = $("aiInput");
   $("aiForm").addEventListener("submit", sendAiQuestion);
   $("aiReset").addEventListener("click", () => {

@@ -1286,45 +1286,71 @@ async function sendAiQuestion(event) {
       "assistant", result.listingIds,
     );
     if (matched.length) {
+      // Keep two related facts on each row, matching the concise recommendation format.
+      // Construct DOM text nodes instead of interpreting listing data as HTML.
       const overview = document.createElement("div");
       overview.className = "ai-rec-overview";
-      const fields = [
-        ["🥬 작물", CROP_BY_ID[cropId]?.name],
-        ["🛠️ 작업", operations.map((id) => OPERATION_BY_ID[id].label).join(combined ? " + " : " · ")],
-        ["📏 면적", areaPyeong ? Math.round(areaPyeong).toLocaleString("ko-KR") + "평" : ""],
-        ["💰 예산", formatBudget ? (transaction === "rent" ? "하루 " : "") + formatBudget + " 이하" : ""],
-        ["📅 대여 기간", transaction === "rent" ? dateText : ""],
+      const cropName = CROP_BY_ID[cropId]?.name;
+      const workName = operations.map((id) => OPERATION_BY_ID[id].label).join(combined ? " + " : " · ");
+      const rows = [
+        [["🥬 작물", cropName], ["작업", workName]],
+        [["📏 면적", areaPyeong ? Math.round(areaPyeong).toLocaleString("ko-KR") + "평" : ""],
+         ["예산", formatBudget ? (transaction === "rent" ? "하루 " : "") + formatBudget + " 이하" : ""]],
+        [["📅 대여 기간", transaction === "rent" ? dateText : ""]],
       ];
-      for (const [label, value] of fields) {
-        if (!value) continue;
-        const line = document.createElement("div");
-        line.className = "ai-rec-field";
-        const key = document.createElement("strong");
-        key.textContent = label + ": ";
-        line.append(key, document.createTextNode(value));
-        overview.append(line);
+      if (transaction === "sale") rows.push([["거래 방식", "구매"]]);
+      for (const rowFields of rows) {
+        const present = rowFields.filter(([, value]) => value);
+        if (!present.length) continue;
+        const row = document.createElement("div");
+        row.className = "ai-rec-row";
+        for (const [index, [label, value]] of present.entries()) {
+          if (index) {
+            const separator = document.createElement("span");
+            separator.className = "ai-rec-separator";
+            separator.textContent = " | ";
+            row.append(separator);
+          }
+          const labelNode = document.createElement("strong");
+          labelNode.textContent = label + ":";
+          row.append(labelNode, document.createTextNode(" " + value));
+        }
+        overview.append(row);
       }
+
       const comparison = document.createElement("div");
       comparison.className = "ai-rec-comparison";
       const title = document.createElement("strong");
       title.textContent = "추천 매물 비교";
       comparison.append(title);
+      const shorten = (value) => String(value || "").replace(/\\s+/g, " ").trim().slice(0, 55);
       for (const item of matched) {
         const line = document.createElement("div");
-        const summary = result.summaries?.[item.id];
-        const features = summary ? [summary] : [item.included, item.pickup].filter(Boolean);
-        line.textContent = "• " + item.title + (features.length ? ": " + features.join(" · ") : "");
+        line.className = "ai-rec-comparison-item";
+        const name = document.createElement("strong");
+        name.textContent = "• " + item.title + ":";
+        line.append(name);
+        // Favor short, factual equipment and pickup details over an AI paragraph.
+        const features = [shorten(item.included), shorten(item.pickup)].filter(Boolean);
+        if (!features.length && result.summaries?.[item.id]) features.push(shorten(result.summaries[item.id]));
+        line.append(document.createTextNode(features.length ? " " + features.join(" · ") : " 상세 정보는 매물 카드에서 확인해 주세요."));
         comparison.append(line);
       }
       const info = document.createElement("div");
       info.className = "ai-rec-notice";
-      info.textContent = "✅ 선택하신 작업 조건과 예산으로 찾은 매물이에요.";
+      info.textContent = maxPrice
+        ? "✅ 모두 작업 조건과 예산에 맞아요!"
+        : "✅ 모두 작업 조건에 맞아요!";
       const caution = document.createElement("div");
       caution.className = "ai-rec-notice";
-      caution.textContent = "💡 예약 가능 여부와 총 대여료는 확인해 주세요.";
+      caution.textContent = transaction === "rent"
+        ? "💡 예약 가능 여부와 총 대여료는 확인해 주세요."
+        : "💡 거래 가능 여부와 최종 가격은 확인해 주세요.";
       const cards = bubble.querySelector(".ai-result");
-      if (cards) bubble.insertBefore(overview, cards), bubble.insertBefore(comparison, cards), bubble.insertBefore(info, cards), bubble.insertBefore(caution, cards);
-      else bubble.append(overview, comparison, info, caution);
+      for (const section of [overview, comparison, info, caution]) {
+        if (cards) bubble.insertBefore(section, cards);
+        else bubble.append(section);
+      }
     }
     $("aiModeLabel").textContent = result.mode === "ai" ? "AI 요약 · 등록 매물 기반" : "등록 매물 조건 검색";
     if (result.mode === "ai" && result.summaries && typeof result.summaries === "object") {

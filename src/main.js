@@ -1654,7 +1654,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       if (recommendationPending) return;
       aiInput.value = button.dataset.prompt;
-      aiInput.focus();
+      $("aiForm").requestSubmit();
     })
   );
 

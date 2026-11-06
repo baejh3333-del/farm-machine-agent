@@ -1,5 +1,5 @@
 // Interpret dates relative to the day the customer submits their rental request.
-const DATE_PATTERN = /(?<![\d])(?:(\d{4})\s*(?:[-./]|년\s*)\s*)?(\d{1,2})\s*(?:[-./]|월\s*|\s+)\s*(\d{1,2})(?:일)?(?![\d])/g;
+const DATE_PATTERN = /(?<![\d])(?:(\d{4})\s*(?:[-./]|년\s*)\s*)?(?:(\d{2})(\d{2})|(\d{1,2})\s*(?:[-./]|월\s*|\s+)\s*(\d{1,2})(?:일)?)(?![\d])/g;
 
 function formatDate(year, month, day) {
   const value = new Date(0);
@@ -15,7 +15,9 @@ export function readRentalDates(message, today = new Date()) {
   const baseYear = today.getFullYear();
   const baseDate = formatDate(baseYear, today.getMonth() + 1, today.getDate());
   let previous = "";
-  return matches.map(([, explicitYear, rawMonth, rawDay], index) => {
+  return matches.map(([, explicitYear, compactMonth, compactDay, spacedMonth, spacedDay], index) => {
+    const rawMonth = compactMonth || spacedMonth;
+    const rawDay = compactDay || spacedDay;
     const month = Number(rawMonth);
     const day = Number(rawDay);
     if (month < 1 || month > 12 || day < 1 || day > 31) return "";

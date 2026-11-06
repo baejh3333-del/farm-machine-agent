@@ -173,6 +173,40 @@ function pictureIcon(name) {
   return `<img class="picture-icon" src="./src/images/icons/${name}.jpg" alt="" width="32" height="32">`;
 }
 
+function favoriteIcon() {
+  return `<svg class="favorite-icon" viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+    <path fill="#b9703c" stroke="#65391f" stroke-width="1.8" stroke-linejoin="round"
+      d="M2 28c0-2.1 2.1-3.9 4.5-4.8 1.4-2.2 3.6-3.1 6-3.1a8.8 8.8 0 0 1 10.7 0c2.7 0 5 1 6.3 3.1 2.4 1 4.5 2.7 4.5 4.8 0 3.5-5 4.1-8.5 4.1-3.3 1.1-5.7 0-7.5 0s-4.2 1.1-7.5 0C7 32.1 2 31.5 2 28Z"/>
+    <path fill="#9a542a" d="M3.1 28c4.4 1.6 5.9-2.3 9.6-1.7 3.1.4 4.6 3.2 8.8 1.1 3.9-2 4.8-1.4 7.1-.5 1.3.5 2.8.8 4.3.6.4 2.8-3.8 3.6-7.6 3.6-3.1 1-5.5 0-7.3 0s-4.2 1-7.3 0c-3.8 0-7.6-.9-7.6-3.1Z"/>
+    <g fill="#78421f">
+      <circle cx="9" cy="28.4" r=".95"/>
+      <circle cx="13.7" cy="25.4" r=".95"/>
+      <circle cx="23.7" cy="28.5" r=".85"/>
+      <circle cx="27.1" cy="26.3" r=".85"/>
+    </g>
+    <g class="favorite-shoot">
+      <path fill="#9ac921" stroke="#416514" stroke-width="1.8" stroke-linejoin="round"
+        d="M16.7 23.1v-4.4C9.5 19.4 6.1 15 6.2 9.2c5.3-2.6 9.7.3 11.6 4.1 2.3-4.6 7-6.9 12.1-5.4.2 6.4-3.8 10.8-10.6 10.8l-.2 4.4a3 3 0 0 1-2.4 0Z"/>
+      <path fill="none" stroke="#d2ee6b" stroke-width="1.5" stroke-linecap="round"
+        d="M9.3 10.7c1-.3 2.1-.2 3 .2m7.9 4c1-2 2.7-3.6 4.6-4.3"/>
+    </g>
+  </svg>`;
+}
+
+function toggleFavorite(id) {
+  const isFav = !state.favorites.includes(id);
+  state.favorites = isFav ? [...state.favorites, id] : state.favorites.filter((value) => value !== id);
+  persist();
+
+  const escapedId = CSS.escape(id);
+  document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"]`).forEach((button) => {
+    button.setAttribute("aria-pressed", String(isFav));
+    const label = button.querySelector(".favorite-label");
+    if (label) label.textContent = isFav ? "찜한 기계" : "찜하기";
+  });
+  toast(isFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
+}
+
 function machineVisual(item) {
   const type = MACHINE_BY_ID[item.machineType];
   return hasListingPhoto(item)
@@ -653,8 +687,8 @@ function card(item) {
             <span class="art-caption">${hasListingPhoto(item) ? "실제 등록 사진" : `${escapeHtml(machineLabel)} AI 예시 이미지`}</span>
           </div>
         </button>
-        <button type="button" class="card-save ${isFav ? "saved" : ""}" data-favorite="${item.id}" aria-label="${escapeHtml(item.title)} 찜하기 ${isFav ? "해제" : "등록"}">
-          <span aria-hidden="true">${pictureIcon(isFav ? "heart" : "heart-outline")}</span>
+        <button type="button" class="card-save" data-favorite="${item.id}" aria-label="${escapeHtml(item.title)} 찜하기" aria-pressed="${isFav}">
+          ${favoriteIcon()}
         </button>
       </div>
 
@@ -794,8 +828,9 @@ function openDetail(id) {
         </div>
 
         <div class="detail-actions">
-          <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${item.id}">
-            ${isFav ? " 찜한 기계" : " 찜하기"}
+          <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${item.id}" aria-label="찜하기" aria-pressed="${isFav}">
+            ${favoriteIcon()}
+            <span class="favorite-label">${isFav ? "찜한 기계" : "찜하기"}</span>
           </button>
           <button type="button" class="button button-primary button-large" data-detail-action="${item.id}" ${unavailable || booked ? "disabled" : ""}>
             ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? " 이 농기계 대여 신청하기" : " 판매자에게 채팅 문의하기"}
@@ -1572,28 +1607,13 @@ function bindEvents() {
     const detailButton = event.target.closest("[data-detail]");
     if (detailButton) return openDetail(detailButton.dataset.detail);
     const favoriteButton = event.target.closest("[data-favorite]");
-    if (favoriteButton) {
-      const id = favoriteButton.dataset.favorite;
-      state.favorites = state.favorites.includes(id) ? state.favorites.filter((value) => value !== id) : [...state.favorites, id];
-      persist();
-      renderListings();
-      toast(state.favorites.includes(id) ? " 찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
-      return;
-    }
+    if (favoriteButton) return toggleFavorite(favoriteButton.dataset.favorite);
     if (event.target.closest("[data-reset-all]")) resetAllFilters();
   });
 
   $("detailContent").addEventListener("click", (event) => {
     const favBtn = event.target.closest("[data-detail-fav]");
-    if (favBtn) {
-      const id = favBtn.dataset.detailFav;
-      state.favorites = state.favorites.includes(id) ? state.favorites.filter((v) => v !== id) : [...state.favorites, id];
-      persist();
-      renderListings();
-      openDetail(id);
-      toast(state.favorites.includes(id) ? " 찜한 농기계에 담았습니다." : "찜 목록에서 제외했습니다.");
-      return;
-    }
+    if (favBtn) return toggleFavorite(favBtn.dataset.detailFav);
     const button = event.target.closest("[data-detail-action]");
     if (!button) return;
     hideDialog($("detailBackdrop"));

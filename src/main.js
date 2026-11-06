@@ -271,8 +271,15 @@ function updateBadges() {
   }
   const ownerBadge = $("ownerBadge");
   if (ownerBadge) {
-    const owned = allListings().filter((item) => item.owner);
-    const pendingCount = state.requests.filter((r) => r.status === "pending" && owned.some((item) => item.id === r.listingId)).length;
+    if (!isDemoLoggedIn()) {
+      ownerBadge.hidden = true;
+      ownerBadge.textContent = "";
+      return;
+    }
+    const ownerIds = new Set(getOwnerData()?.listingIds || []);
+    const pendingCount = state.requests.filter(
+      (request) => request.status === "pending" && ownerIds.has(request.listingId)
+    ).length;
     ownerBadge.hidden = pendingCount === 0;
     ownerBadge.textContent = String(pendingCount);
   }
@@ -1550,7 +1557,7 @@ function bindEvents() {
     $("loginId")?.focus();
   });
   $("ownerLoginGoButton")?.addEventListener("click", () => { setView("login"); $("loginId")?.focus(); });
-  $("demoLogoutButton")?.addEventListener("click", () => { sessionStorage.removeItem(DEMO_LOGIN_KEY); $("loginButton").textContent = "로그인"; setView("home"); toast("로그아웃되었습니다."); });
+  $("demoLogoutButton")?.addEventListener("click", () => { sessionStorage.removeItem(DEMO_LOGIN_KEY); $("loginButton").textContent = "로그인"; updateBadges(); setView("home"); toast("로그아웃되었습니다."); });
   initLoginForm();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
@@ -1842,6 +1849,7 @@ function initLoginForm() {
     if (idInput.value.trim() !== DEMO_ACCOUNT.id || passwordInput.value !== DEMO_ACCOUNT.password) { passwordInput.value = ""; updateSubmit(); toast("아이디 또는 비밀번호가 올바르지 않습니다."); return; }
     sessionStorage.setItem(DEMO_LOGIN_KEY, DEMO_ACCOUNT.id);
     $("loginButton").textContent = "내 계정";
+    updateBadges();
     passwordInput.value = "";
     updateSubmit();
     toast("로그인되었습니다.");

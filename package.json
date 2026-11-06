@@ -1,0 +1,23 @@
+{
+  "name": "farm-machine-agent",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local dev-server.js",
+    "build": "node scripts/build.mjs",
+    "db:seed": "node scripts/seed-db.mjs",
+    "check": "node --test tests/*.test.js",
+    "agent:dev": "eve dev",
+    "agent:build": "eve build",
+    "agent:info": "eve info"
+  },
+  "dependencies": {
+    "ai": "^7.0.120",
+    "eve": "^0.67.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

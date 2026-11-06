@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "node -e \"console.log('Web build uses Node built-ins')\"",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
+}

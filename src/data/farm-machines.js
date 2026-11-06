@@ -54,6 +54,8 @@ export const CROP_BY_ID = Object.fromEntries(CROPS.map((item) => [item.id, item]
 export const OPERATION_BY_ID = Object.fromEntries(OPERATIONS.map((item) => [item.id, item]));
 export const MACHINE_BY_ID = Object.fromEntries(MACHINE_TYPES.map((item) => [item.id, item]));
 
+const distanceCache = new Map();
+
 export function distanceKm(from, to) {
   const values = {
     영양읍: { 영양읍: 2, 청기면: 6, 입암면: 8, 수비면: 18 },
@@ -61,5 +63,11 @@ export function distanceKm(from, to) {
     입암면: { 영양읍: 8, 청기면: 11, 입암면: 2, 수비면: 21 },
     수비면: { 영양읍: 18, 청기면: 13, 입암면: 21, 수비면: 2 },
   };
-  return values[from]?.[to] ?? 30;
+  const max = values[from]?.[to] ?? 30;
+  const key = `${from}:${to}`;
+  if (!distanceCache.has(key)) {
+    const min = max - 1.5;
+    distanceCache.set(key, Math.round((min + Math.random() * (max - min)) * 10) / 10);
+  }
+  return distanceCache.get(key);
 }

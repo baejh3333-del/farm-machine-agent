@@ -3126,3 +3126,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   }
   .scroll-words .scroll-word { transition: none; }
 }
+
+/* 계정 폼 안내 */
+.account-error { color: #a12820; font-size: 14px; }
+#signupHint { margin-top: 6px; color: var(--text-muted); font-size: 13px; }

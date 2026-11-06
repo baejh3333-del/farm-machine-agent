@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local dev-server.js",
     "build": "node scripts/build.mjs",
+    "db:accounts": "node --env-file-if-exists=.env.local scripts/migrate-accounts.mjs",
     "db:seed": "node scripts/seed-db.mjs",
     "check": "node --test tests/*.test.js",
     "agent:dev": "eve dev",
@@ -13,6 +14,8 @@
     "agent:info": "eve info"
   },
   "dependencies": {
+    "better-auth": "^1.7.18",
+    "pg": "^8.23.1",
     "ai": "^7.0.120",
     "eve": "^0.67.2",
     "zod": "^4.6.5"

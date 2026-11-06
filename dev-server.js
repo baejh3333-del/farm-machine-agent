@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recommend } from "./server/agent.js";
+import accountHandler from "./api/account.js";
 import { initListingsDb, listListings, localDatabase } from "./server/listings-db.js";
 
 initListingsDb(localDatabase);
@@ -13,6 +14,7 @@ const allowed = /^\/(?:$|index\.html$|src\/[\w./-]+\.(?:js|css|svg|png|jpg)$)/;
 
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, "http://localhost").pathname;
+  if (path === "/api/account") return accountHandler(request, response);
   if (path === "/api/listings") {
     if (request.method !== "GET") { response.writeHead(405, { allow: "GET" }).end(); return; }
     const headers = { "content-type": "application/json; charset=utf-8" };

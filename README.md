@@ -7,6 +7,7 @@
 Node.js 24 이상에서:
 
 ```powershell
+npm ci
 npm run dev
 ```
 
@@ -15,6 +16,16 @@ npm run dev
 개발 서버를 시작하면 `data/farm-machines.sqlite`가 생성됩니다. 서버를 띄우지 않고 DB만 준비하려면 `npm run db:seed`를 실행하세요. 같은 명령을 다시 실행해도 매물이 중복되지 않습니다.
 
 목 데이터는 현재 카탈로그의 10개 기종별로 대여 6건과 판매 4건, 총 100건입니다. 가격·점검일·예약은 시연용입니다. 화면은 `GET /api/listings`에서 매물을 가져오며 추천 API도 같은 데이터베이스를 읽습니다. Vercel 함수에서는 동일한 시드로 메모리 SQLite를 초기화해 조회합니다.
+
+## 계정 인증
+
+상단 **로그인**을 열고 **회원가입**에서 이름, 이메일, 비밀번호로 가입하면 바로 로그인됩니다. 로컬에서는 첫 계정 요청 시 `data/accounts.sqlite`를 준비합니다. 로그인 상태는 서버 세션과 HTTP 전용 쿠키로 관리합니다.
+
+Vercel 배포에서는 PostgreSQL을 연결합니다.
+
+1. 대상 환경에 `DATABASE_URL`과 `BETTER_AUTH_SECRET`을 서버 환경 변수로 설정합니다. 비밀값은 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`로 생성할 수 있습니다.
+2. 운영 환경의 `BETTER_AUTH_URL`에 서비스의 HTTPS 주소를 설정합니다. Vercel 기본 도메인을 쓰는 프리뷰는 시스템 환경 변수에서 호스트를 가져옵니다.
+3. 대상 DB에 연결할 수 있는 환경에서 같은 서버 변수를 설정하고 `npm run db:accounts`를 실행해 계정 테이블을 준비한 뒤 배포합니다.
 
 ## AI API 연결
 

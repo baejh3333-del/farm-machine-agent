@@ -1,3 +1,4 @@
+import { accountRequest } from "./account.js";
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "./data/farm-machines.js";
 import { askRecommendation } from "./ai/recommend-agent.js";
 import { conversationTurn, unrelatedTurn } from "./ai/conversation.js";
@@ -85,23 +86,22 @@ try {
   state = structuredClone(defaults);
 }
 
-const DEMO_ACCOUNT = { id: "10jo", password: "20261106!" }; // 시연 전용, 공개 코드
-const DEMO_LOGIN_KEY = "moa-demo-login";
+const OWNER_DEMO_PROFILE = "10jo";
+let accountUser = null;
 const OWNER_DB_KEY = "moa-owner-db-v1";
-const isDemoLoggedIn = () => sessionStorage.getItem(DEMO_LOGIN_KEY) === DEMO_ACCOUNT.id;
 function readOwnerDb() {
   try { return JSON.parse(localStorage.getItem(OWNER_DB_KEY) || "{}"); } catch { return {}; }
 }
 function saveOwnerDb(db) {
   try { localStorage.setItem(OWNER_DB_KEY, JSON.stringify(db)); } catch { /* 원본 유지 */ }
 }
-function getOwnerData() { return readOwnerDb()[DEMO_ACCOUNT.id]; }
+function getOwnerData() { return readOwnerDb()[OWNER_DEMO_PROFILE]; }
 function migrateExistingOwnerData() {
   const db = readOwnerDb();
-  if (db[DEMO_ACCOUNT.id]) return;
+  if (db[OWNER_DEMO_PROFILE]) return;
   const owned = allListings().filter((item) => item.owner);
   const ids = new Set(owned.map((item) => item.id));
-  db[DEMO_ACCOUNT.id] = {
+  db[OWNER_DEMO_PROFILE] = {
     listingIds: [...ids],
     customListings: state.customListings.filter((item) => ids.has(item.id)),
     statuses: Object.fromEntries(Object.entries(state.statuses).filter(([id]) => ids.has(id))),
@@ -113,10 +113,10 @@ function migrateExistingOwnerData() {
 }
 function syncOwnerData() {
   const db = readOwnerDb();
-  if (!db[DEMO_ACCOUNT.id]) return;
-  const ids = new Set(db[DEMO_ACCOUNT.id].listingIds);
+  if (!db[OWNER_DEMO_PROFILE]) return;
+  const ids = new Set(db[OWNER_DEMO_PROFILE].listingIds);
   for (const item of state.customListings) if (item.owner) ids.add(item.id);
-  db[DEMO_ACCOUNT.id] = {
+  db[OWNER_DEMO_PROFILE] = {
     listingIds: [...ids],
     customListings: state.customListings.filter((item) => ids.has(item.id)),
     statuses: Object.fromEntries(Object.entries(state.statuses).filter(([id]) => ids.has(id))),
@@ -295,7 +295,7 @@ function markNav(view) {
 
 function setView(view) {
   if (!Object.hasOwn(viewIds, view)) view = "home";
-  if (view === "owner" && !isDemoLoggedIn()) view = "ownerLoginRequired";
+  if (view === "owner" && !accountUser) view = "ownerLoginRequired";
   state.view = view;
   const onMainPage = MAIN_PAGE_VIEWS.includes(view);
   for (const [name, id] of Object.entries(viewIds)) {
@@ -1559,12 +1559,6 @@ function bindEvents() {
     renderListings();
     setView("browse");
   });
-  $("loginButton")?.addEventListener("click", () => {
-    setView("login");
-    $("loginId")?.focus();
-  });
-  $("ownerLoginGoButton")?.addEventListener("click", () => { setView("login"); $("loginId")?.focus(); });
-  $("demoLogoutButton")?.addEventListener("click", () => { sessionStorage.removeItem(DEMO_LOGIN_KEY); $("loginButton").textContent = "로그인"; setView("home"); toast("로그아웃되었습니다."); });
   initLoginForm();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
@@ -1826,55 +1820,122 @@ function initBannerCarousel() {
 // 로그인 화면: 지금은 화면만 동작하고 실제 계정 확인은 서버 연결 후 붙인다
 function initLoginForm() {
   const form = $("loginForm");
-  if (!form) return;
-  const idInput = $("loginId");
-  const passwordInput = $("loginPassword");
+  const email = $("loginId");
+  const password = $("loginPassword");
+  const name = $("signupName");
+  const confirm = $("signupConfirm");
   const submit = $("loginSubmit");
   const eye = $("loginEye");
-  const remember = $("loginRemember");
-  if (isDemoLoggedIn()) $("loginButton").textContent = "내 계정";
-  const savedId = localStorage.getItem("moa-login-id");
-  if (savedId) idInput.value = savedId;
+  const switchButton = $("switchAccount");
+  const headerButton = $("loginButton");
+  const logout = $("accountLogoutButton");
+  let signup = false;
 
-  const updateSubmit = () => {
-    submit.disabled = !(idInput.value.trim() && passwordInput.value);
-  };
-  idInput.addEventListener("input", updateSubmit);
-  passwordInput.addEventListener("input", updateSubmit);
-  updateSubmit();
+  function showError(message) {
+    const error = $("accountError");
+    error.textContent = message;
+    error.hidden = !message;
+  }
+
+  function setMode(nextSignup) {
+    signup = nextSignup;
+    const label = signup ? "회원가입" : "로그인";
+    $("accountHeading").textContent = "모아농 " + label;
+    submit.textContent = label;
+    switchButton.textContent = signup ? "로그인" : "회원가입";
+    $("signupNameField").hidden = $("signupConfirmField").hidden = !signup;
+    name.disabled = confirm.disabled = !signup;
+    name.required = confirm.required = signup;
+    password.minLength = signup ? 8 : 0;
+    password.autocomplete = signup ? "new-password" : "current-password";
+    password.value = confirm.value = "";
+    password.type = "password";
+    eye.setAttribute("aria-pressed", "false");
+    eye.setAttribute("aria-label", "비밀번호 보기");
+    eye.classList.remove("is-showing");
+    showError("");
+    (signup ? name : email).focus();
+  }
+
+  function renderAccount(user) {
+    accountUser = user ?? null;
+    headerButton.textContent = accountUser ? "내 계정" : "로그인";
+  }
+
+  function openLogin() {
+    if (accountUser) return setView("owner");
+    setView("login");
+    setMode(false);
+  }
+
+  headerButton.addEventListener("click", openLogin);
+  $("ownerLoginGoButton").addEventListener("click", openLogin);
+  switchButton.addEventListener("click", () => setMode(!signup));
 
   eye.addEventListener("click", () => {
-    const show = passwordInput.type === "password";
-    passwordInput.type = show ? "text" : "password";
+    const show = password.type === "password";
+    password.type = show ? "text" : "password";
     eye.setAttribute("aria-pressed", String(show));
     eye.setAttribute("aria-label", show ? "비밀번호 숨기기" : "비밀번호 보기");
     eye.classList.toggle("is-showing", show);
   });
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (submit.disabled) return;
-    // 아이디만 저장하고 비밀번호는 어디에도 저장하지 않는다
-    if (remember.checked) localStorage.setItem("moa-login-id", idInput.value.trim());
-    else localStorage.removeItem("moa-login-id");
-    if (idInput.value.trim() !== DEMO_ACCOUNT.id || passwordInput.value !== DEMO_ACCOUNT.password) { passwordInput.value = ""; updateSubmit(); toast("아이디 또는 비밀번호가 올바르지 않습니다."); return; }
-    sessionStorage.setItem(DEMO_LOGIN_KEY, DEMO_ACCOUNT.id);
-    $("loginButton").textContent = "내 계정";
-    passwordInput.value = "";
-    updateSubmit();
-    toast("로그인되었습니다.");
-    setView("owner");
+    showError("");
+    if (signup && !name.value.trim()) {
+      showError("이름을 입력해 주세요.");
+      name.focus();
+      return;
+    }
+    if (signup && password.value !== confirm.value) {
+      showError("비밀번호가 일치하지 않습니다.");
+      confirm.focus();
+      return;
+    }
+    submit.disabled = switchButton.disabled = true;
+    try {
+      const data = { email: email.value.trim(), password: password.value };
+      if (signup) data.name = name.value.trim();
+      const result = await accountRequest(signup ? "signup" : "login", data);
+      renderAccount(result.user);
+      password.value = confirm.value = "";
+      setView("owner");
+    } catch (error) {
+      showError(error instanceof TypeError || error instanceof SyntaxError
+        ? "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
+        : error.message);
+    } finally {
+      submit.disabled = switchButton.disabled = false;
+    }
   });
 
-  for (const el of document.querySelectorAll("[data-login-soon]")) {
-    el.addEventListener("click", (event) => {
-      event.preventDefault();
-      toast(`${el.dataset.loginSoon}은(는) 준비 중이에요.`);
-    });
-  }
+  logout.addEventListener("click", async () => {
+    logout.disabled = true;
+    try {
+      await accountRequest("logout", {});
+      renderAccount(null);
+      setView("home");
+      toast("로그아웃되었습니다.");
+    } catch {
+      toast("로그아웃에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      logout.disabled = false;
+    }
+  });
+
   for (const el of document.querySelectorAll("[data-view-target]")) {
     el.addEventListener("click", () => setView(el.dataset.viewTarget));
   }
+
+  accountRequest("session")
+    .then((result) => {
+      renderAccount(result.user);
+      if (accountUser && state.view === "ownerLoginRequired") setView("owner");
+    })
+    .catch(() => {})
+    .finally(() => { submit.disabled = false; });
 }
 
 // 브랜드 소개(모아농?) 화면: 스크롤로 보일 때마다 구역이 아래에서 떠오르며 나타난다

@@ -5,4 +5,5 @@ node_modules/
 .eve/
 dist/
 /data/*.sqlite*
+/data/account-secret
 .vercel/

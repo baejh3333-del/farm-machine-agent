@@ -507,7 +507,7 @@ function matches(item, filters) {
   if (filters.minPrice && item.price < Number(filters.minPrice)) return false;
   if (filters.maxPrice && item.price > Number(filters.maxPrice)) return false;
   if (filters.areaPyeong && (Number(filters.areaPyeong) * 3.305785 < item.areaMin || Number(filters.areaPyeong) * 3.305785 > item.areaMax)) return false;
-  if (filters.radius !== "all" && distanceKm(state.region, item.region) > Number(filters.radius)) return false;
+  if (filters.radius !== "all" && distanceKm(state.region, item.region, item.id) > Number(filters.radius)) return false;
   if (state.transaction === "rent" && filters.date && !available(item, filters.date, filters.dateEnd || filters.date)) return false;
   return true;
 }
@@ -592,7 +592,7 @@ function renderActiveFilters() {
 
 function card(item) {
   const summary = listingSummary(item);
-  const distance = distanceKm(state.region, item.region);
+  const distance = distanceKm(state.region, item.region, item.id);
   const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
   const cropsText = item.cropIds.map((id) => CROP_BY_ID[id]?.name).filter(Boolean).join("·");
   const opsText = item.operations.map((id) => OPERATION_BY_ID[id]?.label).filter(Boolean).slice(0, 2).join(" · ");
@@ -708,7 +708,7 @@ function openDetail(id) {
       <div class="detail-copy">
         <div class="detail-badges">
           <span class="card-status-pill ${statusClass(item)}">${statusLabel(item)}</span>
-          <span class="spec-tag"> ${escapeHtml(item.region)} (예시 ${distanceKm(state.region, item.region)}km)</span>
+          <span class="spec-tag"> ${escapeHtml(item.region)} (예시 ${distanceKm(state.region, item.region, item.id)}km)</span>
           <span class="spec-tag">${escapeHtml(MACHINE_BY_ID[item.machineType]?.label)}</span>
         </div>
         <h2 id="detailTitle">${escapeHtml(item.title)}</h2>

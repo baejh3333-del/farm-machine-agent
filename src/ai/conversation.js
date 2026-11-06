@@ -1,5 +1,6 @@
 import { CROPS, CROP_BY_ID, CROP_OPERATIONS, OPERATION_BY_ID } from "../data/farm-machines.js";
 import { selectMatchingListings } from "../data/recommendation.js";
+import { readRentalDates } from "./rental-dates.js";
 
 const buy = /구매|구입|사고 싶|살래/;
 const rent = /대여|임대|빌리|빌릴|빌려/;
@@ -42,13 +43,6 @@ function answerInterruption(message, field) {
   }
 }
 
-function readDates(message) {
-  return [...message.matchAll(/(\d{4})\s*(?:[-./]|년\s*)\s*(\d{1,2})\s*(?:[-./]|월\s*)\s*(\d{1,2})(?:일)?/g)].map(([, year, month, day]) => {
-    const date = [year, month.padStart(2, "0"), day.padStart(2, "0")].join("-");
-    const time = Date.parse(date);
-    return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === date ? date : "";
-  });
-}
 
 function nextQuestion(selection, known) {
   if (!selection.cropId) return { field: "crop", reply: "어떤 작물을 키우시나요?", choices: CROPS.map(({ name }) => name) };
@@ -95,12 +89,12 @@ export function conversationTurn(message, filters, previous) {
     known.transaction = false;
   }
 
-  const dates = readDates(message);
+  const dates = readRentalDates(message);
   if (dates.length) {
     if (dates.some((date) => !date) || (dates[1] && dates[1] < dates[0])) {
       return {
         context, known, field: "date",
-        question: { reply: "날짜를 다시 확인해 주세요. 시작일부터 반납일까지 입력해 주세요. 예: 2026-11-20 ~ 2026-11-22", choices: ["건너뛰기"] },
+        question: { reply: "날짜를 다시 확인해 주세요. 시작일부터 반납일까지 입력해 주세요. 예: 11 20 ~ 11 22 (또는 12 30 ~ 1 3)", choices: ["건너뛰기"] },
       };
     }
     [context.date, context.dateEnd = dates[0]] = dates;
@@ -131,7 +125,7 @@ export function conversationTurn(message, filters, previous) {
       operation: "어떤 작업인지 아직 모르겠어요. 아래에서 고르거나 ‘흙을 갈고 싶어’처럼 말씀해 주세요.",
       transaction: "빌리려는 건지 사려는 건지 한 가지를 골라 주세요.",
       area: "면적은 ‘300평’처럼 알려주세요. 아직 모르시면 건너뛰어도 돼요.",
-      date: "날짜는 연도부터 적어 주세요. 예를 들어 2026-11-20처럼 입력하거나 건너뛸 수 있어요.",
+      date: "날짜는 ‘11 20 ~ 11 22’처럼 간단히 적어 주셔도 돼요. 연도가 바뀌면 자동으로 계산해 드려요. 또는 건너뛸 수 있어요.",
       budget: "금액은 ‘7만원 이하’처럼 적어 주세요. 예산이 미정이면 ‘바로 추천’을 눌러 주세요.",
     };
     question.reply = prompts[field];

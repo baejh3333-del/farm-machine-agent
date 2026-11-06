@@ -2,11 +2,11 @@
 
 :root {
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --bg-page: #f3f6f4;
-  --bg-surface: #ffffff;
-  --bg-subtle: #edf3ef;
+  --bg-page: #f5efe4;
+  --bg-surface: #fffcf6;
+  --bg-subtle: #eee5d7;
   --bg-tint: #e6f4ec;
-  --bg-warm: #f7f6f1;
+  --bg-warm: #faf5ec;
 
   --text-strong: #162a22;
   --text-body: #2c4237;
@@ -15,15 +15,15 @@
 
   --forest: #174233;
   --forest-deep: #103024;
-  --primary: #1f7a50;
-  --primary-hover: #186340;
+  --primary: #345840;
+  --primary-hover: #294633;
   --primary-light: #e5f5ec;
   --accent-lime: #dcf29d;
   --accent-amber: #fef3c7;
   --accent-amber-text: #92400e;
 
-  --line: #e1eae4;
-  --line-strong: #c5d7cc;
+  --line: #ded5c6;
+  --line-strong: #d0c5b3;
 
   --shadow-sm: 0 2px 8px rgba(22, 42, 34, 0.05);
   --shadow-md: 0 10px 28px rgba(22, 42, 34, 0.07);
@@ -222,250 +222,137 @@ img {
   background: var(--bg-subtle);
 }
 
-/* =========================================
-   레이아웃 & 사이드바
-   ========================================= */
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: 256px minmax(0, 1fr);
-}
+/* Shared site header */
+.app-shell { min-height: 100vh; --gutter: clamp(20px, 5vw, 80px); }
 
 .sidebar {
-  background: var(--forest);
-  color: #ffffff;
-  padding: 26px 18px;
   position: sticky;
   top: 0;
-  height: 100vh;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.brand {
+  z-index: 20;
+  min-height: 72px;
+  padding-inline: var(--gutter);
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #ffffff;
-  text-decoration: none;
-  padding: 4px 10px 28px;
+  gap: clamp(20px, 4vw, 60px);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--line);
 }
 
+.brand { display: flex; align-items: center; gap: 10px; flex: none; color: var(--forest); }
 .brand-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: var(--accent-lime);
+  width: 38px;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  background: var(--bg-page);
+  font-size: 19px;
 }
+.brand-name { font-size: 22px; font-weight: 850; letter-spacing: -0.06em; line-height: 1.1; }
+.brand-name small { display: block; margin-top: 4px; font-size: 8px; letter-spacing: 0.13em; color: var(--text-muted); }
 
-.brand-name {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.6px;
-  line-height: 1.2;
-}
-
-.brand-name small {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.4px;
-  color: #a9cbb7;
-  margin-top: 3px;
-}
-
-.sidebar-nav {
-  display: grid;
-  gap: 6px;
-}
-
+.sidebar-nav { display: flex; align-self: stretch; gap: clamp(8px, 1.6vw, 28px); }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 52px;
+  gap: 5px;
+  min-height: 44px;
   border: 0;
-  border-radius: 14px;
+  border-bottom: 2px solid transparent;
   background: transparent;
-  color: #d6e8dc;
-  text-align: left;
-  padding: 0 14px;
-  font-size: 15px;
+  padding: 0 3px;
+  color: var(--text-muted);
+  font-size: 14px;
   font-weight: 700;
 }
-
-.nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
-
-.nav-item.active {
-  background: #27694b;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.nav-icon {
-  width: 24px;
-  font-size: 19px;
-  text-align: center;
-  flex: none;
-}
-
-.nav-label {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+.nav-item:hover, .nav-item.active { color: var(--forest-deep); }
+.nav-item.active { border-bottom-color: var(--forest); }
+.nav-icon { display: none; }
+.nav-label { white-space: nowrap; }
 .nav-badge {
-  background: var(--accent-lime);
+  background: var(--bg-subtle);
   color: var(--forest-deep);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-pill);
 }
 
-/* =========================================
-   상단 바 (Topbar) - 명확한 버튼형 컨트롤
-   ========================================= */
-.page-shell {
-  min-width: 0;
-}
-
-.topbar {
-  min-height: 76px;
-  padding: 12px 34px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  position: sticky;
-  top: 0;
-  z-index: 8;
-}
-
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
+.page-shell { min-width: 0; }
+.topbar-left { margin-left: auto; }
 .region-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 6px 16px;
-  background: var(--bg-subtle);
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--radius-pill);
-  transition: border-color 0.15s, background-color 0.15s;
+  gap: 6px;
+  min-height: 44px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
 }
+.region-pill:hover { border-color: var(--forest); }
+.region-pin, .region-arrow { display: none; }
+.region-label { font-size: 12px; color: var(--text-muted); }
+.region-pill select { border: 0; background: transparent; font-size: 14px; font-weight: 750; cursor: pointer; }
 
-.region-pill:hover {
-  background: #e3eee7;
-  border-color: var(--primary);
+.main-content { padding: 30px 0 90px; }
+.main-content > :not(#browseView),
+.search-dock,
+.market-section {
+  width: min(1400px, calc(100% - 2 * var(--gutter)));
+  margin-inline: auto;
 }
-
-.region-pin {
-  font-size: 17px;
-}
-
-.region-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-muted);
-}
-
-.region-pill select {
-  border: 0;
-  background: transparent;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--forest);
-  padding-right: 4px;
-  cursor: pointer;
-}
-
-.region-arrow {
-  font-size: 12px;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-/* =========================================
-   메인 콘텐츠 영역 & 히어로 + 쏘카식 검색 도크
-   ========================================= */
-.main-content {
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: 28px 34px 90px;
-}
+#browseView { margin-top: -30px; }
 
 .hero-card {
-  background: linear-gradient(135deg, #164434 0%, #236849 100%);
-  border-radius: var(--radius-xl);
-  padding: 34px;
-  color: #ffffff;
-  box-shadow: var(--shadow-md);
-  display: grid;
-  gap: 28px;
+  min-height: clamp(370px, 38vw, 545px);
+  display: flex;
+  align-items: center;
+  padding: 55px var(--gutter);
+  color: #fffdf7;
+  background: linear-gradient(90deg, rgba(30, 28, 21, .82), rgba(30, 28, 21, .56) 34%, rgba(30, 28, 21, .08) 72%),
+    #5b4e3d url("/src/farm-hero.jpg") center 56% / cover no-repeat;
 }
-
+.hero-copy { width: min(100%, 1400px); margin-inline: auto; }
 .hero-badge {
   display: inline-block;
-  padding: 6px 13px;
-  border-radius: var(--radius-pill);
-  background: rgba(220, 242, 157, 0.18);
-  border: 1px solid rgba(220, 242, 157, 0.4);
-  color: var(--accent-lime);
+  color: inherit;
   font-size: 13px;
-  font-weight: 800;
-  margin-bottom: 12px;
+  font-weight: 750;
+  letter-spacing: .045em;
 }
-
 .hero-copy h1 {
-  font-size: 32px;
-  line-height: 1.3;
-  letter-spacing: -0.9px;
-  margin-bottom: 12px;
-  font-weight: 800;
+  margin: 15px 0 14px;
+  font-size: clamp(34px, 4.1vw, 64px);
+  line-height: 1.14;
+  letter-spacing: -.065em;
+  font-weight: 780;
 }
-
-.highlight-text {
-  color: var(--accent-lime);
+.hero-copy p { margin: 0; max-width: 37ch; color: #fff8ed; font-size: 16px; }
+.hero-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 44px;
+  margin-top: 26px;
+  padding: 0 16px;
+  border: 1px solid #fff8ed;
+  color: inherit;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 750;
 }
+.hero-link:hover { background: #fff8ed; color: #25271f; }
 
-.hero-copy p {
-  font-size: 16px;
-  color: #d9ece0;
-  margin: 0;
-  max-width: 560px;
-  line-height: 1.6;
-}
-
-/* 쏘카 스타일 검색 도크 */
 .search-dock {
-  background: #ffffff;
-  color: var(--text-strong);
-  border-radius: 22px;
-  padding: 18px;
-  box-shadow: 0 14px 34px rgba(12, 38, 28, 0.18);
+  margin-top: 28px;
+  padding: 16px 20px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  scroll-margin-top: 96px;
 }
-
 .transaction-switch-large {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -512,7 +399,7 @@ img {
 
 .quick-search-bar {
   display: grid;
-  grid-template-columns: 1fr 0.9fr 1.6fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.6fr) auto;
   gap: 10px;
   align-items: stretch;
 }
@@ -522,9 +409,9 @@ img {
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1.5px solid var(--line);
-  background: #f9fbf9;
+  background: var(--bg-warm);
   min-height: 56px;
   transition: border-color 0.15s, background-color 0.15s;
 }
@@ -591,9 +478,12 @@ img {
    초보 농부 1·2단계 맞춤 찾기 위저드 (토스 + Calm Kit 스타일)
    ========================================= */
 .market-section {
-  margin-top: 38px;
+  margin-top: 54px;
   scroll-margin-top: 92px;
 }
+
+.market-kicker { color: var(--text-muted); font-size: 13px; font-weight: 750; }
+.market-section .market-heading h2 { font-size: clamp(27px, 3vw, 42px); letter-spacing: -.055em; }
 
 .section-header-row {
   display: flex;
@@ -911,57 +801,55 @@ img {
 /* 기종별 가로 스크롤 탭 */
 .machine-category-bar {
   display: flex;
-  gap: 8px;
+  gap: clamp(4px, 1vw, 18px);
   overflow-x: auto;
-  padding: 4px 2px 12px;
+  padding: 12px 4px 18px;
+  border-block: 1px solid var(--line);
   scrollbar-width: thin;
 }
 
 .machine-tab {
-  flex: none;
-  min-height: 46px;
-  padding: 8px 16px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--line);
-  background: #ffffff;
+  flex: 1 0 auto;
+  min-width: 66px;
+  padding: 5px 4px;
+  border: 0;
+  background: transparent;
   color: var(--text-body);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  place-items: center;
+  align-content: start;
+  column-gap: 4px;
+  row-gap: 7px;
+  font-size: 13px;
   font-weight: 700;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
-.machine-tab:hover {
-  border-color: var(--primary);
-  background: #f5fbf7;
-}
-
-.machine-tab.active {
-  background: var(--forest);
+.machine-tab:hover .mt-emoji,
+.machine-tab.active .mt-emoji {
+  background: var(--bg-tint);
   border-color: var(--forest);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(23, 66, 51, 0.2);
 }
 
 .mt-emoji {
-  font-size: 18px;
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  width: clamp(48px, 4.5vw, 66px);
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  font-size: 25px;
 }
 
 .mt-count {
-  font-size: 12px;
-  font-weight: 800;
-  padding: 2px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
+  font-size: 11px;
   color: var(--text-muted);
 }
 
-.machine-tab.active .mt-count {
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-}
+.mt-name { justify-self: end; }
+.machine-tab.active .mt-name { text-decoration: underline; text-underline-offset: 4px; }
 
 /* 활성 필터 툴바 */
 .toolbar {
@@ -1032,24 +920,21 @@ img {
 .listing-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  gap: clamp(16px, 2.4vw, 34px);
 }
 
 .listing-card {
   background: var(--bg-surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: 6px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-sm);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .listing-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-  border-color: #a9d4bc;
+  border-color: #9d917c;
 }
 
 .card-media-wrap {
@@ -1066,10 +951,10 @@ img {
 }
 
 .machine-art {
-  height: 176px;
+  aspect-ratio: 16 / 10;
   display: grid;
   place-items: center;
-  background: linear-gradient(145deg, #eef5ef 0%, #dcebe0 100%);
+  background: #eae0d0;
   position: relative;
   overflow: hidden;
 }
@@ -2307,7 +2192,7 @@ img {
 /* =========================================
    반응형 (태블릿 / 모바일 최적화)
    ========================================= */
-@media (max-width: 1180px) {
+@media (max-width: 980px) {
   .quick-search-bar {
     grid-template-columns: 1fr 1fr;
   }
@@ -2326,38 +2211,6 @@ img {
 }
 
 @media (max-width: 900px) {
-  .app-shell {
-    grid-template-columns: 76px minmax(0, 1fr);
-  }
-  .sidebar {
-    padding: 20px 10px;
-  }
-  .brand {
-    padding: 0 0 24px;
-    justify-content: center;
-  }
-  .brand-name,
-  .nav-label {
-    display: none;
-  }
-  .nav-item {
-    justify-content: center;
-    padding: 0;
-    position: relative;
-  }
-  .nav-badge {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    padding: 1px 5px;
-    font-size: 10px;
-  }
-  .main-content {
-    padding: 22px 20px 90px;
-  }
-  .topbar {
-    padding: 10px 20px;
-  }
   .owner-columns,
   .detail-layout {
     grid-template-columns: 1fr;
@@ -2365,61 +2218,36 @@ img {
 }
 
 @media (max-width: 700px) {
-  .app-shell {
-    display: block;
-  }
+  .app-shell { --gutter: 16px; }
   .sidebar {
-    position: fixed;
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: auto;
-    padding: 8px 12px;
-    z-index: 20;
-    background: #ffffff;
-    border-top: 1px solid var(--line-strong);
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
-  }
-  .brand {
-    display: none;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0 8px;
+    padding-top: 9px;
   }
   .sidebar-nav {
-    display: flex;
-    justify-content: space-around;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    gap: 2px;
   }
-  .nav-item {
-    min-width: 0;
-    flex-direction: column;
-    gap: 3px;
-    min-height: 52px;
-    color: var(--text-muted);
-    border-radius: 12px;
-    padding: 6px 4px;
-  }
-  .nav-item.active {
-    background: var(--primary-light);
-    color: var(--primary);
-    box-shadow: none;
-  }
-  .nav-label {
-    display: block;
-    font-size: 11px;
-    font-weight: 800;
-  }
-  .topbar {
-    padding: 10px 14px;
-    flex-wrap: wrap;
-  }
-  .main-content {
-    padding: 16px 14px 110px;
-  }
+  .nav-item { position: relative; font-size: clamp(11px, 3.15vw, 14px); }
+  .nav-badge { position: absolute; top: 0; right: -4px; padding: 0 4px; font-size: 9px; }
+  .brand-name { font-size: 19px; }
+  .region-label { display: none; }
   .hero-card {
-    padding: 22px 18px;
+    min-height: 440px;
+    align-items: end;
+    padding-bottom: 30px;
+    background-image: linear-gradient(0deg, rgba(30, 28, 21, .96), rgba(30, 28, 21, .72) 43%, transparent 83%), url("/src/farm-hero.jpg");
+    background-position: center, 72% center;
   }
-  .hero-copy h1 {
-    font-size: 25px;
-  }
+  .hero-copy p { font-size: 15px; }
+  .hero-copy h1 { font-size: clamp(29px, 7.5vw, 43px); }
+  .search-dock, .market-section { scroll-margin-top: 116px; }
+  .search-dock { padding: 12px; }
+  .market-section { margin-top: 36px; }
+  .market-heading { flex-wrap: wrap; }
   .transaction-switch-large {
     grid-template-columns: 1fr;
   }
@@ -2464,11 +2292,11 @@ img {
   }
   .ai-launcher {
     right: 14px;
-    bottom: 78px;
+    bottom: 18px;
   }
   .ai-panel {
     right: 10px;
-    bottom: 140px;
+    bottom: 82px;
     width: calc(100vw - 20px);
     height: min(520px, calc(100vh - 160px));
   }
@@ -2487,6 +2315,11 @@ img {
   .active-filters:empty { display: none; }
   .filter-chip { min-height: 36px; font-size: 14px; }
 }
+
+/* Compact final recommendation */
+.ai-condition-tags { display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 10px; white-space:normal; }
+.ai-condition-tag { display:inline-flex; padding:4px 8px; border-radius:999px; background:#edf5ee; color:#24563a; font-size:11px; line-height:1.5; }
+.ai-rec-note { margin-top:10px; font-size:12px; color:var(--text-muted); white-space:normal; }
 
 /* Compact, easy-to-scan AI recommendation summary */
 .ai-rec-overview { margin-top: 12px; display: grid; gap: 5px; font-size: 13px; }

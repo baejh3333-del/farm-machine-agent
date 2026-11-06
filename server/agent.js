@@ -1,3 +1,4 @@
+import { readRentalDates } from "../src/ai/rental-dates.js";
 import { CROPS, CROP_BY_ID, OPERATIONS, OPERATION_BY_ID } from "../src/data/farm-machines.js";
 import { recommendationGuide, selectMatchingListings } from "../src/data/recommendation.js";
 import { listListings } from "./listings-db.js";
@@ -79,7 +80,7 @@ async function interpret(message, context) {
       Number.isFinite(area) && area >= 0.01 && area <= Number.MAX_SAFE_INTEGER ? `${Math.round(area * 100) / 100}평` : "",
       Number.isSafeInteger(budget) && budget > 0 ? `${budget}원` : "",
       separate === true ? "각각" : "",
-      ...message.matchAll(/\d{4}\s*(?:[-./]|년\s*)\s*\d{1,2}\s*(?:[-./]|월\s*)\s*\d{1,2}(?:일)?/g).map(([date]) => date),
+      ...readRentalDates(message).filter(Boolean),
     ].filter(Boolean).join(" ");
     return { ...fallback, mode: "ai", intent, query };
   } catch {

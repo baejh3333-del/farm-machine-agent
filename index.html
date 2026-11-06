@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#1b4d3e" />
+  <meta name="theme-color" content="#f5efe4" />
   <meta name="description" content="초보 농부도 쉽게! 작물과 작업에 맞는 농기계를 가까운 곳에서 찾고 대여하거나 구매하세요." />
   <title>모아농기계 — 초보 농부도 쉬운 우리 동네 농기계 대여·구매</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
@@ -12,13 +12,12 @@
 </head>
 <body>
   <div class="app-shell">
-    <!-- 좌측 사이드바 (모바일에서는 하단 탭바) -->
-    <aside class="sidebar" aria-label="주 메뉴">
+    <header class="sidebar" aria-label="사이트 헤더">
       <div class="brand">
         <span class="brand-icon" aria-hidden="true"></span>
         <span class="brand-name">모아농기계<small>EASY FARM RENTAL</small></span>
       </div>
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" aria-label="주 메뉴">
         <button type="button" class="nav-item active" aria-label="매물 찾기" data-view="browse" aria-current="page">
           <span class="nav-icon" aria-hidden="true"></span>
           <span class="nav-label">매물 찾기</span>
@@ -43,13 +42,7 @@
         </button>
       </nav>
 
-    </aside>
-
-    <!-- 메인 영역 -->
-    <div class="page-shell" id="top">
-      <!-- 상단 바 -->
-      <header class="topbar">
-        <div class="topbar-left">
+      <div class="topbar-left">
           <div class="region-pill">
             <span class="region-pin" aria-hidden="true"></span>
             <label for="regionSelect" class="region-label">내 동네</label>
@@ -61,23 +54,23 @@
             </select>
             <span class="region-arrow" aria-hidden="true">▾</span>
           </div>
-        </div>
+      </div>
+    </header>
 
-      </header>
-
+    <div class="page-shell" id="top">
       <main class="main-content">
         <!-- 구매/대여 탐색 화면 -->
         <div id="browseView">
-          <!-- 쏘카 + 토스 스타일 히어로 & 통합 빠른 검색 카드 -->
           <section class="hero-card" aria-labelledby="heroTitle">
             <div class="hero-copy">
-              <span class="hero-badge">초보 농부 맞춤 농기계 플랫폼</span>
-              <h1 id="heroTitle">농기계가 필요할 땐,<br /><span class="highlight-text">모아농기계</span>에서 쉽게 찾으세요</h1>
-              <p>빌릴 날짜나 찾는 기계를 입력해 우리 동네 매물을 비교해 보세요.</p>
+              <span class="hero-badge">경북 영양 · 농기계 대여와 중고 거래</span>
+              <h1 id="heroTitle">농기계가 필요한 날,<br />가까운 곳에서 찾으세요.</h1>
+              <p>하루 대여부터 중고 구매까지, 내 작업에 맞는 기계를 찾아보세요.</p>
+              <a class="hero-link" href="#machineSearch">농기계 둘러보기 <span aria-hidden="true"></span></a>
             </div>
+          </section>
 
-            <!-- 쏘카 스타일 대여/구매 탭 + 날짜·거리·검색바 -->
-            <div class="search-dock">
+          <section class="search-dock" id="machineSearch" aria-label="농기계 빠른 검색">
               <div class="transaction-switch-large" role="group" aria-label="거래 방식 선택">
                 <button type="button" id="rentTab" class="tx-tab active" aria-pressed="true">
                   <span class="tx-icon" aria-hidden="true"></span>
@@ -125,15 +118,14 @@
                   매물 보기
                 </button>
               </div>
-            </div>
           </section>
 
           <!-- 매물 목록 섹션 -->
           <section class="market-section" id="market" aria-labelledby="marketTitle">
             <div class="market-heading">
               <div>
-                <span class="step-pill">우리 동네 매물</span>
-                <h2 id="marketTitle" tabindex="-1">내 작업에 딱 맞는 농기계</h2>
+                <span class="market-kicker">우리 동네 장터</span>
+                <h2 id="marketTitle" tabindex="-1">농기계 매물</h2>
                 <p id="marketSubtitle">원하는 거래 방식과 예산을 설정해 보세요.</p>
               </div>
 
@@ -146,7 +138,6 @@
               </div>
             </div>
 
-            <!-- 쏘카 스타일 기종별 빠른 탭바 -->
             <div class="machine-category-bar" id="machineCategoryBar" role="group" aria-label="농기계 종류별 보기"></div>
 
             <!-- 적용된 필터 칩 & 결과 개수 툴바 -->
@@ -206,7 +197,7 @@
               <div class="callout-left">
                 <span class="callout-icon" aria-hidden="true"></span>
                 <div>
-                  <strong> 고추 재배 중이신가요?</strong>
+                  <strong>고추 재배 중이신가요?</strong>
                   <p>밭 준비부터 수확까지, 필요한 작업을 골라보세요.</p>
                 </div>
               </div>

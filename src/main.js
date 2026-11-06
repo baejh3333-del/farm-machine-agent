@@ -352,7 +352,9 @@ function renderMachineCategoryBar() {
     ...MACHINE_TYPES.map((m) => {
       const matchingItems = baseMatching.filter((item) => item.machineType === m.id);
       const count = matchingItems.length;
-      const photo = matchingItems.find((item) => typeof item.photo === "string" && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo))?.photo;
+      const photo = allListings().find((item) => item.machineType === m.id
+        && typeof item.photo === "string"
+        && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo))?.photo;
       const active = state.filters.machineTypes.includes(m.id);
       return `
         <button type="button" class="machine-tab ${active ? "active" : ""}" data-machine-tab="${m.id}" aria-pressed="${active}">

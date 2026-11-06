@@ -2922,3 +2922,62 @@ img {
 /* 로고를 누르면 홈으로 */
 button.brand-moanong { border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; }
 button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset: 4px; border-radius: 12px; }
+
+/* =========================================
+   화면 크기별 겹침 수정 (2026-11)
+   ========================================= */
+/* 메뉴가 한 줄에 다 안 들어가는 너비: 메뉴를 둘째 줄로 내리고, 넘치면 옆으로 밀어서 보기 */
+@media (max-width: 1240px) {
+  .sidebar {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0 12px;
+    padding-top: 6px;
+  }
+  .topbar-left { grid-column: 2; justify-self: end; }
+  .sidebar-nav {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+  }
+  .sidebar-nav::-webkit-scrollbar { display: none; }
+  .nav-item { min-height: 48px; flex: none; }
+}
+@media (max-width: 700px) {
+  .sidebar-nav { justify-content: flex-start; gap: 4px; }
+  .nav-item { min-height: 44px; padding: 0 8px; font-size: 14px; }
+  .nav-badge { position: static; }
+  .brand-moanong { padding: 8px 0; }
+}
+@media (max-width: 380px) {
+  .region-pill { padding: 4px 8px; }
+  .login-button { padding: 0 10px; }
+  .brand-circle { width: 34px; height: 34px; font-size: 19px; }
+  .brand-circle-accent { font-size: 22px; }
+  .brand-circle + .brand-circle { margin-left: -5px; }
+  .brand-tagline { width: 92px; font-size: 8px; }
+}
+
+/* 배너: 글자와 슬라이드 버튼이 겹치지 않도록 버튼 자리를 비워 두고, 내용이 길면 배너가 늘어남 */
+.banner-carousel { height: auto; }
+.banner-track { min-height: clamp(480px, 40vw, 580px); }
+.banner-slide { height: auto; padding-top: 48px; padding-bottom: 176px; }
+.banner-copy { transform: none; }
+@media (max-width: 700px) {
+  .banner-track { min-height: 460px; }
+  .banner-slide { padding-top: 32px; padding-bottom: 124px; }
+}
+@media (max-width: 700px) {
+  /* 휴대폰: 메뉴를 가려지지 않게 두 줄로 나눠 모두 보이게 */
+  .sidebar-nav { flex-wrap: wrap; justify-content: center; overflow-x: visible; row-gap: 0; }
+  .nav-item { min-height: 40px; }
+}
+.about-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.about-cards-2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.about-reasons { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.about-feature img, .about-feature > div { flex-basis: min(100%, 380px); }

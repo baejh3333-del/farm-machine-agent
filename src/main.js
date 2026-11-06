@@ -613,7 +613,7 @@ function card(item) {
             ${machineVisual(item)}
             <div class="art-badges-top">
               <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
-              <span class="art-distance-pill"> ${escapeHtml(item.region)} · 예시 ${distance}km</span>
+              <span class="art-distance-pill"> ${escapeHtml(item.region)} · ${distance}km</span>
             </div>
             <span class="art-caption">${item.photo ? "실제 등록 사진" : `${escapeHtml(machineLabel)} 예시 그림`}</span>
           </div>
@@ -714,7 +714,7 @@ function openDetail(id) {
       <div class="detail-copy">
         <div class="detail-badges">
           <span class="card-status-pill ${statusClass(item)}">${statusLabel(item)}</span>
-          <span class="spec-tag"> ${escapeHtml(item.region)} (예시 ${distanceKm(state.region, item.region, item.id)}km)</span>
+          <span class="spec-tag"> ${escapeHtml(item.region)} (${distanceKm(state.region, item.region, item.id)}km)</span>
           <span class="spec-tag">${escapeHtml(MACHINE_BY_ID[item.machineType]?.label)}</span>
         </div>
         <h2 id="detailTitle">${escapeHtml(item.title)}</h2>

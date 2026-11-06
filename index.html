@@ -7,15 +7,17 @@
   <meta name="description" content="초보 농부도 쉽게! 작물과 작업에 맞는 농기계를 가까운 곳에서 찾고 대여하거나 구매하세요." />
   <title>모아농기계 — 초보 농부도 쉬운 우리 동네 농기계 대여·구매</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
   <link rel="stylesheet" href="/src/styles.css" />
   <script type="module" src="/src/main.js"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="sidebar" aria-label="사이트 헤더">
-      <div class="brand">
-        <span class="brand-icon" aria-hidden="true"></span>
-        <span class="brand-name">모아농기계<small>EASY FARM RENTAL</small></span>
+      <div class="brand brand-moanong" role="img" aria-label="모아농 EASY FARM RENTAL">
+        <span class="brand-mark" aria-hidden="true"><span class="brand-circle">모</span><span class="brand-circle">아</span><span class="brand-circle brand-circle-accent">농</span></span>
+        <span class="brand-tagline" aria-hidden="true"><span>E</span><span>A</span><span>S</span><span>Y</span><span class="gap"></span><span>F</span><span>A</span><span>R</span><span>M</span><span class="gap"></span><span>R</span><span>E</span><span>N</span><span>T</span><span>A</span><span>L</span></span>
       </div>
       <nav class="sidebar-nav" aria-label="주 메뉴">
         <button type="button" class="nav-item active" aria-label="매물 찾기" data-view="browse" aria-current="page">
@@ -61,12 +63,54 @@
       <main class="main-content">
         <!-- 구매/대여 탐색 화면 -->
         <div id="browseView">
-          <section class="hero-card" aria-labelledby="heroTitle">
-            <div class="hero-copy">
-              <span class="hero-badge">경북 영양 · 농기계 대여와 중고 거래</span>
-              <h1 id="heroTitle">농기계가 필요한 날,<br />가까운 곳에서 찾으세요.</h1>
-              <p>하루 대여부터 중고 구매까지, 내 작업에 맞는 기계를 찾아보세요.</p>
-              <a class="hero-link" href="#machineSearch">농기계 둘러보기 <span aria-hidden="true"></span></a>
+          <section class="banner-carousel" id="bannerCarousel" aria-roledescription="carousel" aria-label="메인 배너">
+            <div class="banner-track" id="bannerTrack">
+              <div class="banner-slide banner-slide-1" role="group" aria-roledescription="slide" aria-label="1 / 3">
+                <div class="banner-copy">
+                  <span class="banner-tag">초보 농부를 위한 농기계 대여</span>
+                  <h1 id="heroTitle" class="banner-title">농기계,<br />클릭 한 번으로</h1>
+                  <p>기계 이름 몰라도, 하려는 일만 알려주세요.</p>
+                  <div class="banner-actions">
+                    <a class="banner-cta" href="#machineSearch">농기계 찾기</a>
+                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide">작업 가이드 보기</button>
+                  </div>
+                </div>
+              </div>
+              <div class="banner-slide banner-slide-2" role="group" aria-roledescription="slide" aria-label="2 / 3" aria-hidden="true">
+                <div class="banner-copy">
+                  <span class="banner-tag">우리 동네 농기계</span>
+                  <h2 class="banner-title">멀리 갈 필요 없이,<br />가까운 곳에서</h2>
+                  <p>이웃 농가의 농기계를 바로 빌려요.</p>
+                  <div class="banner-actions">
+                    <a class="banner-cta" href="#machineSearch" tabindex="-1">농기계 찾기</a>
+                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
+                  </div>
+                </div>
+              </div>
+              <div class="banner-slide banner-slide-3" role="group" aria-roledescription="slide" aria-label="3 / 3" aria-hidden="true">
+                <div class="banner-copy">
+                  <span class="banner-tag">언제든 편하게</span>
+                  <h2 class="banner-title">시간 걱정 없이,<br />필요할 때</h2>
+                  <p>밤에도 주말에도 예약하고 문의하세요.</p>
+                  <div class="banner-actions">
+                    <a class="banner-cta" href="#machineSearch" tabindex="-1">농기계 찾기</a>
+                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="banner-controls">
+              <div class="banner-controls-inner">
+                <div class="banner-dots" role="group" aria-label="배너 선택">
+                  <button type="button" class="banner-dot active" data-slide="0" aria-label="1번 배너 보기" aria-current="true"></button>
+                  <button type="button" class="banner-dot" data-slide="1" aria-label="2번 배너 보기"></button>
+                  <button type="button" class="banner-dot" data-slide="2" aria-label="3번 배너 보기"></button>
+                </div>
+                <span class="banner-counter"><strong id="bannerCounter">01</strong> / 03</span>
+                <button type="button" class="banner-arrow" id="bannerPrev" aria-label="이전 배너"><span aria-hidden="true">‹</span></button>
+                <button type="button" class="banner-arrow" id="bannerPause" aria-label="자동 넘김 멈추기" aria-pressed="false"><span class="banner-pause-icon" aria-hidden="true"></span></button>
+                <button type="button" class="banner-arrow" id="bannerNext" aria-label="다음 배너"><span aria-hidden="true">›</span></button>
+              </div>
             </div>
           </section>
 

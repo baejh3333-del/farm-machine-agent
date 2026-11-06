@@ -352,7 +352,7 @@ function renderMachineCategoryBar() {
     ...MACHINE_TYPES.map((m) => {
       const matchingItems = baseMatching.filter((item) => item.machineType === m.id);
       const count = matchingItems.length;
-      const photo = matchingItems.find((item) => typeof item.photo === "string" && /^data:image\\/(?:png|jpeg|webp);base64,/i.test(item.photo))?.photo;
+      const photo = matchingItems.find((item) => typeof item.photo === "string" && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo))?.photo;
       const active = state.filters.machineTypes.includes(m.id);
       return `
         <button type="button" class="machine-tab ${active ? "active" : ""}" data-machine-tab="${m.id}" aria-pressed="${active}">
@@ -1629,7 +1629,57 @@ if (state.selectedCrop && state.selectedCrop !== "all" && !state.filters.cropIds
   state.filters.cropIds = [state.selectedCrop];
 }
 $("regionSelect").value = state.region;
+// 메인 배너: 4초마다 자동으로 다음 장, 멈춤/재생·이전/다음·점 선택
+function initBannerCarousel() {
+  const track = $("bannerTrack");
+  if (!track) return;
+  const slides = [...track.children];
+  const dots = [...document.querySelectorAll(".banner-dot")];
+  const pauseButton = $("bannerPause");
+  let index = 0;
+  let paused = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  let timer = null;
+
+  const show = (next) => {
+    index = (next + slides.length) % slides.length;
+    track.style.transform = `translateX(-${index * 100}%)`;
+    slides.forEach((slide, i) => {
+      const current = i === index;
+      slide.setAttribute("aria-hidden", String(!current));
+      for (const el of slide.querySelectorAll("a, button")) el.tabIndex = current ? 0 : -1;
+    });
+    dots.forEach((dot, i) => {
+      dot.classList.toggle("active", i === index);
+      if (i === index) dot.setAttribute("aria-current", "true");
+      else dot.removeAttribute("aria-current");
+    });
+    $("bannerCounter").textContent = String(index + 1).padStart(2, "0");
+  };
+  const restart = () => {
+    clearInterval(timer);
+    if (!paused) timer = setInterval(() => show(index + 1), 4000);
+  };
+  const setPaused = (value) => {
+    paused = value;
+    pauseButton.classList.toggle("is-paused", paused);
+    pauseButton.setAttribute("aria-pressed", String(paused));
+    pauseButton.setAttribute("aria-label", paused ? "자동 넘김 다시 시작" : "자동 넘김 멈추기");
+    restart();
+  };
+
+  $("bannerPrev").addEventListener("click", () => { show(index - 1); restart(); });
+  $("bannerNext").addEventListener("click", () => { show(index + 1); restart(); });
+  pauseButton.addEventListener("click", () => setPaused(!paused));
+  dots.forEach((dot, i) => dot.addEventListener("click", () => { show(i); restart(); }));
+  for (const button of track.querySelectorAll("[data-banner-view]")) {
+    button.addEventListener("click", () => setView(button.dataset.bannerView));
+  }
+  show(0);
+  setPaused(paused);
+}
+
 bindEvents();
+initBannerCarousel();
 setTransaction(state.transaction);
 setView(state.view);
 renderAll();

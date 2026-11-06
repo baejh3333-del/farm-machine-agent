@@ -1553,11 +1553,18 @@ function bindEvents() {
     setView("browse");
   });
   $("loginButton")?.addEventListener("click", () => {
+    if (isDemoLoggedIn()) {
+      sessionStorage.removeItem(DEMO_LOGIN_KEY);
+      updateLoginButton();
+      updateBadges();
+      setView("home");
+      toast("로그아웃되었습니다.");
+      return;
+    }
     setView("login");
     $("loginId")?.focus();
   });
   $("ownerLoginGoButton")?.addEventListener("click", () => { setView("login"); $("loginId")?.focus(); });
-  $("demoLogoutButton")?.addEventListener("click", () => { sessionStorage.removeItem(DEMO_LOGIN_KEY); $("loginButton").textContent = "로그인"; updateBadges(); setView("home"); toast("로그아웃되었습니다."); });
   initLoginForm();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
@@ -1812,7 +1819,12 @@ function initBannerCarousel() {
   setPaused(paused);
 }
 
-// 로그인 화면: 지금은 화면만 동작하고 실제 계정 확인은 서버 연결 후 붙인다
+// 시연용 로그인 상태에 따라 상단 버튼을 갱신한다.
+function updateLoginButton() {
+  const button = $("loginButton");
+  if (button) button.textContent = isDemoLoggedIn() ? "로그아웃" : "로그인";
+}
+
 function initLoginForm() {
   const form = $("loginForm");
   if (!form) return;
@@ -1821,7 +1833,7 @@ function initLoginForm() {
   const submit = $("loginSubmit");
   const eye = $("loginEye");
   const remember = $("loginRemember");
-  if (isDemoLoggedIn()) $("loginButton").textContent = "내 계정";
+  updateLoginButton();
   const savedId = localStorage.getItem("moa-login-id");
   if (savedId) idInput.value = savedId;
 
@@ -1848,7 +1860,7 @@ function initLoginForm() {
     else localStorage.removeItem("moa-login-id");
     if (idInput.value.trim() !== DEMO_ACCOUNT.id || passwordInput.value !== DEMO_ACCOUNT.password) { passwordInput.value = ""; updateSubmit(); toast("아이디 또는 비밀번호가 올바르지 않습니다."); return; }
     sessionStorage.setItem(DEMO_LOGIN_KEY, DEMO_ACCOUNT.id);
-    $("loginButton").textContent = "내 계정";
+    updateLoginButton();
     updateBadges();
     passwordInput.value = "";
     updateSubmit();

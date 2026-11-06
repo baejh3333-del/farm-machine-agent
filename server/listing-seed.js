@@ -23,7 +23,7 @@ const regions = ["영양읍", "청기면", "입암면", "수비면"];
 
 // Specifications and prices are fictional demo data, not model or price claims.
 const profiles = {
-  cultivator: [fields, ["till", "ridge"], [100, 3500], [40000, 600000], "로터리·두둑 작업기", ["소형 로터리형", "두둑 성형형", "폭 조절형"]],
+  cultivator: [fields, ["till", "ridge"], [100, 3500], [40000, 600000], "로터리·두둑 작업기", ["소형 로터리형", "두둑 성형", "폭 조절형"]],
   tractor: [allCrops, ["till"], [1000, 18000], [130000, 8500000], "로터리 작업기", ["35마력", "45마력", "55마력"]],
   ridgeMulcher: [fields, ["ridge", "mulch"], [300, 5000], [55000, 900000], "피복 롤러", ["1두둑형", "폭 조절형", "배토판 포함"]],
   transplanter: [["pepper", "cabbage"], ["transplant"], [300, 6000], [65000, 1000000], "모종 트레이 거치대", ["1조식", "2조식", "주간 조절형"]],

@@ -102,7 +102,12 @@ export function conversationTurn(message, filters, previous) {
   }
 
   if (field === "area" && /^\d[\d,]*$/.test(message)) message += "평";
-  if (field === "budget" && /^\d[\d,]*(\s*만)?$/.test(message)) message += "원";
+  if (field === "budget" && /^\\d[\\d,]*(\\s*만)?$/.test(message)) {
+    // During rental budget selection, "5" and "10" mean the displayed
+    // 5만원/10만원 options. Preserve explicit "만" and other amounts.
+    if (context.transaction === "rent" && /^(5|10)$/.test(message)) message += "만원";
+    else message += "원";
+  }
   if (noPreference.test(message) && optional.includes(field)) known[field] = true;
   if (/^(바로 추천|그냥 추천)(해줘)?$/.test(message)) {
     for (const key of optional) known[key] = true;

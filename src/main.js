@@ -347,17 +347,17 @@ function renderMachineCategoryBar() {
   const tabs = [
     `<button type="button" class="machine-tab ${isAll ? "active" : ""}" data-machine-tab="all" aria-pressed="${isAll}">
       <span class="mt-emoji" aria-hidden="true"></span>
-      <span class="mt-name">전체 기종</span>
-      <span class="mt-count">${baseMatching.length}</span>
+      <span class="mt-caption"><span class="mt-name">전체 기종</span><span class="mt-count">${baseMatching.length}</span></span>
     </button>`,
     ...MACHINE_TYPES.map((m) => {
-      const count = baseMatching.filter((item) => item.machineType === m.id).length;
+      const matchingItems = baseMatching.filter((item) => item.machineType === m.id);
+      const count = matchingItems.length;
+      const photo = matchingItems.find((item) => typeof item.photo === "string" && /^data:image\\/(?:png|jpeg|webp);base64,/i.test(item.photo))?.photo;
       const active = state.filters.machineTypes.includes(m.id);
       return `
         <button type="button" class="machine-tab ${active ? "active" : ""}" data-machine-tab="${m.id}" aria-pressed="${active}">
-          <span class="mt-emoji" aria-hidden="true">${m.emoji}</span>
-          <span class="mt-name">${escapeHtml(m.label)}</span>
-          <span class="mt-count">${count}</span>
+          <span class="mt-emoji" aria-hidden="true">${photo ? `<img class="mt-photo" src="${escapeHtml(photo)}" alt="" />` : escapeHtml(m.emoji)}</span>
+          <span class="mt-caption"><span class="mt-name">${escapeHtml(m.label)}</span><span class="mt-count">${count}</span></span>
         </button>
       `;
     }),

@@ -772,7 +772,7 @@ function card(item) {
 
 function renderListings() {
   const items = filteredListings();
-  $("resultCount").textContent = `총 ${items.length}대의 농기계 · ${{ distance: "예시 거리순", price: "낮은 가격순", inspection: "최근 점검순" }[state.sort]}`;
+  $("resultCount").textContent = `총 ${items.length}대의 농기계 · ${{ distance: "거리순", price: "낮은 가격순", inspection: "최근 점검순" }[state.sort]}`;
   $("listingGrid").innerHTML = items.length
     ? items.map(card).join("")
     : `<div class="empty-state">

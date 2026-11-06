@@ -1277,7 +1277,7 @@ async function sendAiQuestion(event) {
     // Use textContent throughout so listing metadata cannot inject markup.
     const matched = result.listingIds.map((id) => allListings().find((item) => item.id === id)).filter(Boolean);
     const showDate = (value) => value ? value.slice(5).replace("-", "/") : "";
-    const dateText = date ? "시작일 " + showDate(date) + " ~ 반납일 " + showDate(dateEnd || date) : "";
+    const dateText = date ? showDate(date) + " ~ " + showDate(dateEnd || date) : "";
     const formatBudget = maxPrice && Number.isFinite(maxPrice / 10000) && maxPrice % 10000 === 0
       ? (maxPrice / 10000).toLocaleString("ko-KR") + "만 원"
       : maxPrice ? money(maxPrice) : "";

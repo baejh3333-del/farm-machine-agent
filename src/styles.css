@@ -280,14 +280,6 @@ img {
   margin-top: 3px;
 }
 
-.sidebar-caption {
-  padding: 0 12px;
-  color: #9dc0ab;
-  font-size: 12px;
-  font-weight: 700;
-  margin-bottom: 10px;
-}
-
 .sidebar-nav {
   display: grid;
   gap: 6px;
@@ -341,36 +333,6 @@ img {
   font-weight: 800;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
-}
-
-.sidebar-help-card {
-  margin-top: auto;
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.09);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  display: grid;
-  gap: 12px;
-}
-
-.sidebar-help-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.sidebar-help-head strong {
-  display: block;
-  font-size: 13px;
-  line-height: 1.35;
-  color: #ffffff;
-}
-
-.sidebar-help-head span {
-  display: block;
-  font-size: 12px;
-  color: #bdd8c7;
-  margin-top: 2px;
 }
 
 /* =========================================
@@ -444,44 +406,6 @@ img {
   pointer-events: none;
 }
 
-.role-switch {
-  background: var(--bg-subtle);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 5px;
-  display: inline-flex;
-  gap: 4px;
-}
-
-.role-switch button {
-  min-height: 40px;
-  border: 0;
-  background: transparent;
-  border-radius: 10px;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 800;
-  padding: 8px 16px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.role-switch button.active {
-  background: #ffffff;
-  color: var(--forest);
-  box-shadow: 0 2px 8px rgba(16, 48, 36, 0.12);
-}
-
-.role-badge {
-  background: #ef4444;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-}
-
 /* =========================================
    메인 콘텐츠 영역 & 히어로 + 쏘카식 검색 도크
    ========================================= */
@@ -499,13 +423,6 @@ img {
   box-shadow: var(--shadow-md);
   display: grid;
   gap: 28px;
-}
-
-.hero-top {
-  display: grid;
-  grid-template-columns: 1.25fr 0.95fr;
-  gap: 24px;
-  align-items: center;
 }
 
 .hero-badge {
@@ -538,66 +455,6 @@ img {
   margin: 0;
   max-width: 560px;
   line-height: 1.6;
-}
-
-.hero-actions-quick {
-  display: grid;
-  gap: 12px;
-}
-
-.quick-guide-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 16px 20px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.11);
-  backdrop-filter: blur(8px);
-  color: #ffffff;
-  text-align: left;
-}
-
-.quick-guide-card:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: translateY(-2px);
-}
-
-.qg-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  display: grid;
-  place-items: center;
-  font-size: 24px;
-  flex: none;
-}
-
-.qg-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.qg-text strong {
-  display: block;
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.qg-text small {
-  display: block;
-  font-size: 13px;
-  color: #d2e8da;
-  margin-top: 2px;
-}
-
-.qg-arrow {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--accent-lime);
 }
 
 /* 쏘카 스타일 검색 도크 */
@@ -733,7 +590,6 @@ img {
 /* =========================================
    초보 농부 1·2단계 맞춤 찾기 위저드 (토스 + Calm Kit 스타일)
    ========================================= */
-.wizard-section,
 .market-section {
   margin-top: 38px;
   scroll-margin-top: 92px;
@@ -758,7 +614,7 @@ img {
   margin-bottom: 6px;
 }
 
-.section-header-row h2,
+.section-header-row h1,
 .market-heading h2 {
   font-size: 24px;
   font-weight: 800;
@@ -810,76 +666,33 @@ img {
   color: var(--text-muted);
 }
 
-/* 1단계: 작물 카드 그리드 */
-.crop-list {
+.crop-picker {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
+  max-width: 340px;
 }
 
-.crop-choice {
-  position: relative;
-  background: #f9fbf9;
-  border: 2px solid var(--line);
-  border-radius: 18px;
-  min-height: 86px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-}
-
-.crop-choice:hover {
-  border-color: #8fc4a7;
-  background: #ffffff;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
-}
-
-.crop-choice.active {
-  background: var(--primary-light);
-  border-color: var(--primary);
-  box-shadow: 0 6px 18px rgba(31, 122, 80, 0.14);
-}
-
-.crop-check {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--line);
-  color: transparent;
-  font-size: 13px;
-  font-weight: 900;
-  display: grid;
-  place-items: center;
-}
-
-.crop-choice.active .crop-check {
-  background: var(--primary);
-  color: #ffffff;
-}
-
-.crop-choice .emoji {
-  font-size: 32px;
-  flex: none;
-}
-
-.crop-info strong {
-  font-size: 17px;
-  font-weight: 800;
-  display: block;
+.crop-picker select {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #fff;
   color: var(--text-strong);
+  font: inherit;
 }
 
-.crop-info small {
-  font-size: 13px;
+.crop-picker p {
+  margin: 0;
   color: var(--text-muted);
-  display: block;
-  margin-top: 3px;
+  font-size: 14px;
+}
+
+#filterCrops {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 2px;
 }
 
 /* 2단계: 4단계 프로세스 탭 & 세부 작업 칩 */
@@ -2495,9 +2308,6 @@ img {
    반응형 (태블릿 / 모바일 최적화)
    ========================================= */
 @media (max-width: 1180px) {
-  .hero-top {
-    grid-template-columns: 1fr;
-  }
   .quick-search-bar {
     grid-template-columns: 1fr 1fr;
   }
@@ -2506,9 +2316,6 @@ img {
   }
   .qs-submit {
     grid-column: 1 / -1;
-  }
-  .crop-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .stage-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2530,9 +2337,7 @@ img {
     justify-content: center;
   }
   .brand-name,
-  .sidebar-caption,
-  .nav-label,
-  .sidebar-help-card {
+  .nav-label {
     display: none;
   }
   .nav-item {
@@ -2584,6 +2389,7 @@ img {
     justify-content: space-around;
   }
   .nav-item {
+    min-width: 0;
     flex-direction: column;
     gap: 3px;
     min-height: 52px;
@@ -2619,9 +2425,6 @@ img {
   }
   .quick-search-bar {
     grid-template-columns: 1fr;
-  }
-  .crop-list {
-    grid-template-columns: repeat(2, 1fr);
   }
   .stage-tabs {
     grid-template-columns: repeat(2, 1fr);
@@ -2673,7 +2476,7 @@ img {
 
 .listing-sort { display: flex; align-items: center; gap: 6px; font-size: 14px; }
 .listing-sort select { min-height: 40px; font: inherit; }
-.buyer-requests { margin: 0 0 16px; }
+.buyer-requests h1 { margin: 0 0 16px; font-size: 24px; }
 .ai-header-actions { display: flex; align-items: center; }
 .ai-follow-up { padding: 8px 0 0; }
 .ai-follow-up button { min-height: 36px; }

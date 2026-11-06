@@ -1,6 +1,6 @@
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "./data/farm-machines.js";
 import { askRecommendation } from "./ai/recommend-agent.js";
-import { conversationTurn } from "./ai/conversation.js";
+import { conversationTurn, unrelatedTurn } from "./ai/conversation.js";
 import { available, compareListings, recommendationGuide, selectMatchingListings } from "./data/recommendation.js";
 
 const $ = (id) => document.getElementById(id);
@@ -73,7 +73,7 @@ const defaults = {
   transaction: "rent",
   region: "영양읍",
   sort: "distance",
-  selectedCrop: "pepper",
+  selectedCrop: "all",
   filters: blankFilters(),
   favorites: [],
   customListings: [],
@@ -201,17 +201,21 @@ function updateBadges() {
   }
 }
 
+const viewIds = { browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView" };
+
 function setView(view) {
+  if (!Object.hasOwn(viewIds, view)) view = "browse";
   state.view = view;
-  $("browseView").hidden = view !== "browse";
-  $("ownerView").hidden = view !== "owner";
-  $("browseMode").classList.toggle("active", view === "browse");
-  $("ownerMode").classList.toggle("active", view === "owner");
-  $("browseMode").setAttribute("aria-pressed", String(view === "browse"));
-  $("ownerMode").setAttribute("aria-pressed", String(view === "owner"));
+  for (const [name, id] of Object.entries(viewIds)) $(id).hidden = name !== view;
+  for (const button of document.querySelectorAll("[data-view]")) {
+    const active = button.dataset.view === view;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
   persist();
   if (view === "owner") renderOwner();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0 });
 }
 
 function setTransaction(type) {
@@ -246,47 +250,8 @@ function syncQuickSearchInputs() {
 
 // 1단계: 작물 선택 렌더링
 function renderCrops() {
-  const isAll = !state.selectedCrop || state.selectedCrop === "all";
-  const allBtn = `
-    <button type="button" class="crop-choice ${isAll ? "active" : ""}" data-crop="all" aria-pressed="${isAll}">
-      <span class="crop-check" aria-hidden="true">${isAll ? "✓" : ""}</span>
-      <span class="emoji" aria-hidden="true">🌈</span>
-      <span class="crop-info">
-        <strong>전체 작물</strong>
-        <small>모든 농기계 한눈에</small>
-      </span>
-    </button>
-  `;
-  const cropBtns = CROPS.map((crop) => {
-    const active = state.selectedCrop === crop.id;
-    return `
-      <button type="button" class="crop-choice ${active ? "active" : ""}" data-crop="${crop.id}" aria-pressed="${active}">
-        <span class="crop-check" aria-hidden="true">${active ? "✓" : ""}</span>
-        <span class="emoji" aria-hidden="true">${crop.emoji}</span>
-        <span class="crop-info">
-          <strong>${escapeHtml(crop.name)}</strong>
-          <small>${escapeHtml(crop.description)}</small>
-        </span>
-      </button>
-    `;
-  }).join("");
-
-  $("cropList").innerHTML = allBtn + cropBtns;
-
-  $("cropList")
-    .querySelectorAll("[data-crop]")
-    .forEach((button) =>
-      button.addEventListener("click", () => {
-        const chosen = button.dataset.crop;
-        state.selectedCrop = chosen;
-        state.filters.cropIds = chosen === "all" ? [] : [chosen];
-        if (chosen !== "all") {
-          state.filters.operations = state.filters.operations.filter((id) => CROP_OPERATIONS[chosen].includes(id));
-        }
-        persist();
-        renderAll();
-      })
-    );
+  $("cropSelect").value = Object.hasOwn(CROP_BY_ID, state.selectedCrop) ? state.selectedCrop : "all";
+  $("cropDescription").textContent = CROP_BY_ID[$("cropSelect").value]?.description || "작물을 고르면 해당 작물에 맞는 작업을 볼 수 있어요.";
 }
 
 // 2단계: 작업 단계 및 세부 작업 버튼 렌더링 (초보 농부 맞춤 위저드)
@@ -517,9 +482,8 @@ function renderFilterOptions() {
   renderFilterPreview();
 }
 
-function openFilters(cropId) {
+function openFilters() {
   draft = structuredClone(state.filters);
-  if (cropId && cropId !== "all") draft.cropIds = [cropId];
   renderFilterOptions();
   showDialog($("filterBackdrop"));
 }
@@ -705,7 +669,6 @@ function renderListings() {
         <p>작업 종류나 예산, 거리 조건을 조금 넓혀서 다시 찾아볼까요?</p>
         <div class="empty-actions">
           <button type="button" class="button button-secondary" data-reset-all>전체 조건 초기화</button>
-          <button type="button" class="button button-primary" data-open-filter>상세 조건 다시 고르기</button>
         </div>
       </div>`;
 
@@ -904,7 +867,10 @@ function chatForm(id) {
 }
 
 function renderBuyerRequests() {
-  $("buyerRequests").hidden = state.requests.length === 0;
+  if (!state.requests.length) {
+    $("buyerRequestList").textContent = "아직 보낸 대여 요청이 없어요. 매물 상세에서 대여를 신청하면 여기에서 상태를 볼 수 있어요.";
+    return;
+  }
   $("buyerRequestList").replaceChildren(...state.requests.slice().reverse().map((request) => {
     const row = document.createElement("div");
     row.className = "request-row";
@@ -1229,26 +1195,39 @@ async function sendAiQuestion(event) {
       date: state.filters.date,
       dateEnd: state.filters.dateEnd,
     };
-    conversation = conversationTurn(message, filters, conversation);
-    if (conversation.reply || conversation.question) {
-      const draft = conversation.reply || conversation.question.reply;
-      const nextQuestion = conversation.reply && conversation.question ? conversation.question.reply : "";
-      pending = appendAiMessage("답변을 준비하고 있어요…", "assistant");
+    const previous = conversation;
+    let turn = conversationTurn(message, filters, previous);
+    let interpreted = false;
+    const directAnswer = previous?.question?.choices.includes(message)
+      || (previous?.field && /^\d[\d,.\s~년월일평㎡만원/-]*$/.test(message));
+    if (!turn.reply && !directAnswer) {
+      pending = appendAiMessage("말씀하신 조건을 확인하고 있어요…", "assistant");
       const result = await askRecommendation(message, {
-        draft,
-        nextQuestion,
-        field: conversation.field,
-        cropIds: conversation.context?.cropIds,
-        interruption: Boolean(conversation.reply),
-      }).catch(() => ({
-        mode: "guide",
-        reply: nextQuestion && !draft.includes(nextQuestion) ? `${draft}\n\n${nextQuestion}` : draft,
-        showChoices: Boolean(conversation.question),
-      }));
+        action: "interpret",
+        cropId: previous?.context?.cropIds?.[0],
+        field: previous?.field,
+      }).catch(() => null);
+      if (result?.intent === "search" && result.query) {
+        turn = conversationTurn(result.query, filters, previous);
+        interpreted = true;
+      } else if (result?.intent === "help" || result?.intent === "rental_help") {
+        const question = result.intent === "help" ? "뭐해" : "대여 신청 방법";
+        turn = conversationTurn(question, filters, previous);
+        interpreted = true;
+      } else if (result?.intent === "unrelated") {
+        turn = unrelatedTurn(previous);
+      }
       pending.remove();
-      if (conversation.question && result.showChoices !== false) askFollowUp(conversation.question, result.reply);
-      else appendAiMessage(result.reply, "assistant");
-      $("aiModeLabel").textContent = result.mode === "ai" ? "GPT 상담" : "기본 상담 안내";
+    }
+    conversation = turn;
+    if (conversation.reply || conversation.question) {
+      if (conversation.question) {
+        const reply = [conversation.reply, conversation.question.reply].filter(Boolean).join("\n\n");
+        askFollowUp(conversation.question, reply);
+      } else {
+        appendAiMessage(conversation.reply, "assistant");
+      }
+      $("aiModeLabel").textContent = interpreted ? "AI 조건 해석 · 상담 안내" : "농기계 상담";
       return;
     }
 
@@ -1256,8 +1235,8 @@ async function sendAiQuestion(event) {
     if (catalogState === "error") await loadCatalog();
     else await catalogReady;
 
-    const { message: query, context } = conversation;
-    const selection = selectMatchingListings(query, context, allListings());
+    const { context } = conversation;
+    const selection = selectMatchingListings("", context, allListings());
     const candidateIds = selection.candidates.map(({ id }) => id);
     const guide = recommendationGuide(selection);
     let result = guide;
@@ -1269,13 +1248,13 @@ async function sendAiQuestion(event) {
     // Catalog candidates can receive an AI explanation. Local demo listings use the same filters.
     if (guide.listingIds.length && candidateIds.every((id) => catalog.some((item) => item.id === id))) {
       try {
-        result = await askRecommendation(query, { ...context, candidateIds });
+        result = await askRecommendation("조건에 맞는 매물", { ...context, candidateIds });
       } catch {
         result = guide;
       }
     }
 
-    const current = selectMatchingListings(query, context, allListings());
+    const current = selectMatchingListings("", context, allListings());
     if (current.candidates.map(({ id }) => id).join() !== candidateIds.join()) result = recommendationGuide(current);
     const { cropId, operations, combined, transaction, maxPrice, areaPyeong, date, dateEnd } = current;
     const conditions = [
@@ -1323,8 +1302,26 @@ function resetAllFilters() {
 }
 
 function bindEvents() {
-  $("browseMode").addEventListener("click", () => setView("browse"));
-  $("ownerMode").addEventListener("click", () => setView("owner"));
+  for (const button of document.querySelectorAll("[data-view]")) {
+    button.addEventListener("click", () => setView(button.dataset.view));
+  }
+  const cropSelect = $("cropSelect");
+  cropSelect.add(new Option("전체 작물", "all"));
+  for (const { id, name, emoji } of CROPS) cropSelect.add(new Option(emoji + " " + name, id));
+  cropSelect.addEventListener("change", () => {
+    const chosen = cropSelect.value;
+    state.selectedCrop = chosen;
+    state.filters.cropIds = chosen === "all" ? [] : [chosen];
+    if (chosen !== "all") {
+      const operations = CROP_OPERATIONS[chosen] || [];
+      state.filters.operations = state.filters.operations.filter((id) => operations.includes(id));
+      state.filters.stageIds = state.filters.stageIds.filter((stage) =>
+        operations.some((id) => OPERATION_BY_ID[id]?.stage === stage)
+      );
+    }
+    persist();
+    renderAll();
+  });
   $("rentTab").addEventListener("click", () => setTransaction("rent"));
   $("saleTab").addEventListener("click", () => setTransaction("sale"));
 
@@ -1365,12 +1362,10 @@ function bindEvents() {
     renderAll();
   });
 
-  $("heroFilter").addEventListener("click", () => openFilters());
-  $("heroAiTrigger")?.addEventListener("click", openAiPanel);
-  $("sidebarAiBtn")?.addEventListener("click", openAiPanel);
-  $("calloutAiBtn")?.addEventListener("click", openAiPanel);
-  $("calloutScrollBtn")?.addEventListener("click", () => $("market").scrollIntoView({ behavior: "smooth" }));
-  $("cropFilterButton").addEventListener("click", () => openFilters(state.selectedCrop));
+  $("guideResults").addEventListener("click", () => {
+    setView("browse");
+    $("marketTitle").focus();
+  });
   $("openFilters").addEventListener("click", () => openFilters());
   $("inlineResetFilters")?.addEventListener("click", resetAllFilters);
 
@@ -1459,7 +1454,6 @@ function bindEvents() {
       toast(state.favorites.includes(id) ? "❤️ 찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
       return;
     }
-    if (event.target.closest("[data-open-filter]")) openFilters();
     if (event.target.closest("[data-reset-all]")) resetAllFilters();
   });
 
@@ -1541,15 +1535,6 @@ function bindEvents() {
       conversation = undefined;
       $("aiInput").value = button.dataset.prompt;
       $("aiForm").requestSubmit();
-    })
-  );
-
-  document.querySelectorAll("[data-section]").forEach((button) =>
-    button.addEventListener("click", () => {
-      setView("browse");
-      $(button.dataset.section).scrollIntoView({ behavior: "smooth" });
-      document.querySelectorAll(".nav-item").forEach((nav) => nav.classList.remove("active"));
-      button.classList.add("active");
     })
   );
 

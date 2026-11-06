@@ -32,7 +32,7 @@ export function selectMatchingListings(message, context, listings) {
   const transaction = /구매|구입|사고 싶|살래/.test(message) ? "sale" : /대여|임대|빌리|빌릴|빌려/.test(message) ? "rent" : context.transaction === "sale" ? "sale" : "rent";
   const budgetMatch = [...message.matchAll(/(\d[\d,]*)\s*(만\s*원|원)/g)].at(-1);
   const maxPrice = budgetMatch ? Number(budgetMatch[1].replaceAll(",", "")) * (budgetMatch[2].startsWith("만") ? 10000 : 1) : Number(context.maxPrice) || 0;
-  const areaMatch = message.match(/(\d[\d,]*)\s*(평|㎡|제곱미터)/);
+  const areaMatch = message.match(/(\d[\d,]*(?:\.\d+)?)\s*(평|㎡|제곱미터)/);
   const areaPyeong = areaMatch ? Number(areaMatch[1].replaceAll(",", "")) / (areaMatch[2] === "평" ? 1 : 3.305785) : Number(context.areaPyeong) || 0;
   const date = typeof context.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(context.date) ? context.date : "";
   const dateEnd = date && typeof context.dateEnd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(context.dateEnd) ? context.dateEnd : date;

@@ -1327,7 +1327,7 @@ async function sendAiQuestion(event) {
         const line = document.createElement("div");
         line.className = "ai-rec-comparison-item";
         const name = document.createElement("strong");
-        name.textContent = "• " + (item.id || item.title) + ":";
+        name.textContent = "• " + (item.title || "농기계 매물") + ":";
         line.append(name);
         // Favor short, factual equipment and pickup details over an AI paragraph.
         const features = [shorten(item.included), shorten(item.pickup)].filter(Boolean);

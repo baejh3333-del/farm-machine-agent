@@ -1247,11 +1247,11 @@ function appendAiMessage(text, role, listingIds = []) {
       cardBtn.type = "button";
       cardBtn.className = "ai-rec-card-btn";
       cardBtn.innerHTML = `
-        <div class="ai-rec-info">
+        <span class="ai-rec-info">
           <strong>${escapeHtml(item.title)}</strong>
           <small>${escapeHtml(item.region)} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}</small>
           <small>${escapeHtml(areaLabel(item.areaMin, item.areaMax))} · ${escapeHtml(item.pickup || "인수 방법 문의")}</small>
-        </div>
+        </span>
         <span class="ai-rec-cta">상세 보기 ›</span>
       `;
       cardBtn.addEventListener("click", () => openDetail(item.id));
@@ -1507,6 +1507,14 @@ function openAiPanel() {
   $("aiClose").focus({ preventScroll: true });
 }
 
+function toggleAiPanelSize() {
+  const button = $("aiExpand");
+  const expanded = $("aiPanel").classList.toggle("is-expanded");
+  button.setAttribute("aria-pressed", String(expanded));
+  button.title = expanded ? "채팅창 원래 크기로" : "채팅창 확대";
+  button.firstElementChild.textContent = expanded ? "⤡" : "⤢";
+}
+
 function resetAllFilters() {
   state.filters = blankFilters();
   state.selectedCrop = "all";
@@ -1716,6 +1724,7 @@ function bindEvents() {
 
   $("newListingButton").addEventListener("click", openNewListing);
   $("aiLauncher").addEventListener("click", openAiPanel);
+  $("aiExpand").addEventListener("click", toggleAiPanelSize);
   window.visualViewport?.addEventListener("resize", syncAiViewport);
   window.visualViewport?.addEventListener("scroll", syncAiViewport);
   const closeAiPanel = ({ returnFocus = true } = {}) => {

@@ -1489,11 +1489,11 @@ img {
 }
 
 .ai-result {
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--line);
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ai-result-title {
@@ -1504,8 +1504,8 @@ img {
 
 .ai-rec-card-btn {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 7px 10px;
+  border-radius: 10px;
   border: 1px solid #b8dec8;
   background: var(--primary-light);
   display: flex;
@@ -1527,7 +1527,7 @@ img {
 
 .ai-rec-info small {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   margin-top: 2px;
 }

@@ -194,7 +194,7 @@ function updateBadges() {
   }
 }
 
-const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView" };
+const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", login: "loginView" };
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
 const MAIN_PAGE_VIEWS = ["home", "browse"];
@@ -1459,8 +1459,10 @@ function bindEvents() {
     setView("browse");
   });
   $("loginButton")?.addEventListener("click", () => {
-    toast("로그인은 준비 중이에요. 지금은 로그인 없이 모든 기능을 써볼 수 있어요.");
+    setView("login");
+    $("loginId")?.focus();
   });
+  initLoginForm();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
     if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = "";
@@ -1713,6 +1715,55 @@ function initBannerCarousel() {
   }
   show(0);
   setPaused(paused);
+}
+
+// 로그인 화면: 지금은 화면만 동작하고 실제 계정 확인은 서버 연결 후 붙인다
+function initLoginForm() {
+  const form = $("loginForm");
+  if (!form) return;
+  const idInput = $("loginId");
+  const passwordInput = $("loginPassword");
+  const submit = $("loginSubmit");
+  const eye = $("loginEye");
+  const remember = $("loginRemember");
+  const savedId = localStorage.getItem("moa-login-id");
+  if (savedId) idInput.value = savedId;
+
+  const updateSubmit = () => {
+    submit.disabled = !(idInput.value.trim() && passwordInput.value);
+  };
+  idInput.addEventListener("input", updateSubmit);
+  passwordInput.addEventListener("input", updateSubmit);
+  updateSubmit();
+
+  eye.addEventListener("click", () => {
+    const show = passwordInput.type === "password";
+    passwordInput.type = show ? "text" : "password";
+    eye.setAttribute("aria-pressed", String(show));
+    eye.setAttribute("aria-label", show ? "비밀번호 숨기기" : "비밀번호 보기");
+    eye.classList.toggle("is-showing", show);
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    // 아이디만 저장하고 비밀번호는 어디에도 저장하지 않는다
+    if (remember.checked) localStorage.setItem("moa-login-id", idInput.value.trim());
+    else localStorage.removeItem("moa-login-id");
+    passwordInput.value = "";
+    updateSubmit();
+    toast("로그인 기능은 준비 중이에요. 지금은 로그인 없이 모든 기능을 써볼 수 있어요.");
+  });
+
+  for (const el of document.querySelectorAll("[data-login-soon]")) {
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      toast(`${el.dataset.loginSoon}은(는) 준비 중이에요.`);
+    });
+  }
+  for (const el of document.querySelectorAll("[data-view-target]")) {
+    el.addEventListener("click", () => setView(el.dataset.viewTarget));
+  }
 }
 
 bindEvents();

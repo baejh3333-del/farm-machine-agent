@@ -298,6 +298,51 @@
             </section>
           </div>
         </div>
+
+        <!-- 로그인 화면 (화면만 구성, 실제 계정 확인은 아직 연결 전) -->
+        <section id="loginView" class="login-view" aria-labelledby="loginTitle" hidden>
+          <div class="login-card">
+            <h1 id="loginTitle" class="login-logo">
+              <span class="visually-hidden">모아농 로그인</span>
+              <span class="login-logo-mark" aria-hidden="true"><span class="brand-circle">모</span><span class="brand-circle">아</span><span class="brand-circle brand-circle-accent">농</span></span>
+              <span class="login-logo-tagline" aria-hidden="true"><span>E</span><span>A</span><span>S</span><span>Y</span><span class="gap"></span><span>F</span><span>A</span><span>R</span><span>M</span><span class="gap"></span><span>R</span><span>E</span><span>N</span><span>T</span><span>A</span><span>L</span></span>
+            </h1>
+
+            <form class="login-form" id="loginForm" novalidate>
+              <label class="visually-hidden" for="loginId">아이디</label>
+              <input class="login-input" id="loginId" name="username" type="text" autocomplete="username" placeholder="아이디" />
+              <div class="login-password">
+                <label class="visually-hidden" for="loginPassword">비밀번호</label>
+                <input class="login-input" id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="비밀번호" />
+                <button type="button" class="login-eye" id="loginEye" aria-label="비밀번호 보기" aria-pressed="false">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle><path class="login-eye-slash" d="M4 4l16 16"></path></svg>
+                </button>
+              </div>
+              <label class="login-remember">
+                <input type="checkbox" id="loginRemember" checked />
+                <span>아이디 저장</span>
+              </label>
+              <button type="submit" class="login-submit" id="loginSubmit" disabled>로그인</button>
+            </form>
+
+            <nav class="login-links" aria-label="계정 도움">
+              <a href="#" class="login-link-strong" data-login-soon="회원가입">회원가입</a>
+              <span aria-hidden="true">|</span>
+              <a href="#" data-login-soon="아이디 찾기">아이디 찾기</a>
+              <span aria-hidden="true">|</span>
+              <a href="#" data-login-soon="비밀번호 찾기">비밀번호 찾기</a>
+            </nav>
+
+            <div class="login-social" role="group" aria-label="간편 로그인">
+              <button type="button" class="social-button social-kakao" data-login-soon="카카오 로그인">카카오 로그인</button>
+              <button type="button" class="social-button social-naver" data-login-soon="네이버 로그인">네이버 로그인</button>
+              <button type="button" class="social-button social-google" data-login-soon="구글 로그인">구글 로그인</button>
+              <button type="button" class="social-button social-apple" data-login-soon="애플 로그인">애플 로그인</button>
+            </div>
+
+            <button type="button" class="login-guest" data-view-target="home">로그인 없이 둘러보기 <span aria-hidden="true">›</span></button>
+          </div>
+        </section>
       </main>
     </div>
   </div>

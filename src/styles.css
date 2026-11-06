@@ -823,31 +823,33 @@ img {
   font-weight: 700;
 }
 
-.machine-tab:hover .mt-emoji,
-.machine-tab.active .mt-emoji {
-  background: var(--bg-tint);
-  border-color: var(--forest);
-}
-
 .mt-emoji {
   display: grid;
   place-items: center;
-  width: clamp(48px, 4.5vw, 66px);
+  width: clamp(70px, 6vw, 88px);
   aspect-ratio: 1;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--bg-surface);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-size: 25px;
+  transition: transform 0.18s ease;
+}
+
+.machine-tab:hover .mt-emoji,
+.machine-tab.active .mt-emoji {
+  transform: translateY(-2px);
 }
 
 .mt-photo {
-  width: 126%;
-  height: 126%;
+  width: 100%;
+  height: 100%;
   max-width: none;
-  border-radius: 50%;
-  object-fit: cover;
-  transform: scale(1.02);
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  filter: drop-shadow(0 4px 5px rgba(22, 42, 34, 0.16));
 }
 
 .mt-caption {

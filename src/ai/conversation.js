@@ -102,7 +102,7 @@ export function conversationTurn(message, filters, previous) {
   }
 
   if (field === "area" && /^\d[\d,]*$/.test(message)) message += "평";
-  if (field === "budget" && /^\\d[\\d,]*(\\s*만)?$/.test(message)) {
+  if (field === "budget" && /^\d[\d,]*(\s*만)?$/.test(message)) {
     // During rental budget selection, "5" and "10" mean the displayed
     // 5만원/10만원 options. Preserve explicit "만" and other amounts.
     if (context.transaction === "rent" && /^(5|10)$/.test(message)) message += "만원";
@@ -131,7 +131,7 @@ export function conversationTurn(message, filters, previous) {
       transaction: "빌리려는 건지 사려는 건지 한 가지를 골라 주세요.",
       area: "면적은 ‘300평’처럼 알려주세요. 아직 모르시면 건너뛰어도 돼요.",
       date: "날짜는 ‘11 20 ~ 11 22’처럼 간단히 적어 주셔도 돼요. 연도가 바뀌면 자동으로 계산해 드려요. 또는 건너뛸 수 있어요.",
-      budget: "금액은 ‘7만원 이하’처럼 적어 주세요. 예산이 미정이면 ‘바로 추천’을 눌러 주세요.",
+      budget: "하루 대여료는 ‘5’ 또는 ‘10’처럼 숫자만 적어도 돼요. 예산이 미정이면 ‘바로 추천’을 눌러 주세요.",
     };
     question.reply = prompts[field];
   }

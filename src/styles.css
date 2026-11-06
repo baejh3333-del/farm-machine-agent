@@ -2487,3 +2487,11 @@ img {
   .active-filters:empty { display: none; }
   .filter-chip { min-height: 36px; font-size: 14px; }
 }
+
+/* Compact, easy-to-scan AI recommendation summary */
+.ai-rec-overview { margin-top: 12px; display: grid; gap: 5px; font-size: 13px; }
+.ai-rec-field { line-height: 1.55; }
+.chat-bubble.assistant .ai-rec-field strong { display: inline; margin: 0; font-weight: 700; }
+.ai-rec-comparison { margin-top: 12px; display: grid; gap: 5px; font-size: 13px; }
+.ai-rec-comparison > strong { margin-bottom: 2px; }
+.ai-rec-notice { margin-top: 9px; font-size: 12px; line-height: 1.5; }

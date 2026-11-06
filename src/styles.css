@@ -3015,3 +3015,88 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   .ai-header { padding-top: max(12px, env(safe-area-inset-top)); }
   .ai-form { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
+
+/* =========================================
+   토스 스타일 모션 (2026-11)
+   ========================================= */
+/* 배너: 배경이 천천히 확대에서 원래 크기로, 글자는 순서대로 떠오름 */
+.banner-slide { isolation: isolate; overflow: hidden; }
+.banner-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: inherit;
+}
+.banner-slide::before { z-index: -1; }
+@keyframes moa-zoom-out { from { transform: scale(1.1); } to { transform: scale(1); } }
+@keyframes moa-copy-in { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+.banner-slide.is-active .banner-bg { animation: moa-zoom-out 6s cubic-bezier(.2,.6,.2,1) both; }
+.banner-slide.is-active .banner-copy > * { animation: moa-copy-in .8s cubic-bezier(.16,1,.3,1) both; }
+.banner-slide.is-active .banner-copy > :nth-child(1) { animation-delay: .15s; }
+.banner-slide.is-active .banner-copy > :nth-child(2) { animation-delay: .28s; }
+.banner-slide.is-active .banner-copy > :nth-child(3) { animation-delay: .42s; }
+.banner-slide.is-active .banner-copy > :nth-child(4) { animation-delay: .56s; }
+
+/* 빠른 검색창: 처음 열릴 때 아래에서 올라옴 */
+@keyframes moa-rise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+#homeView + #browseView .search-dock, .search-dock { animation: moa-rise .9s cubic-bezier(.16,1,.3,1) .35s both; }
+
+/* 매물 카드: 차례로 떠오름, 마우스를 올리면 살짝 떠오름 */
+@keyframes moa-card-in { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+.listing-card { animation: moa-card-in .6s cubic-bezier(.16,1,.3,1) both; transition: transform .25s ease, box-shadow .25s ease; }
+.listing-card:nth-child(2) { animation-delay: .06s; }
+.listing-card:nth-child(3) { animation-delay: .12s; }
+.listing-card:nth-child(4) { animation-delay: .18s; }
+.listing-card:nth-child(5) { animation-delay: .24s; }
+.listing-card:nth-child(6) { animation-delay: .3s; }
+.listing-card:nth-child(n+7) { animation-delay: .36s; }
+.listing-card:hover { transform: translateY(-4px); box-shadow: 0 16px 36px rgba(26, 29, 25, 0.12); }
+
+/* 누를 때 살짝 눌리는 느낌 */
+.banner-cta, .qs-submit, .login-submit, .social-button, .login-button, .tx-tab, .banner-arrow, .nav-item, .button, .about-card, .listing-card button {
+  transition: transform .15s ease, background-color .2s ease, box-shadow .2s ease;
+}
+.banner-cta:active, .qs-submit:active, .login-submit:active:not(:disabled), .social-button:active, .login-button:active, .tx-tab:active, .banner-arrow:active, .button:active { transform: scale(.96); }
+
+/* 스크롤에 맞춰 단어가 차례로 진해짐 */
+.scroll-words .scroll-word { color: #C9CBC5; transition: color .35s ease; }
+.scroll-words .scroll-word.is-lit { color: #1A1D19; }
+.scroll-words strong .scroll-word.is-lit { color: #2D7F4E; }
+.scroll-words-light .scroll-word { color: rgba(255, 255, 255, 0.35); }
+.scroll-words-light .scroll-word.is-lit { color: #FFFFFF; }
+
+/* 소개 페이지 큰 그림: 스크롤하면 작은 카드에서 화면 가득 커짐 */
+.about-hero-image[data-scroll-grow] {
+  transform: scale(var(--grow, .86));
+  border-radius: var(--grow-radius, 48px);
+  transform-origin: center top;
+  will-change: transform;
+}
+/* 소개 페이지 그림: 스크롤 속도와 다르게 천천히 움직임 */
+.about-feature-media { flex: 1 1 min(100%, 420px); min-width: 0; height: 320px; border-radius: 28px; overflow: hidden; display: block; }
+.about-feature-media img[data-parallax] {
+  width: 100%;
+  height: calc(100% + 80px);
+  margin-top: -40px;
+  object-fit: cover;
+  object-position: 72% 50%;
+  border-radius: 0;
+  transform: translateY(var(--parallax, 0px)) scale(1.02);
+  will-change: transform;
+}
+.about-feature.reveal .about-feature-media { transform: scale(.94); transition: transform 1s cubic-bezier(.16,1,.3,1); }
+.about-feature.reveal.is-visible .about-feature-media { transform: none; }
+.about-feature.reveal img { transform: translateY(var(--parallax, 0px)) scale(1.02); transition: none; }
+@media (max-width: 700px) {
+  .about-feature-media { flex: none; width: 100%; height: 220px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner-bg, .banner-copy > *, .search-dock, .listing-card, .about-feature-media, .about-hero-image[data-scroll-grow], .about-feature-media img[data-parallax] {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+  .scroll-words .scroll-word { transition: none; }
+}

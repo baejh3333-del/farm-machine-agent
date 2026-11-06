@@ -74,7 +74,8 @@
         <div id="homeView">
           <section class="banner-carousel" id="bannerCarousel" aria-roledescription="carousel" aria-label="메인 배너">
             <div class="banner-track" id="bannerTrack">
-              <div class="banner-slide banner-slide-1" role="group" aria-roledescription="slide" aria-label="1 / 3">
+              <div class="banner-slide banner-slide-1 is-active" role="group" aria-roledescription="slide" aria-label="1 / 3">
+                <span class="banner-bg" aria-hidden="true"></span>
                 <div class="banner-copy">
                   <span class="banner-tag">초보 농부를 위한 농기계 대여</span>
                   <h1 id="heroTitle" class="banner-title">농기계,<br />클릭 한 번으로</h1>
@@ -86,6 +87,7 @@
                 </div>
               </div>
               <div class="banner-slide banner-slide-2" role="group" aria-roledescription="slide" aria-label="2 / 3" aria-hidden="true">
+                <span class="banner-bg" aria-hidden="true"></span>
                 <div class="banner-copy">
                   <span class="banner-tag">우리 동네 농기계</span>
                   <h2 class="banner-title">멀리 갈 필요 없이,<br />가까운 곳에서</h2>
@@ -97,6 +99,7 @@
                 </div>
               </div>
               <div class="banner-slide banner-slide-3" role="group" aria-roledescription="slide" aria-label="3 / 3" aria-hidden="true">
+                <span class="banner-bg" aria-hidden="true"></span>
                 <div class="banner-copy">
                   <span class="banner-tag">언제든 편하게</span>
                   <h2 class="banner-title">시간 걱정 없이,<br />필요할 때</h2>
@@ -179,7 +182,7 @@
 
           <!-- 매물 목록 섹션 -->
           <section class="market-section" id="market" aria-labelledby="marketTitle">
-            <div class="market-heading">
+            <div class="market-heading reveal">
               <div>
                 <span class="market-kicker">우리 동네 장터</span>
                 <h2 id="marketTitle" tabindex="-1">농기계 매물</h2>
@@ -317,13 +320,13 @@
             <h1 id="aboutTitle">필요한 농기계,<br />클릭 한 번이면 충분해요.</h1>
             <p>모아농은 <strong>초보 농부</strong>를 위한 우리 동네 농기계 대여·중고 거래 서비스예요. 기계 이름을 몰라도 하려는 일만 말하면, 맞는 기계와 쓰는 법을 알려드리고 가까운 이웃 농가의 기계를 바로 빌릴 수 있게 연결해요.</p>
           </section>
-          <img class="about-hero-image reveal" src="./src/banner-1.jpg" alt="밭을 가는 초록 트랙터와 클릭 표시 일러스트" />
+          <img class="about-hero-image" data-scroll-grow src="./src/banner-1.jpg" alt="밭을 가는 초록 트랙터와 클릭 표시 일러스트" />
 
           <section class="about-section" aria-labelledby="aboutProblem">
             <div class="about-heading reveal">
               <span class="about-kicker">문제의식</span>
               <h2 id="aboutProblem">농사는 시작했는데,<br />기계 앞에서 막혀요.</h2>
-              <p>처음 농사를 짓는 사람에게 농기계는 가장 높은 벽이에요. 빌리려는 사람도, 빌려줄 수 있는 사람도 불편한 구조가 그대로 남아 있어요.</p>
+              <p class="scroll-words" data-scroll-words>처음 농사를 짓는 사람에게 농기계는 가장 높은 벽이에요. 빌리려는 사람도, 빌려줄 수 있는 사람도 불편한 구조가 그대로 남아 있어요.</p>
             </div>
             <div class="about-cards">
               <article class="about-card reveal"><span class="about-who">초보 농부</span><h3>무슨 기계가 필요한지 몰라요</h3><p>기종과 규격이 어렵고, 지금 내 작업에 어떤 기계가 맞는지 판단하기 힘들어요.</p></article>
@@ -338,15 +341,15 @@
               <h2 id="aboutWhat">고르고, 배우고, 빌리는 일을<br />한 곳에서 끝내요.</h2>
             </div>
             <div class="about-feature reveal">
-              <img src="./src/banner-1.jpg" alt="밭에서 일하는 초록 트랙터 일러스트" />
+              <span class="about-feature-media"><img src="./src/banner-1.jpg" alt="밭에서 일하는 초록 트랙터 일러스트" data-parallax /></span>
               <div><span class="about-step">01 · 농농이 골라줘요</span><h3>기계 이름 몰라도,<br />하려는 일만 말하세요.</h3><p>"감자 300평 심을 건데요"처럼 말하면 AI 상담사 농농이 작업에 맞는 기계를 추천하고, 어디에 어떻게 쓰는지 쉬운 말로 알려줘요. 농사 순서대로 작물과 할 일을 고르기만 해도 필요한 기계가 바로 나와요.</p></div>
             </div>
             <div class="about-feature about-feature-flip reveal">
-              <img src="./src/banner-2.jpg" alt="농가 마당 창고 앞에 세워진 관리기 일러스트" />
+              <span class="about-feature-media"><img src="./src/banner-2.jpg" alt="농가 마당 창고 앞에 세워진 관리기 일러스트" data-parallax /></span>
               <div><span class="about-step">02 · 가까운 곳에서</span><h3>멀리 갈 필요 없이,<br />이웃 농가의 기계를 빌려요.</h3><p>내 동네를 기준으로 가까운 농가가 올린 농기계를 하루 단위로 빌리거나, 오래 쓸 기계는 중고로 살 수 있어요. 기계를 가진 농가는 쓰지 않는 기간에 빌려주고 수익을 얻어요.</p></div>
             </div>
             <div class="about-feature reveal">
-              <img src="./src/banner-3.jpg" alt="해 질 녘 밭과 불 켜진 농가 일러스트" />
+              <span class="about-feature-media"><img src="./src/banner-3.jpg" alt="해 질 녘 밭과 불 켜진 농가 일러스트" data-parallax /></span>
               <div><span class="about-step">03 · 시간 걱정 없이</span><h3>클릭 몇 번이면<br />대여 예약까지 끝.</h3><p>전화나 방문 없이 밤에도 주말에도 날짜를 고르고 대여를 요청해요. 원하는 기계가 대여 중이면 다시 빌릴 수 있을 때 알림으로 알려드려요.</p></div>
             </div>
           </section>
@@ -355,7 +358,7 @@
             <div class="about-why reveal">
               <div class="about-heading">
                 <span class="about-kicker about-kicker-yellow">왜 이렇게 만들었나</span>
-                <h2 id="aboutWhy">기능은 적게, 길은 짧게.</h2>
+                <h2 id="aboutWhy" class="scroll-words scroll-words-light" data-scroll-words>기능은 적게, 길은 짧게.</h2>
                 <p>기존 서비스는 기능이 너무 많아서, 기계 하나 잠깐 빌리거나 사는 일이 오히려 어려웠어요. 모아농은 초보 농부가 망설이지 않고 바로 끝낼 수 있는 것만 남겼어요.</p>
               </div>
               <div class="about-reasons">
@@ -379,7 +382,7 @@
 
           <section class="about-closing reveal" aria-labelledby="aboutGoal">
             <span class="about-logo-mark about-logo-mark-md" aria-hidden="true"><span class="brand-circle">모</span><span class="brand-circle">아</span><span class="brand-circle brand-circle-accent">농</span></span>
-            <h2 id="aboutGoal">이웃의 기계를 모아,<br />누구나 쉽게 농사짓도록.</h2>
+            <h2 id="aboutGoal" class="scroll-words" data-scroll-words>이웃의 기계를 모아,<br />누구나 쉽게 농사짓도록.</h2>
             <p>모아농은 '모아'와 '농'을 합친 이름이에요. 흩어진 동네 농기계를 한곳에 모아, 처음 농사짓는 사람도 필요한 기계를 쉽게 만나게 하는 것이 우리의 목표예요.</p>
             <button type="button" class="banner-cta" data-view-target="home">모아농 시작하기</button>
           </section>

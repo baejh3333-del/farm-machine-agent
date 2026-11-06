@@ -1775,6 +1775,7 @@ function initBannerCarousel() {
     slides.forEach((slide, i) => {
       const current = i === index;
       slide.setAttribute("aria-hidden", String(!current));
+      slide.classList.toggle("is-active", current);
       for (const el of slide.querySelectorAll("a, button")) el.tabIndex = current ? 0 : -1;
     });
     dots.forEach((dot, i) => {
@@ -1891,11 +1892,86 @@ function trackHeaderHeight() {
   else window.addEventListener("resize", apply);
 }
 
+// 토스 스타일 스크롤 모션: 글자가 스크롤에 맞춰 차례로 진해지고, 이미지는 커지며 천천히 움직인다
+function initScrollMotion() {
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const wordBlocks = [...document.querySelectorAll("[data-scroll-words]")];
+  // 글자를 단어 단위로 나눈다 (<br>, <strong> 같은 태그는 그대로 둔다)
+  const splitWords = (node) => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const parts = child.textContent.split(/(\s+)/);
+        const frag = document.createDocumentFragment();
+        for (const part of parts) {
+          if (!part) continue;
+          if (/^\s+$/.test(part)) frag.append(part);
+          else {
+            const span = document.createElement("span");
+            span.className = "scroll-word";
+            span.textContent = part;
+            frag.append(span);
+          }
+        }
+        child.replaceWith(frag);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        splitWords(child);
+      }
+    }
+  };
+  for (const block of wordBlocks) splitWords(block);
+  if (reduceMotion) {
+    for (const w of document.querySelectorAll(".scroll-word")) w.classList.add("is-lit");
+    return;
+  }
+  const growers = [...document.querySelectorAll("[data-scroll-grow]")];
+  const parallax = [...document.querySelectorAll("[data-parallax]")];
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  let ticking = false;
+  const update = () => {
+    ticking = false;
+    const vh = window.innerHeight;
+    for (const block of wordBlocks) {
+      if (block.offsetParent === null) continue;
+      const r = block.getBoundingClientRect();
+      // 블록 윗부분이 화면 아래 85% 지점에 닿을 때 시작해 화면 45% 지점을 지날 때 끝난다
+      const progress = clamp((vh * 0.85 - r.top) / (vh * 0.4 + r.height));
+      const words = block.querySelectorAll(".scroll-word");
+      const lit = Math.round(progress * words.length);
+      words.forEach((w, i) => w.classList.toggle("is-lit", i < lit));
+    }
+    for (const el of growers) {
+      if (el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      const progress = clamp((vh - r.top) / (vh * 0.7));
+      el.style.setProperty("--grow", (0.86 + 0.14 * progress).toFixed(4));
+      el.style.setProperty("--grow-radius", `${Math.round(48 - 16 * progress)}px`);
+    }
+    for (const el of parallax) {
+      if (el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      const center = (r.top + r.height / 2 - vh / 2) / vh;
+      el.style.setProperty("--parallax", `${(center * -40).toFixed(1)}px`);
+    }
+  };
+  const onScroll = () => {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(update);
+    }
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  // 다른 화면에서 돌아왔을 때도 바로 맞춘다
+  for (const button of document.querySelectorAll("[data-view], #brandHome")) button.addEventListener("click", () => setTimeout(update, 60));
+  update();
+}
+
 bindEvents();
 trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));
 initBannerCarousel();
 initRevealOnScroll();
+initScrollMotion();
 initMainPageScrollSpy();
 setTransaction(state.transaction);
 setView("home");

@@ -1489,6 +1489,7 @@ async function sendAiQuestion(event) {
 
 function openAiPanel() {
   $("aiPanel").hidden = false;
+  document.body.classList.add("ai-open");
   $("aiLauncher").setAttribute("aria-expanded", "true");
   $("aiInput").focus();
 }
@@ -1711,6 +1712,7 @@ function bindEvents() {
   const closeAiPanel = ({ returnFocus = true } = {}) => {
     if ($("aiPanel").hidden) return;
     $("aiPanel").hidden = true;
+    document.body.classList.remove("ai-open");
     $("aiLauncher").setAttribute("aria-expanded", "false");
     if (returnFocus) $("aiLauncher").focus();
   };
@@ -1879,7 +1881,18 @@ function initRevealOnScroll() {
   for (const el of items) observer.observe(el);
 }
 
+// 상단바 높이를 CSS 변수로 알려 농농 상담창이 상단바 아래까지만 커지게 한다
+function trackHeaderHeight() {
+  const header = document.querySelector(".sidebar");
+  if (!header) return;
+  const apply = () => document.documentElement.style.setProperty("--header-h", `${header.offsetHeight}px`);
+  apply();
+  if ("ResizeObserver" in window) new ResizeObserver(apply).observe(header);
+  else window.addEventListener("resize", apply);
+}
+
 bindEvents();
+trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));
 initBannerCarousel();
 initRevealOnScroll();

@@ -287,20 +287,20 @@
         <img src="./src/nongnong.png" width="60" height="60" alt="" />
         <div class="chat-bubble assistant">
           <strong>안녕하세요! 초보 농부 도우미 농농이예요 </strong>
-          하려는 농사일을 평소 말투로 알려주세요. 필요한 조건을 확인한 뒤 등록 매물을 비교해 드려요. 상담 조건을 지우려면 ‘새 상담’을 입력하세요.
+          하려는 농사일을 평소 말투로 알려주세요. 필요한 조건을 확인한 뒤 등록 매물을 비교해 드려요. 아래 작업 예시를 눌러 내 조건에 맞게 고쳐 보세요.
         </div>
       </div>
     </div>
 
-    <div class="prompt-suggestions" aria-label="자주 묻는 질문 예시">
-      <button type="button" data-prompt="고추밭 300평 두둑 만들기, 하루 대여"> 고추밭 300평 두둑 만들기</button>
-      <button type="button" data-prompt="배추밭 200평 비닐 멀칭 기계 대여"> 배추밭 비닐 씌우기(멀칭)</button>
-      <button type="button" data-prompt="벼 수확용 콤바인, 구매 예산 800만원"> 벼 수확 콤바인 구매</button>
-      <button type="button" data-prompt="감자 300평 수확 굴취기 대여"> 감자 캐는 기계 빌리기</button>
+    <div class="prompt-suggestions" id="aiStarters" role="group" aria-label="작업 예시를 입력창에 넣기">
+      <button type="button" data-prompt="고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.">고추밭 두둑 만들기</button>
+      <button type="button" data-prompt="배추밭에 비닐 씌우는 기계를 빌리고 싶어요.">배추밭 비닐 씌우기</button>
+      <button type="button" data-prompt="벼를 수확할 기계를 사고 싶어요.">벼 수확기 구매</button>
+      <button type="button" data-prompt="감자 캐는 기계를 빌리고 싶어요.">감자 캐는 기계 대여</button>
     </div>
 
     <form id="aiForm" class="ai-form">
-      <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평 두둑 만들려는데 어떤 기계 빌릴까요?" aria-label="AI에게 작업 설명" required />
+      <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" required />
       <button type="submit" class="button button-primary ai-send-btn" aria-label="질문 보내기">전송</button>
     </form>
     <p class="ai-footnote">추천은 등록된 매물 기준이며, 작업기 호환성과 기계 상태는 거래 전 꼭 확인하세요.</p>

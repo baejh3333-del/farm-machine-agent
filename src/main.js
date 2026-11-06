@@ -1152,8 +1152,18 @@ function appendAiMessage(text, role, listingIds = []) {
 
 let conversation;
 let recommendationPending = false;
+const aiDefaultPlaceholder = $("aiInput").placeholder;
+const aiInputExamples = {
+  crop: "예: 감자",
+  operation: "예: 밭에 비닐을 씌우려고 해요",
+  transaction: "예: 기계를 빌리고 싶어요",
+  area: "예: 300평",
+  date: "시작일과 반납일을 입력해 주세요",
+  budget: "예: 7만 원 이하",
+};
 
 function askFollowUp(question, reply = question.reply) {
+  $("aiInput").placeholder = aiInputExamples[question.field] || aiDefaultPlaceholder;
   const bubble = appendAiMessage(reply, "assistant");
   const choices = document.createElement("div");
   choices.className = "prompt-suggestions ai-follow-up";
@@ -1182,6 +1192,8 @@ async function sendAiQuestion(event) {
   const submit = $("aiForm").querySelector('[type="submit"]');
   submit.disabled = true;
   $("aiInput").value = "";
+  $("aiInput").placeholder = aiDefaultPlaceholder;
+  $("aiStarters").hidden = true;
   $("aiMessages").querySelectorAll(".ai-follow-up").forEach((choices) => choices.remove());
   appendAiMessage(message, "user");
   let pending;
@@ -1226,6 +1238,10 @@ async function sendAiQuestion(event) {
         askFollowUp(conversation.question, reply);
       } else {
         appendAiMessage(conversation.reply, "assistant");
+      }
+      if (turn.reset) {
+        conversation = undefined;
+        $("aiStarters").hidden = false;
       }
       $("aiModeLabel").textContent = interpreted ? "AI 조건 해석 · 상담 안내" : "농기계 상담";
       return;
@@ -1295,7 +1311,8 @@ async function sendAiQuestion(event) {
       comparison.append(title);
       for (const item of matched) {
         const line = document.createElement("div");
-        const features = [item.included, item.pickup].filter(Boolean);
+        const summary = result.summaries?.[item.id];
+        const features = summary ? [summary] : [item.included, item.pickup].filter(Boolean);
         line.textContent = "• " + item.title + (features.length ? ": " + features.join(" · ") : "");
         comparison.append(line);
       }
@@ -1560,11 +1577,15 @@ function bindEvents() {
     $("aiLauncher").setAttribute("aria-expanded", "false");
     $("aiLauncher").focus();
   });
+  const aiInput = $("aiInput");
   $("aiForm").addEventListener("submit", sendAiQuestion);
   $("aiReset").addEventListener("click", () => {
     if (recommendationPending) return;
     conversation = undefined;
     $("aiMessages").replaceChildren();
+    $("aiStarters").hidden = false;
+    aiInput.value = "";
+    aiInput.placeholder = aiDefaultPlaceholder;
     appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 아는 조건부터 말씀해 주세요.", "assistant");
     $("aiInput").focus();
   });
@@ -1572,9 +1593,8 @@ function bindEvents() {
   document.querySelectorAll("[data-prompt]").forEach((button) =>
     button.addEventListener("click", () => {
       if (recommendationPending) return;
-      conversation = undefined;
-      $("aiInput").value = button.dataset.prompt;
-      $("aiForm").requestSubmit();
+      aiInput.value = button.dataset.prompt;
+      aiInput.focus();
     })
   );
 

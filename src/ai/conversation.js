@@ -63,13 +63,13 @@ function nextQuestion(selection, known) {
   if (!known.transaction) return { field: "transaction", reply: "필요한 기간만 빌리실 건가요, 구매하실 건가요?", choices: ["대여", "구매"] };
   if (!known.area) return { field: "area", reply: "작업할 농지는 대략 몇 평인가요? 면적을 알면 크기가 맞는 장비로 좁힐 수 있어요.", choices: ["100평", "300평", "1000평", "건너뛰기", "바로 추천"] };
   if (selection.transaction === "rent" && !known.date) return { field: "date", reply: "언제 빌리실 건가요? 시작일과 반납일을 알려주세요. 하루만 필요하면 날짜 하나만 입력해도 돼요.", choices: ["건너뛰기", "바로 추천"] };
-  if (!known.budget) return { field: "budget", reply: selection.transaction === "rent" ? "하루 대여료는 얼마까지 생각하세요?" : "구매 예산은 얼마까지 생각하세요?", choices: selection.transaction === "rent" ? ["5만원 이하", "10만원 이하", "건너뛰기"] : ["100만원 이하", "300만원 이하", "건너뛰기"] };
+  if (!known.budget) return { field: "budget", reply: selection.transaction === "rent" ? "하루 대여료는 얼마까지 생각하세요?" : "구매 예산은 얼마까지 생각하세요?", choices: selection.transaction === "rent" ? ["5만원 이하", "10만원 이하", "바로 추천"] : ["100만원 이하", "300만원 이하", "바로 추천"] };
   return null;
 }
 
 export function conversationTurn(message, filters, previous) {
   message = message.trim();
-  if (resetRequest.test(message)) return { reply: "상담 조건을 초기화했어요. 어떤 작업에 쓸 장비를 찾으시나요?" };
+  if (resetRequest.test(message)) return { reset: true, reply: "상담 조건을 초기화했어요. 어떤 작업에 쓸 장비를 찾으시나요?" };
   if (instructionRequest.test(message)) return unrelatedTurn(previous);
   const reply = answerInterruption(message, previous?.field);
   if (reply) return { ...previous, reply, question: previous?.question };
@@ -132,7 +132,7 @@ export function conversationTurn(message, filters, previous) {
       transaction: "빌리려는 건지 사려는 건지 한 가지를 골라 주세요.",
       area: "면적은 ‘300평’처럼 알려주세요. 아직 모르시면 건너뛰어도 돼요.",
       date: "날짜는 연도부터 적어 주세요. 예를 들어 2026-11-20처럼 입력하거나 건너뛸 수 있어요.",
-      budget: "금액은 ‘7만원 이하’처럼 적어 주세요. 정해진 예산이 없다면 건너뛰어도 돼요.",
+      budget: "금액은 ‘7만원 이하’처럼 적어 주세요. 예산이 미정이면 ‘바로 추천’을 눌러 주세요.",
     };
     question.reply = prompts[field];
   }

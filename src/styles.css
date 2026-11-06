@@ -2922,3 +2922,4 @@ img {
 /* 로고를 누르면 홈으로 */
 button.brand-moanong { border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; }
 button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset: 4px; border-radius: 12px; }
+\n/* 로그인 안내 문구를 버튼 너비의 중심에 맞춘다. */\n.owner-login-card h2,\n.owner-login-card p {\n  text-align: center;\n}\n

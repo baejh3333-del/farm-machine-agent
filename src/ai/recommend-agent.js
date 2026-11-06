@@ -1,7 +1,7 @@
 export async function askRecommendation(message, context) {
   const response = await fetch("/api/recommend", {
     method: "POST",
-    signal: AbortSignal.timeout(6500),
+    signal: AbortSignal.timeout(9500),
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message, context }),
   });

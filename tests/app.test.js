@@ -135,3 +135,44 @@ test("API 키가 없어도 안내 응답과 유효한 매물 ID를 반환한다"
     else process.env.OPENAI_API_KEY = previous;
   }
 });
+
+test("예산 범위 표현과 '만' 단위 축약 응답을 올바르게 해석한다", () => {
+  const rangeResult = selectMatchingListings("고추 두둑 대여 5만원~7만원", {}, LISTINGS);
+  assert.equal(rangeResult.maxPrice, 70000);
+
+  let turn = conversationTurn("고추 두둑 장비 대여", {});
+  turn = conversationTurn("300", {}, turn);
+  turn = conversationTurn("건너뛰기", {}, turn);
+  assert.equal(turn.field, "budget");
+  turn = conversationTurn("7만", {}, turn);
+  assert.equal(turn.field, undefined);
+  assert.equal(turn.context.maxPrice, 70000);
+});
+
+test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞춰 폴백 응답을 구성한다", async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const simpleGreeting = await recommend("ㅎㅇ", {
+      draft: "안녕하세요! 저는 농농이에요.",
+      interruption: true,
+    });
+    assert.equal(simpleGreeting.mode, "guide");
+    assert.equal(simpleGreeting.showChoices, false);
+    assert.deepEqual(simpleGreeting.listingIds, []);
+
+    const midFlowInterruption = await recommend("멀칭이 뭐야?", {
+      draft: "멀칭은 흙 표면을 비닐 같은 재료로 덮는 작업이에요.",
+      nextQuestion: "작업할 농지는 대략 몇 평인가요?",
+      field: "area",
+      interruption: true,
+    });
+    assert.equal(midFlowInterruption.mode, "guide");
+    assert.equal(midFlowInterruption.showChoices, true);
+    assert.match(midFlowInterruption.reply, /멀칭은 흙 표면을/);
+    assert.match(midFlowInterruption.reply, /작업할 농지는 대략 몇 평인가요\?/);
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
+});

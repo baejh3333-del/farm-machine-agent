@@ -174,8 +174,9 @@ function hideDialog(backdrop) {
 
 function machineVisual(item, detail = false) {
   const type = MACHINE_BY_ID[item.machineType];
-  return item.photo
-    ? `<img src="${item.photo}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
+  const safePhoto = typeof item.photo === "string" && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo) ? escapeHtml(item.photo) : "";
+  return safePhoto
+    ? `<img src="${safePhoto}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
     : `<span class="art-emoji" aria-label="${escapeHtml(type?.label || "농기계")} 예시 그림" role="img" style="font-size:${detail ? "110px" : "68px"}">${type?.emoji || "🚜"}</span>`;
 }
 
@@ -1220,15 +1221,34 @@ async function sendAiQuestion(event) {
   let pending;
 
   try {
-    const filters = { ...state.filters, cropIds: [], transaction: state.transaction, region: state.region, sort: state.sort };
+    const filters = {
+      transaction: state.transaction,
+      region: state.region,
+      sort: state.sort,
+      radius: state.filters.radius,
+      date: state.filters.date,
+      dateEnd: state.filters.dateEnd,
+    };
     conversation = conversationTurn(message, filters, conversation);
-    if (conversation.reply) {
-      if (conversation.question) askFollowUp(conversation.question, conversation.reply);
-      else appendAiMessage(conversation.reply, "assistant");
-      return;
-    }
-    if (conversation.question) {
-      askFollowUp(conversation.question);
+    if (conversation.reply || conversation.question) {
+      const draft = conversation.reply || conversation.question.reply;
+      const nextQuestion = conversation.reply && conversation.question ? conversation.question.reply : "";
+      pending = appendAiMessage("답변을 준비하고 있어요…", "assistant");
+      const result = await askRecommendation(message, {
+        draft,
+        nextQuestion,
+        field: conversation.field,
+        cropIds: conversation.context?.cropIds,
+        interruption: Boolean(conversation.reply),
+      }).catch(() => ({
+        mode: "guide",
+        reply: nextQuestion && !draft.includes(nextQuestion) ? `${draft}\n\n${nextQuestion}` : draft,
+        showChoices: Boolean(conversation.question),
+      }));
+      pending.remove();
+      if (conversation.question && result.showChoices !== false) askFollowUp(conversation.question, result.reply);
+      else appendAiMessage(result.reply, "assistant");
+      $("aiModeLabel").textContent = result.mode === "ai" ? "GPT 상담" : "기본 상담 안내";
       return;
     }
 

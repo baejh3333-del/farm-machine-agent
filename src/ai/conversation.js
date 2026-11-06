@@ -5,9 +5,15 @@ const buy = /구매|구입|사고 싶|살래/;
 const rent = /대여|임대|빌리|빌릴|빌려/;
 const noPreference = /^(아직 모름|모르겠어요|정해지지 않았어요|상관없어요|건너뛰기)$/;
 const optional = ["area", "date", "budget"];
+const resetRequest = /^(?:새 상담(?: 시작)?|(?:상담|검색) 조건(?:을)?\s*(?:초기화|지워|잊어)(?:\s*해\s*줘|\s*줘)?|처음부터 다시(?: 할래요?)?)[.!?\s]*$/;
+const instructionRequest = /(?:프롬프트|(?:시스템|개발자|이전|기존|모든)\s*(?:지시|명령|규칙)|ignore.{0,30}(?:instructions|prompt)|system\s+prompt)/i;
+
+export function unrelatedTurn(previous) {
+  return { ...previous, reply: "농기계 추천과 매물 이용 방법을 도와드려요. 찾으시는 작업이나 궁금한 기능을 말씀해 주세요." };
+}
 
 const socialReplies = [
-  [/^(안녕(?:하세요|하십니까)?|반가워(?:요)?|하이|hello|hi)[!?.~\s]*$/i, "안녕하세요! 저는 농농이에요. 농기계가 필요하면 어떤 일을 하실 건지 편하게 말씀해 주세요."],
+  [/^(ㅎㅇ|안녕(?:하세요|하십니까)?|반가워(?:요)?|하이|hello|hi)[!?.~\s]*$/i, "안녕하세요! 저는 농농이에요. 농기계가 필요하면 어떤 일을 하실 건지 편하게 말씀해 주세요."],
   [/^(?:(?:지금|너|농농이)\s*)*(?:뭐\s*(?:해(?:요)?|하니|하는 중이야|하는 애야|하는 봇이야|할 수 있(?:어|어요))|무슨 일을 해(?:요)?|누구야|넌 누구야|무엇을 할 수 있(?:어|어요))[!?.~\s]*$/, "농사일에 맞는 장비를 고르는 걸 도와드려요. 예를 들어 ‘고추밭에 비닐을 씌우려고 해’라고 하면 어떤 장비가 필요한지부터 같이 살펴볼 수 있어요."],
   [/^(고마워(?:요)?|감사(?:해요|합니다)|땡큐)[!?.~\s]*$/, "천만에요! 이어서 궁금한 게 있으면 편하게 말씀해 주세요."],
 ];
@@ -63,6 +69,8 @@ function nextQuestion(selection, known) {
 
 export function conversationTurn(message, filters, previous) {
   message = message.trim();
+  if (resetRequest.test(message)) return { reply: "상담 조건을 초기화했어요. 어떤 작업에 쓸 장비를 찾으시나요?" };
+  if (instructionRequest.test(message)) return unrelatedTurn(previous);
   const reply = answerInterruption(message, previous?.field);
   if (reply) return { ...previous, reply, question: previous?.question };
   const context = { ...filters, ...previous?.context };
@@ -100,7 +108,7 @@ export function conversationTurn(message, filters, previous) {
   }
 
   if (field === "area" && /^\d[\d,]*$/.test(message)) message += "평";
-  if (field === "budget" && /^\d[\d,]*$/.test(message)) message += "원";
+  if (field === "budget" && /^\d[\d,]*(\s*만)?$/.test(message)) message += "원";
   if (noPreference.test(message) && optional.includes(field)) known[field] = true;
   if (/^(바로 추천|그냥 추천)(해줘)?$/.test(message)) {
     for (const key of optional) known[key] = true;

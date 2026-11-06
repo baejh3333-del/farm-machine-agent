@@ -54,20 +54,33 @@ export const CROP_BY_ID = Object.fromEntries(CROPS.map((item) => [item.id, item]
 export const OPERATION_BY_ID = Object.fromEntries(OPERATIONS.map((item) => [item.id, item]));
 export const MACHINE_BY_ID = Object.fromEntries(MACHINE_TYPES.map((item) => [item.id, item]));
 
+// [난수 캐시] 같은 페이지에서 지역 조합별 거리가 계속 바뀌지 않도록 저장합니다.
+// 주의: 상품 ID가 아닌 출발/도착 지역 기준이므로 같은 지역 상품은 같은 거리를 표시합니다.
 const distanceCache = new Map();
 
 export function distanceKm(from, to) {
+  // [기존 코드] 지역 간 예시 거리 테이블입니다. 숫자는 난수의 최댓값(km)입니다.
+  // 실제 GPS/도로 이동 거리가 아니며, 원래 테이블 값은 그대로 유지합니다.
   const values = {
     영양읍: { 영양읍: 2, 청기면: 6, 입암면: 8, 수비면: 18 },
     청기면: { 영양읍: 6, 청기면: 2, 입암면: 11, 수비면: 13 },
     입암면: { 영양읍: 8, 청기면: 11, 입암면: 2, 수비면: 21 },
     수비면: { 영양읍: 18, 청기면: 13, 입암면: 21, 수비면: 2 },
   };
+
+  // [추가 코드] 기존 거리(최댓값)에서 1.5km를 뺀 값을 최솟값으로 사용합니다.
+  // 등록되지 않은 지역 조합은 기존 기본값인 30km를 최댓값으로 사용합니다.
   const max = values[from]?.[to] ?? 30;
   const key = `${from}:${to}`;
+
+  // [추가 코드] 처음 조회할 때만 0.1km 단위 난수를 만들고 캐시에 보관합니다.
+  // 새로고침하면 캐시가 초기화되지만, 우연히 같은 숫자가 다시 나올 수 있습니다.
   if (!distanceCache.has(key)) {
     const min = max - 1.5;
     distanceCache.set(key, Math.round((min + Math.random() * (max - min)) * 10) / 10);
   }
+
+  // [사용처] src/main.js의 상품 카드·상세 화면과
+  // src/data/recommendation.js의 거리 필터·추천 정렬에서 호출합니다.
   return distanceCache.get(key);
 }

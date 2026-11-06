@@ -1456,6 +1456,15 @@ img {
   gap: 12px;
 }
 
+.ai-avatar {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #ffffff;
+}
+
 .ai-header strong {
   display: block;
   font-size: 16px;

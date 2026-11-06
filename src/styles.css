@@ -2495,3 +2495,12 @@ img {
 .ai-rec-comparison { margin-top: 12px; display: grid; gap: 5px; font-size: 13px; }
 .ai-rec-comparison > strong { margin-bottom: 2px; }
 .ai-rec-notice { margin-top: 9px; font-size: 12px; line-height: 1.5; }
+
+/* Exact concise recommendation layout: paired details on one line. */
+.ai-rec-overview { gap: 10px; }
+.ai-rec-row { font-size: 13px; line-height: 1.65; white-space: normal; }
+.chat-bubble.assistant .ai-rec-row strong { display: inline; margin: 0; font-weight: 700; }
+.ai-rec-separator { padding: 0 5px; color: var(--text-muted); }
+.ai-rec-comparison { margin-top: 15px; gap: 7px; }
+.chat-bubble.assistant .ai-rec-comparison-item strong { display: inline; margin: 0; font-weight: 700; }
+.ai-rec-comparison-item { line-height: 1.6; overflow-wrap: anywhere; }

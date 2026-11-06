@@ -1930,11 +1930,17 @@ function initScrollMotion() {
   const update = () => {
     ticking = false;
     const vh = window.innerHeight;
+    const scrollY = window.scrollY;
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - vh);
     for (const block of wordBlocks) {
       if (block.offsetParent === null) continue;
       const r = block.getBoundingClientRect();
       // 블록 윗부분이 화면 아래 85% 지점에 닿을 때 시작해 화면 45% 지점을 지날 때 끝난다
-      const progress = clamp((vh * 0.85 - r.top) / (vh * 0.4 + r.height));
+      // 페이지 끝이라 그만큼 스크롤할 수 없으면, 맨 아래에 닿는 순간 끝나도록 맞춘다
+      const absTop = r.top + scrollY;
+      const start = absTop - vh * 0.85;
+      const end = Math.min(absTop + r.height - vh * 0.45, maxScroll);
+      const progress = end <= start ? (scrollY >= end ? 1 : 0) : clamp((scrollY - start) / (end - start));
       const words = block.querySelectorAll(".scroll-word");
       const lit = Math.round(progress * words.length);
       words.forEach((w, i) => w.classList.toggle("is-lit", i < lit));

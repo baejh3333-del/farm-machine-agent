@@ -815,12 +815,10 @@ img {
   border: 0;
   background: transparent;
   color: var(--text-body);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  place-items: center;
-  align-content: start;
-  column-gap: 4px;
-  row-gap: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
   font-size: 13px;
   font-weight: 700;
 }
@@ -832,23 +830,42 @@ img {
 }
 
 .mt-emoji {
-  grid-column: 1 / -1;
   display: grid;
   place-items: center;
   width: clamp(48px, 4.5vw, 66px);
   aspect-ratio: 1;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: var(--bg-surface);
   font-size: 25px;
 }
 
+.mt-photo {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.mt-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  white-space: nowrap;
+}
+
 .mt-count {
+  flex: none;
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.mt-name { justify-self: end; }
+.mt-name {
+  text-align: center;
+}
 .machine-tab.active .mt-name { text-decoration: underline; text-underline-offset: 4px; }
 
 /* 활성 필터 툴바 */

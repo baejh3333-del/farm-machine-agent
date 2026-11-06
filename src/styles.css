@@ -2813,3 +2813,75 @@ img {
   font-size: 11px;
   font-weight: 650;
 }
+
+/* 모아농? 브랜드 소개 (2026-11) */
+.about-view { padding: 56px 0 40px; }
+.about-view[hidden] { display: none; }
+.about-view h1, .about-view h2, .about-view h3 { letter-spacing: -0.045em; color: #1A1D19; }
+.about-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px; padding-bottom: 56px; }
+.about-logo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.about-logo-mark { display: flex; align-items: center; }
+.about-logo-mark .brand-circle { width: 96px; height: 96px; border-width: 4px; font-size: 52px; }
+.about-logo-mark .brand-circle + .brand-circle { margin-left: -14px; }
+.about-logo-mark .brand-circle-accent { font-size: 62px; }
+.about-logo-mark-md .brand-circle { width: 64px; height: 64px; border-width: 3px; font-size: 34px; }
+.about-logo-mark-md .brand-circle + .brand-circle { margin-left: -10px; }
+.about-logo-mark-md .brand-circle-accent { font-size: 40px; }
+.about-logo-tagline { width: 260px; display: flex; justify-content: space-between; font-size: 19px; font-weight: 700; line-height: 1; color: #4A4F47; }
+.about-logo-tagline .gap { width: 6px; }
+.about-hero h1 { margin: 24px 0 0; font-size: clamp(34px, 4.4vw, 54px); line-height: 1.2; font-weight: 800; }
+.about-hero p { margin: 0; max-width: 640px; font-size: 19px; line-height: 1.7; color: #3A3F37; }
+.about-hero p strong { color: #2D7F4E; }
+.about-hero-image { width: 100%; height: clamp(240px, 30vw, 420px); object-fit: cover; object-position: 70% 50%; border-radius: 32px; }
+.about-section { padding-top: 120px; display: flex; flex-direction: column; gap: 40px; }
+.about-heading { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
+.about-heading h2 { margin: 0; font-size: clamp(28px, 3.2vw, 40px); line-height: 1.3; font-weight: 800; }
+.about-heading p { margin: 0; font-size: 18px; line-height: 1.7; color: #3A3F37; }
+.about-kicker { font-size: 16px; font-weight: 800; color: #2D7F4E; }
+.about-kicker-yellow { color: #F7C548; }
+.about-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.about-cards-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.about-card { background: #FFFFFF; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+.about-card h3 { margin: 0; font-size: 24px; font-weight: 800; }
+.about-card p { margin: 0; font-size: 16px; line-height: 1.7; color: #3A3F37; }
+.about-who { font-size: 15px; font-weight: 800; color: #2D7F4E; }
+.about-who-owner { color: #6B4A0E; }
+.about-badge { align-self: flex-start; font-size: 14px; font-weight: 800; color: #2D7F4E; background: #E6F3E7; border-radius: 999px; padding: 5px 12px; }
+.about-badge-owner { color: #6B4A0E; background: #FDF1D6; }
+.about-feature { display: flex; flex-wrap: wrap; gap: 40px; align-items: center; }
+.about-feature-flip { flex-direction: row-reverse; }
+.about-feature img { flex: 1 1 420px; min-width: 0; height: 320px; object-fit: cover; object-position: 72% 50%; border-radius: 28px; }
+.about-feature > div { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.about-feature h3 { margin: 0; font-size: clamp(24px, 2.4vw, 30px); line-height: 1.35; font-weight: 800; }
+.about-feature p { margin: 0; font-size: 17px; line-height: 1.75; color: #3A3F37; }
+.about-step { font-size: 15px; font-weight: 800; color: #6B4A0E; }
+.about-why { background: #2D7F4E; border-radius: 32px; padding: clamp(28px, 4vw, 56px); display: flex; flex-direction: column; gap: 36px; }
+.about-why h2 { color: #FFFFFF; }
+.about-why .about-heading p { color: #E6F3E7; }
+.about-reasons { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.about-reason { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.22); border-radius: 22px; padding: 26px; display: flex; flex-direction: column; gap: 10px; color: #FFFFFF; }
+.about-reason strong { font-size: 20px; }
+.about-reason span { font-size: 16px; line-height: 1.7; color: #E6F3E7; }
+.about-closing { padding: 120px 0 40px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px; }
+.about-closing h2 { margin: 0; font-size: clamp(28px, 3.2vw, 38px); line-height: 1.3; font-weight: 800; }
+.about-closing p { margin: 0; max-width: 560px; font-size: 18px; line-height: 1.7; color: #3A3F37; }
+
+/* 스크롤할 때 아래에서 떠오르며 나타나는 모션 */
+.reveal { opacity: 0; transform: translateY(32px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(.2,.7,.2,1); }
+.reveal.is-visible { opacity: 1; transform: none; }
+.about-feature.reveal img { transform: scale(0.96); transition: transform 0.9s cubic-bezier(.2,.7,.2,1); }
+.about-feature.reveal.is-visible img { transform: none; }
+.about-cards > .reveal:nth-child(2) { transition-delay: 0.12s; }
+.about-cards > .reveal:nth-child(3) { transition-delay: 0.24s; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .about-feature.reveal img { opacity: 1; transform: none; transition: none; }
+}
+@media (max-width: 700px) {
+  .about-view { padding-top: 32px; }
+  .about-logo-mark .brand-circle { width: 72px; height: 72px; font-size: 40px; }
+  .about-logo-mark .brand-circle-accent { font-size: 46px; }
+  .about-logo-tagline { width: 196px; font-size: 14px; }
+  .about-section { padding-top: 80px; }
+  .about-feature, .about-feature-flip { flex-direction: column; gap: 20px; align-items: stretch; }
+  .about-feature img { flex: none; width: 100%; height: 220px; }
+}

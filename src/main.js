@@ -201,7 +201,7 @@ function updateBadges() {
   }
 }
 
-const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", login: "loginView" };
+const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", login: "loginView", about: "aboutView" };
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
 const MAIN_PAGE_VIEWS = ["home", "browse"];
@@ -1773,8 +1773,29 @@ function initLoginForm() {
   }
 }
 
+// 브랜드 소개(모아농?) 화면: 스크롤로 보일 때마다 구역이 아래에서 떠오르며 나타난다
+function initRevealOnScroll() {
+  const items = document.querySelectorAll(".reveal");
+  if (!items.length) return;
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion || !("IntersectionObserver" in window)) {
+    for (const el of items) el.classList.add("is-visible");
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      }
+    }
+  }, { threshold: 0.15, rootMargin: "0px 0px -40px 0px" });
+  for (const el of items) observer.observe(el);
+}
+
 bindEvents();
 initBannerCarousel();
+initRevealOnScroll();
 initMainPageScrollSpy();
 setTransaction(state.transaction);
 setView("home");

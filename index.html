@@ -46,6 +46,10 @@
           <span class="nav-label">내 기계 관리</span>
           <span id="ownerBadge" class="nav-badge" hidden>0</span>
         </button>
+        <button type="button" class="nav-item" aria-label="모아농 브랜드 소개" data-view="about">
+          <span class="nav-icon" aria-hidden="true"></span>
+          <span class="nav-label">모아농?</span>
+        </button>
       </nav>
 
       <div class="topbar-left">
@@ -297,6 +301,84 @@
               <div id="ownerRequests"></div>
             </section>
           </div>
+        </div>
+
+        <!-- 모아농? 브랜드 소개 -->
+        <div id="aboutView" class="about-view" hidden>
+          <section class="about-hero reveal" aria-labelledby="aboutTitle">
+            <div class="about-logo" role="img" aria-label="모아농 EASY FARM RENTAL">
+              <span class="about-logo-mark" aria-hidden="true"><span class="brand-circle">모</span><span class="brand-circle">아</span><span class="brand-circle brand-circle-accent">농</span></span>
+              <span class="about-logo-tagline" aria-hidden="true"><span>E</span><span>A</span><span>S</span><span>Y</span><span class="gap"></span><span>F</span><span>A</span><span>R</span><span>M</span><span class="gap"></span><span>R</span><span>E</span><span>N</span><span>T</span><span>A</span><span>L</span></span>
+            </div>
+            <h1 id="aboutTitle">필요한 농기계,<br />클릭 한 번이면 충분해요.</h1>
+            <p>모아농은 <strong>초보 농부</strong>를 위한 우리 동네 농기계 대여·중고 거래 서비스예요. 기계 이름을 몰라도 하려는 일만 말하면, 맞는 기계와 쓰는 법을 알려드리고 가까운 이웃 농가의 기계를 바로 빌릴 수 있게 연결해요.</p>
+          </section>
+          <img class="about-hero-image reveal" src="./src/banner-1.jpg" alt="밭을 가는 초록 트랙터와 클릭 표시 일러스트" />
+
+          <section class="about-section" aria-labelledby="aboutProblem">
+            <div class="about-heading reveal">
+              <span class="about-kicker">문제의식</span>
+              <h2 id="aboutProblem">농사는 시작했는데,<br />기계 앞에서 막혀요.</h2>
+              <p>처음 농사를 짓는 사람에게 농기계는 가장 높은 벽이에요. 빌리려는 사람도, 빌려줄 수 있는 사람도 불편한 구조가 그대로 남아 있어요.</p>
+            </div>
+            <div class="about-cards">
+              <article class="about-card reveal"><span class="about-who">초보 농부</span><h3>무슨 기계가 필요한지 몰라요</h3><p>기종과 규격이 어렵고, 지금 내 작업에 어떤 기계가 맞는지 판단하기 힘들어요.</p></article>
+              <article class="about-card reveal"><span class="about-who">초보 농부</span><h3>사기엔 부담, 빌릴 곳은 몰라요</h3><p>1년에 며칠 쓰는 기계를 사기엔 비싸고, 가까운 곳에 원하는 날 비어 있는 기계가 있는지 알기 어려워요.</p></article>
+              <article class="about-card reveal"><span class="about-who about-who-owner">기계를 가진 농가</span><h3>쓰지 않는 기계가 놀고 있어요</h3><p>쓰지 않는 기간을 수익으로 바꿀 길이 마땅치 않고, 대여 일정과 문의를 전화로 관리하면 놓치기 쉬워요.</p></article>
+            </div>
+          </section>
+
+          <section class="about-section" aria-labelledby="aboutWhat">
+            <div class="about-heading reveal">
+              <span class="about-kicker">우리가 하는 일</span>
+              <h2 id="aboutWhat">고르고, 배우고, 빌리는 일을<br />한 곳에서 끝내요.</h2>
+            </div>
+            <div class="about-feature reveal">
+              <img src="./src/banner-1.jpg" alt="밭에서 일하는 초록 트랙터 일러스트" />
+              <div><span class="about-step">01 · 농농이 골라줘요</span><h3>기계 이름 몰라도,<br />하려는 일만 말하세요.</h3><p>"감자 300평 심을 건데요"처럼 말하면 AI 상담사 농농이 작업에 맞는 기계를 추천하고, 어디에 어떻게 쓰는지 쉬운 말로 알려줘요. 농사 순서대로 작물과 할 일을 고르기만 해도 필요한 기계가 바로 나와요.</p></div>
+            </div>
+            <div class="about-feature about-feature-flip reveal">
+              <img src="./src/banner-2.jpg" alt="농가 마당 창고 앞에 세워진 관리기 일러스트" />
+              <div><span class="about-step">02 · 가까운 곳에서</span><h3>멀리 갈 필요 없이,<br />이웃 농가의 기계를 빌려요.</h3><p>내 동네를 기준으로 가까운 농가가 올린 농기계를 하루 단위로 빌리거나, 오래 쓸 기계는 중고로 살 수 있어요. 기계를 가진 농가는 쓰지 않는 기간에 빌려주고 수익을 얻어요.</p></div>
+            </div>
+            <div class="about-feature reveal">
+              <img src="./src/banner-3.jpg" alt="해 질 녘 밭과 불 켜진 농가 일러스트" />
+              <div><span class="about-step">03 · 시간 걱정 없이</span><h3>클릭 몇 번이면<br />대여 예약까지 끝.</h3><p>전화나 방문 없이 밤에도 주말에도 날짜를 고르고 대여를 요청해요. 원하는 기계가 대여 중이면 다시 빌릴 수 있을 때 알림으로 알려드려요.</p></div>
+            </div>
+          </section>
+
+          <section class="about-section" aria-labelledby="aboutWhy">
+            <div class="about-why reveal">
+              <div class="about-heading">
+                <span class="about-kicker about-kicker-yellow">왜 이렇게 만들었나</span>
+                <h2 id="aboutWhy">기능은 적게, 길은 짧게.</h2>
+                <p>기존 서비스는 기능이 너무 많아서, 기계 하나 잠깐 빌리거나 사는 일이 오히려 어려웠어요. 모아농은 초보 농부가 망설이지 않고 바로 끝낼 수 있는 것만 남겼어요.</p>
+              </div>
+              <div class="about-reasons">
+                <div class="about-reason"><strong>기계 이름 대신 하려는 일로</strong><span>검색어를 몰라도 되도록, 작물과 할 일에서 출발해 기계를 찾게 했어요.</span></div>
+                <div class="about-reason"><strong>추천에 이유와 쓰는 법까지</strong><span>왜 이 기계인지, 어떻게 쓰는지 함께 알려줘야 초보도 안심하고 고를 수 있어요.</span></div>
+                <div class="about-reason"><strong>클릭 몇 번이면 끝</strong><span>필터와 게시글을 뒤지지 않아도 고르고, 날짜를 누르고, 바로 요청할 수 있어요.</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="about-section" aria-labelledby="aboutWho">
+            <div class="about-heading reveal">
+              <span class="about-kicker">함께하는 사람들</span>
+              <h2 id="aboutWho">빌리는 사람도, 빌려주는 사람도 편하게.</h2>
+            </div>
+            <div class="about-cards about-cards-2">
+              <article class="about-card reveal"><span class="about-badge">빌리는 사람</span><h3>초보 농부</h3><p>하려는 일은 알지만 어떤 기계가 필요한지 모르는 사람. 추천 이유를 이해하고, 가까운 기계를 빌리거나 사요.</p></article>
+              <article class="about-card reveal"><span class="about-badge about-badge-owner">빌려주는 사람</span><h3>농기계를 가진 농가</h3><p>쓰지 않는 기간에 기계를 빌려주거나 팔고 싶은 사람. 일정과 요청을 한곳에서 관리해요.</p></article>
+            </div>
+          </section>
+
+          <section class="about-closing reveal" aria-labelledby="aboutGoal">
+            <span class="about-logo-mark about-logo-mark-md" aria-hidden="true"><span class="brand-circle">모</span><span class="brand-circle">아</span><span class="brand-circle brand-circle-accent">농</span></span>
+            <h2 id="aboutGoal">이웃의 기계를 모아,<br />누구나 쉽게 농사짓도록.</h2>
+            <p>모아농은 '모아'와 '농'을 합친 이름이에요. 흩어진 동네 농기계를 한곳에 모아, 처음 농사짓는 사람도 필요한 기계를 쉽게 만나게 하는 것이 우리의 목표예요.</p>
+            <button type="button" class="banner-cta" data-view-target="home">모아농 시작하기</button>
+          </section>
         </div>
 
         <!-- 로그인 화면 (화면만 구성, 실제 계정 확인은 아직 연결 전) -->

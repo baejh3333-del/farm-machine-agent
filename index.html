@@ -272,7 +272,7 @@
 
         <!-- 내 기계 올리기 / 관리 화면 (소유자 모드) -->
         <section id="ownerLoginRequiredView" class="login-view" hidden>
-          <div class="login-card" style="text-align: center;"><h2>로그인이 필요한 서비스입니다</h2><p>내 기계 관리를 이용하려면 먼저 로그인해 주세요.</p><button type="button" class="login-submit" id="ownerLoginGoButton">로그인하러 가기</button></div>
+          <div class="login-card owner-login-card"><h2>로그인이 필요한 서비스입니다</h2><p>내 기계 관리를 이용하려면 먼저 로그인해 주세요.</p><button type="button" class="login-submit" id="ownerLoginGoButton">로그인하러 가기</button></div>
         </section>
         <div id="ownerView" hidden>
           <section class="owner-hero">
@@ -286,7 +286,6 @@
             </button>
           </section>
 
-          <div style="display:flex;justify-content:flex-end;margin:0 0 12px"><button type="button" class="button button-secondary button-sm" id="demoLogoutButton">로그아웃</button></div>
           <div class="owner-stats" id="ownerStats"></div>
 
           <div class="owner-columns">

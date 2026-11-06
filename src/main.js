@@ -1275,7 +1275,7 @@ async function sendAiQuestion(event) {
       ? (maxPrice / 10000).toLocaleString("ko-KR") + "만 원"
       : maxPrice ? money(maxPrice) : "";
     const bubble = appendAiMessage(
-      matched.length ? `조건에 맞는 농기계 ${matched.length}개를 찾았어요!` : result.reply,
+      matched.length ? `🚜 조건에 맞는 농기계 ${matched.length}개를 찾았어요!` : result.reply,
       "assistant", result.listingIds,
     );
     if (matched.length) {
@@ -1286,10 +1286,10 @@ async function sendAiQuestion(event) {
       const cropName = CROP_BY_ID[cropId]?.name;
       const workName = operations.map((id) => OPERATION_BY_ID[id].label).join(combined ? " + " : " · ");
       const rows = [
-        [["작물", cropName], ["작업", workName]],
-        [["면적", areaPyeong ? Math.round(areaPyeong).toLocaleString("ko-KR") + "평" : ""],
+        [["🥬 작물", cropName], ["작업", workName]],
+        [["📏 면적", areaPyeong ? Math.round(areaPyeong).toLocaleString("ko-KR") + "평" : ""],
          ["예산", formatBudget ? (transaction === "rent" ? "하루 " : "") + formatBudget + " 이하" : ""]],
-        [["대여 기간", transaction === "rent" ? dateText : ""]],
+        [["📅 대여 기간", transaction === "rent" ? dateText : ""]],
       ];
       if (transaction === "sale") rows.push([["거래 방식", "구매"]]);
       for (const rowFields of rows) {
@@ -1332,13 +1332,13 @@ async function sendAiQuestion(event) {
       const info = document.createElement("div");
       info.className = "ai-rec-notice";
       info.textContent = maxPrice
-        ? "모두 작업 조건과 예산에 맞아요!"
-        : "모두 작업 조건에 맞아요!";
+        ? "✅ 모두 작업 조건과 예산에 맞아요!"
+        : "✅ 모두 작업 조건에 맞아요!";
       const caution = document.createElement("div");
       caution.className = "ai-rec-notice";
       caution.textContent = transaction === "rent"
-        ? "예약 가능 여부와 총 대여료는 확인해 주세요."
-        : "거래 가능 여부와 최종 가격은 확인해 주세요.";
+        ? "💡 예약 가능 여부와 총 대여료는 확인해 주세요."
+        : "💡 거래 가능 여부와 최종 가격은 확인해 주세요.";
       const cards = bubble.querySelector(".ai-result");
       for (const section of [overview, comparison, info, caution]) {
         if (cards) bubble.insertBefore(section, cards);

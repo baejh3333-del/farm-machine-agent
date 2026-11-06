@@ -47,10 +47,10 @@ const BEGINNER_TIPS = {
 };
 
 const STAGE_ICONS = {
-  prepare: "🚜",
-  plant: "🌱",
-  care: "💧",
-  harvest: "🌾",
+  prepare: "",
+  plant: "",
+  care: "",
+  harvest: "",
 };
 
 const blankFilters = () => ({
@@ -177,7 +177,7 @@ function machineVisual(item, detail = false) {
   const safePhoto = typeof item.photo === "string" && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo) ? escapeHtml(item.photo) : "";
   return safePhoto
     ? `<img src="${safePhoto}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
-    : `<span class="art-emoji" aria-label="${escapeHtml(type?.label || "농기계")} 예시 그림" role="img" style="font-size:${detail ? "110px" : "68px"}">${type?.emoji || "🚜"}</span>`;
+    : `<span class="art-emoji" aria-label="${escapeHtml(type?.label || "농기계")} 예시 그림" role="img" style="font-size:${detail ? "110px" : "68px"}">${type?.emoji || ""}</span>`;
 }
 
 function listingSummary(item) {
@@ -270,7 +270,7 @@ function renderQuickWizard() {
       const active = state.filters.stageIds.includes(stage.id);
       return `
         <button type="button" class="stage-tab ${active ? "active" : ""}" data-quick-stage="${stage.id}" aria-pressed="${active}">
-          <span class="stage-step-num">${idx + 1}단계 · ${STAGE_ICONS[stage.id] || "🌱"}</span>
+          <span class="stage-step-num">${idx + 1}단계 · ${STAGE_ICONS[stage.id] || ""}</span>
           <strong>${escapeHtml(stage.label)}</strong>
         </button>
       `;
@@ -305,7 +305,7 @@ function renderQuickWizard() {
 
   const calloutTitle = crop
     ? `${crop.emoji} ${crop.name} 농사${activeOpId ? ` · '${OPERATION_BY_ID[activeOpId]?.label}'` : ""} 꿀팁!`
-    : `🌱 초보 농부를 위한 농기계 선택 팁`;
+    : ` 초보 농부를 위한 농기계 선택 팁`;
 
   $("cropCallout").querySelector("strong").textContent = calloutTitle;
   $("cropCallout").querySelector("p").textContent = tipText;
@@ -353,7 +353,7 @@ function renderMachineCategoryBar() {
 
   const tabs = [
     `<button type="button" class="machine-tab ${isAll ? "active" : ""}" data-machine-tab="all" aria-pressed="${isAll}">
-      <span class="mt-emoji" aria-hidden="true">✨</span>
+      <span class="mt-emoji" aria-hidden="true"></span>
       <span class="mt-name">전체 기종</span>
       <span class="mt-count">${baseMatching.length}</span>
     </button>`,
@@ -426,9 +426,9 @@ function renderFilterOptions() {
   $("filterConditions").innerHTML = selectOption(
     "conditions",
     [
-      { id: "good", label: "정상 작동 (즉시 사용)", emoji: "✅" },
-      { id: "used", label: "사용감 있음", emoji: "👌" },
-      { id: "repair", label: "정비 필요", emoji: "🔧" },
+      { id: "good", label: "정상 작동 (즉시 사용)", emoji: "" },
+      { id: "used", label: "사용감 있음", emoji: "" },
+      { id: "repair", label: "정비 필요", emoji: "" },
     ],
     draft.conditions,
     ["good"]
@@ -573,7 +573,7 @@ function buildFilterChips() {
   if (f.maxPrice) chips.push({ group: "maxPrice", value: "", label: `${money(f.maxPrice)} 이하` });
   if (f.areaPyeong) chips.push({ group: "areaPyeong", value: "", label: `밭 ${f.areaPyeong}평 기준` });
   if (f.radius !== "all") chips.push({ group: "radius", value: "all", label: `${f.radius}km 이내` });
-  if (f.date && state.transaction === "rent") chips.push({ group: "date", value: "", label: f.dateEnd ? `📅 ${f.date} ~ ${f.dateEnd}` : `📅 ${f.date}` });
+  if (f.date && state.transaction === "rent") chips.push({ group: "date", value: "", label: f.dateEnd ? ` ${f.date} ~ ${f.dateEnd}` : ` ${f.date}` });
   return chips.filter((c) => c.label);
 }
 
@@ -614,13 +614,13 @@ function card(item) {
             ${machineVisual(item)}
             <div class="art-badges-top">
               <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
-              <span class="art-distance-pill">📍 ${escapeHtml(item.region)} · 예시 ${distance}km</span>
+              <span class="art-distance-pill"> ${escapeHtml(item.region)} · 예시 ${distance}km</span>
             </div>
             <span class="art-caption">${item.photo ? "실제 등록 사진" : `${escapeHtml(machineLabel)} 예시 그림`}</span>
           </div>
         </button>
         <button type="button" class="card-save ${isFav ? "saved" : ""}" data-favorite="${item.id}" aria-label="${escapeHtml(item.title)} 찜하기 ${isFav ? "해제" : "등록"}">
-          <span aria-hidden="true">${isFav ? "❤️" : "🤍"}</span>
+          <span aria-hidden="true">${isFav ? "" : ""}</span>
         </button>
       </div>
 
@@ -639,7 +639,7 @@ function card(item) {
         <div class="card-meta">제조사: ${escapeHtml(item.brand)} · 최근 점검: ${escapeHtml(item.inspectedAt)}</div>
 
         <div class="card-summary">
-          <div class="summary-badge">${state.aiSummaries[item.id] ? "✦ AI 농농이 핵심 요약" : "💡 초보 농부 한줄 안내"}</div>
+          <div class="summary-badge">${state.aiSummaries[item.id] ? "✦ AI 농농이 핵심 요약" : " 초보 농부 한줄 안내"}</div>
           <p>${escapeHtml(summary)}</p>
         </div>
 
@@ -664,7 +664,7 @@ function renderListings() {
   $("listingGrid").innerHTML = items.length
     ? items.map(card).join("")
     : `<div class="empty-state">
-        <div class="empty-icon" aria-hidden="true">🚜</div>
+        <div class="empty-icon" aria-hidden="true"></div>
         <strong>선택하신 조건에 맞는 농기계가 아직 없어요</strong>
         <p>작업 종류나 예산, 거리 조건을 조금 넓혀서 다시 찾아볼까요?</p>
         <div class="empty-actions">
@@ -704,7 +704,7 @@ function openDetail(id) {
       <div class="detail-art-col">
         <div class="detail-art">${machineVisual(item, true)}</div>
         <div class="detail-checklist">
-          <strong>✅ 초보 농부 인수 전 필수 체크리스트</strong>
+          <strong> 초보 농부 인수 전 필수 체크리스트</strong>
           <ul>
             <li>시동이 한 번에 잘 걸리고 이상 소음이 없는지 확인하세요.</li>
             <li>내 트랙터·관리기와 작업기 연결 규격이 맞는지 확인하세요.</li>
@@ -715,7 +715,7 @@ function openDetail(id) {
       <div class="detail-copy">
         <div class="detail-badges">
           <span class="card-status-pill ${statusClass(item)}">${statusLabel(item)}</span>
-          <span class="spec-tag">📍 ${escapeHtml(item.region)} (예시 ${distanceKm(state.region, item.region)}km)</span>
+          <span class="spec-tag"> ${escapeHtml(item.region)} (예시 ${distanceKm(state.region, item.region)}km)</span>
           <span class="spec-tag">${escapeHtml(MACHINE_BY_ID[item.machineType]?.label)}</span>
         </div>
         <h2 id="detailTitle">${escapeHtml(item.title)}</h2>
@@ -750,21 +750,21 @@ function openDetail(id) {
         </div>
 
         <div class="detail-box">
-          <b>📦 포함 구성품 및 인수 방법</b>
+          <b> 포함 구성품 및 인수 방법</b>
           <p>포함 작업기/부속: <strong>${escapeHtml(item.included)}</strong><br>인수 방식: <strong>${escapeHtml(item.pickup)}</strong></p>
         </div>
 
         <div class="detail-box">
-          <b>📝 등록 농가 상세 설명</b>
+          <b> 등록 농가 상세 설명</b>
           <p>${escapeHtml(item.description)}</p>
         </div>
 
         <div class="detail-actions">
           <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${item.id}">
-            ${isFav ? "❤️ 찜한 기계" : "🤍 찜하기"}
+            ${isFav ? " 찜한 기계" : " 찜하기"}
           </button>
           <button type="button" class="button button-primary button-large" data-detail-action="${item.id}" ${unavailable || booked ? "disabled" : ""}>
-            ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? "📅 이 농기계 대여 신청하기" : "💬 판매자에게 채팅 문의하기"}
+            ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? " 이 농기계 대여 신청하기" : " 판매자에게 채팅 문의하기"}
           </button>
         </div>
       </div>
@@ -796,7 +796,7 @@ function rentalForm(id) {
         <textarea id="rentNote" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다."></textarea>
       </label>
       <div class="form-actions">
-        <button class="button button-primary button-large" type="submit">📅 대여 요청 보내기</button>
+        <button class="button button-primary button-large" type="submit"> 대여 요청 보내기</button>
       </div>
     </form>
   `);
@@ -890,15 +890,15 @@ function renderOwner() {
   const pending = state.requests.filter((request) => request.status === "pending" && owned.some((item) => item.id === request.listingId));
   $("ownerStats").innerHTML = `
     <div class="stat-box">
-      <span class="stat-icon" aria-hidden="true">🚜</span>
+      <span class="stat-icon" aria-hidden="true"></span>
       <div><small>내가 등록한 농기계</small><strong>${owned.length}대</strong></div>
     </div>
     <div class="stat-box">
-      <span class="stat-icon" aria-hidden="true">📩</span>
+      <span class="stat-icon" aria-hidden="true"></span>
       <div><small>대기 중인 대여 요청</small><strong>${pending.length}건</strong></div>
     </div>
     <div class="stat-box">
-      <span class="stat-icon" aria-hidden="true">🤝</span>
+      <span class="stat-icon" aria-hidden="true"></span>
       <div><small>거래 완료된 판매</small><strong>${owned.filter((item) => item.type === "sale" && item.status === "done").length}건</strong></div>
     </div>
   `;
@@ -943,7 +943,7 @@ function renderOwner() {
         (request) => `
       <div class="request-row">
         <div class="owner-row-info">
-          <span class="step-pill">📅 대여 승인 대기</span>
+          <span class="step-pill"> 대여 승인 대기</span>
           <strong>${escapeHtml(listingById(request.listingId)?.title || "농기계")}</strong>
           <small>희망 기간: ${request.start} ~ ${request.end}${request.note ? `<br>메모: ${escapeHtml(request.note)}` : ""}</small>
         </div>
@@ -959,7 +959,7 @@ function renderOwner() {
           (message) => `
       <div class="request-row">
         <div class="owner-row-info">
-          <span class="step-pill">💬 채팅 문의</span>
+          <span class="step-pill"> 채팅 문의</span>
           <strong>${escapeHtml(listingById(message.listingId)?.title || "농기계")}</strong>
           <small>"${escapeHtml(message.text)}"</small>
         </div>
@@ -1065,7 +1065,7 @@ function openFavoritesModal() {
   const items = allListings().filter((item) => state.favorites.includes(item.id));
   openForm(`
     <span class="step-pill">관심 농기계 보관함</span>
-    <h2 id="formTitle">❤️ 내가 찜한 농기계 (${items.length}대)</h2>
+    <h2 id="formTitle"> 내가 찜한 농기계 (${items.length}대)</h2>
     <p>비교해 보고 싶은 농기계를 모아두었어요. 버튼을 눌러 상세 조건을 확인하세요.</p>
     <div class="fav-modal-list">
       ${
@@ -1086,7 +1086,7 @@ function openFavoritesModal() {
           </div>`
               )
               .join("")
-          : `<div class="empty-panel">아직 찜한 농기계가 없습니다. 마음에 드는 농기계 카드 우측 상단의 하트(🤍) 버튼을 눌러보세요!</div>`
+          : `<div class="empty-panel">아직 찜한 농기계가 없습니다. 마음에 드는 농기계 카드 우측 상단의 하트() 버튼을 눌러보세요!</div>`
       }
     </div>
   `);
@@ -1123,7 +1123,7 @@ function appendAiMessage(text, role, listingIds = []) {
     results.className = "ai-result";
     const titleEl = document.createElement("div");
     titleEl.className = "ai-result-title";
-    titleEl.textContent = "🚜 농농이가 찾은 맞춤 매물";
+    titleEl.textContent = " 농농이가 찾은 맞춤 매물";
     results.append(titleEl);
 
     listingIds.forEach((id) => {
@@ -1451,7 +1451,7 @@ function bindEvents() {
       state.favorites = state.favorites.includes(id) ? state.favorites.filter((value) => value !== id) : [...state.favorites, id];
       persist();
       renderListings();
-      toast(state.favorites.includes(id) ? "❤️ 찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
+      toast(state.favorites.includes(id) ? " 찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
       return;
     }
     if (event.target.closest("[data-reset-all]")) resetAllFilters();
@@ -1465,7 +1465,7 @@ function bindEvents() {
       persist();
       renderListings();
       openDetail(id);
-      toast(state.favorites.includes(id) ? "❤️ 찜한 농기계에 담았습니다." : "찜 목록에서 제외했습니다.");
+      toast(state.favorites.includes(id) ? " 찜한 농기계에 담았습니다." : "찜 목록에서 제외했습니다.");
       return;
     }
     const button = event.target.closest("[data-detail-action]");

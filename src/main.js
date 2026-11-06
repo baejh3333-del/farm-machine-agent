@@ -1794,6 +1794,7 @@ function initRevealOnScroll() {
 }
 
 bindEvents();
+$("brandHome")?.addEventListener("click", () => setView("home"));
 initBannerCarousel();
 initRevealOnScroll();
 initMainPageScrollSpy();

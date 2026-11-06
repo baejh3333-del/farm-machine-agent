@@ -2885,3 +2885,7 @@ img {
   .about-feature, .about-feature-flip { flex-direction: column; gap: 20px; align-items: stretch; }
   .about-feature img { flex: none; width: 100%; height: 220px; }
 }
+
+/* 로고를 누르면 홈으로 */
+button.brand-moanong { border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; }
+button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset: 4px; border-radius: 12px; }

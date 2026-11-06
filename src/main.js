@@ -1257,18 +1257,58 @@ async function sendAiQuestion(event) {
     const current = selectMatchingListings("", context, allListings());
     if (current.candidates.map(({ id }) => id).join() !== candidateIds.join()) result = recommendationGuide(current);
     const { cropId, operations, combined, transaction, maxPrice, areaPyeong, date, dateEnd } = current;
-    const conditions = [
-      CROP_BY_ID[cropId]?.name,
-      operations.map((id) => OPERATION_BY_ID[id].label).join(combined ? " + " : " / "),
-      transaction === "rent" ? "대여" : "구매",
-      areaPyeong ? Math.round(areaPyeong) + "평" : "",
-      maxPrice ? money(maxPrice) + (transaction === "rent" ? "/일 이하" : " 이하") : "",
-      transaction === "rent" && date ? (dateEnd !== date ? date + " ~ " + dateEnd : date) : "",
-      Number(context.radius) ? "예시 거리 " + context.radius + "km 이내" : "",
-    ].filter(Boolean);
-    const refine = result.listingIds.length ? "\n예산이나 날짜를 바꾸고 싶으면 이어서 말씀해 주세요." : "";
-    pending.remove();
-    appendAiMessage("적용 조건 · " + conditions.join(" · ") + "\n" + result.reply + refine, "assistant", result.listingIds);
+    // Summarize only verified search conditions and the actual recommended listings.
+    // Use textContent throughout so listing metadata cannot inject markup.
+    const matched = result.listingIds.map((id) => allListings().find((item) => item.id === id)).filter(Boolean);
+    const showDate = (value) => value ? value.slice(5).replace("-", "/") : "";
+    const dateText = date ? showDate(date) + (dateEnd && dateEnd !== date ? " ~ " + showDate(dateEnd) : "") : "";
+    const formatBudget = maxPrice && Number.isFinite(maxPrice / 10000) && maxPrice % 10000 === 0
+      ? (maxPrice / 10000).toLocaleString("ko-KR") + "만 원"
+      : maxPrice ? money(maxPrice) : "";
+    const bubble = appendAiMessage(
+      matched.length ? `🚜 조건에 맞는 농기계 ${matched.length}개를 찾았어요!` : result.reply,
+      "assistant", result.listingIds,
+    );
+    if (matched.length) {
+      const overview = document.createElement("div");
+      overview.className = "ai-rec-overview";
+      const fields = [
+        ["🥬 작물", CROP_BY_ID[cropId]?.name],
+        ["🛠️ 작업", operations.map((id) => OPERATION_BY_ID[id].label).join(combined ? " + " : " · ")],
+        ["📏 면적", areaPyeong ? Math.round(areaPyeong).toLocaleString("ko-KR") + "평" : ""],
+        ["💰 예산", formatBudget ? (transaction === "rent" ? "하루 " : "") + formatBudget + " 이하" : ""],
+        ["📅 대여 기간", transaction === "rent" ? dateText : ""],
+      ];
+      for (const [label, value] of fields) {
+        if (!value) continue;
+        const line = document.createElement("div");
+        line.className = "ai-rec-field";
+        const key = document.createElement("strong");
+        key.textContent = label + ": ";
+        line.append(key, document.createTextNode(value));
+        overview.append(line);
+      }
+      const comparison = document.createElement("div");
+      comparison.className = "ai-rec-comparison";
+      const title = document.createElement("strong");
+      title.textContent = "추천 매물 비교";
+      comparison.append(title);
+      for (const item of matched) {
+        const line = document.createElement("div");
+        const features = [item.included, item.pickup].filter(Boolean);
+        line.textContent = "• " + item.title + (features.length ? ": " + features.join(" · ") : "");
+        comparison.append(line);
+      }
+      const info = document.createElement("div");
+      info.className = "ai-rec-notice";
+      info.textContent = "✅ 선택하신 작업 조건과 예산으로 찾은 매물이에요.";
+      const caution = document.createElement("div");
+      caution.className = "ai-rec-notice";
+      caution.textContent = "💡 예약 가능 여부와 총 대여료는 확인해 주세요.";
+      const cards = bubble.querySelector(".ai-result");
+      if (cards) bubble.insertBefore(overview, cards), bubble.insertBefore(comparison, cards), bubble.insertBefore(info, cards), bubble.insertBefore(caution, cards);
+      else bubble.append(overview, comparison, info, caution);
+    }
     $("aiModeLabel").textContent = result.mode === "ai" ? "AI 요약 · 등록 매물 기반" : "등록 매물 조건 검색";
     if (result.mode === "ai" && result.summaries && typeof result.summaries === "object") {
       Object.assign(state.aiSummaries, result.summaries);

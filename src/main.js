@@ -1260,8 +1260,13 @@ function appendAiMessage(text, role, listingIds = []) {
     bubble.append(results);
   }
   $("aiMessages").append(bubble);
-  $("aiMessages").scrollTop = $("aiMessages").scrollHeight;
+  scrollAiToEnd();
   return bubble;
+}
+
+function scrollAiToEnd() {
+  const scroll = $("aiScroll");
+  scroll.scrollTop = scroll.scrollHeight;
 }
 
 let conversation;
@@ -1293,7 +1298,7 @@ function askFollowUp(question, reply = question.reply) {
     choices.append(button);
   }
   bubble.append(choices);
-  $("aiMessages").scrollTop = $("aiMessages").scrollHeight;
+  scrollAiToEnd();
 }
 
 async function sendAiQuestion(event) {
@@ -1483,15 +1488,23 @@ async function sendAiQuestion(event) {
     pending?.remove();
     recommendationPending = false;
     submit.disabled = false;
-    if (!$("aiPanel").hidden) $("aiInput").focus();
   }
+}
+
+function syncAiViewport() {
+  const panel = $("aiPanel");
+  const viewport = window.visualViewport;
+  if (panel.hidden || !viewport) return;
+  panel.style.setProperty("--ai-visible-top", `${viewport.offsetTop}px`);
+  panel.style.setProperty("--ai-visible-height", `${viewport.height}px`);
 }
 
 function openAiPanel() {
   $("aiPanel").hidden = false;
   document.body.classList.add("ai-open");
   $("aiLauncher").setAttribute("aria-expanded", "true");
-  $("aiInput").focus();
+  syncAiViewport();
+  $("aiClose").focus({ preventScroll: true });
 }
 
 function resetAllFilters() {
@@ -1709,12 +1722,14 @@ function bindEvents() {
 
   $("newListingButton").addEventListener("click", openNewListing);
   $("aiLauncher").addEventListener("click", openAiPanel);
+  window.visualViewport?.addEventListener("resize", syncAiViewport);
+  window.visualViewport?.addEventListener("scroll", syncAiViewport);
   const closeAiPanel = ({ returnFocus = true } = {}) => {
     if ($("aiPanel").hidden) return;
     $("aiPanel").hidden = true;
     document.body.classList.remove("ai-open");
     $("aiLauncher").setAttribute("aria-expanded", "false");
-    if (returnFocus) $("aiLauncher").focus();
+    if (returnFocus) $("aiLauncher").focus({ preventScroll: true });
   };
   $("aiClose").addEventListener("click", () => closeAiPanel());
   // 농농 상담창 밖의 화면을 누르면 상담창을 자동으로 닫는다
@@ -1727,7 +1742,7 @@ function bindEvents() {
     closeAiPanel({ returnFocus: false });
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !$("aiPanel").hidden && !document.querySelector(".dialog-backdrop:not([hidden])")) closeAiPanel();
+    if (event.key === "Escape" && !event.isComposing && !$("aiPanel").hidden && !document.querySelector(".dialog-backdrop:not([hidden])")) closeAiPanel();
   }, true);
   const aiInput = $("aiInput");
   $("aiForm").addEventListener("submit", sendAiQuestion);

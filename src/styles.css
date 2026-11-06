@@ -3001,19 +3001,36 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   height: min(600px, calc(100dvh - var(--header-h, 76px) - 140px));
   min-height: 0;
 }
-.ai-messages { min-height: 0; }
+.ai-panel { container: ai-panel / size; }
+.ai-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #f9fbf9;
+}
+.ai-messages { flex: none; overflow: visible; padding: 12px; }
+.ai-welcome img { width: 36px; height: auto; flex: none; }
+.ai-intro { min-width: 0; }
+.ai-intro p { margin: 0; }
+@container ai-panel (max-height: 290px) {
+  .ai-header small, .ai-header-info img, .ai-footnote { display: none; }
+}
 .ai-welcome .chat-bubble { white-space: normal; }
 .ai-welcome .chat-bubble strong { display: block; margin-bottom: 6px; }
-.prompt-suggestions { flex: none; }
+.prompt-suggestions { flex: none; flex-wrap: wrap; overflow: visible; }
+.prompt-suggestions button { max-width: 100%; white-space: normal; }
 .ai-form { flex: none; }
-.ai-form input { min-width: 0; }
+.ai-form input { min-width: 0; font-size: 16px; }
 /* 휴대폰이나 세로가 짧은 화면: 상담창을 화면 전체로 열고, 닫기(X)로 닫기 */
 @media (max-width: 700px), (max-height: 640px) {
   .ai-panel {
     inset: 0;
     width: 100%;
     height: 100vh;
-    height: 100dvh;
+    top: var(--ai-visible-top, 0px);
+    bottom: auto;
+    height: var(--ai-visible-height, 100dvh);
     max-height: none;
     border: 0;
     border-radius: 0;

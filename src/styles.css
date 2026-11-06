@@ -297,13 +297,13 @@ img {
 .region-pill select { border: 0; background: transparent; font-size: 14px; font-weight: 750; cursor: pointer; }
 
 .main-content { padding: 30px 0 90px; }
-.main-content > :not(#browseView),
+.main-content > :not(#browseView):not(#homeView),
 .search-dock,
 .market-section {
   width: min(1400px, calc(100% - 2 * var(--gutter)));
   margin-inline: auto;
 }
-#browseView { margin-top: -30px; }
+#browseView, #homeView { margin-top: -30px; }
 
 .hero-card {
   min-height: clamp(370px, 38vw, 545px);
@@ -2600,4 +2600,45 @@ img {
 }
 @media (max-width: 430px) {
   .search-dock .tx-pill { display: none; }
+}
+
+/* 상단 메뉴 · 로그인 버튼 (2026-11 리디자인) */
+.sidebar { background: #FFFFFF; }
+.sidebar-nav { gap: clamp(4px, 1vw, 12px); }
+.nav-item {
+  min-height: 76px;
+  padding: 0 12px;
+  border-bottom: 3px solid transparent;
+  color: #4A4F47;
+  font-size: 16px;
+  font-weight: 500;
+}
+.nav-item:hover { color: #2D7F4E; }
+.nav-item.active { color: #2D7F4E; font-weight: 800; border-bottom-color: #2D7F4E; }
+.nav-badge { background: #E6F3E7; color: #2D7F4E; }
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.region-pill { border-radius: 14px; border-color: #E2DED3; background: #FFFFFF; padding: 5px 14px; }
+.region-pill:hover { border-color: #2D7F4E; }
+.login-button {
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 14px;
+  background: #2D7F4E;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.login-button:hover { background: #21653C; }
+/* 매물 찾기 화면에서는 배너가 없으므로 검색창을 위로 겹치지 않게 */
+#browseView .search-dock { margin-top: 58px; }
+@media (max-width: 700px) {
+  .nav-item { min-height: 44px; padding: 0 4px; font-size: clamp(11px, 3.15vw, 14px); border-bottom-width: 2px; }
+  .topbar-left { gap: 6px; }
+  .login-button { min-height: 40px; padding: 0 12px; font-size: 13px; }
+  .region-pill { min-height: 40px; padding: 4px 10px; }
+  #browseView .search-dock { margin-top: 46px; }
 }

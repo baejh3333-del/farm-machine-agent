@@ -62,7 +62,7 @@ const blankFilters = () => ({
 });
 
 const defaults = {
-  view: "browse",
+  view: "home",
   transaction: "rent",
   region: "영양읍",
   sort: "distance",
@@ -194,12 +194,16 @@ function updateBadges() {
   }
 }
 
-const viewIds = { browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView" };
+const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView" };
 
 function setView(view) {
-  if (!Object.hasOwn(viewIds, view)) view = "browse";
+  if (!Object.hasOwn(viewIds, view)) view = "home";
   state.view = view;
   for (const [name, id] of Object.entries(viewIds)) $(id).hidden = name !== view;
+  // 빠른 검색창은 홈과 매물 찾기에서 함께 쓰므로 지금 화면 쪽으로 옮긴다
+  const dockSlot = $(view === "home" ? "searchSlotHome" : "searchSlotBrowse");
+  const dock = $("machineSearch");
+  if ((view === "home" || view === "browse") && dockSlot && dock && dock.previousElementSibling !== dockSlot) dockSlot.after(dock);
   for (const button of document.querySelectorAll("[data-view]")) {
     const active = button.dataset.view === view;
     button.classList.toggle("active", active);
@@ -1423,8 +1427,12 @@ function bindEvents() {
     renderListings();
   });
   $("quickSearchBtn")?.addEventListener("click", () => {
-    $("market").scrollIntoView({ behavior: "smooth" });
+    if (state.view !== "browse") setView("browse");
     renderListings();
+    $("market").scrollIntoView({ behavior: "smooth" });
+  });
+  $("loginButton")?.addEventListener("click", () => {
+    toast("로그인은 준비 중이에요. 지금은 로그인 없이 모든 기능을 써볼 수 있어요.");
   });
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
@@ -1683,6 +1691,6 @@ function initBannerCarousel() {
 bindEvents();
 initBannerCarousel();
 setTransaction(state.transaction);
-setView(state.view);
+setView("home");
 renderAll();
 const catalogReady = loadCatalog();

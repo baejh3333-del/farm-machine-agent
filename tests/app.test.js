@@ -194,6 +194,27 @@ test("예산 범위 표현과 '만' 단위 축약 응답을 올바르게 해석�
   assert.equal(turn.context.maxPrice, 70000);
 });
 
+test("대여료 질문에서 5와 10을 만원 단위로 인식한다", () => {
+  for (const [answer, expected] of [["5", 50000], ["10", 100000]]) {
+    let turn = conversationTurn("배추 흙갈이 대여", {});
+    assert.equal(turn.field, "area");
+    turn = conversationTurn("300", {}, turn);
+    assert.equal(turn.field, "date");
+    turn = conversationTurn("건너뛰기", {}, turn);
+    assert.equal(turn.field, "budget");
+    turn = conversationTurn(answer, {}, turn);
+    assert.equal(turn.context.maxPrice, expected);
+    assert.equal(turn.known.budget, true);
+    assert.equal(turn.field, undefined);
+  }
+  // Only the rental budget step gets the special shorthand interpretation.
+  let sale = conversationTurn("배추 흙갈이 구매", {});
+  sale = conversationTurn("300", {}, sale);
+  assert.equal(sale.field, "budget");
+  sale = conversationTurn("10", {}, sale);
+  assert.equal(sale.context.maxPrice, 10);
+});
+
 test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞춰 폴백 응답을 구성한다", async () => {
   const previous = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;

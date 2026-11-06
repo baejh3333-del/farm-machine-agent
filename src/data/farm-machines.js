@@ -1,10 +1,10 @@
 // 검수된 작물-작업 연결을 UI와 추천 API가 함께 사용한다.
 // 기계 적합성은 예시이며 실제 작업기 호환·현장 상태는 게시자 확인이 필요하다.
 export const CROPS = [
-  { id: "pepper", name: "고추", emoji: "🌶️", description: "두둑·멀칭·정식·방제" },
-  { id: "rice", name: "벼", emoji: "🌾", description: "논 준비·이앙·수확" },
-  { id: "cabbage", name: "배추", emoji: "🥬", description: "두둑·멀칭·정식" },
-  { id: "potato", name: "감자", emoji: "🥔", description: "파종·북주기·굴취" },
+  { id: "pepper", name: "고추", emoji: "", description: "두둑·멀칭·정식·방제" },
+  { id: "rice", name: "벼", emoji: "", description: "논 준비·이앙·수확" },
+  { id: "cabbage", name: "배추", emoji: "", description: "두둑·멀칭·정식" },
+  { id: "potato", name: "감자", emoji: "", description: "파종·북주기·굴취" },
 ];
 
 export const STAGES = [
@@ -31,16 +31,16 @@ export const OPERATIONS = [
 ];
 
 export const MACHINE_TYPES = [
-  { id: "cultivator", label: "관리기", emoji: "🚜" },
-  { id: "tractor", label: "트랙터", emoji: "🚜" },
-  { id: "ridgeMulcher", label: "휴립·멀칭기", emoji: "🌱" },
-  { id: "transplanter", label: "정식기", emoji: "🌱" },
-  { id: "ricePlanter", label: "이앙기", emoji: "🌾" },
-  { id: "sprayer", label: "방제기", emoji: "💧" },
-  { id: "potatoPlanter", label: "감자 파종기", emoji: "🥔" },
-  { id: "combine", label: "콤바인", emoji: "🌾" },
-  { id: "potatoHarvester", label: "감자 굴취기", emoji: "🥔" },
-  { id: "carrier", label: "운반차", emoji: "🛺" },
+  { id: "cultivator", label: "관리기", emoji: "" },
+  { id: "tractor", label: "트랙터", emoji: "" },
+  { id: "ridgeMulcher", label: "휴립·멀칭기", emoji: "" },
+  { id: "transplanter", label: "정식기", emoji: "" },
+  { id: "ricePlanter", label: "이앙기", emoji: "" },
+  { id: "sprayer", label: "방제기", emoji: "" },
+  { id: "potatoPlanter", label: "감자 파종기", emoji: "" },
+  { id: "combine", label: "콤바인", emoji: "" },
+  { id: "potatoHarvester", label: "감자 굴취기", emoji: "" },
+  { id: "carrier", label: "운반차", emoji: "" },
 ];
 
 export const CROP_OPERATIONS = {

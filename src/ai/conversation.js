@@ -56,7 +56,7 @@ function nextQuestion(selection, known) {
   }
   if (!known.transaction) return { field: "transaction", reply: "필요한 기간만 빌리실 건가요, 구매하실 건가요?", choices: ["대여", "구매"] };
   if (!known.area) return { field: "area", reply: "작업할 농지는 대략 몇 평인가요? 면적을 알면 크기가 맞는 장비로 좁힐 수 있어요.", choices: ["100평", "300평", "1000평", "건너뛰기", "바로 추천"] };
-  if (selection.transaction === "rent" && !known.date) return { field: "date", reply: "언제 빌리실 건가요? 시작일과 반납일을 알려주세요. 하루만 필요하면 날짜 하나만 입력해도 돼요.", choices: ["건너뛰기", "바로 추천"] };
+  if (selection.transaction === "rent" && !known.date) return { field: "date", reply: "언제 빌리실 건가요? 날짜를 4자리 숫자로 입력해 주세요. 예: 1107 또는 1107~1110. 하루만 필요하면 날짜 하나만 입력해도 돼요.", choices: ["건너뛰기", "바로 추천"] };
   if (!known.budget) return { field: "budget", reply: selection.transaction === "rent" ? "하루 대여료는 얼마까지 생각하세요?" : "구매 예산은 얼마까지 생각하세요?", choices: selection.transaction === "rent" ? ["5만원 이하", "10만원 이하", "바로 추천"] : ["100만원 이하", "300만원 이하", "바로 추천"] };
   return null;
 }
@@ -94,7 +94,7 @@ export function conversationTurn(message, filters, previous) {
     if (dates.some((date) => !date) || (dates[1] && dates[1] < dates[0])) {
       return {
         context, known, field: "date",
-        question: { reply: "날짜를 다시 확인해 주세요. 시작일부터 반납일까지 입력해 주세요. 예: 11 20 ~ 11 22 (또는 12 30 ~ 1 3)", choices: ["건너뛰기"] },
+        question: { reply: "날짜를 다시 확인해 주세요. 시작일부터 반납일까지 입력해 주세요. 예: 1120~1122 (또는 1230~0103)", choices: ["건너뛰기"] },
       };
     }
     [context.date, context.dateEnd = dates[0]] = dates;
@@ -130,7 +130,7 @@ export function conversationTurn(message, filters, previous) {
       operation: "어떤 작업인지 아직 모르겠어요. 아래에서 고르거나 ‘흙을 갈고 싶어’처럼 말씀해 주세요.",
       transaction: "빌리려는 건지 사려는 건지 한 가지를 골라 주세요.",
       area: "면적은 ‘300평’처럼 알려주세요. 아직 모르시면 건너뛰어도 돼요.",
-      date: "날짜는 ‘11 20 ~ 11 22’처럼 간단히 적어 주셔도 돼요. 연도가 바뀌면 자동으로 계산해 드려요. 또는 건너뛸 수 있어요.",
+      date: "날짜는 ‘1120~1122’처럼 붙여 적어 주셔도 돼요. 연도가 바뀌면 자동으로 계산해 드려요. 또는 건너뛸 수 있어요.",
       budget: "하루 대여료는 ‘5’ 또는 ‘10’처럼 숫자만 적어도 돼요. 예산이 미정이면 ‘바로 추천’을 눌러 주세요.",
     };
     question.reply = prompts[field];

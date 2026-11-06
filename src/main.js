@@ -85,6 +85,47 @@ try {
   state = structuredClone(defaults);
 }
 
+const DEMO_ACCOUNT = { id: "10jo", password: "20261106!" }; // 시연 전용, 공개 코드
+const DEMO_LOGIN_KEY = "moa-demo-login";
+const OWNER_DB_KEY = "moa-owner-db-v1";
+const isDemoLoggedIn = () => sessionStorage.getItem(DEMO_LOGIN_KEY) === DEMO_ACCOUNT.id;
+function readOwnerDb() {
+  try { return JSON.parse(localStorage.getItem(OWNER_DB_KEY) || "{}"); } catch { return {}; }
+}
+function saveOwnerDb(db) {
+  try { localStorage.setItem(OWNER_DB_KEY, JSON.stringify(db)); } catch { /* 원본 유지 */ }
+}
+function getOwnerData() { return readOwnerDb()[DEMO_ACCOUNT.id]; }
+function migrateExistingOwnerData() {
+  const db = readOwnerDb();
+  if (db[DEMO_ACCOUNT.id]) return;
+  const owned = allListings().filter((item) => item.owner);
+  const ids = new Set(owned.map((item) => item.id));
+  db[DEMO_ACCOUNT.id] = {
+    listingIds: [...ids],
+    customListings: state.customListings.filter((item) => ids.has(item.id)),
+    statuses: Object.fromEntries(Object.entries(state.statuses).filter(([id]) => ids.has(id))),
+    bookings: Object.fromEntries(Object.entries(state.bookings).filter(([id]) => ids.has(id))),
+    requests: state.requests.filter((item) => ids.has(item.listingId)),
+    messages: state.messages.filter((item) => ids.has(item.listingId)),
+  };
+  saveOwnerDb(db);
+}
+function syncOwnerData() {
+  const db = readOwnerDb();
+  if (!db[DEMO_ACCOUNT.id]) return;
+  const ids = new Set(db[DEMO_ACCOUNT.id].listingIds);
+  for (const item of state.customListings) if (item.owner) ids.add(item.id);
+  db[DEMO_ACCOUNT.id] = {
+    listingIds: [...ids],
+    customListings: state.customListings.filter((item) => ids.has(item.id)),
+    statuses: Object.fromEntries(Object.entries(state.statuses).filter(([id]) => ids.has(id))),
+    bookings: Object.fromEntries(Object.entries(state.bookings).filter(([id]) => ids.has(id))),
+    requests: state.requests.filter((item) => ids.has(item.listingId)),
+    messages: state.messages.filter((item) => ids.has(item.listingId)),
+  };
+  saveOwnerDb(db);
+}
 let draft = structuredClone(state.filters);
 let toastTimer;
 let catalog = [];
@@ -96,6 +137,7 @@ function persist() {
   } catch {
     toast("브라우저 저장 공간이 부족합니다. 사진 크기를 줄여 주세요.");
   }
+  syncOwnerData();
   updateBadges();
 }
 
@@ -115,6 +157,7 @@ async function loadCatalog() {
     if (!Array.isArray(data.listings)) throw new Error("잘못된 매물 응답");
     catalog = data.listings;
     catalogState = "ready";
+    migrateExistingOwnerData();
   } catch (error) {
     console.error(error);
     catalogState = "error";
@@ -235,7 +278,7 @@ function updateBadges() {
   }
 }
 
-const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", login: "loginView", about: "aboutView" };
+const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
 const MAIN_PAGE_VIEWS = ["home", "browse"];
@@ -252,6 +295,7 @@ function markNav(view) {
 
 function setView(view) {
   if (!Object.hasOwn(viewIds, view)) view = "home";
+  if (view === "owner" && !isDemoLoggedIn()) view = "ownerLoginRequired";
   state.view = view;
   const onMainPage = MAIN_PAGE_VIEWS.includes(view);
   for (const [name, id] of Object.entries(viewIds)) {
@@ -955,7 +999,8 @@ function renderBuyerRequests() {
 }
 
 function renderOwner() {
-  const owned = allListings().filter((item) => item.owner);
+  const ownerIds = new Set(getOwnerData()?.listingIds || []);
+  const owned = allListings().filter((item) => ownerIds.has(item.id));
   const pending = state.requests.filter((request) => request.status === "pending" && owned.some((item) => item.id === request.listingId));
   $("ownerStats").innerHTML = `
     <div class="stat-box">
@@ -1504,6 +1549,8 @@ function bindEvents() {
     setView("login");
     $("loginId")?.focus();
   });
+  $("ownerLoginGoButton")?.addEventListener("click", () => { setView("login"); $("loginId")?.focus(); });
+  $("demoLogoutButton")?.addEventListener("click", () => { sessionStorage.removeItem(DEMO_LOGIN_KEY); $("loginButton").textContent = "로그인"; setView("home"); toast("로그아웃되었습니다."); });
   initLoginForm();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
@@ -1753,6 +1800,7 @@ function initLoginForm() {
   const submit = $("loginSubmit");
   const eye = $("loginEye");
   const remember = $("loginRemember");
+  if (isDemoLoggedIn()) $("loginButton").textContent = "내 계정";
   const savedId = localStorage.getItem("moa-login-id");
   if (savedId) idInput.value = savedId;
 
@@ -1777,9 +1825,13 @@ function initLoginForm() {
     // 아이디만 저장하고 비밀번호는 어디에도 저장하지 않는다
     if (remember.checked) localStorage.setItem("moa-login-id", idInput.value.trim());
     else localStorage.removeItem("moa-login-id");
+    if (idInput.value.trim() !== DEMO_ACCOUNT.id || passwordInput.value !== DEMO_ACCOUNT.password) { passwordInput.value = ""; updateSubmit(); toast("아이디 또는 비밀번호가 올바르지 않습니다."); return; }
+    sessionStorage.setItem(DEMO_LOGIN_KEY, DEMO_ACCOUNT.id);
+    $("loginButton").textContent = "내 계정";
     passwordInput.value = "";
     updateSubmit();
-    toast("로그인 기능은 준비 중이에요. 지금은 로그인 없이 모든 기능을 써볼 수 있어요.");
+    toast("로그인되었습니다.");
+    setView("owner");
   });
 
   for (const el of document.querySelectorAll("[data-login-soon]")) {

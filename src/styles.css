@@ -312,7 +312,7 @@ img {
   padding: 55px var(--gutter);
   color: #fffdf7;
   background: linear-gradient(90deg, rgba(30, 28, 21, .82), rgba(30, 28, 21, .56) 34%, rgba(30, 28, 21, .08) 72%),
-    #5b4e3d url("/src/farm-hero.jpg") center 56% / cover no-repeat;
+    #5b4e3d url("./farm-hero.jpg") center 56% / cover no-repeat;
 }
 .hero-copy { width: min(100%, 1400px); margin-inline: auto; }
 .hero-badge {
@@ -2247,7 +2247,7 @@ img {
     min-height: 440px;
     align-items: end;
     padding-bottom: 30px;
-    background-image: linear-gradient(0deg, rgba(30, 28, 21, .96), rgba(30, 28, 21, .72) 43%, transparent 83%), url("/src/farm-hero.jpg");
+    background-image: linear-gradient(0deg, rgba(30, 28, 21, .96), rgba(30, 28, 21, .72) 43%, transparent 83%), url("./farm-hero.jpg");
     background-position: center, 72% center;
   }
   .hero-copy p { font-size: 15px; }
@@ -2779,4 +2779,37 @@ img {
 @media (max-width: 700px) {
   .login-view { padding: 24px 0 60px; }
   .login-logo { margin-bottom: 28px; }
+}
+
+.picture-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+.machine-art:has(.machine-example),
+.detail-art:has(.machine-example) {
+  position: relative;
+  background: #f4ede0;
+}
+
+.machine-example {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.machine-example-label {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #fffaf0;
+  color: #554a39;
+  font-size: 11px;
+  font-weight: 650;
 }

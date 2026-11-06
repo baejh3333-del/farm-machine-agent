@@ -165,12 +165,19 @@ function hideDialog(backdrop) {
   }
 }
 
-function machineVisual(item, detail = false) {
+const LISTING_PHOTO = /^data:image\/(?:png|jpeg|webp);base64,/i;
+const hasListingPhoto = (item) => typeof item.photo === "string" && LISTING_PHOTO.test(item.photo);
+const machineImage = (type) => `./src/images/machines/${type?.id || "tractor"}.jpg`;
+
+function pictureIcon(name) {
+  return `<img class="picture-icon" src="./src/images/icons/${name}.jpg" alt="" width="32" height="32">`;
+}
+
+function machineVisual(item) {
   const type = MACHINE_BY_ID[item.machineType];
-  const safePhoto = typeof item.photo === "string" && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo) ? escapeHtml(item.photo) : "";
-  return safePhoto
-    ? `<img src="${safePhoto}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
-    : `<span class="art-emoji" aria-label="${escapeHtml(type?.label || "농기계")} 예시 그림" role="img" style="font-size:${detail ? "110px" : "68px"}">${type?.emoji || ""}</span>`;
+  return hasListingPhoto(item)
+    ? `<img src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
+    : `<img class="machine-example" src="${machineImage(type)}" alt="${escapeHtml(type?.label || "농기계")} AI 예시 이미지" width="350" height="365" loading="lazy">`;
 }
 
 function listingSummary(item) {
@@ -332,6 +339,7 @@ function renderQuickWizard() {
     ? `${crop.emoji} ${crop.name} 농사${activeOpId ? ` · '${OPERATION_BY_ID[activeOpId]?.label}'` : ""} 꿀팁!`
     : ` 초보 농부를 위한 농기계 선택 팁`;
 
+  $("cropCallout").querySelector(".callout-icon").innerHTML = pictureIcon(crop?.id || "bulb");
   $("cropCallout").querySelector("strong").textContent = calloutTitle;
   $("cropCallout").querySelector("p").textContent = tipText;
 
@@ -378,19 +386,18 @@ function renderMachineCategoryBar() {
 
   const tabs = [
     `<button type="button" class="machine-tab ${isAll ? "active" : ""}" data-machine-tab="all" aria-pressed="${isAll}">
-      <span class="mt-emoji" aria-hidden="true"></span>
+      <span class="mt-emoji" aria-hidden="true"><img class="mt-photo" src="${machineImage()}" alt="" /></span>
       <span class="mt-caption"><span class="mt-name">전체 기종</span><span class="mt-count">${baseMatching.length}</span></span>
     </button>`,
     ...MACHINE_TYPES.map((m) => {
       const matchingItems = baseMatching.filter((item) => item.machineType === m.id);
       const count = matchingItems.length;
       const photo = allListings().find((item) => item.machineType === m.id
-        && typeof item.photo === "string"
-        && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item.photo))?.photo;
+        && hasListingPhoto(item))?.photo;
       const active = state.filters.machineTypes.includes(m.id);
       return `
         <button type="button" class="machine-tab ${active ? "active" : ""}" data-machine-tab="${m.id}" aria-pressed="${active}">
-          <span class="mt-emoji" aria-hidden="true">${photo ? `<img class="mt-photo" src="${escapeHtml(photo)}" alt="" />` : escapeHtml(m.emoji)}</span>
+          <span class="mt-emoji" aria-hidden="true"><img class="mt-photo" src="${photo ? escapeHtml(photo) : machineImage(m)}" alt="" /></span>
           <span class="mt-caption"><span class="mt-name">${escapeHtml(m.label)}</span><span class="mt-count">${count}</span></span>
         </button>
       `;
@@ -425,7 +432,7 @@ function selectOption(group, values, checked, recommendedIds = []) {
       return `
         <label class="option ${isChecked ? "is-checked" : ""} ${isRec ? "is-recommended" : ""}">
           <input type="checkbox" data-filter-group="${group}" value="${item.id}" ${isChecked ? "checked" : ""}>
-          ${item.emoji ? `<span class="opt-emoji" aria-hidden="true">${item.emoji}</span>` : ""}
+          ${group === "cropIds" ? pictureIcon(item.id) : group === "machineTypes" ? `<img class="picture-icon" src="${machineImage(item)}" alt="" width="32" height="32">` : group === "conditions" && ["good", "repair"].includes(item.id) ? pictureIcon(item.id) : ""}
           <span class="opt-text">${escapeHtml(item.label || item.name)}</span>
           ${isRec ? `<span class="opt-rec-badge">추천</span>` : ""}
         </label>
@@ -643,11 +650,11 @@ function card(item) {
               <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
               <span class="art-distance-pill"> ${escapeHtml(item.region)} · ${distance}km</span>
             </div>
-            <span class="art-caption">${item.photo ? "실제 등록 사진" : `${escapeHtml(machineLabel)} 예시 그림`}</span>
+            <span class="art-caption">${hasListingPhoto(item) ? "실제 등록 사진" : `${escapeHtml(machineLabel)} AI 예시 이미지`}</span>
           </div>
         </button>
         <button type="button" class="card-save ${isFav ? "saved" : ""}" data-favorite="${item.id}" aria-label="${escapeHtml(item.title)} 찜하기 ${isFav ? "해제" : "등록"}">
-          <span aria-hidden="true">${isFav ? "찜함" : "찜"}</span>
+          <span aria-hidden="true">${pictureIcon(isFav ? "heart" : "heart-outline")}</span>
         </button>
       </div>
 
@@ -691,7 +698,7 @@ function renderListings() {
   $("listingGrid").innerHTML = items.length
     ? items.map(card).join("")
     : `<div class="empty-state">
-        <div class="empty-icon" aria-hidden="true"></div>
+        <div class="empty-icon" aria-hidden="true"><img class="picture-icon" src="${machineImage()}" alt="" width="32" height="32"></div>
         <strong>선택하신 조건에 맞는 농기계가 아직 없어요</strong>
         <p>작업 종류나 예산, 거리 조건을 조금 넓혀서 다시 찾아볼까요?</p>
         <div class="empty-actions">
@@ -729,7 +736,7 @@ function openDetail(id) {
   $("detailContent").innerHTML = `
     <div class="detail-layout">
       <div class="detail-art-col">
-        <div class="detail-art">${machineVisual(item, true)}</div>
+        <div class="detail-art">${machineVisual(item)}${hasListingPhoto(item) ? "" : '<span class="machine-example-label">AI 예시 이미지</span>'}</div>
         <div class="detail-checklist">
           <strong> 초보 농부 인수 전 필수 체크리스트</strong>
           <ul>
@@ -917,15 +924,15 @@ function renderOwner() {
   const pending = state.requests.filter((request) => request.status === "pending" && owned.some((item) => item.id === request.listingId));
   $("ownerStats").innerHTML = `
     <div class="stat-box">
-      <span class="stat-icon" aria-hidden="true"></span>
+      <span class="stat-icon" aria-hidden="true">${pictureIcon("sprout")}</span>
       <div><small>내가 등록한 농기계</small><strong>${owned.length}대</strong></div>
     </div>
     <div class="stat-box">
-      <span class="stat-icon" aria-hidden="true"></span>
+      <span class="stat-icon" aria-hidden="true">${pictureIcon("envelope")}</span>
       <div><small>대기 중인 대여 요청</small><strong>${pending.length}건</strong></div>
     </div>
     <div class="stat-box">
-      <span class="stat-icon" aria-hidden="true"></span>
+      <span class="stat-icon" aria-hidden="true">${pictureIcon("handshake")}</span>
       <div><small>거래 완료된 판매</small><strong>${owned.filter((item) => item.type === "sale" && item.status === "done").length}건</strong></div>
     </div>
   `;

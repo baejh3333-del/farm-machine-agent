@@ -15,7 +15,7 @@ export function available(item, start, end = start) {
 }
 
 export function compareListings(a, b, region, sort) {
-  const distance = distanceKm(region, a.region) - distanceKm(region, b.region);
+  const distance = distanceKm(region, a.region, a.id) - distanceKm(region, b.region, b.id);
   if (sort === "price" && a.price !== b.price) return a.price - b.price;
   if (sort === "inspection" && a.inspectedAt !== b.inspectedAt) return b.inspectedAt.localeCompare(a.inspectedAt);
   return distance || a.price - b.price || a.id.localeCompare(b.id);
@@ -49,7 +49,7 @@ export function selectMatchingListings(message, context, listings) {
     (!Number(minPrice) || item.price >= Number(minPrice)) &&
     (!maxPrice || item.price <= maxPrice) &&
     (!areaPyeong || (areaPyeong * 3.305785 >= item.areaMin && areaPyeong * 3.305785 <= item.areaMax)) &&
-    (!Number(radius) || !region || distanceKm(region, item.region) <= Number(radius))
+    (!Number(radius) || !region || distanceKm(region, item.region, item.id) <= Number(radius))
   ).sort((a, b) => compareListings(a, b, region, sort)).slice(0, 8);
   return { cropId, operationId: operations[0], operations, combined, transaction, maxPrice, areaPyeong, date, dateEnd, candidates };
 }

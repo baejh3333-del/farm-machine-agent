@@ -224,7 +224,7 @@ function listingById(id) {
 }
 
 function statusLabel(item) {
-  if (item.type === "sale") return item.status === "done" ? "판매 완료" : item.status === "dealing" ? "거래 중" : "판매 가능";
+  if (item.type === "sale") return item.status === "done" ? "판매 완료" : item.status === "dealing" ? "거래 중" : "구매 가능";
   if (item.condition === "repair") return "정비 중";
   return rentedNow(item) ? "대여 중" : "대여 가능";
 }

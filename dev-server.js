@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { recommend } from "./server/agent.js";
 import accountHandler from "./api/account.js";
 import { initListingsDb, listListings, localDatabase } from "./server/listings-db.js";
+import { recommendLimitResponse } from "./server/rate-limit.js";
 
 initListingsDb(localDatabase);
 
@@ -35,6 +36,11 @@ const server = createServer(async (request, response) => {
       const data = JSON.parse(body);
       const message = typeof data.message === "string" ? data.message.trim() : "";
       if (!message || message.length > 500) { response.writeHead(400).end(); return; }
+      const limited = await recommendLimitResponse(request);
+      if (limited) {
+        response.writeHead(limited.status, { ...limited.headers, "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(limited.body));
+        return;
+      }
       const result = await recommend(message, data.context && typeof data.context === "object" ? data.context : {});
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(result));
     } catch (error) {

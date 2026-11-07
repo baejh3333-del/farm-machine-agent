@@ -1,4 +1,5 @@
 import { recommend } from "../server/agent.js";
+import { recommendLimitResponse } from "../server/rate-limit.js";
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "POST만 지원합니다." });
@@ -10,6 +11,11 @@ export default async function handler(request, response) {
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!message || message.length > 500) return response.status(400).json({ error: "질문은 1~500자로 입력해 주세요." });
   const context = body.context && typeof body.context === "object" ? body.context : {};
+  const limited = await recommendLimitResponse(request);
+  if (limited) {
+    for (const [name, value] of Object.entries(limited.headers)) response.setHeader(name, value);
+    return response.status(limited.status).json(limited.body);
+  }
   try {
     const result = await recommend(message, context);
     return response.status(200).json(result);

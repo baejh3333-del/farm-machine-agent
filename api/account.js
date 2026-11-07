@@ -1,5 +1,6 @@
 import { fromNodeHeaders } from "better-auth/node";
 import { accountAuth } from "../server/account-auth.js";
+import { DEMO_ACCOUNT_EMAIL, assignDemoOwnership } from "../server/schema.js";
 
 const routes = new Map([
   ["session", ["GET", "/get-session"]],
@@ -77,6 +78,8 @@ export default async function accountHandler(request, response) {
     const auth = await accountAuth();
     const result = await auth.handler(new Request(`${origin}/api/auth${path}`, { method, headers, body }));
     const data = await result.json();
+    // 시연 계정(10jo)을 새로 만들면 시드에서 그 계정 소유였던 매물을 바로 넘겨준다.
+    if (result.ok && action === "signup" && data?.user?.email === DEMO_ACCOUNT_EMAIL) await assignDemoOwnership();
     const cookies = result.headers.getSetCookie();
     if (cookies.length) response.setHeader("Set-Cookie", cookies);
     response.writeHead(result.status, { "Content-Type": "application/json; charset=utf-8" })

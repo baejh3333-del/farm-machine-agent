@@ -1,14 +1,10 @@
 import { listListings } from "../server/listings-db.js";
+import { currentUser, handle, query, requireUser } from "../server/http.js";
 
-export default function handler(request, response) {
-  if (request.method !== "GET") {
-    response.setHeader("Allow", "GET");
-    return response.status(405).json({ error: "GET만 지원합니다." });
-  }
-  try {
-    return response.status(200).json({ listings: listListings() });
-  } catch (error) {
-    console.error("listings failed", error.message);
-    return response.status(500).json({ error: "매물을 불러오지 못했습니다." });
-  }
-}
+// GET /api/listings          공개 매물 (로그인했으면 owner로 내 매물 표시)
+// GET /api/listings?owner=me 내 매물만
+export default handle(["GET"], async (request) => {
+  const ownerOnly = query(request).get("owner") === "me";
+  const user = ownerOnly ? await requireUser(request) : await currentUser(request);
+  return { body: { listings: await listListings({ viewerId: user?.id ?? null, ownerOnly }) } };
+});

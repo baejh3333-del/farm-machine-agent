@@ -1,78 +1,49 @@
-import { mkdirSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
-import { buildMockListings } from "./listing-seed.js";
+import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
+import { getPool } from "./db.js";
+import { DEMO_OWNER_ID, ensureSchema } from "./schema.js";
 
-const localDirectory = new URL("../data/", import.meta.url);
-export const localDatabase = new URL("farm-machines.sqlite", localDirectory);
-let database;
-let listQuery;
-const catalog = new Map(buildMockListings().map((item) => [item.id, item]));
+const LISTING_COLUMNS = `
+  l.id, l.owner_id, l.type, l.title, l.brand, l.machine_type, l.model_id, l.crop_ids, l.operations,
+  l.area_min, l.area_max, l.price, l.region, l.condition, l.inspected_at::text AS inspected_at,
+  l.included, l.pickup, l.description, l.summary, l.photo_url, l.status, l.is_demo,
+  COALESCE((
+    SELECT json_agg(json_build_object('start', lower(b.period)::text, 'end', (upper(b.period) - 1)::text)
+      ORDER BY lower(b.period))
+    FROM booking b WHERE b.listing_id = l.id
+  ), '[]'::json) AS booked`;
 
-const columns = [
-  "id", "type", "title", "brand", "machineType", "cropIds", "operations",
-  "areaMin", "areaMax", "price", "region", "condition", "inspectedAt",
-  "included", "pickup", "description", "summary", "booked", "owner", "status",
-];
-const jsonColumns = ["cropIds", "operations", "booked"];
-
-export function initListingsDb(location = ":memory:") {
-  if (database) return;
-  if (location === localDatabase) mkdirSync(localDirectory, { recursive: true });
-  const connection = new DatabaseSync(location, { timeout: 5000 });
-  try {
-    connection.exec(`
-      CREATE TABLE IF NOT EXISTS listings (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL CHECK (type IN ('rent', 'sale')),
-        title TEXT NOT NULL,
-        brand TEXT NOT NULL,
-        machineType TEXT NOT NULL,
-        cropIds TEXT NOT NULL CHECK (json_type(cropIds) = 'array'),
-        operations TEXT NOT NULL CHECK (json_type(operations) = 'array'),
-        areaMin INTEGER NOT NULL CHECK (areaMin > 0),
-        areaMax INTEGER NOT NULL CHECK (areaMax >= areaMin),
-        price INTEGER NOT NULL CHECK (price >= 0),
-        region TEXT NOT NULL,
-        condition TEXT NOT NULL CHECK (condition IN ('good', 'used', 'repair')),
-        inspectedAt TEXT NOT NULL,
-        included TEXT NOT NULL,
-        pickup TEXT NOT NULL,
-        description TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        booked TEXT NOT NULL CHECK (json_type(booked) = 'array'),
-        owner INTEGER NOT NULL CHECK (owner IN (0, 1)),
-        status TEXT NOT NULL CHECK (status IN ('open', 'dealing', 'done'))
-      ) STRICT;
-      BEGIN IMMEDIATE;
-    `);
-    const insert = connection.prepare(`
-      INSERT INTO listings (${columns.join(", ")})
-      VALUES (${columns.map(() => "?").join(", ")})
-      ON CONFLICT(id) DO UPDATE SET
-        title = excluded.title, brand = excluded.brand,
-        included = excluded.included, description = excluded.description,
-        summary = excluded.summary
-    `);
-    for (const item of buildMockListings()) {
-      insert.run(...columns.map((key) => jsonColumns.includes(key) ? JSON.stringify(item[key])
-        : key === "owner" ? Number(item[key]) : item[key]));
-    }
-    connection.exec("COMMIT");
-    listQuery = connection.prepare("SELECT * FROM listings ORDER BY rowid");
-    database = connection;
-  } catch (error) {
-    connection.close();
-    throw error;
-  }
+// 브라우저가 쓰던 매물 형태를 그대로 돌려준다. owner는 "지금 로그인한 사용자의 매물인지"다.
+export function toListing(row, viewerId) {
+  const specification = row.model_id ? SPEC_BY_ID[row.model_id] : undefined;
+  return {
+    id: row.id, type: row.type, title: row.title, brand: row.brand, machineType: row.machine_type,
+    cropIds: row.crop_ids, operations: row.operations, areaMin: row.area_min, areaMax: row.area_max,
+    price: row.price, region: row.region, condition: row.condition, inspectedAt: row.inspected_at,
+    included: row.included, pickup: row.pickup, description: row.description, summary: row.summary,
+    ...(row.photo_url ? { photo: row.photo_url } : {}),
+    booked: typeof row.booked === "string" ? JSON.parse(row.booked) : row.booked,
+    status: row.status,
+    owner: Boolean(viewerId) && row.owner_id === viewerId,
+    // 데모 농가 소유 매물은 승인할 사람이 없다. 화면에서 안내하는 데 쓴다.
+    demoOwner: row.owner_id === DEMO_OWNER_ID,
+    demo: row.is_demo,
+    ...(specification ? { modelId: specification.id, model: specification.model, specification } : {}),
+  };
 }
 
-export function listListings() {
-  initListingsDb();
-  return listQuery.all().map((row) => {
-    for (const key of jsonColumns) row[key] = JSON.parse(row[key]);
-    const model = catalog.get(row.id);
-    return { ...row, owner: Boolean(row.owner), ...(model ? {
-      modelId: model.modelId, model: model.model, specification: model.specification, demo: true,
-    } : {}) };
-  });
+export async function listListings({ viewerId = null, ownerOnly = false } = {}) {
+  await ensureSchema();
+  const { rows } = await getPool().query(`
+    SELECT ${LISTING_COLUMNS}
+    FROM listing l
+    WHERE l.status <> 'hidden' AND ($2::boolean IS NOT TRUE OR l.owner_id = $1)
+    ORDER BY l.sort_order, l.created_at, l.id
+  `, [viewerId, ownerOnly]);
+  return rows.map((row) => toListing(row, viewerId));
+}
+
+export async function getListing(id, viewerId = null) {
+  await ensureSchema();
+  const { rows } = await getPool().query(`SELECT ${LISTING_COLUMNS} FROM listing l WHERE l.id = $1`, [id]);
+  return rows[0] ? toListing(rows[0], viewerId) : null;
 }

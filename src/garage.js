@@ -1,28 +1,29 @@
 import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, checkModelCompatibility } from "./data/machine-specifications.js";
 import { findCompatibleRentals } from "./data/compatibility.js";
 
-const key = "moa-owned-machines-v1";
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const money = (value) => `${value.toLocaleString("ko-KR")}원`;
 const labels = { compatible: "호환 가능", check: "추가 확인 필요", incompatible: "호환 불가", notApplicable: "연결 불필요" };
 export const compatibilityBadge = (verdict) => `<span class="compat-badge compat-${verdict.status}">${labels[verdict.status]}</span>`;
 
-export function createGarage({ root, getListings, getCatalogState, today, openListing, openRental, notify }) {
-  let owned = [], selectedId = "";
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) || "{}");
-    const ids = new Set();
-    owned = (Array.isArray(saved.owned) ? saved.owned : []).filter((item) => {
-      if (!item || typeof item.id !== "string" || ids.has(item.id) || SPEC_BY_ID[item.modelId]?.role !== "powerUnit" || typeof item.name !== "string") return false;
-      ids.add(item.id); return true;
-    }).map((item) => ({ id: item.id, modelId: item.modelId, name: item.name.slice(0, 40) }));
-    selectedId = owned.some((item) => item.id === saved.selectedId) ? saved.selectedId : owned[0]?.id || "";
-  } catch { /* A malformed or unavailable local store starts with an empty garage. */ }
+// storage.load()은 { owned, selectedId }를, storage.save(owned, selectedId)는 성공 여부를 돌려준다.
+// 로그인 전에는 브라우저에, 로그인 후에는 계정에 저장한다(user-store.js).
+function sanitize(saved) {
+  const ids = new Set();
+  const owned = (Array.isArray(saved?.owned) ? saved.owned : []).filter((item) => {
+    if (!item || typeof item.id !== "string" || ids.has(item.id) || SPEC_BY_ID[item.modelId]?.role !== "powerUnit" || typeof item.name !== "string") return false;
+    ids.add(item.id); return true;
+  }).map((item) => ({ id: item.id, modelId: item.modelId, name: item.name.slice(0, 40) }));
+  const selectedId = owned.some((item) => item.id === saved?.selectedId) ? saved.selectedId : owned[0]?.id || "";
+  return { owned, selectedId };
+}
+
+export function createGarage({ root, storage, getListings, getCatalogState, today, openListing, openRental, notify }) {
+  let { owned, selectedId } = sanitize(storage.load());
   let mode = owned.length ? "owned" : "set";
   const selected = () => owned.find((item) => item.id === selectedId);
   function save(next, nextSelected) {
-    try { localStorage.setItem(key, JSON.stringify({ owned: next, selectedId: nextSelected })); }
-    catch { notify("브라우저 저장 공간을 사용할 수 없어 변경하지 못했습니다."); return false; }
+    if (!storage.save(next, nextSelected)) { notify("보유 농기계를 저장하지 못했습니다."); return false; }
     owned = next; selectedId = nextSelected; return true;
   }
   root.innerHTML = `
@@ -102,10 +103,15 @@ export function createGarage({ root, getListings, getCatalogState, today, openLi
       openRental(button.dataset.garageRent, $("compatStart").value, $("compatEnd").value);
     }
   });
-  window.addEventListener("storage", (event) => { if (event.key === key) notify("다른 창에서 보유 기계가 변경됐습니다. 새로고침해 최신 목록을 확인하세요."); });
   refreshOwned();
   return {
     refresh: refreshResults,
+    // 로그인·로그아웃이나 서버 저장 결과가 오면 저장소에서 다시 읽는다.
+    reload() {
+      ({ owned, selectedId } = sanitize(storage.load()));
+      if (!owned.length) mode = "set";
+      refreshOwned();
+    },
     detail(item) {
       if (!item.specification) return "";
       if (item.specification.role !== "implement") return `<div class="detail-compatibility"><strong>${item.specification.role === "powerUnit" ? "내 기계와 작업기를 함께 비교하세요" : "독립 구동 장비입니다"}</strong><p>${item.specification.role === "powerUnit" ? "내 농기계에 등록하거나, 이 모델과 호환되는 대여 세트를 찾아보세요." : "트랙터·관리기에 연결하지 않고 사용합니다."}</p><button type="button" class="button button-secondary" data-open-garage>내 농기계 · 호환 세트 찾기</button></div>`;

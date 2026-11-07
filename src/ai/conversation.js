@@ -23,7 +23,7 @@ function answerInterruption(message, field) {
   const social = socialReplies.find(([pattern]) => pattern.test(message));
   if (social) return social[1];
   if (/대여\s*(?:신청|예약).*(?:어떻게|방법)|어떻게.*(?:빌려|대여)|(?:빌리는|예약하는)\s*방법/.test(message)) {
-    return "매물 상세에서 ‘대여 신청하기’를 누르고 시작일과 반납일을 고르세요. 요청을 보낸 뒤 ‘내 대여 요청’에서 승인 여부를 확인할 수 있어요.";
+    return "매물 상세에서 ‘대여 신청하기’를 누르고 시작일과 반납일을 고르세요. 요청을 보낸 뒤 ‘내 대여 요청’에서 신청 내용을 확인할 수 있어요. 소유 농가의 승인 기능은 아직 준비 중이에요.";
   }
   if (/멀칭(?:이|은)?\s*(?:뭐|무엇)|비닐\s*피복(?:이|은)?\s*뭐/.test(message)) {
     return "멀칭은 흙 표면을 비닐 같은 재료로 덮는 작업이에요. 비닐을 깔 장비를 찾고 계시면 ‘멀칭 장비 찾아줘’라고 말씀해 주세요.";

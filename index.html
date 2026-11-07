@@ -211,7 +211,25 @@
             <div class="toolbar">
               <div id="activeFilters" class="active-filters" aria-label="적용된 필터"></div>
               <button type="button" class="button-reset-inline" id="inlineResetFilters" hidden>조건 전체 해제 ✕</button>
-              <label class="listing-sort">정렬 <select id="listingSort"><option value="distance">거리순</option><option value="price">낮은 가격순</option><option value="inspection">최근 점검순</option></select></label>
+              <label class="listing-sort">
+                <span class="listing-sort-label">정렬</span>
+                <div class="listing-sort-picker">
+                  <button type="button" class="listing-sort-trigger" id="listingSortTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="listingSortMenu">
+                    <span id="listingSortCurrent">최근 점검순</span>
+                    <span class="listing-sort-chevron" aria-hidden="true"></span>
+                  </button>
+                  <div class="listing-sort-menu" id="listingSortMenu" role="listbox" aria-label="정렬 기준" hidden>
+                    <button type="button" class="listing-sort-option" role="option" data-sort-value="distance">거리순</button>
+                    <button type="button" class="listing-sort-option" role="option" data-sort-value="price">낮은 가격순</button>
+                    <button type="button" class="listing-sort-option" role="option" data-sort-value="inspection">최근 점검순</button>
+                  </div>
+                  <select id="listingSort" class="listing-sort-native" tabindex="-1" aria-hidden="true">
+                    <option value="distance">거리순</option>
+                    <option value="price">낮은 가격순</option>
+                    <option value="inspection">최근 점검순</option>
+                  </select>
+                </div>
+              </label>
               <span class="result-count" id="resultCount"></span>
             </div>
 

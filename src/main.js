@@ -1649,6 +1649,47 @@ function bindEvents() {
     persist();
     renderListings();
   });
+
+  // Custom-styled sort menu keeps the original select/change behavior intact.
+  const sortSelect = $("listingSort");
+  const sortTrigger = $("listingSortTrigger");
+  const sortMenu = $("listingSortMenu");
+  const sortCurrent = $("listingSortCurrent");
+  const sortOptions = [...document.querySelectorAll(".listing-sort-option")];
+  const closeSortMenu = () => {
+    sortMenu.hidden = true;
+    sortTrigger.setAttribute("aria-expanded", "false");
+  };
+  const syncSortMenu = () => {
+    const selected = sortSelect.selectedOptions[0];
+    sortCurrent.textContent = selected?.textContent || "최근 점검순";
+    sortOptions.forEach((option) => {
+      const active = option.dataset.sortValue === sortSelect.value;
+      option.setAttribute("aria-selected", String(active));
+    });
+  };
+  syncSortMenu();
+  sortTrigger.addEventListener("click", () => {
+    const willOpen = sortMenu.hidden;
+    sortMenu.hidden = !willOpen;
+    sortTrigger.setAttribute("aria-expanded", String(willOpen));
+  });
+  sortOptions.forEach((option) => {
+    option.addEventListener("click", () => {
+      sortSelect.value = option.dataset.sortValue;
+      sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      syncSortMenu();
+      closeSortMenu();
+      sortTrigger.focus();
+    });
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".listing-sort-picker")) closeSortMenu();
+  });
+  sortTrigger.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSortMenu();
+  });
+  sortSelect.addEventListener("change", syncSortMenu);
   $("quickSearchBtn")?.addEventListener("click", () => {
     renderListings();
     setView("browse");

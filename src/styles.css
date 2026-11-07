@@ -3162,9 +3162,9 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 /* Listing sort control — compact text-only version (visual only). */
 .toolbar label.listing-sort {
   display: inline-flex !important;
-  flex: 0 0 250px !important;
-  width: 250px !important;
-  min-width: 250px !important;
+  flex: 0 0 240px !important;
+  width: 240px !important;
+  min-width: 240px !important;
   min-height: 60px !important;
   box-sizing: border-box !important;
   align-items: center !important;
@@ -3176,7 +3176,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   background: #fff !important;
   color: #214d3b !important;
   font-family: inherit !important;
-  font-size: 16px !important;
+  font-size: 22px !important;
   font-weight: 800 !important;
   line-height: 1.2 !important;
   white-space: nowrap !important;
@@ -3213,12 +3213,12 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 }
 @media (max-width: 600px) {
   .toolbar label.listing-sort {
-    flex-basis: 250px !important;
-    width: 250px !important;
-    min-width: 250px !important;
+    flex-basis: 240px !important;
+    width: 240px !important;
+    min-width: 240px !important;
     min-height: 56px !important;
     padding: 5px 16px !important;
-    font-size: 15px !important;
+    font-size: 21px !important;
     border-radius: 17px !important;
   }
   .toolbar label.listing-sort select#listingSort {

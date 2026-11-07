@@ -3330,3 +3330,12 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   .tx-tab .tx-icon { display: none; }
   .tx-label { white-space: normal; text-align: center; }
 }
+
+.model-specification { margin: 18px 0; padding: 18px; background: #f4f8f3; border: 1px solid #dce7da; border-radius: 14px; overflow-wrap: anywhere; }
+.model-specification h3 { margin: 0 0 10px; font-size: 17px; }
+.model-specification p { font-size: 13px; line-height: 1.65; }
+.model-specification a { color: #24563a; text-decoration: underline; font-size: 13px; }
+.model-spec-list { margin: 14px 0; }
+.model-spec-list > div { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid #dce7da; font-size: 14px; }
+.model-spec-list dt { color: #596554; }
+.model-spec-list dd { margin: 0; font-weight: 600; }

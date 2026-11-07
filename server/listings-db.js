@@ -6,6 +6,7 @@ const localDirectory = new URL("../data/", import.meta.url);
 export const localDatabase = new URL("farm-machines.sqlite", localDirectory);
 let database;
 let listQuery;
+const catalog = new Map(buildMockListings().map((item) => [item.id, item]));
 
 const columns = [
   "id", "type", "title", "brand", "machineType", "cropIds", "operations",
@@ -47,7 +48,10 @@ export function initListingsDb(location = ":memory:") {
     const insert = connection.prepare(`
       INSERT INTO listings (${columns.join(", ")})
       VALUES (${columns.map(() => "?").join(", ")})
-      ON CONFLICT(id) DO NOTHING
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title, brand = excluded.brand,
+        included = excluded.included, description = excluded.description,
+        summary = excluded.summary
     `);
     for (const item of buildMockListings()) {
       insert.run(...columns.map((key) => jsonColumns.includes(key) ? JSON.stringify(item[key])
@@ -66,6 +70,9 @@ export function listListings() {
   initListingsDb();
   return listQuery.all().map((row) => {
     for (const key of jsonColumns) row[key] = JSON.parse(row[key]);
-    return { ...row, owner: Boolean(row.owner) };
+    const model = catalog.get(row.id);
+    return { ...row, owner: Boolean(row.owner), ...(model ? {
+      modelId: model.modelId, model: model.model, specification: model.specification, demo: true,
+    } : {}) };
   });
 }

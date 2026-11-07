@@ -1,3 +1,4 @@
+import { applyModelSpecification } from "../src/data/machine-specifications.js";
 import { CROP_BY_ID, MACHINE_BY_ID, OPERATION_BY_ID } from "../src/data/farm-machines.js";
 
 const seed = [
@@ -70,5 +71,5 @@ export function buildMockListings() {
       }
     }
   });
-  return listings;
+  return listings.map((item, index) => applyModelSpecification(item, index));
 }

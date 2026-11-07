@@ -30,7 +30,7 @@ export function selectMatchingListings(message, context, listings) {
   const separately = /각각|따로|작업별/.test(message);
   const combined = !separately && operations.length > 1 && (namedOperations.length > 1 || Boolean(context.combined));
   const transaction = /구매|구입|사고 싶|살래/.test(message) ? "sale" : /대여|임대|빌리|빌릴|빌려/.test(message) ? "rent" : context.transaction === "sale" ? "sale" : "rent";
-  const budgetMatch = [...message.matchAll(/(\d[\d,]*)\s*(만\s*원|원)/g)].at(-1);
+  const budgetMatch = [...message.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(만\s*원|원)/g)].at(-1);
   const maxPrice = budgetMatch ? Number(budgetMatch[1].replaceAll(",", "")) * (budgetMatch[2].startsWith("만") ? 10000 : 1) : Number(context.maxPrice) || 0;
   const areaMatch = message.match(/(\d[\d,]*(?:\.\d+)?)\s*(평|㎡|제곱미터)/);
   const areaPyeong = areaMatch ? Number(areaMatch[1].replaceAll(",", "")) / (areaMatch[2] === "평" ? 1 : 3.305785) : Number(context.areaPyeong) || 0;

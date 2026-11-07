@@ -57,6 +57,7 @@ Vercel에서는 프로젝트의 서버 환경 변수 `OPENAI_API_KEY`를 설정�
 - `server/user-data.js`, `api/me.js`: 찜, 보유 농기계
 - `server/http.js`: API 공통 처리(세션, 같은 출처 확인, JSON 검사)
 - `src/user-store.js`, `src/trade.js`: 화면의 사용자 데이터와 신청·채팅·소유자 화면
+- `src/main.js`: 화면 시작점(모듈 연결). 화면별 코드는 `src/browse.js`(매물 찾기·필터), `src/detail.js`(상세), `src/favorites.js`(찜), `src/ai/chat-panel.js`(농농이 상담), `src/login.js`, `src/navigation.js`, `src/effects.js`, 공통 상태는 `src/app-state.js`에 있습니다.
 - `src/ai/recommend-agent.js`, `server/agent.js`, `api/recommend.js`: 추천(후보는 서버가 DB에서 선정)
 - `server/rate-limit.js`: 추천 API 호출 제한
 

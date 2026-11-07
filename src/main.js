@@ -981,7 +981,7 @@ function rentalForm(id) {
         <textarea id="rentNote" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다."></textarea>
       </label>
       <div class="form-actions">
-        <button class="button button-primary button-large" type="submit"> 대여 요청 보내기</button>
+        <button class="button button-primary button-large" type="submit" id="rentalSubmitButton">대여 요청 보내기</button>
       </div>
     </form>
   `);
@@ -990,9 +990,18 @@ function rentalForm(id) {
     const end = $("rentEnd").value;
     $("rentEnd").min = start || today();
     const days = (Date.parse(end) - Date.parse(start)) / 86400000 + 1;
-    $("rentalEstimate").textContent = days > 0
-      ? `기본 대여료 ${money(item.price * days)} (${days}일) · 운송비와 보증금은 소유 농가에 확인해 주세요.`
-      : "시작일과 반납일을 확인해 주세요.";
+    const valid = Number.isInteger(days) && days > 0;
+    const button = $("rentalSubmitButton");
+    if (valid) {
+      const totalPrice = item.price * days;
+      $("rentalEstimate").textContent = `대여 기간 ${days}일 · 기본 대여료 ${money(totalPrice)} · 운송비와 보증금은 소유 농가에 확인해 주세요.`;
+      button.textContent = `${days}일 · ${money(totalPrice)} 대여 신청하기`;
+      button.disabled = false;
+    } else {
+      $("rentalEstimate").textContent = "시작일과 반납일을 확인해 주세요.";
+      button.textContent = "대여 기간을 확인해 주세요";
+      button.disabled = true;
+    }
   };
   $("rentalForm").addEventListener("input", updateEstimate);
   updateEstimate();

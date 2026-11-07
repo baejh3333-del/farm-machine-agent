@@ -88,6 +88,7 @@ try {
 
 const OWNER_DEMO_PROFILE = "10jo";
 let accountUser = null;
+function isLoggedIn() { return Boolean(accountUser); }
 const OWNER_DB_KEY = "moa-owner-db-v1";
 function readOwnerDb() {
   try { return JSON.parse(localStorage.getItem(OWNER_DB_KEY) || "{}"); } catch { return {}; }
@@ -271,10 +272,15 @@ function updateBadges() {
   }
   const ownerBadge = $("ownerBadge");
   if (ownerBadge) {
-    const owned = allListings().filter((item) => item.owner);
-    const pendingCount = state.requests.filter((r) => r.status === "pending" && owned.some((item) => item.id === r.listingId)).length;
-    ownerBadge.hidden = pendingCount === 0;
-    ownerBadge.textContent = String(pendingCount);
+    if (!isLoggedIn()) {
+      ownerBadge.hidden = true;
+      ownerBadge.textContent = "";
+    } else {
+      const owned = allListings().filter((item) => item.owner);
+      const pendingCount = state.requests.filter((r) => r.status === "pending" && owned.some((item) => item.id === r.listingId)).length;
+      ownerBadge.hidden = pendingCount === 0;
+      ownerBadge.textContent = String(pendingCount);
+    }
   }
 }
 
@@ -295,7 +301,7 @@ function markNav(view) {
 
 function setView(view) {
   if (!Object.hasOwn(viewIds, view)) view = "home";
-  if (view === "owner" && !accountUser) view = "ownerLoginRequired";
+  if (view === "owner" && !isLoggedIn()) view = "ownerLoginRequired";
   state.view = view;
   const onMainPage = MAIN_PAGE_VIEWS.includes(view);
   for (const [name, id] of Object.entries(viewIds)) {
@@ -1868,11 +1874,12 @@ function initLoginForm() {
 
   function renderAccount(user) {
     accountUser = user ?? null;
-    headerButton.textContent = accountUser ? "내 계정" : "로그인";
+    headerButton.textContent = isLoggedIn() ? "내 계정" : "로그인";
+    updateBadges();
   }
 
   function openLogin() {
-    if (accountUser) return setView("owner");
+    if (isLoggedIn()) return setView("owner");
     setView("login");
     setMode(false);
   }
@@ -1941,7 +1948,7 @@ function initLoginForm() {
   accountRequest("session")
     .then((result) => {
       renderAccount(result.user);
-      if (accountUser && state.view === "ownerLoginRequired") setView("owner");
+      if (isLoggedIn() && state.view === "ownerLoginRequired") setView("owner");
     })
     .catch(() => {})
     .finally(() => { submit.disabled = false; });

@@ -3159,37 +3159,32 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .mt-photo { border-radius: 16px; }
 .picture-icon[src*="images/machines"] { border-radius: 6px; }
 
-/* Listing sort control — match the adjacent filter button (visual only). */
+/* Listing sort control — compact text-only version (visual only). */
 .toolbar label.listing-sort {
   display: inline-flex !important;
-  flex: 0 0 271px !important;
-  width: 271px !important;
-  min-width: 271px !important;
-  min-height: 66px !important;
+  flex: 0 0 250px !important;
+  width: 250px !important;
+  min-width: 250px !important;
+  min-height: 60px !important;
   box-sizing: border-box !important;
   align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 8px !important;
-  padding: 6px 22px !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 5px 18px !important;
   border: 2px solid #214d3b !important;
-  border-radius: 20px !important;
+  border-radius: 18px !important;
   background: #fff !important;
   color: #214d3b !important;
   font-family: inherit !important;
-  font-size: 18px !important;
+  font-size: 16px !important;
   font-weight: 800 !important;
   line-height: 1.2 !important;
   white-space: nowrap !important;
   box-shadow: 0 2px 8px rgba(30, 65, 48, .08) !important;
 }
 .toolbar label.listing-sort::before {
-  content: "" !important;
-  display: block !important;
-  flex: 0 0 38px !important;
-  width: 38px !important;
-  height: 38px !important;
-  border-radius: 8px !important;
-  background: #f3f1e8 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38'%3E%3Cpath d='M8 10h22M8 19h22M8 28h22' stroke='%239b7650' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='14' cy='10' r='3.5' fill='%23518b63'/%3E%3Ccircle cx='25' cy='19' r='3.5' fill='%23d28a55'/%3E%3Ccircle cx='17' cy='28' r='3.5' fill='%23518b63'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  content: none !important;
+  display: none !important;
 }
 .toolbar label.listing-sort select#listingSort {
   display: block !important;
@@ -3197,7 +3192,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   width: 132px !important;
   min-width: 0 !important;
   max-width: 132px !important;
-  min-height: 44px !important;
+  min-height: 40px !important;
   box-sizing: border-box !important;
   margin: 0 !important;
   padding: 0 18px 0 0 !important;
@@ -3218,21 +3213,18 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 }
 @media (max-width: 600px) {
   .toolbar label.listing-sort {
-    flex-basis: 271px !important;
-    width: 271px !important;
-    min-width: 271px !important;
-    min-height: 62px !important;
-    padding: 5px 18px !important;
-    font-size: 17px !important;
-  }
-  .toolbar label.listing-sort::before {
-    flex-basis: 36px !important;
-    width: 36px !important;
-    height: 36px !important;
+    flex-basis: 250px !important;
+    width: 250px !important;
+    min-width: 250px !important;
+    min-height: 56px !important;
+    padding: 5px 16px !important;
+    font-size: 15px !important;
+    border-radius: 17px !important;
   }
   .toolbar label.listing-sort select#listingSort {
     width: 132px !important;
     max-width: 132px !important;
+    min-height: 38px !important;
   }
 }
 

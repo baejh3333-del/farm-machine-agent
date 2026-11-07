@@ -7,6 +7,7 @@
     "dev": "node --env-file-if-exists=.env.local dev-server.js",
     "build": "node scripts/build.mjs",
     "db:accounts": "node --env-file-if-exists=.env.local scripts/migrate-accounts.mjs",
+    "db:demo-account": "node --env-file-if-exists=.env.local scripts/create-demo-account.mjs",
     "db:seed": "node scripts/seed-db.mjs",
     "check": "node --test tests/*.test.js",
     "agent:dev": "eve dev",

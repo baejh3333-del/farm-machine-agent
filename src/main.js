@@ -1832,10 +1832,10 @@ function initBannerCarousel() {
   setPaused(paused);
 }
 
-// 로그인 화면: 지금은 화면만 동작하고 실제 계정 확인은 서버 연결 후 붙인다
+// 아이디 기반 로그인 및 회원가입 화면
 function initLoginForm() {
   const form = $("loginForm");
-  const email = $("loginId");
+  const username = $("loginId");
   const password = $("loginPassword");
   const name = $("signupName");
   const confirm = $("signupConfirm");
@@ -1869,7 +1869,7 @@ function initLoginForm() {
     eye.setAttribute("aria-label", "비밀번호 보기");
     eye.classList.remove("is-showing");
     showError("");
-    (signup ? name : email).focus();
+    (signup ? name : username).focus();
   }
 
   function renderAccount(user) {
@@ -1912,7 +1912,7 @@ function initLoginForm() {
     }
     submit.disabled = switchButton.disabled = true;
     try {
-      const data = { email: email.value.trim(), password: password.value };
+      const data = { username: username.value.trim(), password: password.value };
       if (signup) data.name = name.value.trim();
       const result = await accountRequest(signup ? "signup" : "login", data);
       renderAccount(result.user);

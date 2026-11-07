@@ -66,11 +66,14 @@ export function createDevServer() {
       }
       return handler(request, response);
     }
-    if (request.method !== "GET" || !allowed.test(path) || path.includes("..")) { response.writeHead(404).end(); return; }
+    // 화면은 HEAD 요청의 Date 헤더로 서버 시간을 맞춘다(Vercel 정적 파일과 같게).
+    if (!["GET", "HEAD"].includes(request.method) || !allowed.test(path) || path.includes("..")) { response.writeHead(404).end(); return; }
     const file = resolve(join(root, path === "/" ? "index.html" : path.slice(1)));
     if (!file.startsWith(root)) { response.writeHead(404).end(); return; }
-    try { const content = await readFile(file); response.writeHead(200, { "content-type": mime[extname(file)] || "application/octet-stream" }).end(content); }
-    catch { response.writeHead(404).end(); }
+    try {
+      const content = await readFile(file);
+      response.writeHead(200, { "content-type": mime[extname(file)] || "application/octet-stream" }).end(request.method === "HEAD" ? undefined : content);
+    } catch { response.writeHead(404).end(); }
   });
 }
 

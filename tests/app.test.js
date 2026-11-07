@@ -194,8 +194,13 @@ test("예산 범위 표현과 '만' 단위 축약 응답을 올바르게 해석�
   assert.equal(turn.context.maxPrice, 70000);
 });
 
-test("대여료 질문에서 5와 10을 만원 단위로 인식한다", () => {
-  for (const [answer, expected] of [["5", 50000], ["10", 100000]]) {
+test("대여료 질문에서 모든 양수 숫자를 만원 단위로 인식한다", () => {
+  for (const [answer, expected] of [
+    ["1", 10000], ["3", 30000], ["5", 50000], ["7", 70000],
+    ["10", 100000], ["15", 150000], ["25", 250000],
+    ["100", 1000000], ["7.5", 75000],
+    ["7만", 70000], ["7만원", 70000], ["70000원", 70000],
+  ]) {
     let turn = conversationTurn("배추 흙갈이 대여", {});
     assert.equal(turn.field, "area");
     turn = conversationTurn("300", {}, turn);

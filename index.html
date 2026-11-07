@@ -388,7 +388,7 @@
           </section>
         </div>
 
-        <!-- 로그인 화면 (화면만 구성, 실제 계정 확인은 아직 연결 전) -->
+        <!-- 아이디 기반 계정 로그인 화면 -->
         <section id="loginView" class="login-view" aria-labelledby="loginTitle" hidden>
           <div class="login-card">
             <h1 id="loginTitle" class="login-logo">
@@ -402,8 +402,8 @@
                 <label class="visually-hidden" for="signupName">이름</label>
                 <input class="login-input" id="signupName" name="name" autocomplete="name" maxlength="40" placeholder="이름" disabled />
               </div>
-              <label class="visually-hidden" for="loginId">이메일</label>
-              <input class="login-input" id="loginId" name="email" type="email" autocomplete="username" placeholder="이메일" maxlength="254" required />
+              <label class="visually-hidden" for="loginId">아이디</label>
+              <input class="login-input" id="loginId" name="username" type="text" autocomplete="username" placeholder="아이디 (영문·숫자·_·-, 3~30자)" minlength="3" maxlength="30" pattern="[A-Za-z0-9_-]{3,30}" required />
               <div class="login-password">
                 <label class="visually-hidden" for="loginPassword">비밀번호</label>
                 <input class="login-input" id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="비밀번호" maxlength="128" required />

@@ -12,8 +12,30 @@ const toPyeong = (sqm) => Math.max(1, Math.round(Number(sqm) / 3.305785));
 const areaLabel = (minSqm, maxSqm) => `약 ${toPyeong(minSqm).toLocaleString()}~${toPyeong(maxSqm).toLocaleString()}평`;
 const areaFullLabel = (minSqm, maxSqm) =>
   `약 ${toPyeong(minSqm).toLocaleString()}~${toPyeong(maxSqm).toLocaleString()}평 (${Number(minSqm).toLocaleString()}~${Number(maxSqm).toLocaleString()}㎡)`;
+// 웹서버 시간과 내 기기 시간의 차이 (서버 응답의 Date 헤더로 맞춘다)
+let serverTimeOffset = 0;
+const serverNow = () => new Date(Date.now() + serverTimeOffset);
 const today = () =>
-  new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(serverNow());
+const addDays = (isoDate, days) => {
+  const d = new Date(`${isoDate}T12:00:00+09:00`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+};
+const koreanDateParts = (isoDate) => {
+  const d = new Date(`${isoDate}T12:00:00+09:00`);
+  const fmt = (opts) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", ...opts }).format(d);
+  return { date: fmt({ year: "numeric", month: "long", day: "numeric" }), weekday: fmt({ weekday: "long" }) };
+};
+async function syncServerTime() {
+  try {
+    const response = await fetch(location.pathname || "/", { method: "HEAD", cache: "no-store" });
+    const header = response.headers.get("date");
+    if (header) serverTimeOffset = new Date(header).getTime() - Date.now();
+  } catch {
+    // 서버 시간을 못 받으면 기기 시간을 그대로 쓴다
+  }
+}
 
 const BEGINNER_TIPS = {
   pepper: {
@@ -142,12 +164,38 @@ function persist() {
   updateBadges();
 }
 
+// 데모: 대여 가능한 매물 중 5대를 '지금 대여 중'으로 보여준다 (매물 번호로 고정해서 새로고침해도 같은 5대)
+const DEMO_RENTED_COUNT = 5;
+let demoRentedIds = null;
+function pickDemoRentedIds() {
+  const hash = (text) => [...text].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  return new Set(
+    catalog
+      .filter((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair")
+      .sort((a, b) => hash(a.id) - hash(b.id) || a.id.localeCompare(b.id))
+      .slice(0, DEMO_RENTED_COUNT)
+      .map((item) => item.id),
+  );
+}
+
 function allListings() {
+  if (!demoRentedIds && catalog.length) demoRentedIds = pickDemoRentedIds();
+  const now = today();
   return [...state.customListings, ...catalog].map((item) => ({
     ...item,
     status: state.statuses[item.id] || item.status,
-    booked: [...(item.booked || []), ...(state.bookings[item.id] || [])],
+    booked: [
+      ...(item.booked || []),
+      ...(state.bookings[item.id] || []),
+      ...(demoRentedIds?.has(item.id) ? [{ start: now, end: addDays(now, 2), demo: true }] : []),
+    ],
   }));
+}
+
+function rentedNow(item) {
+  if (item.type !== "rent") return false;
+  const now = today();
+  return (item.booked || []).some((range) => range.start <= now && now <= range.end);
 }
 
 async function loadCatalog() {
@@ -172,10 +220,12 @@ function listingById(id) {
 
 function statusLabel(item) {
   if (item.type === "sale") return item.status === "done" ? "판매 완료" : item.status === "dealing" ? "거래 중" : "판매 가능";
-  return item.condition === "repair" ? "정비 중" : "대여 가능";
+  if (item.condition === "repair") return "정비 중";
+  return rentedNow(item) ? "대여 중" : "대여 가능";
 }
 
 function statusClass(item) {
+  if (item.type === "rent" && item.condition !== "repair" && item.status === "open" && rentedNow(item)) return "rented";
   return item.status !== "open" || item.condition === "repair" ? "warn" : "ok";
 }
 
@@ -348,6 +398,7 @@ function setTransaction(type) {
   if (quickDateBox) {
     quickDateBox.classList.toggle("disabled-field", type === "sale");
     $("quickDateInput").disabled = type === "sale";
+    $("quickDateEndInput").disabled = type === "sale";
   }
   persist();
   renderAll();
@@ -355,8 +406,19 @@ function setTransaction(type) {
 
 function syncQuickSearchInputs() {
   if ($("quickDateInput")) {
+    // 날짜를 고르기 전에는 웹서버 기준 오늘(대여)과 내일(반납)을 보여준다
+    const start = state.filters.date || today();
+    const end = state.filters.dateEnd && state.filters.dateEnd >= start ? state.filters.dateEnd : state.filters.date ? start : addDays(start, 1);
     $("quickDateInput").min = today();
-    $("quickDateInput").value = state.filters.date || "";
+    $("quickDateInput").value = start;
+    $("quickDateEndInput").min = start;
+    $("quickDateEndInput").value = end;
+    const s = koreanDateParts(start);
+    const e = koreanDateParts(end);
+    $("quickDateLabel").textContent = s.date;
+    $("quickDateDay").textContent = s.weekday;
+    $("quickDateEndLabel").textContent = e.date;
+    $("quickDateEndDay").textContent = e.weekday;
     $("clearQuickDate").hidden = !state.filters.date;
   }
   if ($("quickRadiusSelect")) {
@@ -1194,6 +1256,7 @@ function openFavoritesModal() {
               .map(
                 (item) => `
           <div class="fav-modal-item">
+            <button type="button" class="fav-thumb" data-favorite-detail="${item.id}" aria-label="${escapeHtml(item.title)} 상세 보기">${machineVisual(item)}</button>
             <div class="fav-item-info">
               <span class="spec-tag">${item.type === "rent" ? "일일 대여" : "중고 판매"} · ${escapeHtml(item.region)}</span>
               <strong>${escapeHtml(item.title)}</strong>
@@ -1576,10 +1639,26 @@ function bindEvents() {
   initLoginForm();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
-    if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = "";
+    if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = state.filters.date ? addDays(state.filters.date, 1) : "";
     persist();
     renderAll();
   });
+  $("quickDateEndInput")?.addEventListener("change", (event) => {
+    const end = event.target.value;
+    if (!state.filters.date) state.filters.date = today();
+    state.filters.dateEnd = end && end >= state.filters.date ? end : state.filters.date;
+    persist();
+    renderAll();
+  });
+  // 날짜 칸 어디를 눌러도 달력이 열리게
+  for (const id of ["quickDateInput", "quickDateEndInput"]) {
+    $(id)?.closest(".qs-date")?.addEventListener("click", (event) => {
+      const input = $(id);
+      if (input.disabled) return;
+      if (event.target !== input) event.preventDefault();
+      try { input.showPicker?.(); } catch { input.focus(); }
+    });
+  }
   $("clearQuickDate")?.addEventListener("click", () => {
     state.filters.date = "";
     state.filters.dateEnd = "";
@@ -2065,6 +2144,7 @@ function initScrollMotion() {
 }
 
 bindEvents();
+syncServerTime().then(() => { syncQuickSearchInputs(); renderAll(); });
 trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));
 initBannerCarousel();

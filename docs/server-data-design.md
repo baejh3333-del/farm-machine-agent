@@ -240,7 +240,7 @@ COMMIT;
 | `GET/PUT/DELETE /api/favorites/:listingId` | 찜 |
 | `GET/POST/DELETE /api/owned-machines` | 보유 농기계 |
 
-모든 쓰기 요청은 `/api/account`와 같은 규칙을 따른다. Origin을 확인하고, `application/json`만 받고, 본문 크기를 제한한다. 경로는 Vercel 파일 라우팅(`api/requests/[id]/approve.js`)을 쓴다. 로컬 개발 서버는 같은 핸들러를 가져다 쓰도록 먼저 정리한다(9장 1단계).
+모든 쓰기 요청은 `/api/account`와 같은 규칙을 따른다. Origin을 확인하고, `application/json`만 받고, 본문 크기를 제한한다. 경로는 Vercel 파일 라우팅(`api/requests/[id]/approve.js`)을 쓴다. 로컬 개발 서버는 #18부터 `api/*.js` 핸들러를 그대로 실행한다. 새 API를 추가하면 `dev-server.js`의 라우팅 표에도 등록하고, `[id]` 같은 경로 변수를 처리하는 부분을 더한다.
 
 ## 7. 로컬 개발 DB
 
@@ -262,7 +262,7 @@ A를 권한다. A가 막히면 B로 간다. 이 설계의 SQL은 PGlite(Postgres
 
 ## 9. 구현 순서
 
-1. **기반 정리**: 스키마 마이그레이션 스크립트, 시드(`demo-owner`, 시드 예약 포함), 로컬 PGlite, 스키마 테스트. `dev-server.js`가 `api/*.js` 핸들러를 그대로 쓰도록 정리한다.
+1. **기반 정리**: 스키마 마이그레이션 스크립트, 시드(`demo-owner`, 시드 예약 포함), 로컬 PGlite, 스키마 테스트. (개발 서버 핸들러 공유는 #18에서 끝냈다.)
 2. **매물**: 조회를 Postgres로 옮기고, 소유자 등록·수정 API를 만든다. 소유자 화면을 `owner=me`로 바꾸고 `moa-owner-db-v1`을 없앤다.
 3. **신청·승인**: 신청, 승인, 거절, 취소 API를 만든다. 동시 승인과 반복 클릭 테스트를 포함한다.
 4. **화면 연결**: 신청 폼, 내 대여 요청, 소유자 요청 목록을 API에 연결한다. 로그아웃 정리, localStorage 키 정리, 안내 문구 복구("준비 중" 제거)도 이 단계에서 한다.

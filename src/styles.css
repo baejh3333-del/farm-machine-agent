@@ -975,7 +975,7 @@ img {
   aspect-ratio: 16 / 10;
   display: grid;
   place-items: center;
-  background: #eae0d0;
+  background: #E9EAE7;
   position: relative;
   overflow: hidden;
 }
@@ -2837,7 +2837,7 @@ img {
 .machine-art:has(.machine-example),
 .detail-art:has(.machine-example) {
   position: relative;
-  background: #f4ede0;
+  background: #E9EAE7;
 }
 
 .machine-example {
@@ -3154,3 +3154,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .owner-login-card p {
   text-align: center;
 }
+
+/* 농기계 사진 배경: 쿨 그레이 (사이트 베이지 배경과 구분) */
+.mt-photo { border-radius: 16px; }
+.picture-icon[src*="images/machines"] { border-radius: 6px; }

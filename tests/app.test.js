@@ -6,7 +6,7 @@ import { recommend, selectCandidates } from "../server/agent.js";
 import { selectMatchingListings } from "../src/data/recommendation.js";
 import { conversationTurn } from "../src/ai/conversation.js";
 
-const LISTINGS = listListings();
+const LISTINGS = await listListings();
 
 test("인사와 기능 질문은 작물 입력을 강요하지 않는다", () => {
   const greeting = conversationTurn("안녕", {});
@@ -116,8 +116,8 @@ test("목 DB는 현재 카탈로그의 모든 기종과 두 거래 방식을 포
   assert.ok(LISTINGS.every((item) => item.cropIds.every((crop) => item.operations.every((op) => CROP_OPERATIONS[crop]?.includes(op)))));
 });
 
-test("작물·작업·거래 방식·예산으로 실제 후보를 좁힌다", () => {
-  const result = selectCandidates("고추 두둑 대여", { maxPrice: 70000 });
+test("작물·작업·거래 방식·예산으로 실제 후보를 좁힌다", async () => {
+  const result = await selectCandidates("고추 두둑 대여", { maxPrice: 70000 });
   assert.equal(result.cropId, "pepper");
   assert.equal(result.operationId, "ridge");
   assert.equal(result.transaction, "rent");
@@ -125,17 +125,17 @@ test("작물·작업·거래 방식·예산으로 실제 후보를 좁힌다", (
   assert.ok(result.candidates.every((item) => item.cropIds.includes("pepper") && item.operations.includes("ridge") && item.type === "rent" && item.price <= 70000));
 });
 
-test("면적과 예약일을 반영한다", () => {
+test("면적과 예약일을 반영한다", async () => {
   const first = LISTINGS.find((item) => item.type === "rent" && item.booked.length);
   assert.ok(first);
   const day = first.booked[0].start;
   const message = `${first.cropIds[0] === "pepper" ? "고추" : first.cropIds[0] === "rice" ? "벼" : first.cropIds[0] === "cabbage" ? "배추" : "감자"} 대여`;
-  const result = selectCandidates(message, { date: day });
+  const result = await selectCandidates(message, { date: day });
   assert.ok(!result.candidates.some((item) => item.id === first.id));
 });
 
-test("질문의 면적과 구매 예산도 해석한다", () => {
-  const result = selectCandidates("고추밭 300평 두둑 기계를 구매하고 싶어요. 예산 80만원", {});
+test("질문의 면적과 구매 예산도 해석한다", async () => {
+  const result = await selectCandidates("고추밭 300평 두둑 기계를 구매하고 싶어요. 예산 80만원", {});
   assert.equal(result.transaction, "sale");
   assert.ok(result.candidates.length > 0);
   assert.ok(result.candidates.every((item) => item.price <= 800000 && item.areaMin <= 300 * 3.305785 && item.areaMax >= 300 * 3.305785));
@@ -157,13 +157,12 @@ test("겸용 장비 요청은 모든 작업과 예산을 충족하며 등록 순
   assert.deepEqual(selectMatchingListings(question, context, [...LISTINGS].reverse()).candidates, candidates);
 });
 
-test("서버 추천은 브라우저에서 제외한 매물을 다시 추가하지 않는다", () => {
+test("서버 추천은 브라우저가 보낸 후보 목록을 받지 않고 DB 매물에서 직접 고른다", async () => {
   const question = "고추 흙갈이 대여";
-  const { candidates } = selectCandidates(question);
+  const { candidates } = await selectCandidates(question);
   assert.ok(candidates.length > 1);
-  const candidateIds = candidates.slice(1).map(({ id }) => id);
-  assert.deepEqual(selectCandidates(question, { candidateIds }).candidates.map(({ id }) => id), candidateIds);
-  assert.deepEqual(selectCandidates(question, { candidateIds: [] }).candidates, []);
+  const ignored = await selectCandidates(question, { candidateIds: [] });
+  assert.deepEqual(ignored.candidates.map(({ id }) => id), candidates.map(({ id }) => id));
 });
 
 test("API 키가 없어도 안내 응답과 유효한 매물 ID를 반환한다", async () => {
@@ -175,6 +174,11 @@ test("API 키가 없어도 안내 응답과 유효한 매물 ID를 반환한다"
     assert.ok(result.reply.includes("고추"));
     assert.ok(result.listingIds.length > 0);
     assert.ok(result.listingIds.every((id) => LISTINGS.some((item) => item.id === id)));
+    assert.deepEqual(
+      { cropId: result.selection.cropId, operations: result.selection.operations, maxPrice: result.selection.maxPrice },
+      { cropId: "pepper", operations: ["ridge"], maxPrice: 70000 },
+      "화면이 다시 계산하지 않도록 서버가 해석한 조건을 함께 돌려준다",
+    );
   } finally {
     if (previous === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previous;
@@ -220,28 +224,18 @@ test("대여료 질문에서 모든 양수 숫자를 만원 단위로 인식한�
   assert.equal(sale.context.maxPrice, 10);
 });
 
-test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞춰 폴백 응답을 구성한다", async () => {
+test("서버는 클라이언트가 보낸 draft 문구를 그대로 돌려주지 않는다", async () => {
   const previous = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   try {
-    const simpleGreeting = await recommend("ㅎㅇ", {
-      draft: "안녕하세요! 저는 농농이에요.",
-      interruption: true,
-    });
-    assert.equal(simpleGreeting.mode, "guide");
-    assert.equal(simpleGreeting.showChoices, false);
-    assert.deepEqual(simpleGreeting.listingIds, []);
-
-    const midFlowInterruption = await recommend("멀칭이 뭐야?", {
-      draft: "멀칭은 흙 표면을 비닐 같은 재료로 덮는 작업이에요.",
+    const result = await recommend("멀칭이 뭐야?", {
+      draft: "임의로 넣은 문구",
       nextQuestion: "작업할 농지는 대략 몇 평인가요?",
-      field: "area",
       interruption: true,
     });
-    assert.equal(midFlowInterruption.mode, "guide");
-    assert.equal(midFlowInterruption.showChoices, true);
-    assert.match(midFlowInterruption.reply, /멀칭은 흙 표면을/);
-    assert.match(midFlowInterruption.reply, /작업할 농지는 대략 몇 평인가요\?/);
+    assert.equal(result.mode, "guide");
+    assert.doesNotMatch(result.reply, /임의로 넣은 문구/);
+    assert.equal(result.showChoices, undefined);
   } finally {
     if (previous === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previous;

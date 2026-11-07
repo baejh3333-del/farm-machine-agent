@@ -4,8 +4,8 @@ import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, checkModelCompatibility } from "../
 import { buildMockListings } from "../server/listing-seed.js";
 import { listListings } from "../server/listings-db.js";
 
-test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사용한다", () => {
-  for (const listings of [buildMockListings(), listListings()]) {
+test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사용한다", async () => {
+  for (const listings of [buildMockListings(), await listListings()]) {
     assert.equal(listings.length, 100);
     assert.equal(new Set(listings.map((item) => item.modelId)).size, 12);
     for (const item of listings) {

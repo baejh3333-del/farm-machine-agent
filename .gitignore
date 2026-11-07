@@ -2,8 +2,8 @@ node_modules/
 .env
 .env.*
 !.env.example
-.eve/
 dist/
 /data/*.sqlite*
+/data/pglite/
 /data/account-secret
 .vercel/

@@ -310,7 +310,7 @@
             <div>
               <span class="hero-badge">농기계 공유 · 판매 관리</span>
               <h1>내 농기계 조회</h1>
-              <p>로그인한 계정에 연결된 시연용 농기계를 확인할 수 있어요. 등록·수정·삭제는 지원하지 않아요.</p>
+              <p>로그인한 계정에 연결된 농기계와 도착한 대여 요청·문의를 관리해요. 매물 등록·수정은 아직 지원하지 않아요.</p>
             </div>
           </section>
 
@@ -328,7 +328,7 @@
             <section class="panel">
               <div class="panel-header">
                 <h2>도착한 대여 요청 · 문의</h2>
-                <small>조회 전용 · 이 브라우저에 저장된 내용</small>
+                <small>승인·거절 · 채팅 답장</small>
               </div>
               <div id="ownerRequests"></div>
             </section>
@@ -428,7 +428,7 @@
                 <input class="login-input" id="signupName" name="name" autocomplete="name" maxlength="40" placeholder="이름" disabled />
               </div>
               <label class="visually-hidden" for="loginId">아이디</label>
-              <input class="login-input" id="loginId" name="username" type="text" autocomplete="username" placeholder="아이디 (영문·숫자·_·-, 3~30자)" minlength="3" maxlength="30" pattern="[A-Za-z0-9_-]{3,30}" required />
+              <input class="login-input" id="loginId" name="username" type="text" autocomplete="username" placeholder="아이디 (영문·숫자·_·-, 3~30자)" minlength="3" maxlength="30" pattern="[A-Za-z0-9_\-]{3,30}" required />
               <div class="login-password">
                 <label class="visually-hidden" for="loginPassword">비밀번호</label>
                 <input class="login-input" id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="비밀번호" maxlength="128" required />

@@ -3148,3 +3148,9 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 @media (max-width: 700px), (max-height: 640px) {
   .ai-expand { display: none; }
 }
+
+/* 내 기계 관리 로그인 안내 문구 중앙 정렬 */
+.owner-login-card h2,
+.owner-login-card p {
+  text-align: center;
+}

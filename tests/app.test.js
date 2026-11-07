@@ -220,28 +220,18 @@ test("대여료 질문에서 모든 양수 숫자를 만원 단위로 인식한�
   assert.equal(sale.context.maxPrice, 10);
 });
 
-test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞춰 폴백 응답을 구성한다", async () => {
+test("서버는 클라이언트가 보낸 draft 문구를 그대로 돌려주지 않는다", async () => {
   const previous = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   try {
-    const simpleGreeting = await recommend("ㅎㅇ", {
-      draft: "안녕하세요! 저는 농농이에요.",
-      interruption: true,
-    });
-    assert.equal(simpleGreeting.mode, "guide");
-    assert.equal(simpleGreeting.showChoices, false);
-    assert.deepEqual(simpleGreeting.listingIds, []);
-
-    const midFlowInterruption = await recommend("멀칭이 뭐야?", {
-      draft: "멀칭은 흙 표면을 비닐 같은 재료로 덮는 작업이에요.",
+    const result = await recommend("멀칭이 뭐야?", {
+      draft: "임의로 넣은 문구",
       nextQuestion: "작업할 농지는 대략 몇 평인가요?",
-      field: "area",
       interruption: true,
     });
-    assert.equal(midFlowInterruption.mode, "guide");
-    assert.equal(midFlowInterruption.showChoices, true);
-    assert.match(midFlowInterruption.reply, /멀칭은 흙 표면을/);
-    assert.match(midFlowInterruption.reply, /작업할 농지는 대략 몇 평인가요\?/);
+    assert.equal(result.mode, "guide");
+    assert.doesNotMatch(result.reply, /임의로 넣은 문구/);
+    assert.equal(result.showChoices, undefined);
   } finally {
     if (previous === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previous;

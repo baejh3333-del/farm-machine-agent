@@ -118,7 +118,10 @@ function readOwnerDb() {
 function saveOwnerDb(db) {
   try { localStorage.setItem(OWNER_DB_KEY, JSON.stringify(db)); } catch { /* 원본 유지 */ }
 }
-function getOwnerData() { return readOwnerDb()[OWNER_DEMO_PROFILE]; }
+function getOwnerData() {
+  if (!isLoggedIn() || accountUser.email !== `${OWNER_DEMO_PROFILE}@users.moa-farm.example.com`) return null;
+  return readOwnerDb()[OWNER_DEMO_PROFILE];
+}
 function migrateExistingOwnerData() {
   const db = readOwnerDb();
   if (db[OWNER_DEMO_PROFILE]) return;
@@ -326,7 +329,8 @@ function updateBadges() {
       ownerBadge.hidden = true;
       ownerBadge.textContent = "";
     } else {
-      const owned = allListings().filter((item) => item.owner);
+      const ownerIds = new Set(getOwnerData()?.listingIds || []);
+      const owned = allListings().filter((item) => ownerIds.has(item.id));
       const pendingCount = state.requests.filter((r) => r.status === "pending" && owned.some((item) => item.id === r.listingId)).length;
       ownerBadge.hidden = pendingCount === 0;
       ownerBadge.textContent = String(pendingCount);
@@ -1067,6 +1071,7 @@ function renderBuyerRequests() {
 }
 
 function renderOwner() {
+  if (!isLoggedIn()) return;
   const ownerIds = new Set(getOwnerData()?.listingIds || []);
   const owned = allListings().filter((item) => ownerIds.has(item.id));
   const pending = state.requests.filter((request) => request.status === "pending" && owned.some((item) => item.id === request.listingId));
@@ -1104,17 +1109,10 @@ function renderOwner() {
         </div>
         <div class="owner-row-actions">
           <button type="button" class="button button-secondary button-sm" data-owner-detail="${item.id}">상세 보기</button>
-          ${
-            item.type === "sale" && item.status !== "done"
-              ? `<button type="button" class="button button-primary button-sm" data-sale-status="${item.id}">${
-                  item.status === "open" ? "거래 중으로 변경" : "판매 완료 처리"
-                }</button>`
-              : ""
-          }
         </div>
       </div>`
       )
-      .join("") || `<div class="empty-panel">아직 직접 등록한 농기계가 없습니다. 우측 상단 '+ 새 농기계 등록하기' 버튼을 눌러 등록해 보세요.</div>`;
+      .join("") || `<div class="empty-panel">이 계정에 연결된 시연용 농기계가 없습니다.</div>`;
 
   const inquiries = state.messages.filter((message) => message.role === "buyer" && owned.some((item) => item.id === message.listingId));
   const latestByListing = [...new Map(inquiries.map((message) => [message.listingId, message])).values()];
@@ -1130,8 +1128,7 @@ function renderOwner() {
           <small>희망 기간: ${request.start} ~ ${request.end}${request.note ? `<br>메모: ${escapeHtml(request.note)}` : ""}</small>
         </div>
         <div class="owner-row-actions">
-          <button type="button" class="button button-primary button-sm" data-approve="${request.id}">승인하기</button>
-          <button type="button" class="button button-secondary button-sm" data-reject="${request.id}">거절</button>
+
         </div>
       </div>`
       )
@@ -1146,7 +1143,7 @@ function renderOwner() {
           <small>"${escapeHtml(message.text)}"</small>
         </div>
         <div class="owner-row-actions">
-          <button type="button" class="button button-primary button-sm" data-reply="${message.listingId}">답장 보내기</button>
+
         </div>
       </div>`
         )
@@ -1772,42 +1769,10 @@ function bindEvents() {
   $("ownerListings").addEventListener("click", (event) => {
     const detailBtn = event.target.closest("[data-owner-detail]");
     if (detailBtn) return openDetail(detailBtn.dataset.ownerDetail);
-    const button = event.target.closest("[data-sale-status]");
-    if (!button) return;
-    const item = listingById(button.dataset.saleStatus);
-    state.statuses[item.id] = item.status === "open" ? "dealing" : "done";
-    persist();
-    renderOwner();
-    renderListings();
-    toast("매물 거래 상태를 변경했습니다.");
+
   });
 
-  $("ownerRequests").addEventListener("click", (event) => {
-    const reply = event.target.closest("[data-reply]");
-    if (reply) return chatForm(reply.dataset.reply);
-    const approve = event.target.closest("[data-approve]");
-    const reject = event.target.closest("[data-reject]");
-    if (!approve && !reject) return;
-    const request = state.requests.find((item) => item.id === (approve || reject).dataset[approve ? "approve" : "reject"]);
-    if (request?.status !== "pending") return;
-    const listing = listingById(request.listingId);
-    if (!listing?.owner) return;
-    if (approve) {
-      if (!available(listing, request.start, request.end)) return toast("이미 예약된 기간이라 승인할 수 없습니다.");
-      (state.bookings[listing.id] ||= []).push({ start: request.start, end: request.end });
-      request.status = "approved";
-      toast("대여 요청을 승인했습니다!");
-    } else {
-      request.status = "rejected";
-      toast("대여 요청을 거절했습니다.");
-    }
-    persist();
-    renderOwner();
-    renderBuyerRequests();
-    renderListings();
-  });
 
-  $("newListingButton").addEventListener("click", openNewListing);
   $("aiLauncher").addEventListener("click", openAiPanel);
   $("aiExpand").addEventListener("click", toggleAiPanelSize);
   window.visualViewport?.addEventListener("resize", syncAiViewport);

@@ -58,9 +58,11 @@ export default async function accountHandler(request, response) {
     catch { return json(response, 400, "INVALID_BODY"); }
     if (!data || typeof data !== "object" || Array.isArray(data)) return json(response, 400, "INVALID_BODY");
     if (action !== "logout") {
-      const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
+      const username = typeof data.username === "string" ? data.username.trim().toLowerCase() : "";
       const password = data.password;
-      if (email.length > 254 || !email) return json(response, 400, "INVALID_EMAIL");
+      if (!/^[a-z0-9_-]{3,30}$/.test(username)) return json(response, 400, "INVALID_USERNAME");
+      // Better Auth uses an email identifier internally; no user email is collected.
+      const email = `${username}@users.moa-farm.example.com`;
       if (typeof password !== "string" || !password || password.length > 128) return json(response, 400, "INVALID_PASSWORD");
       const name = typeof data.name === "string" ? data.name.trim() : "";
       if (action === "signup" && (!name || name.length > 40)) return json(response, 400, "INVALID_NAME");

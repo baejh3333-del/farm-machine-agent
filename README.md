@@ -49,7 +49,6 @@ Vercel에서는 프로젝트의 서버 환경 변수 `OPENAI_API_KEY`를 설정�
 - `server/agent.js`: 서버 추천 후보 선정과 AI 호출
 - `api/recommend.js`: Vercel 함수
 - `server/rate-limit.js`: 추천 API 호출 제한
-- `agent/`: 기존 Eve 에이전트 실험 파일. 현재 화면의 추천 API와는 별도입니다.
 
 ## 현재 범위
 

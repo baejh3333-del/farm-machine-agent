@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
   <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/garage.css" />
   <script type="module" src="/src/main.js"></script>
 </head>
 <body>
@@ -50,6 +51,7 @@
           <span class="nav-icon" aria-hidden="true"></span>
           <span class="nav-label">모아농?</span>
         </button>
+        <button type="button" class="nav-item" data-view="garage" aria-label="내 농기계·호환"><span class="nav-label">내 농기계·호환</span></button>
       </nav>
 
       <div class="topbar-left">
@@ -70,6 +72,7 @@
 
     <div class="page-shell" id="top">
       <main class="main-content">
+        <div id="garageView" hidden></div>
         <!-- 홈: 메인 배너 + 빠른 검색 -->
         <div id="homeView">
           <section class="banner-carousel" id="bannerCarousel" aria-roledescription="carousel" aria-label="메인 배너">

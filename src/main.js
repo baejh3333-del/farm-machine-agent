@@ -1,3 +1,5 @@
+import { createGarage } from "./garage.js";
+let garage;
 import { accountRequest } from "./account.js";
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "./data/farm-machines.js";
 import { askRecommendation } from "./ai/recommend-agent.js";
@@ -338,7 +340,7 @@ function updateBadges() {
   }
 }
 
-const viewIds = { home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
+const viewIds = { garage: "garageView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
 const MAIN_PAGE_VIEWS = ["home", "browse"];
@@ -364,6 +366,7 @@ function setView(view) {
   markNav(view);
   persist();
   if (view === "owner") renderOwner();
+  if (view === "garage") garage?.refresh();
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
   scrollSpyPausedUntil = Date.now() + 1000;
   if (view === "browse") $("market").scrollIntoView({ behavior: "smooth" });
@@ -865,6 +868,7 @@ function renderListings() {
 }
 
 function renderAll() {
+  garage?.refresh();
   syncQuickSearchInputs();
   renderCrops();
   renderQuickWizard();
@@ -903,6 +907,7 @@ function openDetail(id) {
           <span class="spec-tag">${escapeHtml(MACHINE_BY_ID[item.machineType]?.label)}</span>
         </div>
         <h2 id="detailTitle">${escapeHtml(item.title)}</h2>
+        ${garage?.detail(item) || ""}
         ${item.specification ? `
           <section class="model-specification" aria-label="실제 모델 사양">
             <h3>실제 모델 사양</h3>
@@ -2169,6 +2174,23 @@ function initScrollMotion() {
   update();
 }
 
+garage = createGarage({
+  root: $("garageView"), getListings: allListings, getCatalogState: () => catalogState,
+  today, openListing: openDetail, notify: toast,
+  openRental(id, start, end) {
+    state.filters.date = start;
+    state.filters.dateEnd = end;
+    persist();
+    rentalForm(id);
+  },
+});
+$("detailContent").addEventListener("click", (event) => {
+  if (event.target.closest("[data-open-garage]")) {
+    hideDialog($("detailBackdrop"));
+    setView("garage");
+    $("ownedModel").focus();
+  }
+});
 bindEvents();
 syncServerTime().then(() => { syncQuickSearchInputs(); renderAll(); });
 trackHeaderHeight();

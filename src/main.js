@@ -1005,7 +1005,7 @@ function rentalForm(id) {
     const button = $("rentalSubmitButton");
     if (valid) {
       const totalPrice = item.price * days;
-      $("rentalEstimate").textContent = `대여 기간 ${days}일 · 기본 대여료 ${money(totalPrice)} · 운송비와 보증금은 소유 농가에 확인해 주세요.`;
+      $("rentalEstimate").textContent = "운송비와 보증금은 소유 농가에 확인해 주세요.";
       button.textContent = `${days}일 · ${money(totalPrice)} 대여 신청하기`;
       button.disabled = false;
     } else {

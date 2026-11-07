@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import pg from "pg";
+import { getPool } from "./db.js";
 
 // /api/recommend 호출 제한. 응답이 실패하면 화면은 규칙 기반 추천으로 돌아가므로,
 // 제한을 확인할 수 없을 때도 OpenAI를 호출하지 않는 쪽(fail-closed)으로 처리한다.
@@ -102,9 +102,8 @@ let defaultStore;
 function getDefaultStore(env = process.env) {
   if (defaultStore) return defaultStore;
   if (env.DATABASE_URL) {
-    const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 2, connectionTimeoutMillis: 1500, idleTimeoutMillis: 10_000 });
-    pool.on("error", (error) => console.warn("rate limit pool error", error.message));
-    defaultStore = createPostgresStore(pool);
+    // 앱 데이터와 같은 연결 풀을 쓴다.
+    defaultStore = createPostgresStore(getPool());
   } else {
     if (env.VERCEL) console.warn("DATABASE_URL is not set; recommend rate limit is per instance only");
     defaultStore = createMemoryStore();

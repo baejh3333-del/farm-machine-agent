@@ -3,9 +3,12 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import accountHandler from "./api/account.js";
+import conversationsHandler from "./api/conversations.js";
 import listingsHandler from "./api/listings.js";
+import meHandler from "./api/me.js";
 import recommendHandler, { MAX_BODY_BYTES } from "./api/recommend.js";
-import { initListingsDb, localDatabase } from "./server/listings-db.js";
+import requestsHandler from "./api/requests.js";
+import { ensureSchema } from "./server/schema.js";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
@@ -13,8 +16,11 @@ const allowed = /^\/(?:$|index\.html$|src\/[\w./-]+\.(?:js|css|svg|png|jpg)$)/;
 
 // api/*.js를 Vercel과 똑같이 실행한다. /api/account는 본문을 직접 읽으므로 그대로 넘긴다.
 const handlers = new Map([
+  ["/api/conversations", conversationsHandler],
   ["/api/listings", listingsHandler],
+  ["/api/me", meHandler],
   ["/api/recommend", recommendHandler],
+  ["/api/requests", requestsHandler],
 ]);
 
 // Vercel이 붙여 주는 response.status()/json()만 흉내 낸다.
@@ -69,7 +75,8 @@ export function createDevServer() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  initListingsDb(localDatabase);
+  // 첫 요청을 기다리지 않고 미리 DB를 준비해 설정 오류를 바로 보여 준다.
+  ensureSchema().catch((error) => console.error("데이터베이스를 준비하지 못했습니다:", error.message));
   const port = Number(process.env.PORT) || 3000;
   createDevServer().listen(port, "127.0.0.1", () => console.log(`모아농기계: http://localhost:${port}`));
 }

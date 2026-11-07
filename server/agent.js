@@ -78,17 +78,21 @@ async function interpret(message, context) {
   }
 }
 
-export function selectCandidates(message, context = {}) {
-  const allowedIds = Array.isArray(context.candidateIds) ? new Set(context.candidateIds.slice(0, 8)) : null;
-  const listings = listListings().filter(({ id }) => !allowedIds || allowedIds.has(id));
-  return selectMatchingListings(message, context, listings);
+// 추천 후보는 서버 DB의 매물에서만 고른다. 브라우저가 보낸 후보 목록은 받지 않는다.
+export async function selectCandidates(message, context = {}) {
+  return selectMatchingListings(message, context, await listListings());
+}
+
+// 화면이 추천 요약(작물·작업·예산·기간)을 다시 계산하지 않도록 서버가 해석한 조건을 함께 돌려준다.
+function selectionSummary({ cropId, operations, combined, transaction, maxPrice, areaPyeong, date, dateEnd }) {
+  return { cropId: cropId ?? null, operations, combined, transaction, maxPrice, areaPyeong, date, dateEnd };
 }
 
 export async function recommend(message, context = {}) {
   if (context.action === "interpret") return interpret(message, context);
-  const selection = selectCandidates(message, context);
+  const selection = await selectCandidates(message, context);
   const { cropId, operations, transaction, candidates } = selection;
-  const guide = recommendationGuide(selection);
+  const guide = { ...recommendationGuide(selection), selection: selectionSummary(selection) };
   if (!guide.listingIds.length || !process.env.OPENAI_API_KEY) return guide;
 
   try {
@@ -107,7 +111,7 @@ export async function recommend(message, context = {}) {
     const { listingIds } = guide;
     const summaries = Object.fromEntries((Array.isArray(result.summaries) ? result.summaries : []).filter((item) => listingIds.includes(item.id) && typeof item.text === "string").map((item) => [item.id, item.text.slice(0, 160)]));
     // reply는 항상 규칙 기반 안내문을 쓴다. 모델은 매물별 한줄 요약만 만든다.
-    return { mode: "ai", reply: guide.reply, listingIds, summaries };
+    return { mode: "ai", reply: guide.reply, listingIds, summaries, selection: guide.selection };
   } catch {
     return guide;
   }

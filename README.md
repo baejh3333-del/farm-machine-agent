@@ -38,6 +38,8 @@ OPENAI_MODEL=gpt-6-luna
 
 Vercel에서는 프로젝트의 서버 환경 변수 `OPENAI_API_KEY`를 설정한 뒤 다시 배포합니다. 키를 넣으면 `/api/recommend`가 OpenAI Responses API를 호출하고, 추천된 등록 매물에 대한 한줄 요약을 카드에 표시합니다. 키가 없을 때는 등록 데이터 기반 안내가 동작합니다. 키는 브라우저 코드에 포함되지 않습니다.
 
+`/api/recommend`는 OpenAI 비용을 막기 위해 호출 횟수를 제한합니다. 기본값은 IP당 분당 15회·하루 150회, 서비스 전체 하루 3,000회이며 `RECOMMEND_LIMIT_PER_MINUTE`, `RECOMMEND_LIMIT_PER_DAY`, `RECOMMEND_GLOBAL_LIMIT_PER_DAY`로 바꿀 수 있습니다(0이면 해당 제한 해제). 사용자 메시지 하나는 의도 해석과 추천 요약으로 최대 2회 호출됩니다. 한도를 넘으면 `429`와 `Retry-After`를 돌려주고, 화면은 AI 없이 규칙 기반 안내로 계속 동작합니다. `DATABASE_URL`이 있으면 횟수를 Postgres `recommend_rate_limit` 테이블(처음 호출할 때 자동 생성)에 저장해 모든 Vercel 인스턴스가 공유하고, IP는 `BETTER_AUTH_SECRET`으로 HMAC 처리해 원래 값을 남기지 않습니다. `DATABASE_URL`이 없으면 프로세스 메모리에만 세므로 로컬 개발용으로만 충분합니다. 횟수를 확인할 수 없으면 OpenAI를 호출하지 않고 `503`을 돌려줍니다.
+
 ## 파일
 
 - `src/data/farm-machines.js`: 작물, 재배 작업, 농기계 종류
@@ -46,8 +48,8 @@ Vercel에서는 프로젝트의 서버 환경 변수 `OPENAI_API_KEY`를 설정�
 - `src/ai/recommend-agent.js`: 화면과 추천 API 연결
 - `server/agent.js`: 서버 추천 후보 선정과 AI 호출
 - `api/recommend.js`: Vercel 함수
-- `agent/`: 기존 Eve 에이전트 실험 파일. 현재 화면의 추천 API와는 별도입니다.
+- `server/rate-limit.js`: 추천 API 호출 제한
 
 ## 현재 범위
 
-등록, 대여 요청, 대화, 관심 목록은 브라우저 `localStorage`에 저장되는 데모입니다. 다른 기기나 사용자와 데이터가 공유되지 않습니다. 지도 거리도 영양군 네 지역 사이의 예시값이며 GPS 실측 거리가 아닙니다. 실제 서비스에는 회원/거래자 식별, 공동 데이터베이스, 사진 저장소, 재고 동기화, 알림, 위치 권한 및 거리 계산, API 요청 제한이 필요합니다.
+등록, 대여 요청, 대화, 관심 목록은 브라우저 `localStorage`에 저장되는 데모입니다. 다른 기기나 사용자와 데이터가 공유되지 않습니다. 소유자가 대여 요청을 승인·거절하는 기능은 아직 없습니다. 지도 거리도 영양군 네 지역 사이의 예시값이며 GPS 실측 거리가 아닙니다. 실제 서비스에는 회원/거래자 식별, 공동 데이터베이스, 사진 저장소, 재고 동기화, 알림, 위치 권한 및 거리 계산이 필요합니다.

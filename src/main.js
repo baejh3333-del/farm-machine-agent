@@ -986,7 +986,7 @@ function rentalForm(id) {
   openForm(`
     <span class="step-pill">간편 대여 신청</span>
     <h2 id="formTitle">농기계 대여 요청하기</h2>
-    <p><strong>${escapeHtml(item.title)}</strong> (${money(item.price)}/일) · 일정을 선택해 요청을 보내면 소유 농가에서 확인 후 승인해 드립니다.</p>
+    <p><strong>${escapeHtml(item.title)}</strong> (${money(item.price)}/일) · 일정을 선택해 요청을 보낼 수 있어요. 시연 버전에서는 요청이 이 브라우저에만 저장되고, 소유 농가의 승인·거절 기능은 준비 중입니다.</p>
     <form class="stack-form" id="rentalForm">
       <div class="form-row-2">
         <label>대여 시작일<input type="date" id="rentStart" min="${today()}" value="${date}" required></label>
@@ -1032,7 +1032,7 @@ function rentalForm(id) {
     hideDialog($("formBackdrop"));
     renderOwner();
     renderBuyerRequests();
-    toast("대여 요청을 성공적으로 보냈습니다! 상단 '내 기계 등록·관리'에서 승인 시연을 해볼 수 있어요.");
+    toast("대여 요청을 보냈습니다. '내 대여 요청'에서 신청 내용을 확인할 수 있어요.");
   });
 }
 
@@ -1150,7 +1150,7 @@ function renderOwner() {
         <div class="owner-row-info">
           <span class="step-pill"> 대여 승인 대기</span>
           <strong>${escapeHtml(listingById(request.listingId)?.title || "농기계")}</strong>
-          <small>희망 기간: ${request.start} ~ ${request.end}${request.note ? `<br>메모: ${escapeHtml(request.note)}` : ""}</small>
+          <small>희망 기간: ${request.start} ~ ${request.end}${request.note ? `<br>메모: ${escapeHtml(request.note)}` : ""}<br>승인·거절 기능은 준비 중입니다.</small>
         </div>
         <div class="owner-row-actions">
 

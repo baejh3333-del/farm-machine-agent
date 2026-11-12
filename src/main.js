@@ -1,5 +1,6 @@
 import { createGarage } from "./garage.js";
 let garage;
+let detailDates = null; // 열려 있는 상세 화면이 일반 검색 필터 대신 쓰는 대여 기간
 import { accountRequest } from "./account.js";
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "./data/farm-machines.js";
 import { askRecommendation } from "./ai/recommend-agent.js";
@@ -878,11 +879,13 @@ function renderAll() {
   updateBadges();
 }
 
-function openDetail(id) {
+// context (호환 검색에서 열 때): { start, end, powerModelId } — 일반 검색 필터 대신 이 기간·본체 기준으로 보여준다.
+function openDetail(id, context = {}) {
   const item = listingById(id);
   if (!item) return;
-  const date = state.filters.date;
-  const dateEnd = state.filters.dateEnd || date;
+  detailDates = context.start ? { start: context.start, end: context.end || context.start } : null;
+  const date = detailDates?.start || state.filters.date;
+  const dateEnd = detailDates?.end || state.filters.dateEnd || date;
   const booked = item.type === "rent" && date && !available(item, date, dateEnd);
   const unavailable = item.status !== "open" || item.condition === "repair";
   const isFav = state.favorites.includes(item.id);
@@ -907,7 +910,7 @@ function openDetail(id) {
           <span class="spec-tag">${escapeHtml(MACHINE_BY_ID[item.machineType]?.label)}</span>
         </div>
         <h2 id="detailTitle">${escapeHtml(item.title)}</h2>
-        ${garage?.detail(item) || ""}
+        ${garage?.detail(item, context.powerModelId) || ""}
         ${item.specification ? `
           <section class="model-specification" aria-label="실제 모델 사양">
             <h3>실제 모델 사양</h3>
@@ -979,10 +982,11 @@ function openForm(html) {
   showDialog($("formBackdrop"));
 }
 
-function rentalForm(id) {
+function rentalForm(id, dates) {
   const item = listingById(id);
-  const date = state.filters.date >= today() ? state.filters.date : today();
-  const endDate = state.filters.dateEnd >= date ? state.filters.dateEnd : date;
+  const from = dates || { start: state.filters.date, end: state.filters.dateEnd };
+  const date = from.start >= today() ? from.start : today();
+  const endDate = from.end >= date ? from.end : date;
   openForm(`
     <span class="step-pill">간편 대여 신청</span>
     <h2 id="formTitle">농기계 대여 요청하기</h2>
@@ -1829,7 +1833,7 @@ function bindEvents() {
     if (!button) return;
     hideDialog($("detailBackdrop"));
     const item = listingById(button.dataset.detailAction);
-    item.type === "rent" ? rentalForm(item.id) : chatForm(item.id);
+    item.type === "rent" ? rentalForm(item.id, detailDates) : chatForm(item.id);
   });
 
   $("ownerListings").addEventListener("click", (event) => {
@@ -2176,13 +2180,9 @@ function initScrollMotion() {
 
 garage = createGarage({
   root: $("garageView"), getListings: allListings, getCatalogState: () => catalogState,
+  reloadListings() { catalogState = "loading"; renderAll(); return loadCatalog(); },
   today, openListing: openDetail, notify: toast,
-  openRental(id, start, end) {
-    state.filters.date = start;
-    state.filters.dateEnd = end;
-    persist();
-    rentalForm(id);
-  },
+  openRental: (id, start, end) => rentalForm(id, { start, end }),
 });
 $("detailContent").addEventListener("click", (event) => {
   if (event.target.closest("[data-open-garage]")) {

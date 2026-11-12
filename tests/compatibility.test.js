@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { findCompatibleRentals, rentalDays } from '../src/data/compatibility.js';
 import { buildMockListings } from '../server/listing-seed.js';
+import { GARAGE_KEY, readGarage, updateGarage } from '../src/data/garage-store.js';
 const options = { mode: 'set', operation: 'mulch', start: '2026-11-20', end: '2026-11-22', today: '2026-11-07' };
 const listings = buildMockListings();
 
@@ -38,4 +39,19 @@ test('잘못된 날짜·과거 기간을 거르고 포함 일수를 계산한다
   assert.equal(rentalDays('2026-11-22', '2026-11-20'), 0);
   assert.equal(rentalDays('2026-02-30', '2026-03-04'), 0);
   assert.ok(findCompatibleRentals(listings, { ...options, start: '2026-11-06' }).error);
+});
+test('두 탭이 각자 등록해도 보유 농기계가 모두 남는다', () => {
+  const data = new Map();
+  const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+  const add = (id, modelId) => updateGarage(storage, (garage) => ({ owned: [...garage.owned, { id, modelId, name: id }], selectedId: id }));
+  readGarage(storage); // 두 번째 탭이 빈 목록을 먼저 읽어 둔 상태
+  add('a', 'asia-amc900');
+  const second = add('b', 'daedong-dk550');
+  assert.deepEqual(second.owned.map((item) => item.id), ['a', 'b']);
+  assert.equal(readGarage(storage).selectedId, 'b');
+  const removed = updateGarage(storage, (garage) => ({ ...garage, owned: garage.owned.filter((item) => item.id !== 'b') }));
+  assert.deepEqual([removed.owned.length, removed.selectedId], [1, 'a']);
+  assert.equal(updateGarage(storage, (garage) => ({ ...garage, selectedId: 'gone' })).selectedId, 'a');
+  data.set(GARAGE_KEY, '{broken');
+  assert.deepEqual(readGarage(storage), { owned: [], selectedId: '' });
 });

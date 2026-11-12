@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recommend } from "./server/agent.js";
+import recommendHandler from "./api/recommend.js";
 import accountHandler from "./api/account.js";
 import { initListingsDb, listListings, localDatabase } from "./server/listings-db.js";
 
@@ -27,22 +27,7 @@ const server = createServer(async (request, response) => {
     }
     return;
   }
-  if (path === "/api/recommend") {
-    if (request.method !== "POST") { response.writeHead(405).end(); return; }
-    let body = "";
-    for await (const chunk of request) { body += chunk; if (body.length > 10000) { response.writeHead(413).end(); return; } }
-    try {
-      const data = JSON.parse(body);
-      const message = typeof data.message === "string" ? data.message.trim() : "";
-      if (!message || message.length > 500) { response.writeHead(400).end(); return; }
-      const result = await recommend(message, data.context && typeof data.context === "object" ? data.context : {});
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(result));
-    } catch (error) {
-      console.error("recommend failed", error instanceof Error ? error.message : "unknown");
-      response.writeHead(502, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify({ error: "추천에 실패했습니다." }));
-    }
-    return;
-  }
+  if (path === "/api/recommend") return recommendHandler(request, response);
   if (request.method !== "GET" || !allowed.test(path) || path.includes("..")) { response.writeHead(404).end(); return; }
   const file = resolve(join(root, path === "/" ? "index.html" : path.slice(1)));
   if (!file.startsWith(root)) { response.writeHead(404).end(); return; }

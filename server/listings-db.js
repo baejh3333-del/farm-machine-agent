@@ -49,11 +49,9 @@ export function initListingsDb(location = ":memory:") {
       INSERT INTO listings (${columns.join(", ")})
       VALUES (${columns.map(() => "?").join(", ")})
       ON CONFLICT(id) DO UPDATE SET
-        title = excluded.title, brand = excluded.brand,
-        included = excluded.included, description = excluded.description,
-        summary = excluded.summary
+        ${columns.slice(1).map((key) => `${key} = excluded.${key}`).join(", ")}
     `);
-    for (const item of buildMockListings()) {
+    for (const item of catalog.values()) {
       insert.run(...columns.map((key) => jsonColumns.includes(key) ? JSON.stringify(item[key])
         : key === "owner" ? Number(item[key]) : item[key]));
     }

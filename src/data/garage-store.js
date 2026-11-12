@@ -17,11 +17,11 @@ export function readGarage(storage) {
   return { owned, selectedId };
 }
 
-// Applies one change to what is stored right now, not to a copy read earlier,
-// so a machine saved from another tab survives. Throws if the store rejects the write.
-export function updateGarage(storage, change) {
-  const next = change(readGarage(storage));
-  if (!next.owned.some((item) => item.id === next.selectedId)) next.selectedId = next.owned[0]?.id || "";
-  storage.setItem(GARAGE_KEY, JSON.stringify(next));
-  return next;
+export async function updateGarage(storage, change, locks = navigator.locks) {
+  return locks.request(GARAGE_KEY, () => {
+    const next = change(readGarage(storage));
+    if (!next.owned.some((item) => item.id === next.selectedId)) next.selectedId = next.owned[0]?.id || "";
+    storage.setItem(GARAGE_KEY, JSON.stringify(next));
+    return next;
+  });
 }

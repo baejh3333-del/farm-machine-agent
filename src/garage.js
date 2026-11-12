@@ -13,8 +13,11 @@ export function createGarage({ root, getListings, getCatalogState, reloadListing
   try { load(); } catch { /* localStorage itself is unavailable: start with an empty garage. */ }
   let mode = owned.length ? "owned" : "set";
   const selected = () => owned.find((item) => item.id === selectedId);
-  function save(change) {
-    try { ({ owned, selectedId } = updateGarage(localStorage, change)); }
+  async function save(change) {
+    try {
+      await updateGarage(localStorage, change);
+      load();
+    }
     catch { notify("브라우저 저장 공간을 사용할 수 없어 변경하지 못했습니다."); return false; }
     return true;
   }
@@ -53,7 +56,14 @@ export function createGarage({ root, getListings, getCatalogState, reloadListing
     refreshResults();
   }
   function searchOptions() { return { mode, modelId: selected()?.modelId, operation: $("compatOperation").value, start: $("compatStart").value, end: $("compatEnd").value, today: today(), onlyCompatible: $("compatOnly").checked }; }
+  function syncDateLimits() {
+    const minimum = today();
+    const start = $("compatStart");
+    start.min = minimum;
+    $("compatEnd").min = start.value > minimum ? start.value : minimum;
+  }
   function refreshResults() {
+    syncDateLimits();
     if (!searched) { $("compatResults").innerHTML = '<div class="garage-empty"><strong>어떤 날, 어떤 작업이 필요한가요?</strong><p>기간을 선택하면 예약이 겹치는 매물은 제외해 드려요.</p></div>'; return; }
     if (getCatalogState() !== "ready") { $("compatResults").innerHTML = `<div class="garage-empty">${getCatalogState() === "loading" ? "매물을 불러오는 중입니다…" : '<strong>매물을 불러오지 못했습니다</strong><p>잠시 후 다시 시도해 주세요.</p><button type="button" class="button button-secondary" data-garage-retry>다시 불러오기</button>'}</div>`; return; }
     const { error, results } = findCompatibleRentals(getListings(), searchOptions());
@@ -65,25 +75,33 @@ export function createGarage({ root, getListings, getCatalogState, reloadListing
       return `<article class="compat-result">${compatibilityBadge(verdict)}<h3>${power ? `${esc(power.model)} <span>+</span> ` : ""}${esc(implement.model)}</h3><p class="compat-reason">${esc(verdict.reason)}</p><div class="compat-machines">${machines.map((item) => `<div><span>${item === power ? "본체" : "작업기"}</span><strong>${esc(item.brand)} ${esc(item.model)}</strong><small>${esc(item.region)} · ${esc(item.pickup)} · ${money(item.price)}/일</small><div class="compat-item-actions"><button type="button" data-garage-detail="${esc(item.id)}"${power && item === implement ? ` data-garage-power="${esc(power.modelId)}"` : ""}>사양·상세 보기 ↗</button>${verdict.status === "compatible" ? `<button type="button" data-garage-rent="${esc(item.id)}">대여 요청</button>` : ""}</div></div>`).join("")}</div><div class="compat-total"><span>${days}일 총 대여료<small>하루 ${money(dailyPrice)} · 운반비 별도</small></span><strong>${money(totalPrice)}</strong></div>${power ? '<p class="garage-note">두 매물에 각각 요청하고 승인을 받아야 해요. 세트 예약이 한 번에 확정되지는 않아요.</p>' : ""}</article>`;
     }).join("");
   }
-  $("ownedMachineForm").addEventListener("submit", (event) => {
+  $("ownedMachineForm").addEventListener("submit", async (event) => {
     event.preventDefault(); const modelId = $("ownedModel").value;
     if (SPEC_BY_ID[modelId]?.role !== "powerUnit") return;
     const item = { id: crypto.randomUUID(), modelId, name: $("ownedName").value.trim() || SPEC_BY_ID[modelId].model };
-    if (!save((garage) => ({ owned: [...garage.owned, item], selectedId: item.id }))) return;
-    mode = "owned"; $("ownedMachineForm").reset(); refreshOwned(); notify("내 농기계를 저장하고 기준 기계로 선택했습니다.");
+    const submit = event.submitter;
+    if (submit) submit.disabled = true;
+    try {
+      if (!await save((garage) => ({ owned: [...garage.owned, item], selectedId: item.id }))) return;
+      mode = "owned"; $("ownedMachineForm").reset(); refreshOwned(); notify("내 농기계를 저장하고 기준 기계로 선택했습니다.");
+    } finally {
+      if (submit) submit.disabled = false;
+    }
   });
   $("compatSearch").addEventListener("submit", (event) => { event.preventDefault(); searched = true; refreshResults(); });
   $("compatStart").addEventListener("change", () => {
-    $("compatEnd").min = $("compatStart").value || today();
+    syncDateLimits();
     if (!$("compatEnd").value || $("compatEnd").value < $("compatStart").value) $("compatEnd").value = $("compatStart").value;
     if (searched) refreshResults();
   });
   for (const id of ["compatEnd", "compatOperation", "compatOnly"]) $(id).addEventListener("change", () => { if (searched) refreshResults(); });
-  root.addEventListener("click", (event) => {
+  $("compatSearch").addEventListener("focusin", syncDateLimits);
+  $("compatSearch").addEventListener("pointerdown", syncDateLimits);
+  root.addEventListener("click", async (event) => {
     const button = event.target.closest("button"); if (!button) return;
     if (button.dataset.garageMode) { mode = button.dataset.garageMode; refreshMode(); }
-    if (button.dataset.ownedSelect && save((garage) => ({ ...garage, selectedId: button.dataset.ownedSelect }))) refreshOwned();
-    if (button.dataset.ownedRemove && save((garage) => ({ ...garage, owned: garage.owned.filter((item) => item.id !== button.dataset.ownedRemove) }))) { refreshOwned(); notify("보유 목록에서 삭제했습니다."); }
+    if (button.dataset.ownedSelect && await save((garage) => ({ ...garage, selectedId: button.dataset.ownedSelect }))) refreshOwned();
+    if (button.dataset.ownedRemove && await save((garage) => ({ ...garage, owned: garage.owned.filter((item) => item.id !== button.dataset.ownedRemove) }))) { refreshOwned(); notify("보유 목록에서 삭제했습니다."); }
     if (button.dataset.garageRetry !== undefined) reloadListings();
     if (button.dataset.garageDetail) openListing(button.dataset.garageDetail, { start: $("compatStart").value, end: $("compatEnd").value, powerModelId: button.dataset.garagePower });
     if (button.dataset.garageRent) {

@@ -17,6 +17,7 @@
     "db:freeze": "node --env-file-if-exists=.env.local scripts/db-admin.mjs freeze",
     "db:reconcile-photos": "node --env-file-if-exists=.env.local scripts/db-admin.mjs reconcile-photos",
     "check": "node --test tests/*.test.js",
+    "test:pg-pool": "node --env-file-if-exists=.env.local --test tests/pg-pool-integration.test.js",
     "agent:dev": "eve dev",
     "agent:build": "eve build",
     "agent:info": "eve info"

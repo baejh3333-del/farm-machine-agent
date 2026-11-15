@@ -149,7 +149,7 @@ after(async () => {
   }
 });
 
-test("1. 명시적 마이그레이션, 체크섬 검증, 환경 마커 가드 및 btree_gist/user.id 확인", async () => {
+test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 환경 마커 가드 및 btree_gist/user.id 확인", async () => {
   await assert.rejects(
     () => runMigrations({ env: "test", pool }),
     (err) => err.code === "ENVIRONMENT_UNINITIALIZED"
@@ -207,7 +207,7 @@ test("1. 명시적 마이그레이션, 체크섬 검증, 환경 마커 가드 �
   assert.equal(pgListings.length, 100);
 });
 
-test("2. 회원가입 및 A/B/C 계정 세션, write-freeze 503 차단 및 복구", async () => {
+test("[PGlite 로컬 엔진] 2. 회원가입 및 A/B/C 계정 세션, write-freeze 503 차단 및 복구", async () => {
   userA = await signupHttp(baseUrl, "farmer_a", "농부A");
   userB = await signupHttp(baseUrl, "farmer_b", "농부B");
   userC = await signupHttp(baseUrl, "farmer_c", "농부C");
@@ -278,7 +278,7 @@ test("2. 회원가입 및 A/B/C 계정 세션, write-freeze 503 차단 및 복�
   assert.equal(unblockedFav.body.isFavorite, true);
 });
 
-test("3. 서버 이미지 검증·EXIF 제거·교체/실패 정리 및 reconcile 고아 객체 정리", async () => {
+test("[PGlite 로컬 엔진] 3. 서버 이미지 검증·EXIF 제거·교체/실패 정리 및 reconcile 고아 객체 정리", async () => {
   // Build PNG + JPEG with synthetic EXIF metadata
   const rawJpegWithExif = await sharp({
     create: { width: 48, height: 32, channels: 3, background: { r: 70, g: 140, b: 80 } },
@@ -410,7 +410,7 @@ test("3. 서버 이미지 검증·EXIF 제거·교체/실패 정리 및 reconcil
   assert.equal(removedPhotoStillExists.status, 200);
 });
 
-test("4. 동시 중복 대여 승인 레이스, GiST 배타 제약, KST 날짜 경계, 취소·재승인 및 활성 예약 보호", async () => {
+test("[PGlite 로컬 엔진] 4. 중복 대여 승인 직렬화, GiST 배타 제약, KST 날짜 경계, 취소·재승인 및 활성 예약 보호", async () => {
   const today = kstToday();
   const futureStart = shiftDate(today, 3);
   const futureEnd = shiftDate(today, 5);
@@ -527,7 +527,7 @@ test("4. 동시 중복 대여 승인 레이스, GiST 배타 제약, KST 날짜 �
   );
 });
 
-test("5. 클라이언트 UUID 멱등성(4개 엔드포인트) 및 상태 전이 재시도 200·충돌 409", async () => {
+test("[PGlite 로컬 엔진] 5. 클라이언트 UUID 멱등성(4개 엔드포인트) 및 상태 전이 재시도 200·충돌 409", async () => {
   const today = kstToday();
 
   // 1) Listing creation idempotency
@@ -583,6 +583,23 @@ test("5. 클라이언트 UUID 멱등성(4개 엔드포인트) 및 상태 전이 
   assert.equal(add2.userData.selectedOwnedMachineId, m2Id);
   assert.equal(add2.userData.ownedMachines.filter((m) => m.isSelected).length, 1);
 
+  // User C starts from 0 owned machines: Promise.all concurrent inserts + concurrent same-UUID retries
+  const c1Id = randomUUID();
+  const c2Id = randomUUID();
+  const [c1Res, c2Res] = await Promise.all([
+    addOwnedMachine(userC.user.id, { id: c1Id, modelId: "asia-amc900", name: "C관리기1" }, { pool }),
+    addOwnedMachine(userC.user.id, { id: c2Id, modelId: "daedong-dk450", name: "C트랙터2" }, { pool }),
+  ]);
+  assert.equal(c1Res.idempotent, false);
+  assert.equal(c2Res.idempotent, false);
+  const cRetryPair = await Promise.all([
+    addOwnedMachine(userC.user.id, { id: c1Id, modelId: "asia-amc900", name: "C관리기1" }, { pool }),
+    addOwnedMachine(userC.user.id, { id: c1Id, modelId: "asia-amc900", name: "C관리기1" }, { pool }),
+  ]);
+  assert.ok(cRetryPair.every((r) => r.idempotent === true));
+  assert.equal(cRetryPair[1].userData.ownedMachines.length, 2);
+  assert.equal(cRetryPair[1].userData.ownedMachines.filter((m) => m.isSelected).length, 1);
+
   // 3) Rental request idempotency & transition retry idempotency
   const reqId = randomUUID();
   const rStart = shiftDate(today, 10);
@@ -629,7 +646,7 @@ test("5. 클라이언트 UUID 멱등성(4개 엔드포인트) 및 상태 전이 
   );
 });
 
-test("6. A/B/C 다중 사용자 권한 분리, 1:1 대화 격리 및 seq 순서·페이지네이션", async () => {
+test("[PGlite 로컬 엔진] 6. A/B/C 다중 사용자 권한 분리, 1:1 대화 격리 및 seq 순서·페이지네이션", async () => {
   const listId = randomUUID();
   await createListing(userA.user, {
     id: listId,

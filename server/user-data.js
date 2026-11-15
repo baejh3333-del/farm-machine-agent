@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { getPool, withTransaction } from "./db.js";
-import { fail } from "./http.js";
+import { fail, HttpError } from "./http.js";
 import { isUuid, normalizeText, requireUuid } from "./validate.js";
 
 function toOwnedDto(row) {
@@ -92,50 +92,75 @@ export async function addOwnedMachine(userId, payload, { pool = getPool() } = {}
   const rawName = typeof payload?.name === "string" && payload.name.trim() ? payload.name : spec.model;
   const name = normalizeText(rawName, { min: 1, max: 40, field: "기계 별명" });
 
-  return withTransaction(async (client) => {
-    const existingRes = await client.query(
-      `SELECT id, user_id, model_id, name, is_selected
-       FROM owned_machines
-       WHERE id = $1
-       FOR UPDATE`,
-      [id]
-    );
-    if (existingRes.rows.length) {
-      const existing = existingRes.rows[0];
-      if (existing.user_id !== userId || existing.model_id !== modelId || existing.name !== name) {
-        fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
-      }
-      const userData = await getUserData(userId, { client });
-      return { idempotent: true, userData };
-    }
+  const matchesExistingOwned = (existing) =>
+    existing.user_id === userId && existing.model_id === modelId && existing.name === name;
 
-    const userRowsRes = await client.query(
-      `SELECT id, is_selected FROM owned_machines WHERE user_id = $1 FOR UPDATE`,
-      [userId]
-    );
-    const shouldSelect = userRowsRes.rows.length === 0 || payload?.select !== false;
-    if (shouldSelect) {
-      await client.query(
-        `UPDATE owned_machines SET is_selected = false WHERE user_id = $1 AND is_selected = true`,
+  try {
+    return await withTransaction(async (client) => {
+      // Lock parent user row first so 0-row concurrent inserts for the same user serialize cleanly.
+      await client.query(`SELECT id FROM "user" WHERE id = $1 FOR UPDATE`, [userId]);
+
+      const existingRes = await client.query(
+        `SELECT id, user_id, model_id, name, is_selected
+         FROM owned_machines
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+      if (existingRes.rows.length) {
+        const existing = existingRes.rows[0];
+        if (!matchesExistingOwned(existing)) {
+          fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
+        }
+        const userData = await getUserData(userId, { client });
+        return { idempotent: true, userData };
+      }
+
+      const userRowsRes = await client.query(
+        `SELECT id, is_selected FROM owned_machines WHERE user_id = $1 FOR UPDATE`,
         [userId]
       );
+      const shouldSelect = userRowsRes.rows.length === 0 || payload?.select !== false;
+      if (shouldSelect) {
+        await client.query(
+          `UPDATE owned_machines SET is_selected = false WHERE user_id = $1 AND is_selected = true`,
+          [userId]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO owned_machines (id, user_id, model_id, name, is_selected)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, userId, modelId, name, shouldSelect]
+      );
+
+      const userData = await getUserData(userId, { client });
+      return { idempotent: false, userData };
+    }, pool);
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error?.code === "23505") {
+      const winnerRes = await pool.query(
+        `SELECT id, user_id, model_id, name FROM owned_machines WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      const winner = winnerRes.rows[0];
+      if (winner && matchesExistingOwned(winner)) {
+        const userData = await getUserData(userId, { pool });
+        return { idempotent: true, userData };
+      }
+      fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
     }
-
-    await client.query(
-      `INSERT INTO owned_machines (id, user_id, model_id, name, is_selected)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, userId, modelId, name, shouldSelect]
-    );
-
-    const userData = await getUserData(userId, { client });
-    return { idempotent: false, userData };
-  }, pool);
+    throw error;
+  }
 }
 
 export async function selectOwnedMachine(userId, ownedId, { pool = getPool() } = {}) {
   const id = requireUuid(ownedId, "보유 농기계 ID");
 
   return withTransaction(async (client) => {
+    await client.query(`SELECT id FROM "user" WHERE id = $1 FOR UPDATE`, [userId]);
+
     const targetRes = await client.query(
       `SELECT id, user_id, is_selected FROM owned_machines WHERE id = $1 FOR UPDATE`,
       [id]
@@ -171,6 +196,8 @@ export async function removeOwnedMachine(userId, ownedId, { pool = getPool() } =
   const id = requireUuid(ownedId, "보유 농기계 ID");
 
   return withTransaction(async (client) => {
+    await client.query(`SELECT id FROM "user" WHERE id = $1 FOR UPDATE`, [userId]);
+
     const targetRes = await client.query(
       `SELECT id, user_id, is_selected FROM owned_machines WHERE id = $1 FOR UPDATE`,
       [id]
@@ -212,6 +239,8 @@ export async function importGuestData(userId, { favorites = [], ownedMachines = 
   const ownedInput = Array.isArray(ownedMachines) ? ownedMachines.slice(0, 30) : [];
 
   return withTransaction(async (client) => {
+    await client.query(`SELECT id FROM "user" WHERE id = $1 FOR UPDATE`, [userId]);
+
     let importedFavorites = 0;
     if (favInput.length) {
       const validRes = await client.query(

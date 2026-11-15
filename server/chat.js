@@ -67,6 +67,19 @@ function matchesIdempotentMessage(row, userId, body, conversationId, listingId) 
   return true;
 }
 
+async function findExistingMessage(db, messageId, { lock = false } = {}) {
+  const lockClause = lock ? " FOR UPDATE OF m" : " LIMIT 1";
+  const res = await db.query(
+    `SELECT m.*, c.listing_id, u.name AS sender_name
+     FROM messages m
+     JOIN conversations c ON c.id = m.conversation_id
+     JOIN "user" u ON u.id = m.sender_id
+     WHERE m.id = $1${lockClause}`,
+    [messageId]
+  );
+  return res.rows[0] || null;
+}
+
 export async function sendMessage(user, payload, { pool = getPool() } = {}) {
   const messageId = requireUuid(payload?.id ?? payload?.messageId, "메시지 ID");
   const body = normalizeText(payload?.body, { min: 1, max: 500, field: "메시지 내용", allowNewlines: true });
@@ -79,26 +92,17 @@ export async function sendMessage(user, payload, { pool = getPool() } = {}) {
 
   try {
     return await withTransaction(async (client) => {
-      const existingRes = await client.query(
-        `SELECT m.*, c.listing_id, u.name AS sender_name
-         FROM messages m
-         JOIN conversations c ON c.id = m.conversation_id
-         JOIN "user" u ON u.id = m.sender_id
-         WHERE m.id = $1
-         FOR UPDATE OF m`,
-        [messageId]
-      );
-      if (existingRes.rows.length) {
-        const existing = existingRes.rows[0];
-        if (!matchesIdempotentMessage(existing, user.id, body, conversationId, listingId)) {
+      const preExisting = await findExistingMessage(client, messageId, { lock: true });
+      if (preExisting) {
+        if (!matchesIdempotentMessage(preExisting, user.id, body, conversationId, listingId)) {
           fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
         }
-        const convRow = await fetchConversationById(client, existing.conversation_id);
+        const convRow = await fetchConversationById(client, preExisting.conversation_id);
         return {
           status: 200,
           idempotent: true,
-          conversation: toConversationDto(convRow, existing),
-          message: toMessageDto(existing),
+          conversation: toConversationDto(convRow, preExisting),
+          message: toMessageDto(preExisting),
         };
       }
 
@@ -147,6 +151,21 @@ export async function sendMessage(user, payload, { pool = getPool() } = {}) {
         lockedConv = lockedRes.rows[0];
       }
 
+      // Re-check under READ COMMITTED after acquiring conversations FOR UPDATE so concurrent same-UUID retries do not bump last_seq.
+      const existingAfterLock = await findExistingMessage(client, messageId, { lock: true });
+      if (existingAfterLock) {
+        if (!matchesIdempotentMessage(existingAfterLock, user.id, body, conversationId, listingId)) {
+          fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
+        }
+        const convRow = await fetchConversationById(client, existingAfterLock.conversation_id);
+        return {
+          status: 200,
+          idempotent: true,
+          conversation: toConversationDto(convRow, existingAfterLock),
+          message: toMessageDto(existingAfterLock),
+        };
+      }
+
       const seqRes = await client.query(
         `UPDATE conversations
          SET last_seq = last_seq + 1, updated_at = now()
@@ -180,16 +199,7 @@ export async function sendMessage(user, payload, { pool = getPool() } = {}) {
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (error?.code === "23505") {
-      const existingRes = await pool.query(
-        `SELECT m.*, c.listing_id, u.name AS sender_name
-         FROM messages m
-         JOIN conversations c ON c.id = m.conversation_id
-         JOIN "user" u ON u.id = m.sender_id
-         WHERE m.id = $1
-         LIMIT 1`,
-        [messageId]
-      );
-      const existing = existingRes.rows[0];
+      const existing = await findExistingMessage(pool, messageId);
       if (existing && matchesIdempotentMessage(existing, user.id, body, conversationId, listingId)) {
         const convRow = await fetchConversationById(pool, existing.conversation_id);
         return {

@@ -42,25 +42,31 @@ export function migrationChecksum(sql) {
 
 async function withMigrationLock(pool, fn) {
   return withProcessLock(async () => {
-    if (usesLocalDatabase() || pool.isLocal) {
+    if (pool?.isLocal) {
       return fn();
     }
     const client = await pool.connect();
+    let unlockHealthy = false;
     try {
       await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
       return await fn();
     } finally {
-      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => {});
-      client.release();
+      try {
+        const res = await client.query("SELECT pg_advisory_unlock($1) AS unlocked", [MIGRATION_LOCK_KEY]);
+        unlockHealthy = res?.rows?.[0]?.unlocked === true;
+      } catch {
+        unlockHealthy = false;
+      }
+      client.release(!unlockHealthy);
     }
   });
 }
 
 export async function inspectDatabase({ pool = getPool() } = {}) {
-  const target = describeDatabaseTarget();
+  const target = describeDatabaseTarget(pool);
   const tablesRes = await pool.query(
     `SELECT table_name FROM information_schema.tables
-     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+     WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
      ORDER BY table_name`
   );
   const tables = tablesRes.rows.map((r) => r.table_name);
@@ -91,7 +97,7 @@ export async function inspectDatabase({ pool = getPool() } = {}) {
   if (tables.includes("user")) {
     const colRes = await pool.query(
       `SELECT data_type FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'user' AND column_name = 'id'`
+       WHERE table_schema = current_schema() AND table_name = 'user' AND column_name = 'id'`
     );
     userIdType = colRes.rows[0]?.data_type ?? null;
   }
@@ -112,7 +118,7 @@ export async function inspectDatabase({ pool = getPool() } = {}) {
 
 export async function initEnvironment({ env: explicitEnv, pool = getPool() } = {}) {
   const env = resolveExpectedEnv(explicitEnv);
-  const target = describeDatabaseTarget();
+  const target = describeDatabaseTarget(pool);
 
   return withMigrationLock(pool, async () => {
     await pool.query(`
@@ -149,7 +155,7 @@ export async function initEnvironment({ env: explicitEnv, pool = getPool() } = {
 
 export async function assertEnvironmentMarker({ env: explicitEnv, pool = getPool() } = {}) {
   const env = resolveExpectedEnv(explicitEnv);
-  const existsRes = await pool.query("SELECT to_regclass('public.app_meta')::text AS reg");
+  const existsRes = await pool.query("SELECT to_regclass('app_meta')::text AS reg");
   if (!existsRes.rows[0]?.reg) {
     const error = new Error(
       `Database environment marker is missing (app_meta table not found). Run db:init -- --env ${env} first.`
@@ -183,7 +189,7 @@ export async function runMigrations({
   runBetterAuth = true,
 } = {}) {
   const env = await assertEnvironmentMarker({ env: explicitEnv, pool });
-  const target = describeDatabaseTarget();
+  const target = describeDatabaseTarget(pool);
 
   return withMigrationLock(pool, async () => {
     if (runBetterAuth) {
@@ -198,7 +204,7 @@ export async function runMigrations({
 
     const userIdCol = await pool.query(
       `SELECT data_type FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'user' AND column_name = 'id'`
+       WHERE table_schema = current_schema() AND table_name = 'user' AND column_name = 'id'`
     );
     if (!userIdCol.rows.length) {
       const error = new Error("Better Auth 'user' table does not exist. Run Better Auth migration first.");

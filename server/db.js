@@ -20,18 +20,36 @@ export function kstToday(now = Date.now()) {
   }).format(new Date(now));
 }
 
+function parseDatabaseTarget(connectionString) {
+  const parsed = new URL(connectionString);
+  return {
+    mode: "pg",
+    host: parsed.hostname || "unknown",
+    port: parsed.port || "5432",
+    database: parsed.pathname.replace(/^\//, "") || "postgres",
+  };
+}
+
 /**
  * Returns non-secret description of the configured database target.
  */
-export function describeDatabaseTarget() {
-  if (process.env.DATABASE_URL) {
-    const parsed = new URL(process.env.DATABASE_URL);
+export function describeDatabaseTarget(activePool = pool) {
+  if (activePool?.targetInfo) {
+    return activePool.targetInfo;
+  }
+  if (activePool && activePool.isLocal === false) {
+    if (process.env.DATABASE_URL) {
+      return parseDatabaseTarget(process.env.DATABASE_URL);
+    }
     return {
       mode: "pg",
-      host: parsed.hostname || "unknown",
-      port: parsed.port || "5432",
-      database: parsed.pathname.replace(/^\//, "") || "postgres",
+      host: "custom",
+      port: "5432",
+      database: "postgres",
     };
+  }
+  if (!activePool && process.env.DATABASE_URL) {
+    return parseDatabaseTarget(process.env.DATABASE_URL);
   }
   return {
     mode: "pglite",
@@ -52,18 +70,34 @@ function localDataDir() {
 }
 
 /**
+ * Creates a configured pg.Pool for multi-connection PostgreSQL server execution.
+ */
+export function createPgPool(connectionString, options = {}) {
+  if (!connectionString) {
+    throw new Error("PostgreSQL connectionString is required");
+  }
+  const requestedMax = Number(options.max);
+  const max = Number.isFinite(requestedMax) ? Math.max(2, Math.trunc(requestedMax)) : 5;
+  const pgPool = new pg.Pool({
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 10_000,
+    ...options,
+    connectionString,
+    max,
+  });
+  pgPool.isLocal = false;
+  pgPool.targetInfo = parseDatabaseTarget(connectionString);
+  pgPool.on("error", (error) => console.warn("database pool error", error.message));
+  return pgPool;
+}
+
+/**
  * Returns the shared PostgreSQL pool (pg.Pool in deployed/PG mode, PGlite adapter locally).
  */
 export function getPool() {
   if (pool) return pool;
   if (process.env.DATABASE_URL) {
-    pool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 5,
-      connectionTimeoutMillis: 5000,
-      idleTimeoutMillis: 10_000,
-    });
-    pool.on("error", (error) => console.warn("database pool error", error.message));
+    pool = createPgPool(process.env.DATABASE_URL);
   } else if (process.env.VERCEL) {
     throw new Error("DATABASE_URL must be configured on Vercel");
   } else {

@@ -20,6 +20,7 @@ export const blankFilters = () => ({
 
 const defaults = {
   view: "home",
+  viewMode: "list",
   transaction: "rent",
   region: "영양읍",
   sort: "distance",
@@ -33,6 +34,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
   state = {
     view: typeof saved.view === "string" ? saved.view : defaults.view,
+    viewMode: saved.viewMode === "map" ? "map" : defaults.viewMode,
     transaction: saved.transaction === "sale" ? "sale" : defaults.transaction,
     region: typeof saved.region === "string" ? saved.region : defaults.region,
     sort: typeof saved.sort === "string" ? saved.sort : defaults.sort,
@@ -71,6 +73,10 @@ export const runtime = {
   catalog: [],
   catalogState: "loading",
   catalogReady: Promise.resolve(),
+  weatherData: null,
+  mapConfig: null,
+  userCoords: null,
+  selectedMapListingId: "",
 };
 
 export function isLoggedIn() {

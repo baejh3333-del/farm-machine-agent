@@ -3,7 +3,7 @@ import { accountRequest } from "./account.js";
 import { CROPS, MACHINE_BY_ID } from "./data/farm-machines.js";
 import { initFontScale } from "./core/a11y.js";
 import {
-  $, escapeHtml, today, syncServerTime, toast, showDialog, hideDialog,
+  $, escapeHtml, today, addDays, areaLabel, syncServerTime, toast, showDialog, hideDialog,
   getListingPhotoSrc, hasListingPhoto, machineImage,
 } from "./core/utils.js";
 import {
@@ -17,11 +17,13 @@ import {
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
 import { createAiPanel } from "./ai/panel.js";
+import { refreshWeatherAndMapConfig } from "./views/map-weather.js";
 
 initFontScale();
 
 const appDeps = {
   machineVisual: (...args) => machineVisual(...args),
+  listingSummary: (...args) => listingSummary(...args),
   hasListingPhoto,
   renderAll: (...args) => renderAll(...args),
   setView: (...args) => setView(...args),
@@ -232,7 +234,7 @@ function setView(view) {
     txViews.renderBuyerRequests();
     if (isLoggedIn()) refreshAuthenticatedData();
   }
-  if (view === "runtime.garage") runtime.garage?.refresh();
+  if (view === "garage") runtime.garage?.refresh();
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
   scrollSpyPausedUntil = Date.now() + 1000;
   if (view === "browse") $("market").scrollIntoView({ behavior: "smooth" });
@@ -293,10 +295,22 @@ function bindEvents() {
   $("rentTab").addEventListener("click", () => catalogViews.setTransaction("rent"));
   $("saleTab").addEventListener("click", () => catalogViews.setTransaction("sale"));
 
+  $("viewModeList")?.addEventListener("click", () => {
+    state.viewMode = "list";
+    persist(updateBadges);
+    catalogViews.renderListings();
+  });
+  $("viewModeMap")?.addEventListener("click", () => {
+    state.viewMode = "map";
+    persist(updateBadges);
+    catalogViews.renderListings();
+  });
+
   $("regionSelect").addEventListener("change", (event) => {
     state.region = event.target.value;
     persist(updateBadges);
     renderAll();
+    refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
     toast(`내 동네가 '${state.region}'(으)로 설정되었습니다.`);
   });
 
@@ -359,6 +373,7 @@ function bindEvents() {
     if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = state.filters.date ? addDays(state.filters.date, 1) : "";
     persist(updateBadges);
     renderAll();
+    refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
   });
   $("quickDateEndInput")?.addEventListener("change", (event) => {
     const end = event.target.value;
@@ -381,6 +396,7 @@ function bindEvents() {
     state.filters.dateEnd = "";
     persist(updateBadges);
     renderAll();
+    refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
   });
   $("quickRadiusSelect")?.addEventListener("change", (event) => {
     state.filters.radius = event.target.value;
@@ -881,9 +897,9 @@ runtime.garage = createGarage({
   },
 });
 $("detailContent").addEventListener("click", (event) => {
-  if (event.target.closest("[data-open-runtime.garage]")) {
+  if (event.target.closest("[data-open-garage]")) {
     hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
-    setView("runtime.garage");
+    setView("garage");
     $("ownedModel").focus();
   }
 });
@@ -899,4 +915,5 @@ catalogViews.setTransaction(state.transaction);
 setView("home");
 renderAll();
 runtime.catalogReady = loadCatalog();
+refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
 

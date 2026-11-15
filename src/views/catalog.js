@@ -1,8 +1,9 @@
 import { SPEC_BY_ID } from "../data/machine-specifications.js";
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "../data/farm-machines.js";
-import { available } from "../data/recommendation.js";
-import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog } from "../core/utils.js";
+import { available, compareListings } from "../data/recommendation.js";
+import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, addDays, koreanDateParts, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog, machineImage } from "../core/utils.js";
 import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites } from "../core/store.js";
+import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote } from "./map-weather.js";
 
 export function createCatalogViews(deps) {
 function setTransaction(type) {
@@ -315,7 +316,7 @@ function matches(item, filters) {
   if (filters.minPrice && item.price < Number(filters.minPrice)) return false;
   if (filters.maxPrice && item.price > Number(filters.maxPrice)) return false;
   if (filters.areaPyeong && (Number(filters.areaPyeong) * 3.305785 < item.areaMin || Number(filters.areaPyeong) * 3.305785 > item.areaMax)) return false;
-  if (filters.radius !== "all" && distanceKm(state.region, item.region, item.id) > Number(filters.radius)) return false;
+  if (filters.radius !== "all" && distanceKm(activeDistanceOrigin(), item.region, item.id) > Number(filters.radius)) return false;
   if (state.transaction === "rent" && filters.date && !available(item, filters.date, filters.dateEnd || filters.date)) return false;
   return true;
 }
@@ -333,7 +334,7 @@ function filteredListings(filters = state.filters) {
             .toLowerCase()
             .includes(query))
     )
-    .sort((a, b) => compareListings(a, b, state.region, state.sort));
+    .sort((a, b) => compareListings(a, b, activeDistanceOrigin(), state.sort));
 }
 
 function renderFilterPreview() {
@@ -399,8 +400,8 @@ function renderActiveFilters() {
 }
 
 function card(item) {
-  const summary = listingSummary(item);
-  const distance = distanceKm(state.region, item.region, item.id);
+  const summary = deps.listingSummary(item);
+  const distance = distanceKm(activeDistanceOrigin(), item.region, item.id);
   const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
   const cropsText = item.cropIds.map((id) => CROP_BY_ID[id]?.name).filter(Boolean).join("·");
   const opsText = item.operations.map((id) => OPERATION_BY_ID[id]?.label).filter(Boolean).slice(0, 2).join(" · ");
@@ -462,6 +463,25 @@ function card(item) {
 function renderListings() {
   const items = filteredListings();
   $("resultCount").textContent = `총 ${items.length}대의 농기계 · ${{ distance: "거리순", price: "낮은 가격순", inspection: "최근 점검순" }[state.sort]}`;
+
+  const isMap = state.viewMode === "map";
+  $("viewModeList")?.classList.toggle("active", !isMap);
+  $("viewModeMap")?.classList.toggle("active", isMap);
+  $("viewModeList")?.setAttribute("aria-pressed", String(!isMap));
+  $("viewModeMap")?.setAttribute("aria-pressed", String(isMap));
+
+  renderWeatherBanner();
+  $("listingGrid").hidden = isMap;
+
+  if (isMap) {
+    renderListingMap(items, {
+      onOpenDetail: (id) => openDetail(id),
+      onGpsUpdated: () => renderListings(),
+    });
+  } else {
+    renderListingMap(items);
+  }
+
   $("listingGrid").innerHTML = items.length
     ? items.map(card).join("")
     : `<div class="empty-state">
@@ -506,10 +526,11 @@ function openDetail(id) {
       <div class="detail-copy">
         <div class="detail-badges">
           <span class="card-status-pill ${statusClass(item)}">${statusLabel(item)}</span>
-          <span class="spec-tag"> ${escapeHtml(item.region)} (${distanceKm(state.region, item.region, item.id)}km)</span>
+          <span class="spec-tag"> ${escapeHtml(item.region)} (${distanceKm(activeDistanceOrigin(), item.region, item.id)}km)</span>
           <span class="spec-tag">${escapeHtml(MACHINE_BY_ID[item.machineType]?.label)}</span>
         </div>
         <h2 id="detailTitle">${escapeHtml(item.title)}</h2>
+        ${item.type === "rent" ? weatherDetailNote() : ""}
         ${runtime.garage?.detail(item) || ""}
         ${item.specification ? `
           <section class="model-specification" aria-label="실제 모델 사양">
@@ -530,7 +551,7 @@ function openDetail(id) {
         ${item.type === "rent" ? `<div class="detail-box"><b>대여 일정과 비용</b><p>${date ? `${date} ~ ${dateEnd} · ${booked || unavailable ? "대여 불가" : "대여 가능"}` : "시작일과 반납일을 선택해 대여 가능 여부를 확인하세요."}<br>운송비와 보증금은 소유 농가에 확인해 주세요.</p></div>` : ""}
         <div class="detail-box highlight">
           <b>${state.aiSummaries[item.id] ? "AI 한줄 요약" : "기종 사용 안내"}</b>
-          <p>${escapeHtml(listingSummary(item))}</p>
+          <p>${escapeHtml(deps.listingSummary(item))}</p>
         </div>
 
         <div class="detail-spec-grid">

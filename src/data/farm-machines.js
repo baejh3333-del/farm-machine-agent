@@ -54,34 +54,68 @@ export const CROP_BY_ID = Object.fromEntries(CROPS.map((item) => [item.id, item]
 export const OPERATION_BY_ID = Object.fromEntries(OPERATIONS.map((item) => [item.id, item]));
 export const MACHINE_BY_ID = Object.fromEntries(MACHINE_TYPES.map((item) => [item.id, item]));
 
-// [난수 캐시] 같은 페이지에서 지역 조합별 거리가 계속 바뀌지 않도록 저장합니다.
-// 주의: 상품 ID가 아닌 출발/도착 지역 기준이므로 같은 지역 상품은 같은 거리를 표시합니다.
-/**
- * 상품별 예시 거리 캐시
- * key: 출발지역 + 상품지역 + 상품ID
- * 같은 페이지에서는 동일 상품의 거리를 유지하고 새로고침 시 다시 생성합니다.
- */
+export const REGION_COORDS = {
+  영양읍: { name: "영양읍", lat: 36.6667, lng: 129.1124, nx: 88, ny: 108 },
+  청기면: { name: "청기면", lat: 36.7064, lng: 129.0695, nx: 87, ny: 109 },
+  입암면: { name: "입암면", lat: 36.5992, lng: 129.0888, nx: 88, ny: 107 },
+  수비면: { name: "수비면", lat: 36.7988, lng: 129.2116, nx: 89, ny: 111 },
+};
+
+function stableHash(str) {
+  let h = 2166136261;
+  const text = String(str || "");
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function listingCoords(itemOrRegion, itemId = "") {
+  const region = typeof itemOrRegion === "string" ? itemOrRegion : itemOrRegion?.region;
+  const id = typeof itemOrRegion === "string" ? itemId : itemOrRegion?.id || itemId;
+  const base = REGION_COORDS[region] || REGION_COORDS["영양읍"];
+  if (!id) return { lat: base.lat, lng: base.lng };
+  const h1 = stableHash(`${id}:lat`);
+  const h2 = stableHash(`${id}:lng`);
+  const latOffset = ((h1 % 1000) / 1000 - 0.5) * 0.026;
+  const lngOffset = ((h2 % 1000) / 1000 - 0.5) * 0.032;
+  return {
+    lat: Number((base.lat + latOffset).toFixed(6)),
+    lng: Number((base.lng + lngOffset).toFixed(6)),
+  };
+}
+
+export function haversineKm(a, b) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 const distanceCache = new Map();
 
 export function distanceKm(from, to, itemId) {
-  // [기존 코드] 지역별 기준 거리이며 난수의 최댓값(km)으로 사용합니다.
-  const values = {
-    영양읍: { 영양읍: 2, 청기면: 6, 입암면: 8, 수비면: 18 },
-    청기면: { 영양읍: 6, 청기면: 2, 입암면: 11, 수비면: 13 },
-    입암면: { 영양읍: 8, 청기면: 11, 입암면: 2, 수비면: 21 },
-    수비면: { 영양읍: 18, 청기면: 13, 입암면: 21, 수비면: 2 },
-  };
+  const fromCoords =
+    from && typeof from === "object" && Number.isFinite(from.lat) && Number.isFinite(from.lng)
+      ? from
+      : REGION_COORDS[from] || REGION_COORDS["영양읍"];
+  const fromKey =
+    from && typeof from === "object" && Number.isFinite(from.lat)
+      ? `${from.lat.toFixed(4)},${from.lng.toFixed(4)}`
+      : String(from || "영양읍");
 
-  // [변경 코드] 기존 값에서 1.5km 낮은 값부터 최댓값까지 0.1km 단위로 생성합니다.
-  const max = values[from]?.[to] ?? 30;
-  const min = max - 1.5;
-
-  // 상품 ID를 포함해 동일 지역의 서로 다른 상품을 구분합니다.
-  const key = JSON.stringify([from, to, itemId]);
+  const key = JSON.stringify([fromKey, to, itemId || ""]);
   if (!distanceCache.has(key)) {
-    const randomStep = Math.floor(Math.random() * 16);
-    const distance = Math.round((min + randomStep * 0.1) * 10) / 10;
+    const toCoords = listingCoords(to, itemId);
+    const raw = haversineKm(fromCoords, toCoords);
+    const distance = Math.max(0.2, Math.round(raw * 10) / 10);
     distanceCache.set(key, distance);
   }
   return distanceCache.get(key);
 }
+

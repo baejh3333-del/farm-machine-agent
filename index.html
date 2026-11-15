@@ -200,6 +200,10 @@
               </div>
 
               <div class="market-controls">
+                <div class="view-mode-switch" role="group" aria-label="보기 방식 선택">
+                  <button type="button" class="view-mode-btn active" id="viewModeList" aria-pressed="true">목록 보기</button>
+                  <button type="button" class="view-mode-btn" id="viewModeMap" aria-pressed="false">지도 보기</button>
+                </div>
                 <button type="button" class="filter-trigger-btn" id="openFilters" aria-haspopup="dialog">
                   <img class="picture-icon" src="./src/images/icons/sliders.jpg" alt="" width="32" height="32">
                   <strong>상세 필터 · 평수/예산</strong>
@@ -235,6 +239,12 @@
               </label>
               <span class="result-count" id="resultCount"></span>
             </div>
+
+            <!-- 대여일 기상 예보 안내 배너 -->
+            <div id="rentalWeatherBanner" class="rental-weather-banner" hidden aria-live="polite"></div>
+
+            <!-- 매물 위치 지도 패널 -->
+            <div id="listingMapPanel" class="listing-map-panel" hidden></div>
 
             <!-- 매물 카드 그리드 -->
             <div id="listingGrid" class="listing-grid" aria-live="polite"></div>

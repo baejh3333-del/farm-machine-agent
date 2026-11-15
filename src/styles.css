@@ -3386,3 +3386,244 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .req-pill-approvable, .req-pill-upcoming, .req-pill-active { background: #e8f5ec; color: #1f5e39; }
 .req-pill-conflict { background: #fdf0ed; color: #a13224; }
 .req-pill-expired, .req-pill-rejected, .req-pill-cancelled, .req-pill-completed { background: #f1f3f1; color: #555c56; }
+
+/* 목록 / 지도 보기 전환 */
+.market-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.view-mode-switch {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 12px;
+  background: #edf2ed;
+  border: 1px solid #d5dfd6;
+  gap: 4px;
+}
+.view-mode-btn {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4b5d4e;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.view-mode-btn.active {
+  background: #2d5a38;
+  color: #ffffff;
+}
+
+/* 대여일 날씨 안내 배너 */
+.rental-weather-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin: 0 0 18px;
+  border-radius: 14px;
+  border: 1px solid #d5e5d8;
+  background: #f4faf5;
+}
+.rental-weather-banner.is-caution {
+  border-color: #f0c987;
+  background: #fff8eb;
+}
+.rental-weather-banner.is-wind {
+  border-color: #cbd8ee;
+  background: #f3f7fd;
+}
+.rwb-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rwb-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.rwb-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rwb-source-pill {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(45, 90, 56, 0.1);
+  color: #2d5a38;
+  font-weight: 600;
+}
+.rwb-advice {
+  margin: 3px 0 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+.rwb-metrics {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rwb-metric {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  color: #2f3b31;
+}
+
+/* 매물 위치 지도 패널 */
+.listing-map-panel {
+  margin-bottom: 24px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #dde5de;
+}
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.map-toolbar-info {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.map-toolbar-info span {
+  font-size: 0.85rem;
+  color: #5b695e;
+}
+.map-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.map-canvas-wrap {
+  position: relative;
+}
+.regional-svg-map {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 14px;
+  border: 1px solid #dfe6df;
+}
+.kakao-map-box {
+  width: 100%;
+  height: 400px;
+  border-radius: 14px;
+  border: 1px solid #dfe6df;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f2efe7;
+  color: #4b5d4e;
+}
+.map-provider-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d7dfd8;
+  font-size: 0.75rem;
+  color: #4a5a4d;
+}
+.map-region-halo {
+  fill: rgba(45, 90, 56, 0.08);
+  stroke: rgba(45, 90, 56, 0.25);
+  stroke-dasharray: 4 3;
+}
+.map-region-text {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #2d5a38;
+}
+.map-user-text {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #1d4ed8;
+}
+.map-pin {
+  cursor: pointer;
+}
+.map-pin-dot {
+  fill: #2d7f4e;
+  stroke: #ffffff;
+  stroke-width: 2;
+  transition: r 0.15s ease, fill 0.15s ease;
+}
+.map-pin.is-selected .map-pin-dot {
+  fill: #d97706;
+}
+.map-pin-ring {
+  fill: none;
+  stroke: #d97706;
+  stroke-width: 2;
+  stroke-opacity: 0.55;
+}
+.map-selected-card {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #faf8f3;
+  border: 1px solid #e3ded1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.msc-info {
+  display: grid;
+  gap: 4px;
+}
+.msc-region {
+  font-size: 0.8125rem;
+  color: #5b695e;
+}
+.msc-price {
+  font-weight: 700;
+  color: #2d5a38;
+}
+.detail-weather-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 10px 0 14px;
+  border-radius: 12px;
+  background: #f4faf5;
+  border: 1px solid #d5e5d8;
+  font-size: 0.85rem;
+}
+.detail-weather-note.is-caution {
+  background: #fff8eb;
+  border-color: #f0c987;
+}
+.detail-weather-note.is-wind {
+  background: #f3f7fd;
+  border-color: #cbd8ee;
+}
+.detail-weather-note p {
+  margin: 3px 0 0;
+  color: #4b5563;
+}

@@ -3,7 +3,7 @@ import { accountRequest } from "./account.js";
 import { CROPS, MACHINE_BY_ID } from "./data/farm-machines.js";
 import { initFontScale } from "./core/a11y.js";
 import {
-  $, escapeHtml, today, syncServerTime, toast, showDialog, hideDialog,
+  $, escapeHtml, today, addDays, areaLabel, syncServerTime, toast, showDialog, hideDialog,
   getListingPhotoSrc, hasListingPhoto, machineImage,
 } from "./core/utils.js";
 import {
@@ -17,11 +17,13 @@ import {
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
 import { createAiPanel } from "./ai/panel.js";
+import { refreshWeatherAndMapConfig } from "./views/map-weather.js";
 
 initFontScale();
 
 const appDeps = {
   machineVisual: (...args) => machineVisual(...args),
+  listingSummary: (...args) => listingSummary(...args),
   hasListingPhoto,
   renderAll: (...args) => renderAll(...args),
   setView: (...args) => setView(...args),
@@ -293,10 +295,22 @@ function bindEvents() {
   $("rentTab").addEventListener("click", () => catalogViews.setTransaction("rent"));
   $("saleTab").addEventListener("click", () => catalogViews.setTransaction("sale"));
 
+  $("viewModeList")?.addEventListener("click", () => {
+    state.viewMode = "list";
+    persist(updateBadges);
+    catalogViews.renderListings();
+  });
+  $("viewModeMap")?.addEventListener("click", () => {
+    state.viewMode = "map";
+    persist(updateBadges);
+    catalogViews.renderListings();
+  });
+
   $("regionSelect").addEventListener("change", (event) => {
     state.region = event.target.value;
     persist(updateBadges);
     renderAll();
+    refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
     toast(`내 동네가 '${state.region}'(으)로 설정되었습니다.`);
   });
 
@@ -359,6 +373,7 @@ function bindEvents() {
     if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = state.filters.date ? addDays(state.filters.date, 1) : "";
     persist(updateBadges);
     renderAll();
+    refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
   });
   $("quickDateEndInput")?.addEventListener("change", (event) => {
     const end = event.target.value;
@@ -381,6 +396,7 @@ function bindEvents() {
     state.filters.dateEnd = "";
     persist(updateBadges);
     renderAll();
+    refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
   });
   $("quickRadiusSelect")?.addEventListener("change", (event) => {
     state.filters.radius = event.target.value;
@@ -392,7 +408,7 @@ function bindEvents() {
     setView("browse");
     $("marketTitle").focus();
   });
-  $("catalogViews.openFilters").addEventListener("click", () => catalogViews.openFilters());
+  $("openFilters").addEventListener("click", () => catalogViews.openFilters());
   $("inlineResetFilters")?.addEventListener("click", catalogViews.resetAllFilters);
 
   // 활성 필터 칩 개별 제거
@@ -414,7 +430,7 @@ function bindEvents() {
 
   // 상세 필터 모달 이벤트
   $("closeFilters").addEventListener("click", () => hideDialog($("filterBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
-  $("catalogViews.applyFilters").addEventListener("click", catalogViews.applyFilters);
+  $("applyFilters").addEventListener("click", catalogViews.applyFilters);
   $("resetFilters").addEventListener("click", () => {
     runtime.draft = blankFilters();
     catalogViews.renderFilterOptions();
@@ -899,4 +915,5 @@ catalogViews.setTransaction(state.transaction);
 setView("home");
 renderAll();
 runtime.catalogReady = loadCatalog();
+refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
 

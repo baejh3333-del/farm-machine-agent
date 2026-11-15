@@ -29,6 +29,7 @@ const apiRouteLoaders = new Map([
   ["/api/requests", () => import("./api/requests.js")],
   ["/api/conversations", () => import("./api/conversations.js")],
   ["/api/photos", () => import("./api/photos.js")],
+  ["/api/weather", () => import("./api/weather.js")],
 ]);
 
 function patchResponse(response) {

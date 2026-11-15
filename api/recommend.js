@@ -1,5 +1,6 @@
 import { recommend } from "../server/agent.js";
 import { fail, handle, readJson } from "../server/http.js";
+import { enforceRateLimit } from "../server/rate-limit.js";
 
 export default handle(["POST"], async (request) => {
   const body = await readJson(request);
@@ -10,6 +11,7 @@ export default handle(["POST"], async (request) => {
   const context = body.context && typeof body.context === "object" && !Array.isArray(body.context)
     ? body.context
     : {};
+  await enforceRateLimit(request, "recommend");
   try {
     const result = await recommend(message, context);
     return { status: 200, body: result };

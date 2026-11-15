@@ -1,4 +1,5 @@
 import { assertWritesAllowed, fail, handle, readJson, requireUser } from "../server/http.js";
+import { enforceRateLimit } from "../server/rate-limit.js";
 import {
   approveRentalRequest,
   cancelRentalRequest,
@@ -21,6 +22,7 @@ export default handle(["GET", "POST"], async (request) => {
 
   switch (action) {
     case "create": {
+      await enforceRateLimit(request, "rental", { userId: user.id });
       const result = await createRentalRequest(user, body);
       return { status: result.status, body: { request: result.request, idempotent: result.idempotent } };
     }

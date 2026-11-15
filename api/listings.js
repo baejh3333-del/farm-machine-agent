@@ -10,6 +10,7 @@ import {
 } from "../server/http.js";
 import { fetchListings } from "../server/listings-db.js";
 import { createListing, updateListing } from "../server/listings-service.js";
+import { enforceRateLimit } from "../server/rate-limit.js";
 
 export default handle(["GET", "POST"], async (request) => {
   if (request.method === "GET") {
@@ -27,6 +28,8 @@ export default handle(["GET", "POST"], async (request) => {
 
   const user = await requireUser(request);
   await assertWritesAllowed();
+  // 2MB 본문 읽기와 이미지 재인코딩 전에 확인한다.
+  await enforceRateLimit(request, "listing", { userId: user.id });
   const body = await readJson(request, { maxBytes: MAX_UPLOAD_JSON_BYTES });
   const action = typeof body.action === "string" ? body.action.trim() : "create";
 

@@ -18,6 +18,7 @@ import { resetAuthCache } from "../server/account-auth.js";
 import { recommend } from "../server/agent.js";
 import { getConversationMessages, sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
+import { classifyError } from "../server/http.js";
 import { fetchListings } from "../server/listings-db.js";
 import { createListing, updateListing } from "../server/listings-service.js";
 import {
@@ -33,8 +34,10 @@ import {
   cancelRentalRequest,
   createRentalRequest,
   listRequestsForUser,
+  MAX_RENTAL_DAYS,
   rejectRentalRequest,
 } from "../server/rentals.js";
+import { checkRateLimit, enforceRateLimit } from "../server/rate-limit.js";
 import { listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
 import { addOwnedMachine } from "../server/user-data.js";
 
@@ -165,7 +168,7 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
   );
 
   const migRes = await runMigrations({ env: "test", pool });
-  assert.deepEqual(migRes.applied, ["0001_initial_schema.sql"]);
+  assert.deepEqual(migRes.applied, ["0001_initial_schema.sql", "0002_rate_limits_and_rental_bounds.sql"]);
 
   const info = await inspectDatabase({ pool });
   assert.equal(info.environment, "test");
@@ -731,4 +734,148 @@ test("[PGlite 로컬 엔진] 6. A/B/C 다중 사용자 권한 분리, 1:1 대화
   // Forward polling with after_seq never misses seq
   const poll1 = await getConversationMessages(userB.user.id, { conversationId: convId, afterSeq: 2, pool });
   assert.deepEqual(poll1.messages.map((m) => m.seq), [3, 4, 5]);
+});
+
+test("[PGlite 로컬 엔진] 7. 대여 기간 상한·BIGINT 합계, 오류 분류, 호출 제한(429·Retry-After)", async () => {
+  const today = kstToday();
+  const start = shiftDate(today, 10);
+
+  // --- 대여 기간 상한 및 합계 오버플로 방지 ---
+  const listingId = randomUUID();
+  const created = await createListing(userA.user, {
+    id: listingId,
+    type: "rent",
+    modelId: "asia-amc900",
+    title: "기간 상한 테스트 관리기",
+    region: "청기면",
+    cropIds: ["pepper"],
+    operations: ["ridge"],
+    price: 500_000_000,
+    areaMin: 200,
+    areaMax: 1000,
+    condition: "good",
+    inspectedAt: today,
+  }, { pool });
+  assert.equal(created.status, 201);
+
+  await assert.rejects(
+    () => createRentalRequest(userB.user, { id: randomUUID(), listingId, start, end: shiftDate(start, MAX_RENTAL_DAYS) }, { pool }),
+    (err) => err.status === 400 && err.code === "RENTAL_PERIOD_TOO_LONG"
+  );
+  await assert.rejects(
+    () => createRentalRequest(userB.user, { id: randomUUID(), listingId, start, end: "9999-12-31" }, { pool }),
+    (err) => err.status === 400 && err.code === "RENTAL_PERIOD_TOO_LONG"
+  );
+
+  const maxReq = await createRentalRequest(
+    userB.user,
+    { id: randomUUID(), listingId, start, end: shiftDate(start, MAX_RENTAL_DAYS - 1) },
+    { pool }
+  );
+  assert.equal(maxReq.status, 201);
+  assert.equal(maxReq.request.days, MAX_RENTAL_DAYS);
+  assert.equal(maxReq.request.totalPrice, 500_000_000 * MAX_RENTAL_DAYS, "INTEGER 범위를 넘는 합계도 저장된다");
+
+  // DB 제약이 서버 검증과 별개로 상한과 일수 일관성을 지킨다
+  await assert.rejects(
+    () => pool.query(
+      `INSERT INTO rental_requests (id, listing_id, requester_id, start_date, end_date, daily_price, days, total_price)
+       VALUES ($1, $2, $3, $4::date, $5::date, 1000, 400, 400000)`,
+      [randomUUID(), listingId, userB.user.id, start, shiftDate(start, 399)]
+    ),
+    (err) => err?.code === "23514"
+  );
+  await assert.rejects(
+    () => pool.query(
+      `INSERT INTO rental_requests (id, listing_id, requester_id, start_date, end_date, daily_price, days, total_price)
+       VALUES ($1, $2, $3, $4::date, $5::date, 1000, 5, 5000)`,
+      [randomUUID(), listingId, userB.user.id, start, shiftDate(start, 1)]
+    ),
+    (err) => err?.code === "23514"
+  );
+
+  // --- 예상하지 못한 오류 분류: 일시적 오류만 503 ---
+  const pgError = (code) => Object.assign(new Error("db"), { code });
+  assert.equal(classifyError(pgError("22003")).status, 400);
+  assert.equal(classifyError(pgError("23514")).status, 400);
+  assert.equal(classifyError(pgError("23503")).status, 409);
+  assert.equal(classifyError(pgError("40P01")).status, 503);
+  assert.equal(classifyError(pgError("55P03")).status, 503);
+  assert.equal(classifyError(pgError("57014")).status, 503);
+  assert.equal(classifyError(pgError("ECONNRESET")).status, 503);
+  assert.equal(classifyError(new Error("timeout exceeded when trying to connect")).status, 503);
+  assert.deepEqual(
+    [classifyError(new TypeError("x is not a function")).status, classifyError(new TypeError("x")).code],
+    [500, "SERVER_ERROR"]
+  );
+
+  // --- 호출 제한: 저장소(rate_limits 테이블) 기반 카운트 ---
+  const fakeReq = (ip) => ({ headers: {}, socket: { remoteAddress: ip } });
+  const policies = {
+    probe: {
+      failOpen: false,
+      limits: [
+        { scope: "client", name: "minute", window: 60_000, offset: 0, max: 2 },
+        { scope: "all", name: "day", window: 86_400_000, offset: 9 * 3_600_000, max: 4 },
+      ],
+    },
+    soft: { failOpen: true, limits: [{ scope: "client", name: "minute", window: 60_000, offset: 0, max: 1 }] },
+  };
+  const now = Date.UTC(2026, 10, 7, 12, 0, 30);
+  const opts = { env: {}, now, pool, policies };
+
+  assert.equal((await checkRateLimit(fakeReq("198.51.100.1"), "probe", opts)).allowed, true);
+  assert.equal((await checkRateLimit(fakeReq("198.51.100.1"), "probe", opts)).allowed, true);
+  assert.deepEqual(await checkRateLimit(fakeReq("198.51.100.1"), "probe", opts), { allowed: false, retryAfter: 30 });
+  // 차단된 요청을 계속 보내도 전체 한도는 소진되지 않는다
+  for (let i = 0; i < 5; i += 1) await checkRateLimit(fakeReq("198.51.100.1"), "probe", opts);
+  assert.equal((await checkRateLimit(fakeReq("198.51.100.2"), "probe", opts)).allowed, true, "다른 IP는 따로 센다");
+  assert.equal((await checkRateLimit(fakeReq("198.51.100.1"), "probe", { ...opts, userId: "user-x" })).allowed, true, "로그인 사용자는 계정 단위로 센다");
+  assert.equal((await checkRateLimit(fakeReq("198.51.100.3"), "probe", opts)).allowed, false, "전체 한도 4회 초과 시 차단");
+  assert.equal(
+    (await checkRateLimit(fakeReq("198.51.100.1"), "probe", { ...opts, now: now + 86_400_000 })).allowed,
+    true,
+    "다음 창에서는 초기화된다"
+  );
+
+  const stored = await pool.query("SELECT key FROM rate_limits WHERE key LIKE 'probe:%'");
+  assert.ok(stored.rows.length > 0);
+  assert.ok(stored.rows.every((row) => !row.key.includes("198.51.100")), "원래 IP를 저장하지 않는다");
+
+  // 저장소 장애: 추천(fail-closed)은 503, 쓰기 정책(fail-open)은 통과
+  const brokenPool = { query: async () => { throw new Error("db down"); } };
+  await assert.rejects(
+    () => enforceRateLimit(fakeReq("198.51.100.9"), "probe", { ...opts, pool: brokenPool }),
+    (err) => err.status === 503 && err.code === "RATE_LIMIT_UNAVAILABLE"
+  );
+  await enforceRateLimit(fakeReq("198.51.100.9"), "soft", { ...opts, pool: brokenPool });
+
+  // --- HTTP 경로: /api/recommend 429 + Retry-After ---
+  const prev = {
+    ENABLE_RATE_LIMIT: process.env.ENABLE_RATE_LIMIT,
+    RECOMMEND_LIMIT_PER_MINUTE: process.env.RECOMMEND_LIMIT_PER_MINUTE,
+  };
+  process.env.ENABLE_RATE_LIMIT = "1";
+  process.env.RECOMMEND_LIMIT_PER_MINUTE = "2";
+  try {
+    const call = () => apiReq(baseUrl, "/api/recommend", {
+      method: "POST",
+      json: { message: "멀칭이 뭐야?", context: { draft: "멀칭은 두둑에 비닐을 덮는 작업입니다." } },
+    });
+    let limited = null;
+    // 분 경계를 넘더라도 3회 연속 호출이 한 창에 들어가도록 여유 있게 반복한다
+    for (let i = 0; i < 6 && !limited; i += 1) {
+      const res = await call();
+      if (res.status === 429) limited = res;
+      else assert.equal(res.status, 200);
+    }
+    assert.ok(limited, "분당 한도 2회를 넘으면 429");
+    assert.equal(limited.body.code, "TOO_MANY_REQUESTS");
+    assert.ok(Number(limited.headers.get("retry-after")) >= 1);
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });

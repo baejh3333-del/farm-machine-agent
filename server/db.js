@@ -20,6 +20,29 @@ export function kstToday(now = Date.now()) {
   }).format(new Date(now));
 }
 
+function readMs(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+}
+
+function pickMs(override, name, fallback) {
+  return Number.isSafeInteger(override) && override >= 0 ? override : readMs(name, fallback);
+}
+
+/**
+ * 트랜잭션 단위 서버 타임아웃(ms). 0이면 해당 타임아웃을 끈다.
+ * 연결 시작 파라미터가 아니라 SET LOCAL로 적용하므로 PgBouncer/Neon 같은 트랜잭션 풀러에서도 동작한다.
+ */
+export function transactionTimeouts(overrides = {}) {
+  return {
+    statementMs: pickMs(overrides.statementMs, "DB_STATEMENT_TIMEOUT_MS", 10_000),
+    lockMs: pickMs(overrides.lockMs, "DB_LOCK_TIMEOUT_MS", 5_000),
+    idleInTransactionMs: pickMs(overrides.idleInTransactionMs, "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 15_000),
+  };
+}
+
 function parseDatabaseTarget(connectionString) {
   const parsed = new URL(connectionString);
   return {
@@ -78,9 +101,12 @@ export function createPgPool(connectionString, options = {}) {
   }
   const requestedMax = Number(options.max);
   const max = Number.isFinite(requestedMax) ? Math.max(2, Math.trunc(requestedMax)) : 5;
+  // 트랜잭션 밖 단일 쿼리의 클라이언트 측 상한. 0이면 끈다(마이그레이션 등 관리 작업).
+  const queryTimeout = readMs("DB_QUERY_TIMEOUT_MS", 15_000);
   const pgPool = new pg.Pool({
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 10_000,
+    ...(queryTimeout > 0 ? { query_timeout: queryTimeout } : {}),
     ...options,
     connectionString,
     max,
@@ -115,12 +141,23 @@ export function setPool(customPool) {
 
 /**
  * Executes an async callback inside a single PostgreSQL transaction (BEGIN/COMMIT/ROLLBACK).
+ * On a PostgreSQL server the transaction runs under statement/lock/idle timeouts so a stuck
+ * lock wait cannot hold a pooled connection until the function itself times out.
  */
-export async function withTransaction(fn, customPool = null) {
+export async function withTransaction(fn, customPool = null, timeoutOverrides = {}) {
   const activePool = customPool || getPool();
   const client = await activePool.connect();
   try {
-    await client.query("BEGIN");
+    if (activePool.isLocal) {
+      // Embedded single-connection PGlite: no lock waits to bound.
+      await client.query("BEGIN");
+    } else {
+      const t = transactionTimeouts(timeoutOverrides);
+      await client.query(
+        `BEGIN; SET LOCAL statement_timeout = ${t.statementMs}; SET LOCAL lock_timeout = ${t.lockMs}; ` +
+          `SET LOCAL idle_in_transaction_session_timeout = ${t.idleInTransactionMs}`
+      );
+    }
     const result = await fn(client);
     await client.query("COMMIT");
     return result;

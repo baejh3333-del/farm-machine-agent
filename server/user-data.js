@@ -299,3 +299,21 @@ export async function importGuestData(userId, { favorites = [], ownedMachines = 
     return { importedFavorites, importedMachines, userData };
   }, pool);
 }
+
+export async function updateUserNickname(userId, rawName, { pool = getPool() } = {}) {
+  const name = normalizeText(rawName, { min: 1, max: 40, field: "닉네임" });
+  return withTransaction(async (client) => {
+    const res = await client.query(
+      `UPDATE "user"
+       SET name = $1, "updatedAt" = NOW()
+       WHERE id = $2
+       RETURNING id, name, email`,
+      [name, userId]
+    );
+    if (!res.rows.length) {
+      fail(404, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다.");
+    }
+    return { user: res.rows[0] };
+  }, pool);
+}
+

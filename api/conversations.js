@@ -1,4 +1,5 @@
 import { assertWritesAllowed, fail, handle, queryParams, readJson, requireUser } from "../server/http.js";
+import { notifyAlimtalkSafe } from "../server/integrations/alimtalk.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
 import { getConversationMessages, listConversationsForUser, sendMessage } from "../server/chat.js";
 
@@ -36,6 +37,17 @@ export default handle(["GET", "POST"], async (request) => {
     fail(400, "UNKNOWN_ACTION", "지원하지 않는 대화 요청입니다.");
   }
   const result = await sendMessage(user, body);
+  if (!result.idempotent && body.recipientPhone) {
+    notifyAlimtalkSafe({
+      to: body.recipientPhone,
+      templateKey: "chat_message",
+      variables: {
+        senderName: user.name,
+        listingTitle: result.conversation?.listingTitle,
+        preview: result.message?.body,
+      },
+    });
+  }
   return {
     status: result.status,
     body: {

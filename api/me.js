@@ -6,6 +6,7 @@ import {
   removeOwnedMachine,
   selectOwnedMachine,
   toggleFavorite,
+  updateUserNickname,
 } from "../server/user-data.js";
 
 export default handle(["GET", "POST"], async (request) => {
@@ -41,6 +42,10 @@ export default handle(["GET", "POST"], async (request) => {
         favorites: body.favorites,
         ownedMachines: body.ownedMachines,
       });
+      return { status: 200, body: result };
+    }
+    case "updateNickname": {
+      const result = await updateUserNickname(user.id, body.name);
       return { status: 200, body: result };
     }
     default:

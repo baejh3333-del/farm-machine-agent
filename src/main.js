@@ -1,5 +1,5 @@
 import { createGarage } from "./garage.js";
-import { accountRequest } from "./account.js";
+import { accountRequest, getSocialProviders, signInWithSocial } from "./account.js";
 import { CROPS, MACHINE_BY_ID } from "./data/farm-machines.js";
 import { initFontScale } from "./core/a11y.js";
 import {
@@ -864,10 +864,107 @@ function initLoginForm() {
     el.addEventListener("click", () => setView(el.dataset.viewTarget));
   }
 
+  function isPlaceholderNickname(value) {
+    return typeof value === "string" && /^(카카오회원|네이버회원)_/.test(value);
+  }
+
+  function openNicknameModal({ required = false } = {}) {
+    if (!isLoggedIn()) return;
+    stopChatPolling();
+    const currentName = isPlaceholderNickname(runtime.accountUser?.name) ? "" : (runtime.accountUser?.name || "");
+    $("formContent").innerHTML = `
+      <h2 id="formTitle" style="margin:0 0 8px">${required ? "사이트 닉네임 설정" : "닉네임 변경"}</h2>
+      <p style="margin:0 0 14px;color:var(--muted,#555);font-size:0.95rem">
+        ${required ? "모아농기계에서 거래·채팅 시 표시될 닉네임을 설정해 주세요." : "다른 사용자에게 표시될 닉네임을 변경할 수 있습니다."}
+      </p>
+      <form id="nicknameForm" style="display:grid;gap:12px">
+        <label for="nicknameInput" style="font-weight:600">닉네임 (1~40자)</label>
+        <input id="nicknameInput" class="login-input" type="text" maxlength="40" required value="${escapeHtml(currentName)}" placeholder="예: 영양감자농장" />
+        <p id="nicknameError" class="account-error" role="alert" hidden></p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="button button-secondary" id="nicknameCancelBtn">나중에</button>
+          <button type="submit" class="button button-primary" id="nicknameSaveBtn">저장하기</button>
+        </div>
+      </form>
+    `;
+    showDialog($("formBackdrop"));
+    const input = $("nicknameInput");
+    const errEl = $("nicknameError");
+    const saveBtn = $("nicknameSaveBtn");
+    $("nicknameCancelBtn").addEventListener("click", () => hideDialog($("formBackdrop")));
+    input.focus();
+
+    $("nicknameForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const nextName = input.value.trim();
+      if (!nextName || nextName.length > 40) {
+        errEl.textContent = "닉네임을 1~40자로 입력해 주세요.";
+        errEl.hidden = false;
+        input.focus();
+        return;
+      }
+      saveBtn.disabled = true;
+      errEl.hidden = true;
+      try {
+        const res = await apiFetch("/api/me", { method: "POST", json: { action: "updateNickname", name: nextName } });
+        if (res?.user) {
+          renderAccount({ ...runtime.accountUser, name: res.user.name });
+        }
+        hideDialog($("formBackdrop"));
+        toast("닉네임이 설정되었습니다.");
+        await refreshAuthenticatedData();
+      } catch (error) {
+        errEl.textContent = error.message || "닉네임을 저장하지 못했습니다.";
+        errEl.hidden = false;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+  $("editNicknameButton")?.addEventListener("click", () => openNicknameModal({ required: false }));
+
+  const kakaoBtn = $("kakaoLoginButton");
+  const naverBtn = $("naverLoginButton");
+  const socialSection = $("socialLoginSection");
+  getSocialProviders().then((providers) => {
+    if (!socialSection) return;
+    const hasKakao = Boolean(providers?.kakao && kakaoBtn);
+    const hasNaver = Boolean(providers?.naver && naverBtn);
+    if (hasKakao) kakaoBtn.hidden = false;
+    if (hasNaver) naverBtn.hidden = false;
+    socialSection.hidden = !(hasKakao || hasNaver);
+  }).catch(() => {});
+
+  kakaoBtn?.addEventListener("click", async () => {
+    showError("");
+    kakaoBtn.disabled = true;
+    try {
+      await signInWithSocial("kakao", window.location.pathname || "/");
+    } catch (error) {
+      showError(error.message);
+      kakaoBtn.disabled = false;
+    }
+  });
+
+  naverBtn?.addEventListener("click", async () => {
+    showError("");
+    naverBtn.disabled = true;
+    try {
+      await signInWithSocial("naver", window.location.pathname || "/");
+    } catch (error) {
+      showError(error.message);
+      naverBtn.disabled = false;
+    }
+  });
+
   accountRequest("session")
     .then(async (result) => {
       await applyAccountTransition(result.user);
       if (isLoggedIn() && state.view === "ownerLoginRequired") setView("owner");
+      if (isLoggedIn() && isPlaceholderNickname(result.user?.name)) {
+        openNicknameModal({ required: true });
+      }
     })
     .catch(() => {})
     .finally(() => { submit.disabled = false; });

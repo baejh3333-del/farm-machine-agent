@@ -30,6 +30,7 @@ const apiRouteLoaders = new Map([
   ["/api/conversations", () => import("./api/conversations.js")],
   ["/api/photos", () => import("./api/photos.js")],
   ["/api/weather", () => import("./api/weather.js")],
+  ["/api/integrations", () => import("./api/integrations.js")],
 ]);
 
 function patchResponse(response) {
@@ -101,7 +102,8 @@ export async function createAppServer() {
   return createServer(async (request, response) => {
     patchResponse(response);
     const { pathname } = new URL(request.url || "/", "http://localhost");
-    const loader = apiRouteLoaders.get(pathname);
+    const loader = apiRouteLoaders.get(pathname)
+      || (pathname.startsWith("/api/auth/") ? () => import("./api/auth/[...all].js") : null);
     if (loader) {
       try {
         const mod = await loader();

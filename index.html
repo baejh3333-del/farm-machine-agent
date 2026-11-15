@@ -335,6 +335,7 @@
             <strong id="ownerAccountLabel"></strong>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button type="button" class="button button-primary button-sm" id="newListingButton">+ 새 농기계 등록</button>
+              <button type="button" class="button button-secondary button-sm" id="editNicknameButton">닉네임 설정</button>
               <button type="button" class="button button-secondary button-sm" id="accountLogoutButton">로그아웃</button>
             </div>
           </div>
@@ -468,6 +469,11 @@
               <p id="accountError" class="account-error" role="alert" hidden></p>
               <button type="submit" class="login-submit" id="loginSubmit" disabled>로그인</button>
             </form>
+
+            <div id="socialLoginSection" style="display:grid;gap:8px;margin-top:12px" hidden>
+              <button type="button" class="login-submit" id="kakaoLoginButton" style="background:#FEE500;color:#191919" hidden>카카오로 시작하기</button>
+              <button type="button" class="login-submit" id="naverLoginButton" style="background:#03C75A;color:#FFFFFF" hidden>네이버로 시작하기</button>
+            </div>
 
             <button type="button" class="login-guest" id="switchAccount">회원가입</button>
             <button type="button" class="login-guest" data-view-target="home">로그인 없이 둘러보기 <span aria-hidden="true">›</span></button>

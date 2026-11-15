@@ -1,5 +1,5 @@
 import { fromNodeHeaders } from "better-auth/node";
-import { accountAuth } from "../server/account-auth.js";
+import { accountAuth, getEnabledSocialProviders } from "../server/account-auth.js";
 import { assertWritesAllowed, HttpError } from "../server/http.js";
 
 const routes = new Map([
@@ -36,6 +36,15 @@ async function readBody(request) {
 export default async function accountHandler(request, response) {
   response.setHeader("Cache-Control", "no-store");
   const action = new URL(request.url, "http://localhost").searchParams.get("action");
+  if (action === "providers") {
+    if (request.method !== "GET") {
+      response.setHeader("Allow", "GET");
+      return json(response, 405, "METHOD_NOT_ALLOWED");
+    }
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
+      .end(JSON.stringify({ providers: getEnabledSocialProviders() }));
+    return;
+  }
   const route = routes.get(action);
   if (!route) return json(response, 404, "UNKNOWN_ACTION");
   const [method, path] = route;

@@ -25,3 +25,27 @@ export async function accountRequest(action, data) {
   }
   return result;
 }
+
+export async function getSocialProviders() {
+  const response = await fetch("/api/account?action=providers", { cache: "no-store" });
+  if (!response.ok) return { kakao: false, naver: false };
+  const data = await response.json().catch(() => null);
+  return data?.providers ?? { kakao: false, naver: false };
+}
+
+export async function signInWithSocial(provider, callbackURL = "/") {
+  if (provider !== "kakao" && provider !== "naver") {
+    throw new Error("지원하지 않는 소셜 로그인 방식입니다.");
+  }
+  const response = await fetch("/api/auth/sign-in/social", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, callbackURL }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.url) {
+    throw new Error(data?.message || "소셜 로그인을 시작하지 못했습니다.");
+  }
+  window.location.assign(data.url);
+}
+

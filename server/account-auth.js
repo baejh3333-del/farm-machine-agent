@@ -51,13 +51,55 @@ function resolveSecret() {
   return localSecret();
 }
 
-export function buildAccountAuthOptions({ database = getPool(), secret = resolveSecret(), baseURL = resolveBaseURL() } = {}) {
+export function getEnabledSocialProviders(env = process.env) {
+  return {
+    kakao: Boolean(env.KAKAO_CLIENT_ID?.trim() && env.KAKAO_CLIENT_SECRET?.trim()),
+    naver: Boolean(env.NAVER_CLIENT_ID?.trim() && env.NAVER_CLIENT_SECRET?.trim()),
+  };
+}
+
+export function buildSocialProvidersConfig(env = process.env) {
+  const providers = {};
+  if (env.KAKAO_CLIENT_ID?.trim() && env.KAKAO_CLIENT_SECRET?.trim()) {
+    providers.kakao = {
+      clientId: env.KAKAO_CLIENT_ID.trim(),
+      clientSecret: env.KAKAO_CLIENT_SECRET.trim(),
+      mapProfileToUser: (profile) => {
+        const account = profile?.kakao_account || {};
+        const suffix = String(profile?.id ?? "user").slice(-6);
+        return {
+          name: `카카오회원_${suffix}`,
+          email: account.email || `kakao_${profile?.id ?? "user"}@users.moa-farm.example.com`,
+        };
+      },
+    };
+  }
+  if (env.NAVER_CLIENT_ID?.trim() && env.NAVER_CLIENT_SECRET?.trim()) {
+    providers.naver = {
+      clientId: env.NAVER_CLIENT_ID.trim(),
+      clientSecret: env.NAVER_CLIENT_SECRET.trim(),
+      mapProfileToUser: (profile) => {
+        const res = profile?.response || profile || {};
+        const suffix = String(res.id ?? "user").slice(-6);
+        return {
+          name: `네이버회원_${suffix}`,
+          email: res.email || `naver_${res.id ?? "user"}@users.moa-farm.example.com`,
+        };
+      },
+    };
+  }
+  return providers;
+}
+
+export function buildAccountAuthOptions({ database = getPool(), secret = resolveSecret(), baseURL = resolveBaseURL(), env = process.env } = {}) {
+  const socialProviders = buildSocialProvidersConfig(env);
   return {
     appName: "모아농기계",
     database,
     secret,
     baseURL,
     emailAndPassword: { enabled: true, minPasswordLength: 8, maxPasswordLength: 128 },
+    ...(Object.keys(socialProviders).length ? { socialProviders } : {}),
     session: { expiresIn: 7 * 24 * 60 * 60 },
     rateLimit: {
       enabled: !process.env.NODE_TEST_CONTEXT || process.env.ENABLE_AUTH_RATE_LIMIT === "1",

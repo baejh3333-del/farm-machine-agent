@@ -1,0 +1,50 @@
+@charset "UTF-8";
+
+:root {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-scale: 1;
+
+  --bg-page: #f5efe4;
+  --bg-surface: #fffcf6;
+  --bg-subtle: #eee5d7;
+  --bg-tint: #e6f4ec;
+  --bg-warm: #faf5ec;
+
+  --text-strong: #162a22;
+  --text-body: #2c4237;
+  --text-muted: #5e7468;
+  --text-soft: #82968b;
+
+  --forest: #174233;
+  --forest-deep: #103024;
+  --primary: #345840;
+  --primary-hover: #294633;
+  --primary-light: #e5f5ec;
+  --accent-lime: #dcf29d;
+  --accent-amber: #fef3c7;
+  --accent-amber-text: #92400e;
+
+  --line: #ded5c6;
+  --line-strong: #d0c5b3;
+
+  --shadow-sm: 0 2px 8px rgba(22, 42, 34, 0.05);
+  --shadow-md: 0 10px 28px rgba(22, 42, 34, 0.07);
+  --shadow-lg: 0 20px 48px rgba(16, 48, 36, 0.14);
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  font-family: var(--font-sans);
+  color: var(--text-strong);
+  background: var(--bg-page);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  font-size: calc(16px * var(--font-scale, 1));
+  scroll-behavior: smooth;
+}

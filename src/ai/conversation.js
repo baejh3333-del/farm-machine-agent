@@ -1,3 +1,8 @@
+/**
+ * @deprecated 구형 규칙/정규식 기반 챗봇 로직입니다.
+ * 공식 AI 에이전트 방향성은 `/agent` (Tool Calling 기반)이며,
+ * `/internal/agent/*` API와 `src/ai/panel.js` 연동이 완료되면 이 파일은 삭제됩니다.
+ */
 import { CROPS, CROP_BY_ID, CROP_OPERATIONS, OPERATION_BY_ID } from "../data/farm-machines.js";
 import { selectMatchingListings } from "../data/recommendation.js";
 import { readRentalDates } from "./rental-dates.js";

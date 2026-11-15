@@ -114,8 +114,8 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
 
 function savePendingIntentAndRedirectLogin(intent, notice = "로그인 후 이어서 진행할 수 있어요.") {
   runtime.pendingIntent = intent;
-  hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
-  hideDialog($("formBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+  hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
+  hideDialog($("formBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
   toast(notice);
   setView("login");
 }
@@ -429,7 +429,7 @@ function bindEvents() {
   });
 
   // 상세 필터 모달 이벤트
-  $("closeFilters").addEventListener("click", () => hideDialog($("filterBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); })));
+  $("closeFilters").addEventListener("click", () => hideDialog($("filterBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
   $("catalogViews.applyFilters").addEventListener("click", catalogViews.applyFilters);
   $("resetFilters").addEventListener("click", () => {
     runtime.draft = blankFilters();
@@ -465,16 +465,16 @@ function bindEvents() {
       catalogViews.renderFilterOptions();
       return;
     }
-    if (event.target === $("filterBackdrop")) hideDialog($("filterBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+    if (event.target === $("filterBackdrop")) hideDialog($("filterBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
   });
 
   $("filterBackdrop").addEventListener("input", catalogViews.renderFilterPreview);
 
-  $("closeDetail").addEventListener("click", () => hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); })));
-  $("closeForm").addEventListener("click", () => hideDialog($("formBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); })));
+  $("closeDetail").addEventListener("click", () => hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+  $("closeForm").addEventListener("click", () => hideDialog($("formBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
   for (const id of ["detailBackdrop", "formBackdrop"]) {
     $(id).addEventListener("click", (event) => {
-      if (event.target === $(id)) hideDialog($(id, (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+      if (event.target === $(id)) hideDialog($(id), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
     });
   }
   document.addEventListener("keydown", (event) => {
@@ -497,19 +497,19 @@ function bindEvents() {
     if (favBtn) return toggleFavorite(favBtn.dataset.detailFav);
     const manageBtn = event.target.closest("[data-detail-manage]");
     if (manageBtn) {
-      hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+      hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
       setView("owner");
       return;
     }
     const chatBtn = event.target.closest("[data-detail-chat]");
     if (chatBtn) {
-      hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+      hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
       txViews.chatForm({ listingId: chatBtn.dataset.detailChat });
       return;
     }
     const button = event.target.closest("[data-detail-action]");
     if (!button) return;
-    hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+    hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
     const item = listingById(button.dataset.detailAction);
     if (!item) return;
     item.type === "rent" ? txViews.rentalForm(item.id) : txViews.chatForm({ listingId: item.id });
@@ -898,7 +898,7 @@ runtime.garage = createGarage({
 });
 $("detailContent").addEventListener("click", (event) => {
   if (event.target.closest("[data-open-garage]")) {
-    hideDialog($("detailBackdrop", (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
+    hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
     setView("garage");
     $("ownedModel").focus();
   }

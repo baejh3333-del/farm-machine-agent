@@ -3421,11 +3421,8 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 
 /* 대여일 날씨 안내 배너 */
 .rental-weather-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 12px;
   padding: 12px 16px;
   margin: 0 0 18px;
   border-radius: 14px;
@@ -3439,6 +3436,13 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .rental-weather-banner.is-wind {
   border-color: #cbd8ee;
   background: #f3f7fd;
+}
+.rwb-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 .rwb-main {
   display: flex;
@@ -3468,6 +3472,12 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   font-size: 0.85rem;
   color: #4b5563;
 }
+.rwb-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .rwb-metrics {
   display: flex;
   gap: 8px;
@@ -3481,6 +3491,156 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(0, 0, 0, 0.07);
   color: #2f3b31;
+}
+.rwb-expand-btn {
+  border: 1px solid #c2d6c7;
+  background: #ffffff;
+  color: #23492c;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rwb-expand-btn:hover {
+  background: #eaf3ec;
+  border-color: #9dc0a6;
+}
+.rwb-detail-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.rwb-days-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.rwb-day-card {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.rwb-day-card:hover {
+  transform: translateY(-1px);
+  border-color: #7ea888;
+}
+.rwb-day-card.is-active {
+  background: #ffffff;
+  border-color: #2d5a38;
+  box-shadow: 0 0 0 2px rgba(45, 90, 56, 0.16);
+}
+.rwb-day-card.is-caution.is-active {
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.16);
+}
+.rwb-day-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #374151;
+}
+.rwb-day-icon {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+.rwb-day-temp {
+  font-size: 0.85rem;
+  color: #1f2937;
+}
+.rwb-day-meta {
+  font-size: 0.74rem;
+  color: #5b695e;
+}
+.rwb-day-range-note {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef1ef;
+  color: #5f6b62;
+}
+.rwb-day-detail {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+}
+.rwb-day-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rwb-day-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: #5b695e;
+}
+.rwb-applied-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2d5a38;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e7f3ea;
+}
+.rwb-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 8px;
+}
+.rwb-slot-card {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: #f8faf8;
+  border: 1px solid #e5ece6;
+}
+.rwb-slot-time {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #4b5563;
+}
+.rwb-slot-icon {
+  font-size: 1.15rem;
+}
+.rwb-slot-temp {
+  font-size: 0.85rem;
+  color: #111827;
+}
+.rwb-slot-meta {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+.rwb-work-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rwb-work-pill {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eaf5ed;
+  color: #235330;
+}
+.rwb-work-pill.is-caution {
+  background: #fef3dc;
+  color: #8a4b08;
 }
 
 /* 매물 위치 지도 패널 */
@@ -3605,8 +3765,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   color: #2d5a38;
 }
 .detail-weather-note {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
   gap: 10px;
   padding: 10px 12px;
   margin: 10px 0 14px;
@@ -3623,9 +3782,141 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   background: #f3f7fd;
   border-color: #cbd8ee;
 }
+.dwn-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
 .detail-weather-note p {
   margin: 3px 0 0;
   color: #4b5563;
+}
+.dwn-mini-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+.dwn-mini-day {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 0.75rem;
+  color: #374151;
+}
+.dwn-mini-day.is-caution {
+  background: rgba(254, 243, 220, 0.75);
+}
+
+/* 예약 폼 대여 기간 날씨 패널 */
+.rental-booking-weather {
+  margin: 4px 0 6px;
+}
+.rbw-loading {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f6f8f6;
+  border: 1px solid #e1e8e2;
+  font-size: 0.83rem;
+  color: #4b5b4e;
+}
+.rbw-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #d5e5d8;
+  background: #f4faf5;
+}
+.rbw-box.is-caution {
+  border-color: #f0c987;
+  background: #fff8eb;
+}
+.rbw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+.rbw-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(45, 90, 56, 0.12);
+  color: #2d5a38;
+}
+.rbw-box.is-caution .rbw-badge {
+  background: rgba(217, 119, 6, 0.14);
+  color: #8a4b08;
+}
+.rbw-summary-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #4b5563;
+}
+.rbw-days {
+  display: grid;
+  gap: 6px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+.rbw-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.82rem;
+}
+.rbw-day-row.is-out-of-range {
+  background: rgba(255, 255, 255, 0.55);
+  color: #6b7280;
+}
+.rbw-day-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rbw-day-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rbw-pill-muted,
+.rbw-pill-is-good,
+.rbw-pill-is-caution,
+.rbw-pill-is-wind {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.rbw-pill-muted {
+  background: #eceeed;
+  color: #6b7280;
+}
+.rbw-pill-is-good {
+  background: #e5f3e9;
+  color: #235330;
+}
+.rbw-pill-is-caution {
+  background: #fde9c4;
+  color: #8a4b08;
+}
+.rbw-pill-is-wind {
+  background: #e1ebfa;
+  color: #1e40af;
 }
 .map-error-box {
   padding: 40px 20px;

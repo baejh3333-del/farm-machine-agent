@@ -3,7 +3,7 @@ import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, 
 import { available, compareListings } from "../data/recommendation.js";
 import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, addDays, koreanDateParts, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog, machineImage } from "../core/utils.js";
 import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites } from "../core/store.js";
-import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote } from "./map-weather.js";
+import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
 
 export function createCatalogViews(deps) {
 function setTransaction(type) {
@@ -470,7 +470,17 @@ function renderListings() {
   $("viewModeList")?.setAttribute("aria-pressed", String(!isMap));
   $("viewModeMap")?.setAttribute("aria-pressed", String(isMap));
 
-  renderWeatherBanner();
+  renderWeatherBanner({
+    onSelectDate: (chosenDate) => {
+      state.filters.date = chosenDate;
+      state.filters.dateEnd = chosenDate;
+      if ($("quickDateInput")) $("quickDateInput").value = chosenDate;
+      if ($("quickDateEndInput")) $("quickDateEndInput").value = chosenDate;
+      persist(deps.updateBadges);
+      renderListings();
+      refreshWeatherAndMapConfig({ onUpdate: () => renderListings() });
+    },
+  });
   $("listingGrid").hidden = isMap;
 
   if (isMap) {

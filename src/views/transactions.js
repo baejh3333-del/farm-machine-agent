@@ -1,6 +1,7 @@
 import { CROPS, OPERATIONS, MACHINE_TYPES, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID } from "../data/farm-machines.js";
 import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
+import { renderBookingWeatherPanel } from "./map-weather.js";
 
 export function createTransactionViews(deps) {
 function openForm(html) {
@@ -51,6 +52,7 @@ function rentalForm(id, draftValues = null) {
         <label>대여 시작일<input type="date" id="rentStart" min="${minToday}" value="${escapeHtml(initialStart)}" required></label>
         <label>반납 예정일<input type="date" id="rentEnd" min="${escapeHtml(initialStart)}" value="${escapeHtml(initialEnd)}" required></label>
       </div>
+      <div id="rentalBookingWeather" class="rental-booking-weather" hidden aria-live="polite"></div>
       <p id="rentalEstimate" aria-live="polite"></p>
       <label>작업 내용 · 방문 메모 (선택)
         <textarea id="rentNote" maxlength="500" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다.">${escapeHtml(initialNote)}</textarea>
@@ -62,7 +64,23 @@ function rentalForm(id, draftValues = null) {
   `);
 
   let lastPayloadFingerprint = null;
+  let lastBookingWeatherKey = "";
   let busy = false;
+
+  const updateBookingWeather = (start, end, valid) => {
+    const weatherHost = $("rentalBookingWeather");
+    if (!weatherHost) return;
+    if (!valid) {
+      lastBookingWeatherKey = "";
+      weatherHost.innerHTML = "";
+      weatherHost.hidden = true;
+      return;
+    }
+    const key = `${item.region}:${start}:${end}`;
+    if (key === lastBookingWeatherKey) return;
+    lastBookingWeatherKey = key;
+    renderBookingWeatherPanel(weatherHost, { region: item.region, start, end });
+  };
 
   const updateEstimate = () => {
     const start = $("rentStart").value;
@@ -81,6 +99,7 @@ function rentalForm(id, draftValues = null) {
       button.textContent = "대여 기간을 확인해 주세요";
       button.disabled = true;
     }
+    updateBookingWeather(start, end, valid);
   };
   $("rentalForm").addEventListener("input", () => {
     const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}`;

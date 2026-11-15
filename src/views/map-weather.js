@@ -1,5 +1,5 @@
 import { REGION_COORDS, MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
-import { $, escapeHtml, money, today, toast } from "../core/utils.js";
+import { $, escapeHtml, money, today, addDays, toast } from "../core/utils.js";
 import { state, runtime, apiFetch } from "../core/store.js";
 
 const WEATHER_ICONS = {
@@ -10,8 +10,25 @@ const WEATHER_ICONS = {
   snow: "❄️",
 };
 
+const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
 let kakaoSdkPromise = null;
 let lastWeatherKey = "";
+
+function formatShortDateLabel(ymd, baseToday = today()) {
+  if (ymd === baseToday) return `오늘 (${ymd.slice(5).replace("-", "/")})`;
+  if (ymd === addDays(baseToday, 1)) return `내일 (${ymd.slice(5).replace("-", "/")})`;
+  if (ymd === addDays(baseToday, 2)) return `모레 (${ymd.slice(5).replace("-", "/")})`;
+  const d = new Date(`${ymd}T12:00:00+09:00`);
+  const wd = Number.isNaN(d.getTime()) ? "" : WEEKDAY_KO[d.getUTCDay()];
+  return `${ymd.slice(5).replace("-", "/")} (${wd})`;
+}
+
+function suitabilityLabel(suitability) {
+  if (suitability === "caution") return "작업 주의";
+  if (suitability === "wind") return "강풍 주의";
+  return "작업 적합";
+}
 
 function loadKakaoSdk(appKey) {
   if (window.kakao?.maps) return Promise.resolve(window.kakao.maps);
@@ -40,9 +57,18 @@ export async function refreshWeatherAndMapConfig({ onUpdate } = {}) {
   lastWeatherKey = key;
 
   try {
-    const params = new URLSearchParams({ region: state.region, date: targetDate });
+    const params = new URLSearchParams({ region: state.region, date: targetDate, days: "5" });
     const data = await apiFetch(`/api/weather?${params.toString()}`, { timeoutMs: 5000 });
     if (data?.weather) runtime.weatherData = data.weather;
+    if (Array.isArray(data?.forecastDays)) {
+      runtime.forecastDays = data.forecastDays;
+      const hasCurrent = data.forecastDays.some((d) => d.date === runtime.selectedForecastDate);
+      if (!hasCurrent) {
+        runtime.selectedForecastDate = data.forecastDays.some((d) => d.date === targetDate)
+          ? targetDate
+          : (data.forecastDays[0]?.date || "");
+      }
+    }
     if (data?.mapConfig) runtime.mapConfig = data.mapConfig;
     onUpdate?.();
     return data;
@@ -51,7 +77,7 @@ export async function refreshWeatherAndMapConfig({ onUpdate } = {}) {
   }
 }
 
-export function renderWeatherBanner() {
+export function renderWeatherBanner({ onSelectDate } = {}) {
   const host = $("rentalWeatherBanner");
   if (!host) return;
 
@@ -72,26 +98,148 @@ export function renderWeatherBanner() {
   const icon = WEATHER_ICONS[w.icon] || "🌤️";
   const toneClass = w.suitability === "caution" ? "is-caution" : w.suitability === "wind" ? "is-wind" : "is-good";
   const tempText = Number.isFinite(w.tempMin) && Number.isFinite(w.tempMax) ? `${w.tempMin}° ~ ${w.tempMax}°C` : "";
+  const days = Array.isArray(runtime.forecastDays) && runtime.forecastDays.length ? runtime.forecastDays : [w];
+  const activeDay = days.find((d) => d.date === runtime.selectedForecastDate) || days[0] || w;
+  const activeDayTone = activeDay.suitability === "caution" ? "is-caution" : activeDay.suitability === "wind" ? "is-wind" : "is-good";
 
   host.hidden = false;
-  host.className = `rental-weather-banner ${toneClass}`;
+  host.className = `rental-weather-banner ${toneClass}${runtime.weatherExpanded ? " is-expanded" : ""}`;
   host.innerHTML = `
-    <div class="rwb-main">
-      <span class="rwb-icon" aria-hidden="true">${icon}</span>
-      <div class="rwb-copy">
-        <div class="rwb-title-row">
-          <strong>${escapeHtml(w.region)} ${isSelectedDate ? escapeHtml(targetDate) : "오늘"} 작업 날씨 · ${escapeHtml(w.summary)}</strong>
-          <span class="rwb-source-pill">${w.source === "kma" ? "기상청 단기예보" : "예시 기상 안내"}</span>
+    <div class="rwb-top-row">
+      <div class="rwb-main">
+        <span class="rwb-icon" aria-hidden="true">${icon}</span>
+        <div class="rwb-copy">
+          <div class="rwb-title-row">
+            <strong>${escapeHtml(w.region)} ${isSelectedDate ? escapeHtml(targetDate) : "오늘"} 작업 날씨 · ${escapeHtml(w.summary)}</strong>
+            <span class="rwb-source-pill">${escapeHtml(w.sourceLabel || (w.source === "kma" ? "기상청 단기예보" : "예시 기상 안내"))}</span>
+          </div>
+          <p class="rwb-advice">${escapeHtml(w.advice)}</p>
         </div>
-        <p class="rwb-advice">${escapeHtml(w.advice)}</p>
+      </div>
+      <div class="rwb-right">
+        <div class="rwb-metrics">
+          ${tempText ? `<span class="rwb-metric">${escapeHtml(tempText)}</span>` : ""}
+          <span class="rwb-metric">강수확률 ${Number(w.pop) || 0}%</span>
+          <span class="rwb-metric">풍속 ${Number(w.windSpeed) || 0}m/s</span>
+          ${Number.isFinite(w.humidity) ? `<span class="rwb-metric">습도 ${w.humidity}%</span>` : ""}
+        </div>
+        <button
+          type="button"
+          class="rwb-expand-btn"
+          id="toggleWeatherForecastBtn"
+          aria-expanded="${runtime.weatherExpanded ? "true" : "false"}"
+        >
+          ${runtime.weatherExpanded ? "예보 접기 ▲" : "5일 예보 · 시간대별 보기 ▼"}
+        </button>
       </div>
     </div>
-    <div class="rwb-metrics">
-      ${tempText ? `<span class="rwb-metric">${escapeHtml(tempText)}</span>` : ""}
-      <span class="rwb-metric">강수확률 ${Number(w.pop) || 0}%</span>
-      <span class="rwb-metric">풍속 ${Number(w.windSpeed) || 0}m/s</span>
-    </div>
+    ${
+      runtime.weatherExpanded
+        ? `
+      <div class="rwb-detail-panel" id="weatherDetailPanel">
+        <div class="rwb-days-strip" role="tablist" aria-label="날짜별 날씨 예보">
+          ${days
+            .map((d) => {
+              const dIcon = WEATHER_ICONS[d.icon] || "🌤️";
+              const isSelected = d.date === activeDay.date;
+              const dTone = d.suitability === "caution" ? "is-caution" : d.suitability === "wind" ? "is-wind" : "is-good";
+              return `
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="${isSelected ? "true" : "false"}"
+                  class="rwb-day-card ${dTone}${isSelected ? " is-active" : ""}"
+                  data-forecast-date="${escapeHtml(d.date)}"
+                >
+                  <span class="rwb-day-label">${escapeHtml(formatShortDateLabel(d.date))}</span>
+                  <span class="rwb-day-icon" aria-hidden="true">${dIcon}</span>
+                  <strong class="rwb-day-temp">${Number.isFinite(d.tempMin) ? `${d.tempMin}°` : "-"} / ${Number.isFinite(d.tempMax) ? `${d.tempMax}°` : "-"}</strong>
+                  <span class="rwb-day-meta">강수 ${Number(d.pop) || 0}% · ${escapeHtml(suitabilityLabel(d.suitability))}</span>
+                  ${!d.inShortTermRange ? `<span class="rwb-day-range-note">참고 예보</span>` : ""}
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+        <div class="rwb-day-detail ${activeDayTone}">
+          <div class="rwb-day-detail-head">
+            <div>
+              <strong>${escapeHtml(formatShortDateLabel(activeDay.date))} 상세 예보 · ${escapeHtml(activeDay.summary)}</strong>
+              <span class="rwb-day-sub">${escapeHtml(activeDay.rainAmount || "강수 없음")} · 풍속 ${Number(activeDay.windSpeed) || 0}m/s${Number.isFinite(activeDay.humidity) ? ` · 습도 ${activeDay.humidity}%` : ""}</span>
+            </div>
+            ${
+              state.filters.date !== activeDay.date
+                ? `<button type="button" class="button button-secondary button-sm" id="applyForecastDateBtn" data-apply-date="${escapeHtml(activeDay.date)}">이 날짜로 매물 보기</button>`
+                : `<span class="rwb-applied-badge">현재 선택된 날짜</span>`
+            }
+          </div>
+          ${
+            Array.isArray(activeDay.slots) && activeDay.slots.length
+              ? `<div class="rwb-slots-grid" aria-label="시간대별 예보">
+                  ${activeDay.slots
+                    .map(
+                      (s) => `
+                    <div class="rwb-slot-card">
+                      <span class="rwb-slot-time">${escapeHtml(s.timeLabel)}</span>
+                      <span class="rwb-slot-icon" aria-hidden="true">${WEATHER_ICONS[s.icon] || "🌤️"}</span>
+                      <strong class="rwb-slot-temp">${Number.isFinite(s.temp) ? `${s.temp}°C` : "-"}</strong>
+                      <span class="rwb-slot-meta">강수 ${Number(s.pop) || 0}%</span>
+                      <span class="rwb-slot-meta">${Number(s.windSpeed) || 0}m/s</span>
+                    </div>`
+                    )
+                    .join("")}
+                </div>`
+              : ""
+          }
+          ${
+            Array.isArray(activeDay.workTips) && activeDay.workTips.length
+              ? `<div class="rwb-work-tips">
+                  ${activeDay.workTips
+                    .map(
+                      (tip) => `
+                    <span class="rwb-work-pill is-${escapeHtml(tip.status)}">
+                      <strong>${escapeHtml(tip.label)}</strong> · ${escapeHtml(tip.note)}
+                    </span>`
+                    )
+                    .join("")}
+                </div>`
+              : ""
+          }
+        </div>
+      </div>`
+        : ""
+    }
   `;
+
+  $("toggleWeatherForecastBtn")?.addEventListener("click", () => {
+    runtime.weatherExpanded = !runtime.weatherExpanded;
+    renderWeatherBanner({ onSelectDate });
+  });
+
+  host.querySelectorAll("[data-forecast-date]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      runtime.selectedForecastDate = btn.dataset.forecastDate;
+      renderWeatherBanner({ onSelectDate });
+    });
+  });
+
+  $("applyForecastDateBtn")?.addEventListener("click", (event) => {
+    const chosen = event.currentTarget.dataset.applyDate;
+    if (!chosen) return;
+    if (typeof onSelectDate === "function") {
+      onSelectDate(chosen);
+    } else {
+      state.filters.date = chosen;
+      state.filters.dateEnd = chosen;
+      const qStart = $("quickDateInput");
+      const qEnd = $("quickDateEndInput");
+      if (qStart) qStart.value = chosen;
+      if (qEnd) qEnd.value = chosen;
+      lastWeatherKey = "";
+      refreshWeatherAndMapConfig({ onUpdate: () => renderWeatherBanner({ onSelectDate }) });
+    }
+    toast(`${chosen} 날짜 기준으로 대여 가능 매물을 표시합니다.`);
+  });
 }
 
 export function weatherDetailNote() {
@@ -99,15 +247,126 @@ export function weatherDetailNote() {
   if (!w || state.transaction !== "rent") return "";
   const icon = WEATHER_ICONS[w.icon] || "🌤️";
   const toneClass = w.suitability === "caution" ? "is-caution" : w.suitability === "wind" ? "is-wind" : "is-good";
+  const upcoming = Array.isArray(runtime.forecastDays) ? runtime.forecastDays.slice(0, 4) : [];
   return `
     <div class="detail-weather-note ${toneClass}">
-      <span aria-hidden="true">${icon}</span>
-      <div>
-        <strong>${escapeHtml(w.region)} (${escapeHtml(w.date)}) · ${escapeHtml(w.summary)} · 강수확률 ${Number(w.pop) || 0}%</strong>
-        <p>${escapeHtml(w.advice)}</p>
+      <div class="dwn-top">
+        <span aria-hidden="true">${icon}</span>
+        <div>
+          <strong>${escapeHtml(w.region)} (${escapeHtml(w.date)}) · ${escapeHtml(w.summary)} · 강수확률 ${Number(w.pop) || 0}% · 풍속 ${Number(w.windSpeed) || 0}m/s</strong>
+          <p>${escapeHtml(w.advice)}</p>
+        </div>
       </div>
+      ${
+        upcoming.length > 1
+          ? `<div class="dwn-mini-strip" aria-label="가까운 날짜 예보">
+              ${upcoming
+                .map(
+                  (d) => `
+                <span class="dwn-mini-day is-${d.suitability === "caution" ? "caution" : d.suitability === "wind" ? "wind" : "good"}">
+                  <span>${escapeHtml(formatShortDateLabel(d.date))}</span>
+                  <span>${WEATHER_ICONS[d.icon] || "🌤️"} ${Number.isFinite(d.tempMin) ? `${d.tempMin}°~${d.tempMax}°` : ""}</span>
+                  <span>강수 ${Number(d.pop) || 0}%</span>
+                </span>`
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
     </div>
   `;
+}
+
+export async function renderBookingWeatherPanel(container, { region, start, end } = {}) {
+  if (!container) return;
+  if (!start || !end || end < start) {
+    container.innerHTML = "";
+    container.hidden = true;
+    return;
+  }
+
+  container.hidden = false;
+  container.innerHTML = `<div class="rbw-loading">선택한 대여 기간(${escapeHtml(start)} ~ ${escapeHtml(end)})의 작업 날씨 예보를 확인하는 중...</div>`;
+
+  try {
+    const params = new URLSearchParams({ region: region || state.region, date: start, endDate: end });
+    const data = await apiFetch(`/api/weather?${params.toString()}`, { timeoutMs: 5000 });
+    const days = Array.isArray(data?.rangeForecast) ? data.rangeForecast : [];
+    if (!days.length) {
+      container.innerHTML = "";
+      container.hidden = true;
+      return;
+    }
+
+    const forecastAvailableDays = days.filter((d) => d.inShortTermRange);
+    const hasCaution = forecastAvailableDays.some((d) => d.suitability === "caution" || d.suitability === "wind");
+    const hasOutOfRange = days.some((d) => !d.inShortTermRange);
+
+    container.innerHTML = `
+      <div class="rbw-box ${hasCaution ? "is-caution" : "is-good"}">
+        <div class="rbw-header">
+          <strong>🌦️ ${escapeHtml(data.region || region)} 대여 기간 작업 날씨</strong>
+          <span class="rbw-badge">
+            ${
+              forecastAvailableDays.length
+                ? hasCaution
+                  ? "주의 예보 포함"
+                  : "예보 확인 가능"
+                : "단기예보 범위 외"
+            }
+          </span>
+        </div>
+        <p class="rbw-summary-note">
+          ${
+            !forecastAvailableDays.length
+              ? "선택한 날짜는 단기예보 제공 범위(오늘~3일 후)를 벗어나 계절 참고 기온만 표시됩니다."
+              : hasCaution
+                ? "예보가 나온 날 중 비·눈 또는 강풍 주의가 포함된 날이 있습니다. 작업 일정과 안전 준비를 확인하세요."
+                : "예보가 나온 날은 농작업하기 무난한 날씨입니다."
+          }
+          ${forecastAvailableDays.length && hasOutOfRange ? " (이후 날짜는 단기예보 범위 외)" : ""}
+        </p>
+        <div class="rbw-days">
+          ${days
+            .map((d) => {
+              const dIcon = WEATHER_ICONS[d.icon] || "🌤️";
+              if (!d.inShortTermRange) {
+                return `
+                  <div class="rbw-day-row is-out-of-range">
+                    <div class="rbw-day-date">
+                      <strong>${escapeHtml(formatShortDateLabel(d.date))}</strong>
+                      <span class="rbw-pill-muted">예보 범위 외</span>
+                    </div>
+                    <div class="rbw-day-info">
+                      <span>단기예보 미제공 기간 (계절 참고 ${Number.isFinite(d.tempMin) ? `${d.tempMin}°~${d.tempMax}°C` : ""})</span>
+                    </div>
+                  </div>
+                `;
+              }
+              const tone = d.suitability === "caution" ? "is-caution" : d.suitability === "wind" ? "is-wind" : "is-good";
+              return `
+                <div class="rbw-day-row ${tone}">
+                  <div class="rbw-day-date">
+                    <strong>${escapeHtml(formatShortDateLabel(d.date))}</strong>
+                    <span class="rbw-pill-${tone}">${escapeHtml(suitabilityLabel(d.suitability))}</span>
+                  </div>
+                  <div class="rbw-day-info">
+                    <span aria-hidden="true">${dIcon}</span>
+                    <strong>${escapeHtml(d.summary)}</strong>
+                    <span>${Number.isFinite(d.tempMin) ? `${d.tempMin}°~${d.tempMax}°C` : ""}</span>
+                    <span>강수 ${Number(d.pop) || 0}%</span>
+                    <span>풍속 ${Number(d.windSpeed) || 0}m/s</span>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `;
+  } catch {
+    container.innerHTML = `<div class="rbw-loading">날씨 예보를 불러오지 못했습니다. 예약 신청은 그대로 진행할 수 있습니다.</div>`;
+  }
 }
 
 function activeOriginCoords() {

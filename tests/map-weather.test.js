@@ -50,3 +50,47 @@ test("KAKAO_MAP_JS_KEY가 설정되면 mapConfig.provider가 kakao로 전환된�
     else delete process.env.KAKAO_MAP_JS_KEY;
   }
 });
+
+test("getWeatherAndMapConfig는 며칠간 예보(forecastDays)와 시간대별 슬롯(slots)·작업 팁을 반환한다", async () => {
+  const prevKma = process.env.KMA_WEATHER_API_KEY;
+  delete process.env.KMA_WEATHER_API_KEY;
+  try {
+    const res = await getWeatherAndMapConfig({ region: "영양읍", days: 5 });
+    assert.equal(Array.isArray(res.forecastDays), true);
+    assert.equal(res.forecastDays.length, 5);
+    assert.equal(res.forecastDays[0].inShortTermRange, true);
+    assert.equal(res.forecastDays[3].inShortTermRange, true);
+    assert.equal(res.forecastDays[4].inShortTermRange, false);
+
+    assert.equal(Array.isArray(res.weather.slots), true);
+    assert.ok(res.weather.slots.length >= 4);
+    assert.equal(typeof res.weather.slots[0].timeLabel, "string");
+    assert.equal(typeof res.weather.slots[0].temp, "number");
+
+    assert.equal(Array.isArray(res.weather.workTips), true);
+    assert.equal(res.weather.workTips.length, 3);
+  } finally {
+    if (prevKma !== undefined) process.env.KMA_WEATHER_API_KEY = prevKma;
+  }
+});
+
+test("getWeatherAndMapConfig는 endDate가 주어지면 예약 기간 일별 예보(rangeForecast)와 예보 가능 여부를 반환한다", async () => {
+  const prevKma = process.env.KMA_WEATHER_API_KEY;
+  delete process.env.KMA_WEATHER_API_KEY;
+  try {
+    const base = await getWeatherAndMapConfig({ region: "수비면" });
+    const todayYmd = base.today;
+    const endMs = Date.parse(`${todayYmd}T00:00:00Z`) + 4 * 86_400_000;
+    const endYmd = new Date(endMs).toISOString().slice(0, 10);
+
+    const res = await getWeatherAndMapConfig({ region: "수비면", date: todayYmd, endDate: endYmd });
+    assert.equal(Array.isArray(res.rangeForecast), true);
+    assert.equal(res.rangeForecast.length, 5);
+    assert.equal(res.rangeForecast[0].date, todayYmd);
+    assert.equal(res.rangeForecast[0].inShortTermRange, true);
+    assert.equal(res.rangeForecast[4].date, endYmd);
+    assert.equal(res.rangeForecast[4].inShortTermRange, false);
+  } finally {
+    if (prevKma !== undefined) process.env.KMA_WEATHER_API_KEY = prevKma;
+  }
+});

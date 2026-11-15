@@ -171,15 +171,19 @@ export async function getWeatherAndMapConfig({ region = "영양읍", date = "" }
     weather = cached.value;
   } else {
     const diff = daysBetween(kstTodayYmd(), targetDate);
+    let fallbackReason = !kmaApiKey ? "NO_KEY" : diff < 0 || diff > 3 ? "OUT_OF_RANGE" : "";
     if (kmaApiKey && diff >= 0 && diff <= 3) {
       try {
         weather = await fetchKmaForecast(safeRegion, targetDate, kmaApiKey);
-      } catch {
+        if (!weather) fallbackReason = "NO_FORECAST_FOR_DATE";
+      } catch (err) {
+        fallbackReason = err instanceof Error ? err.message : "KMA_FETCH_ERROR";
+        console.warn("KMA weather fetch failed, using fallback:", fallbackReason);
         weather = null;
       }
     }
     if (!weather) {
-      weather = buildFallbackForecast(safeRegion, targetDate);
+      weather = { ...buildFallbackForecast(safeRegion, targetDate), fallbackReason };
     }
     weatherCache.set(cacheKey, { at: Date.now(), value: weather });
   }

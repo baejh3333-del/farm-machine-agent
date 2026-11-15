@@ -241,10 +241,20 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail }) {
     const box = $("kakaoMapBox");
     if (!box) return;
     const origin = activeOriginCoords();
+    const originPos = new maps.LatLng(origin.lat, origin.lng);
     const map = new maps.Map(box, {
-      center: new maps.LatLng(origin.lat, origin.lng),
+      center: originPos,
       level: 7,
     });
+    const bounds = new maps.LatLngBounds();
+    bounds.extend(originPos);
+
+    new maps.Marker({
+      map,
+      position: originPos,
+      title: runtime.userCoords ? "내 GPS 위치" : `내 동네 (${state.region})`,
+    });
+
     const originArg = activeDistanceOrigin();
 
     const updateSelectedCard = (item) => {
@@ -263,9 +273,11 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail }) {
 
     items.forEach((item) => {
       const c = listingCoords(item);
+      const pos = new maps.LatLng(c.lat, c.lng);
+      bounds.extend(pos);
       const marker = new maps.Marker({
         map,
-        position: new maps.LatLng(c.lat, c.lng),
+        position: pos,
         title: item.title,
       });
       maps.event.addListener(marker, "click", () => {
@@ -273,6 +285,10 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail }) {
         updateSelectedCard(item);
       });
     });
+
+    if (items.length > 0) {
+      map.setBounds(bounds);
+    }
 
     if (items[0]) updateSelectedCard(items.find((i) => i.id === runtime.selectedMapListingId) || items[0]);
   } catch {

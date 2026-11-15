@@ -408,7 +408,7 @@ function bindEvents() {
     setView("browse");
     $("marketTitle").focus();
   });
-  $("catalogViews.openFilters").addEventListener("click", () => catalogViews.openFilters());
+  $("openFilters").addEventListener("click", () => catalogViews.openFilters());
   $("inlineResetFilters")?.addEventListener("click", catalogViews.resetAllFilters);
 
   // 활성 필터 칩 개별 제거
@@ -430,7 +430,7 @@ function bindEvents() {
 
   // 상세 필터 모달 이벤트
   $("closeFilters").addEventListener("click", () => hideDialog($("filterBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); }));
-  $("catalogViews.applyFilters").addEventListener("click", catalogViews.applyFilters);
+  $("applyFilters").addEventListener("click", catalogViews.applyFilters);
   $("resetFilters").addEventListener("click", () => {
     runtime.draft = blankFilters();
     catalogViews.renderFilterOptions();

@@ -121,120 +121,22 @@ export function activeDistanceOrigin() {
   return runtime.userCoords || state.region;
 }
 
-function projectToSvg(lat, lng, bounds) {
-  const pad = 42;
-  const width = 760;
-  const height = 420;
-  const x = pad + ((lng - bounds.minLng) / Math.max(0.001, bounds.maxLng - bounds.minLng)) * (width - pad * 2);
-  const y = height - pad - ((lat - bounds.minLat) / Math.max(0.001, bounds.maxLat - bounds.minLat)) * (height - pad * 2);
-  return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
-}
-
-function renderSvgMap(container, items, { onOpenDetail }) {
-  const origin = activeOriginCoords();
-  const regionPoints = Object.values(REGION_COORDS);
-  const itemPoints = items.map((item) => ({ item, coords: listingCoords(item) }));
-
-  const allLats = [...regionPoints.map((r) => r.lat), ...itemPoints.map((p) => p.coords.lat), origin.lat];
-  const allLngs = [...regionPoints.map((r) => r.lng), ...itemPoints.map((p) => p.coords.lng), origin.lng];
-  const bounds = {
-    minLat: Math.min(...allLats) - 0.025,
-    maxLat: Math.max(...allLats) + 0.025,
-    minLng: Math.min(...allLngs) - 0.035,
-    maxLng: Math.max(...allLngs) + 0.035,
-  };
-
-  const selectedId = runtime.selectedMapListingId && items.some((i) => i.id === runtime.selectedMapListingId)
-    ? runtime.selectedMapListingId
-    : items[0]?.id || "";
-  runtime.selectedMapListingId = selectedId;
-
-  const originPt = projectToSvg(origin.lat, origin.lng, bounds);
-
-  const regionLabelsSvg = regionPoints
-    .map((r) => {
-      const pt = projectToSvg(r.lat, r.lng, bounds);
-      return `
-        <g class="map-region-anchor">
-          <circle cx="${pt.x}" cy="${pt.y}" r="26" class="map-region-halo" />
-          <text x="${pt.x}" y="${pt.y - 32}" text-anchor="middle" class="map-region-text">${escapeHtml(r.name)}</text>
-        </g>
-      `;
-    })
-    .join("");
-
-  const pinsSvg = itemPoints
-    .map(({ item, coords }) => {
-      const pt = projectToSvg(coords.lat, coords.lng, bounds);
-      const isSelected = item.id === selectedId;
-      return `
-        <g class="map-pin ${isSelected ? "is-selected" : ""}" data-map-pin="${escapeHtml(item.id)}" tabindex="0" role="button" aria-label="${escapeHtml(item.title)} 위치 보기">
-          <circle cx="${pt.x}" cy="${pt.y}" r="${isSelected ? 12 : 8}" class="map-pin-dot" />
-          ${isSelected ? `<circle cx="${pt.x}" cy="${pt.y}" r="18" class="map-pin-ring" />` : ""}
-        </g>
-      `;
-    })
-    .join("");
-
-  const selectedItem = items.find((i) => i.id === selectedId);
-  const originArg = activeDistanceOrigin();
-
+function renderMapError(container, message, { onRetry, onSwitchToList } = {}) {
   container.innerHTML = `
-    <div class="map-canvas-wrap">
-      <svg viewBox="0 0 760 420" class="regional-svg-map" role="img" aria-label="영양군 농기계 매물 위치 지도">
-        <defs>
-          <pattern id="farmGrid" width="38" height="38" patternUnits="userSpaceOnUse">
-            <path d="M 38 0 L 0 0 0 38" fill="none" stroke="rgba(45, 90, 56, 0.08)" stroke-width="1" />
-          </pattern>
-        </defs>
-        <rect width="760" height="420" fill="#f2efe7" rx="16" />
-        <rect width="760" height="420" fill="url(#farmGrid)" rx="16" />
-        ${regionLabelsSvg}
-        <g class="map-user-origin">
-          <circle cx="${originPt.x}" cy="${originPt.y}" r="14" fill="rgba(37, 99, 235, 0.16)" />
-          <circle cx="${originPt.x}" cy="${originPt.y}" r="6.5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
-          <text x="${originPt.x}" y="${originPt.y + 20}" text-anchor="middle" class="map-user-text">${runtime.userCoords ? "내 GPS 위치" : `내 동네 (${escapeHtml(state.region)})`}</text>
-        </g>
-        ${pinsSvg}
-      </svg>
-      <div class="map-provider-badge">내장 지역 지도 (카카오맵 키 미설정 시 기본 제공)</div>
-    </div>
-    <div class="map-selected-card" id="mapSelectedCard">
-      ${
-        selectedItem
-          ? `
-            <div class="msc-info">
-              <span class="msc-region">${escapeHtml(selectedItem.region)} · ${distanceKm(originArg, selectedItem.region, selectedItem.id)}km · ${escapeHtml(MACHINE_BY_ID[selectedItem.machineType]?.label || "")}</span>
-              <strong>${escapeHtml(selectedItem.title)}</strong>
-              <span class="msc-price">${money(selectedItem.price)}${selectedItem.type === "rent" ? " / 1일" : ""}</span>
-            </div>
-            <button type="button" class="button button-primary" id="mapOpenDetailBtn">상세 보기</button>
-          `
-          : `<p class="msc-empty">표시할 매물이 없습니다. 검색 조건을 조정해 보세요.</p>`
-      }
+    <div class="map-error-box" role="alert">
+      <strong>지도를 불러올 수 없습니다</strong>
+      <p>${escapeHtml(message)}</p>
+      <div class="map-error-actions">
+        <button type="button" class="button button-secondary" id="mapRetryBtn">다시 시도</button>
+        <button type="button" class="button button-primary" id="mapBackToListBtn">목록 보기로 전환</button>
+      </div>
     </div>
   `;
-
-  container.querySelectorAll("[data-map-pin]").forEach((pin) => {
-    const selectPin = () => {
-      runtime.selectedMapListingId = pin.dataset.mapPin;
-      renderSvgMap(container, items, { onOpenDetail });
-    };
-    pin.addEventListener("click", selectPin);
-    pin.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        selectPin();
-      }
-    });
-  });
-
-  $("mapOpenDetailBtn")?.addEventListener("click", () => {
-    if (selectedItem) onOpenDetail?.(selectedItem.id);
-  });
+  $("mapRetryBtn")?.addEventListener("click", () => onRetry?.());
+  $("mapBackToListBtn")?.addEventListener("click", () => onSwitchToList?.());
 }
 
-async function renderKakaoMap(container, items, appKey, { onOpenDetail }) {
+async function renderKakaoMap(container, items, appKey, { onOpenDetail, onRetry, onSwitchToList }) {
   container.innerHTML = `<div class="kakao-map-box" id="kakaoMapBox">지도를 불러오는 중...</div><div class="map-selected-card" id="mapSelectedCard"></div>`;
   try {
     const maps = await loadKakaoSdk(appKey);
@@ -292,7 +194,11 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail }) {
 
     if (items[0]) updateSelectedCard(items.find((i) => i.id === runtime.selectedMapListingId) || items[0]);
   } catch {
-    renderSvgMap(container, items, { onOpenDetail });
+    renderMapError(
+      container,
+      "지도 API 연결에 실패했습니다. 네트워크 상태나 도메인 허용 설정을 확인한 뒤 다시 시도해 주세요.",
+      { onRetry, onSwitchToList }
+    );
   }
 }
 
@@ -346,9 +252,20 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
   });
 
   const renderArea = $("mapRenderArea");
+  const onSwitchToList = () => $("viewModeList")?.click();
+  const onRetry = () => {
+    kakaoSdkPromise = null;
+    lastWeatherKey = "";
+    refreshWeatherAndMapConfig({ onUpdate: () => onGpsUpdated?.() });
+  };
+
   if (runtime.mapConfig?.provider === "kakao" && runtime.mapConfig?.kakaoAppKey) {
-    renderKakaoMap(renderArea, items, runtime.mapConfig.kakaoAppKey, { onOpenDetail });
+    renderKakaoMap(renderArea, items, runtime.mapConfig.kakaoAppKey, { onOpenDetail, onRetry, onSwitchToList });
   } else {
-    renderSvgMap(renderArea, items, { onOpenDetail });
+    renderMapError(
+      renderArea,
+      "지도 API 서버와 연결되지 않았습니다. 환경 설정을 확인하거나 잠시 후 다시 시도해 주세요.",
+      { onRetry, onSwitchToList }
+    );
   }
 }

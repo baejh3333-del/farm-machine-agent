@@ -193,7 +193,7 @@ export async function getWeatherAndMapConfig({ region = "영양읍", date = "" }
     coords: REGION_COORDS[safeRegion],
     weather,
     mapConfig: {
-      provider: kakaoAppKey ? "kakao" : "svg",
+      provider: kakaoAppKey ? "kakao" : "unavailable",
       kakaoAppKey,
     },
   };

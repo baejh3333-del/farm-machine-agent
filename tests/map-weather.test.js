@@ -26,7 +26,7 @@ test("getWeatherAndMapConfig는 API 키 미설정 시 폴백 예보와 svg 지�
   try {
     const res = await getWeatherAndMapConfig({ region: "청기면", date: "2026-05-15" });
     assert.equal(res.region, "청기면");
-    assert.equal(res.mapConfig.provider, "svg");
+    assert.equal(res.mapConfig.provider, "unavailable");
     assert.equal(res.mapConfig.kakaoAppKey, null);
     assert.equal(res.weather.source, "fallback");
     assert.ok(["good", "caution", "wind"].includes(res.weather.suitability));

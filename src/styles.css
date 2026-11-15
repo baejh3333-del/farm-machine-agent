@@ -3627,3 +3627,28 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   margin: 3px 0 0;
   color: #4b5563;
 }
+.map-error-box {
+  padding: 40px 20px;
+  border-radius: 14px;
+  border: 1px solid #f0c987;
+  background: #fff9ef;
+  text-align: center;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.map-error-box strong {
+  color: #8a4b08;
+  font-size: 1rem;
+}
+.map-error-box p {
+  margin: 0;
+  color: #5f5242;
+  font-size: 0.9rem;
+}
+.map-error-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

@@ -1,7 +1,10 @@
-import { fileURLToPath } from "node:url";
-import { initListingsDb, listListings, localDatabase } from "../server/listings-db.js";
+import { closePool } from "../server/db.js";
+import { resolveExpectedEnv, seedDemoListings } from "../server/migrator.js";
 
-initListingsDb(localDatabase);
-const listings = listListings();
-const rentals = listings.filter(({ type }) => type === "rent").length;
-console.log(`${fileURLToPath(localDatabase)}: 총 ${listings.length}건 (대여 ${rentals}건, 판매 ${listings.length - rentals}건)`);
+try {
+  const env = resolveExpectedEnv();
+  const result = await seedDemoListings({ env });
+  console.log(`시드 완료 (${result.environment}): 총 ${result.totalDemo}건 중 ${result.inserted}건 추가`);
+} finally {
+  await closePool();
+}

@@ -2,26 +2,37 @@
   "name": "farm-machine-agent",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local dev-server.js",
     "build": "node scripts/build.mjs",
     "db:accounts": "node --env-file-if-exists=.env.local scripts/migrate-accounts.mjs",
     "db:demo-account": "node --env-file-if-exists=.env.local scripts/create-demo-account.mjs",
-    "db:seed": "node scripts/seed-db.mjs",
+    "db:inspect": "node --env-file-if-exists=.env.local scripts/db-admin.mjs inspect",
+    "db:init": "node --env-file-if-exists=.env.local scripts/db-admin.mjs init",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/db-admin.mjs migrate",
+    "db:seed": "node --env-file-if-exists=.env.local scripts/db-admin.mjs seed",
+    "db:freeze": "node --env-file-if-exists=.env.local scripts/db-admin.mjs freeze",
+    "db:reconcile-photos": "node --env-file-if-exists=.env.local scripts/db-admin.mjs reconcile-photos",
     "check": "node --test tests/*.test.js",
     "agent:dev": "eve dev",
     "agent:build": "eve build",
     "agent:info": "eve info"
   },
   "dependencies": {
-    "better-auth": "^1.7.18",
-    "pg": "^8.23.1",
+    "@vercel/blob": "^2.9.0",
     "ai": "^7.0.120",
+    "better-auth": "^1.7.18",
     "eve": "^0.67.2",
+    "pg": "^8.23.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "playwright": "^1.65.1",
     "typescript": "^7.0.2"
   }
 }

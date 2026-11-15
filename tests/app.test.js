@@ -170,7 +170,7 @@ test("API 키가 없어도 안내 응답과 유효한 매물 ID를 반환한다"
   const previous = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   try {
-    const result = await recommend("고추 두둑 대여", { maxPrice: 70000 });
+    const result = await recommend("고추 두둑 대여", { maxPrice: 70000 }, { listings: LISTINGS });
     assert.equal(result.mode, "guide");
     assert.ok(result.reply.includes("고추"));
     assert.ok(result.listingIds.length > 0);

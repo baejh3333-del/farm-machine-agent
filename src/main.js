@@ -1,3 +1,4 @@
+import { MACHINE_SPECIFICATIONS, SPEC_BY_ID } from "./data/machine-specifications.js";
 import { createGarage } from "./garage.js";
 let garage;
 import { accountRequest } from "./account.js";
@@ -86,6 +87,9 @@ const blankFilters = () => ({
   dateEnd: "",
 });
 
+const UI_PREFS_KEY = "moa-farm-v1";
+const GUEST_FAV_KEY = "moa-guest-favorites-v1";
+
 const defaults = {
   view: "home",
   transaction: "rent",
@@ -93,108 +97,163 @@ const defaults = {
   sort: "distance",
   selectedCrop: "all",
   filters: blankFilters(),
-  favorites: [],
-  customListings: [],
-  statuses: {},
-  bookings: {},
-  requests: [],
-  messages: [],
   aiSummaries: {},
 };
 
 let state;
 try {
-  state = { ...structuredClone(defaults), ...JSON.parse(localStorage.getItem("moa-farm-v1") || "{}") };
-  state.filters = { ...blankFilters(), ...(state.filters || {}) };
+  const saved = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+  state = {
+    view: typeof saved.view === "string" ? saved.view : defaults.view,
+    transaction: saved.transaction === "sale" ? "sale" : defaults.transaction,
+    region: typeof saved.region === "string" ? saved.region : defaults.region,
+    sort: typeof saved.sort === "string" ? saved.sort : defaults.sort,
+    selectedCrop: typeof saved.selectedCrop === "string" ? saved.selectedCrop : defaults.selectedCrop,
+    filters: { ...blankFilters(), ...(saved.filters || {}) },
+    aiSummaries: saved.aiSummaries && typeof saved.aiSummaries === "object" ? saved.aiSummaries : {},
+  };
 } catch {
   state = structuredClone(defaults);
 }
 
-const OWNER_DEMO_PROFILE = "10jo";
+function readGuestFavorites() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GUEST_FAV_KEY) || "[]");
+    return Array.isArray(raw) ? [...new Set(raw.filter((v) => typeof v === "string" && v.trim()))] : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveGuestFavorites(list) {
+  guestFavorites = [...new Set(list.filter((v) => typeof v === "string" && v.trim()))];
+  try {
+    localStorage.setItem(GUEST_FAV_KEY, JSON.stringify(guestFavorites));
+  } catch {
+    toast("브라우저 저장 공간이 부족합니다.");
+  }
+}
+
+function clearGuestFavorites() {
+  guestFavorites = [];
+  try { localStorage.removeItem(GUEST_FAV_KEY); } catch { /* ignore */ }
+}
+
 let accountUser = null;
 function isLoggedIn() { return Boolean(accountUser); }
-const OWNER_DB_KEY = "moa-owner-db-v1";
-function readOwnerDb() {
-  try { return JSON.parse(localStorage.getItem(OWNER_DB_KEY) || "{}"); } catch { return {}; }
+
+let authEpoch = 0;
+const activeControllers = new Set();
+let guestFavorites = readGuestFavorites();
+let serverFavorites = [];
+let incomingRequests = [];
+let outgoingRequests = [];
+let approvableRequestCount = 0;
+let userConversations = [];
+let chatPollTimer = null;
+let pendingIntent = null;
+let dismissGuestImport = false;
+
+function activeFavorites() {
+  return isLoggedIn() ? serverFavorites : guestFavorites;
 }
-function saveOwnerDb(db) {
-  try { localStorage.setItem(OWNER_DB_KEY, JSON.stringify(db)); } catch { /* 원본 유지 */ }
+
+function stopChatPolling() {
+  if (chatPollTimer) {
+    clearInterval(chatPollTimer);
+    chatPollTimer = null;
+  }
 }
-function getOwnerData() {
-  if (!isLoggedIn() || accountUser.email !== `${OWNER_DEMO_PROFILE}@users.moa-farm.example.com`) return null;
-  return readOwnerDb()[OWNER_DEMO_PROFILE];
+
+function bumpAuthEpoch() {
+  authEpoch += 1;
+  stopChatPolling();
+  for (const controller of activeControllers) {
+    try { controller.abort(); } catch { /* ignore */ }
+  }
+  activeControllers.clear();
+  return authEpoch;
 }
-function migrateExistingOwnerData() {
-  const db = readOwnerDb();
-  if (db[OWNER_DEMO_PROFILE]) return;
-  const owned = allListings().filter((item) => item.owner);
-  const ids = new Set(owned.map((item) => item.id));
-  db[OWNER_DEMO_PROFILE] = {
-    listingIds: [...ids],
-    customListings: state.customListings.filter((item) => ids.has(item.id)),
-    statuses: Object.fromEntries(Object.entries(state.statuses).filter(([id]) => ids.has(id))),
-    bookings: Object.fromEntries(Object.entries(state.bookings).filter(([id]) => ids.has(id))),
-    requests: state.requests.filter((item) => ids.has(item.listingId)),
-    messages: state.messages.filter((item) => ids.has(item.listingId)),
-  };
-  saveOwnerDb(db);
+
+function resetAccountRuntimeState() {
+  serverFavorites = [];
+  incomingRequests = [];
+  outgoingRequests = [];
+  approvableRequestCount = 0;
+  userConversations = [];
+  dismissGuestImport = false;
 }
-function syncOwnerData() {
-  const db = readOwnerDb();
-  if (!db[OWNER_DEMO_PROFILE]) return;
-  const ids = new Set(db[OWNER_DEMO_PROFILE].listingIds);
-  for (const item of state.customListings) if (item.owner) ids.add(item.id);
-  db[OWNER_DEMO_PROFILE] = {
-    listingIds: [...ids],
-    customListings: state.customListings.filter((item) => ids.has(item.id)),
-    statuses: Object.fromEntries(Object.entries(state.statuses).filter(([id]) => ids.has(id))),
-    bookings: Object.fromEntries(Object.entries(state.bookings).filter(([id]) => ids.has(id))),
-    requests: state.requests.filter((item) => ids.has(item.listingId)),
-    messages: state.messages.filter((item) => ids.has(item.listingId)),
-  };
-  saveOwnerDb(db);
+
+let onSessionExpiredHandler = null;
+
+async function apiFetch(url, options = {}) {
+  const epoch = authEpoch;
+  const controller = new AbortController();
+  activeControllers.add(controller);
+  const timeoutMs = options.timeoutMs || 15000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = { ...(options.headers || {}) };
+  if (options.json !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: options.method || "GET",
+      headers,
+      body: options.json !== undefined ? JSON.stringify(options.json) : options.body,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (epoch !== authEpoch) {
+      const staleErr = new Error("계정 상태가 변경되었습니다.");
+      staleErr.code = "AUTH_CHANGED";
+      throw staleErr;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 401 && isLoggedIn() && onSessionExpiredHandler) {
+        onSessionExpiredHandler();
+      }
+      const err = new Error(data?.error || `요청 처리에 실패했습니다. (${response.status})`);
+      err.status = response.status;
+      err.code = data?.code || "REQUEST_FAILED";
+      throw err;
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+    activeControllers.delete(controller);
+  }
 }
+
 let draft = structuredClone(state.filters);
 let toastTimer;
 let catalog = [];
 let catalogState = "loading";
+let catalogReady = Promise.resolve();
 
 function persist() {
   try {
-    localStorage.setItem("moa-farm-v1", JSON.stringify(state));
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify({
+      view: state.view,
+      transaction: state.transaction,
+      region: state.region,
+      sort: state.sort,
+      selectedCrop: state.selectedCrop,
+      filters: state.filters,
+      aiSummaries: state.aiSummaries,
+    }));
   } catch {
-    toast("브라우저 저장 공간이 부족합니다. 사진 크기를 줄여 주세요.");
+    toast("브라우저 저장 공간이 부족합니다.");
   }
-  syncOwnerData();
   updateBadges();
 }
 
-// 데모: 대여 가능한 매물 중 5대를 '지금 대여 중'으로 보여준다 (매물 번호로 고정해서 새로고침해도 같은 5대)
-const DEMO_RENTED_COUNT = 5;
-let demoRentedIds = null;
-function pickDemoRentedIds() {
-  const hash = (text) => [...text].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
-  return new Set(
-    catalog
-      .filter((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair")
-      .sort((a, b) => hash(a.id) - hash(b.id) || a.id.localeCompare(b.id))
-      .slice(0, DEMO_RENTED_COUNT)
-      .map((item) => item.id),
-  );
-}
-
 function allListings() {
-  if (!demoRentedIds && catalog.length) demoRentedIds = pickDemoRentedIds();
-  const now = today();
-  return [...state.customListings, ...catalog].map((item) => ({
-    ...item,
-    status: state.statuses[item.id] || item.status,
-    booked: [
-      ...(item.booked || []),
-      ...(state.bookings[item.id] || []),
-      ...(demoRentedIds?.has(item.id) ? [{ start: now, end: addDays(now, 2), demo: true }] : []),
-    ],
-  }));
+  return catalog;
 }
 
 function rentedNow(item) {
@@ -203,20 +262,21 @@ function rentedNow(item) {
   return (item.booked || []).some((range) => range.start <= now && now <= range.end);
 }
 
-async function loadCatalog() {
+async function loadCatalog({ quiet = false } = {}) {
+  const epoch = authEpoch;
   try {
-    const response = await fetch("/api/listings", { signal: AbortSignal.timeout(4000) });
-    if (!response.ok) throw new Error(`매물 조회 실패 (${response.status})`);
-    const data = await response.json();
+    const data = await apiFetch("/api/listings", { timeoutMs: 8000 });
+    if (epoch !== authEpoch) return;
     if (!Array.isArray(data.listings)) throw new Error("잘못된 매물 응답");
     catalog = data.listings;
     catalogState = "ready";
-    migrateExistingOwnerData();
   } catch (error) {
-    console.error(error);
+    if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+    if (!quiet) console.error(error);
     catalogState = "error";
   }
   renderAll();
+  if (isLoggedIn()) renderOwner();
 }
 
 function listingById(id) {
@@ -256,6 +316,7 @@ function showDialog(backdrop) {
 
 function hideDialog(backdrop) {
   if (backdrop.hidden) return;
+  if (backdrop === $("formBackdrop")) stopChatPolling();
   backdrop.hidden = true;
   dialogOpeners.get(backdrop)?.focus();
   dialogOpeners.delete(backdrop);
@@ -265,7 +326,12 @@ function hideDialog(backdrop) {
 }
 
 const LISTING_PHOTO = /^data:image\/(?:png|jpeg|webp);base64,/i;
-const hasListingPhoto = (item) => typeof item.photo === "string" && LISTING_PHOTO.test(item.photo);
+const getListingPhotoSrc = (item) => {
+  if (typeof item?.photoUrl === "string" && item.photoUrl.startsWith("/api/photos")) return item.photoUrl;
+  if (typeof item?.photo === "string" && LISTING_PHOTO.test(item.photo)) return item.photo;
+  return "";
+};
+const hasListingPhoto = (item) => Boolean(getListingPhotoSrc(item));
 const machineImage = (type) => `./src/images/machines/${type?.id || "tractor"}.jpg`;
 
 function pictureIcon(name) {
@@ -292,24 +358,110 @@ function favoriteIcon() {
   </svg>`;
 }
 
-function toggleFavorite(id) {
-  const isFav = !state.favorites.includes(id);
-  state.favorites = isFav ? [...state.favorites, id] : state.favorites.filter((value) => value !== id);
-  persist();
+async function refreshAuthenticatedData({ includeRequests = true, includeConversations = true } = {}) {
+  if (!isLoggedIn()) {
+    resetAccountRuntimeState();
+    garage?.resetToGuest();
+    updateBadges();
+    renderAll();
+    renderBuyerRequests();
+    return;
+  }
 
+  const epoch = authEpoch;
+  try {
+    const tasks = [apiFetch("/api/me")];
+    tasks.push(includeRequests ? apiFetch("/api/requests") : Promise.resolve(null));
+    tasks.push(includeConversations ? apiFetch("/api/conversations?mode=list") : Promise.resolve(null));
+    const [meData, reqData, convData] = await Promise.all(tasks);
+    if (epoch !== authEpoch) return;
+
+    serverFavorites = Array.isArray(meData?.favorites) ? meData.favorites : [];
+    garage?.setExternalOwned(meData?.ownedMachines || [], meData?.selectedOwnedMachineId || "");
+
+    if (reqData) {
+      incomingRequests = Array.isArray(reqData.incoming) ? reqData.incoming : [];
+      outgoingRequests = Array.isArray(reqData.outgoing) ? reqData.outgoing : [];
+      approvableRequestCount = Number(reqData.approvableCount) || 0;
+    }
+    if (convData) {
+      userConversations = Array.isArray(convData.conversations) ? convData.conversations : [];
+    }
+
+    renderGuestImportBanner();
+    updateBadges();
+    renderListings();
+    if (state.view === "requests") renderBuyerRequests();
+    if (state.view === "owner") renderOwner();
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+    if (error?.status !== 401) {
+      console.error("authenticated refresh failed", error);
+    }
+  }
+}
+
+function savePendingIntentAndRedirectLogin(intent, notice = "로그인 후 이어서 진행할 수 있어요.") {
+  pendingIntent = intent;
+  hideDialog($("detailBackdrop"));
+  hideDialog($("formBackdrop"));
+  toast(notice);
+  setView("login");
+}
+
+function syncFavoriteButtons(id, isFav) {
   const escapedId = CSS.escape(id);
   document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"]`).forEach((button) => {
     button.setAttribute("aria-pressed", String(isFav));
     const label = button.querySelector(".favorite-label");
     if (label) label.textContent = isFav ? "찜한 기계" : "찜하기";
   });
-  toast(isFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
+}
+
+async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
+  const currentList = activeFavorites();
+  const nextFav = typeof favorite === "boolean" ? favorite : !currentList.includes(id);
+
+  if (!isLoggedIn()) {
+    saveGuestFavorites(nextFav ? [...guestFavorites, id] : guestFavorites.filter((v) => v !== id));
+    syncFavoriteButtons(id, nextFav);
+    updateBadges();
+    toast(nextFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
+    if (fromModal) openFavoritesModal();
+    return;
+  }
+
+  const escapedId = CSS.escape(id);
+  const buttons = [...document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"], [data-fav-remove="${escapedId}"]`)];
+  buttons.forEach((btn) => { btn.disabled = true; });
+  try {
+    const res = await apiFetch("/api/me", {
+      method: "POST",
+      json: { action: "toggleFavorite", listingId: id, favorite: nextFav },
+    });
+    serverFavorites = Array.isArray(res?.userData?.favorites) ? res.userData.favorites : [];
+    const actualFav = serverFavorites.includes(id);
+    syncFavoriteButtons(id, actualFav);
+    updateBadges();
+    toast(actualFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
+    if (fromModal) openFavoritesModal();
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+    if (error?.status === 401) {
+      savePendingIntentAndRedirectLogin(null, "세션이 만료되었습니다. 다시 로그인해 주세요.");
+      return;
+    }
+    toast(error?.message || "찜 상태를 변경하지 못했습니다.");
+  } finally {
+    buttons.forEach((btn) => { btn.disabled = false; });
+  }
 }
 
 function machineVisual(item) {
   const type = MACHINE_BY_ID[item.machineType];
-  return hasListingPhoto(item)
-    ? `<img src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
+  const src = getListingPhotoSrc(item);
+  return src
+    ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title)} 사진" style="width:100%;height:100%;object-fit:cover">`
     : `<img class="machine-example" src="${machineImage(type)}" alt="${escapeHtml(type?.label || "농기계")} AI 예시 이미지" width="350" height="365" loading="lazy">`;
 }
 
@@ -321,9 +473,10 @@ function listingSummary(item) {
 
 function updateBadges() {
   const favBadge = $("favNavBadge");
+  const favCount = activeFavorites().length;
   if (favBadge) {
-    favBadge.hidden = state.favorites.length === 0;
-    favBadge.textContent = String(state.favorites.length);
+    favBadge.hidden = favCount === 0;
+    favBadge.textContent = String(favCount);
   }
   const ownerBadge = $("ownerBadge");
   if (ownerBadge) {
@@ -331,11 +484,8 @@ function updateBadges() {
       ownerBadge.hidden = true;
       ownerBadge.textContent = "";
     } else {
-      const ownerIds = new Set(getOwnerData()?.listingIds || []);
-      const owned = allListings().filter((item) => ownerIds.has(item.id));
-      const pendingCount = state.requests.filter((r) => r.status === "pending" && owned.some((item) => item.id === r.listingId)).length;
-      ownerBadge.hidden = pendingCount === 0;
-      ownerBadge.textContent = String(pendingCount);
+      ownerBadge.hidden = approvableRequestCount === 0;
+      ownerBadge.textContent = String(approvableRequestCount);
     }
   }
 }
@@ -365,7 +515,14 @@ function setView(view) {
   }
   markNav(view);
   persist();
-  if (view === "owner") renderOwner();
+  if (view === "owner") {
+    renderOwner();
+    refreshAuthenticatedData();
+  }
+  if (view === "requests") {
+    renderBuyerRequests();
+    if (isLoggedIn()) refreshAuthenticatedData();
+  }
   if (view === "garage") garage?.refresh();
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
   scrollSpyPausedUntil = Date.now() + 1000;
@@ -790,7 +947,7 @@ function card(item) {
   const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
   const cropsText = item.cropIds.map((id) => CROP_BY_ID[id]?.name).filter(Boolean).join("·");
   const opsText = item.operations.map((id) => OPERATION_BY_ID[id]?.label).filter(Boolean).slice(0, 2).join(" · ");
-  const isFav = state.favorites.includes(item.id);
+  const isFav = activeFavorites().includes(item.id);
   const sClass = statusClass(item);
 
   return `
@@ -885,7 +1042,7 @@ function openDetail(id) {
   const dateEnd = state.filters.dateEnd || date;
   const booked = item.type === "rent" && date && !available(item, date, dateEnd);
   const unavailable = item.status !== "open" || item.condition === "repair";
-  const isFav = state.favorites.includes(item.id);
+  const isFav = activeFavorites().includes(item.id);
 
   $("detailContent").innerHTML = `
     <div class="detail-layout">
@@ -964,9 +1121,14 @@ function openDetail(id) {
             ${favoriteIcon()}
             <span class="favorite-label">${isFav ? "찜한 기계" : "찜하기"}</span>
           </button>
-          <button type="button" class="button button-primary button-large" data-detail-action="${item.id}" ${unavailable || booked ? "disabled" : ""}>
-            ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? " 이 농기계 대여 신청하기" : " 판매자에게 채팅 문의하기"}
-          </button>
+          ${item.owner ? `
+            <button type="button" class="button button-primary button-large" data-detail-manage="${item.id}">내 매물 관리하기</button>
+          ` : `
+            ${item.type === "rent" ? `<button type="button" class="button button-secondary" data-detail-chat="${item.id}">1:1 문의</button>` : ""}
+            <button type="button" class="button button-primary button-large" data-detail-action="${item.id}" ${unavailable || booked ? "disabled" : ""}>
+              ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? " 이 농기계 대여 신청하기" : " 판매자에게 채팅 문의하기"}
+            </button>
+          `}
         </div>
       </div>
     </div>
@@ -975,131 +1137,446 @@ function openDetail(id) {
 }
 
 function openForm(html) {
+  stopChatPolling();
   $("formContent").innerHTML = html;
   showDialog($("formBackdrop"));
 }
 
-function rentalForm(id) {
+const REQUEST_STATE_LABEL = {
+  approvable: "승인 대기",
+  conflict: "일정 충돌 (승인 불가)",
+  expired: "기간 경과",
+  upcoming: "예약 확정",
+  active: "대여 중",
+  completed: "대여 완료",
+  rejected: "거절됨",
+  cancelled: "취소됨",
+};
+
+function renderRequestBadge(req) {
+  const label = REQUEST_STATE_LABEL[req.derivedState] || req.status;
+  return `<span class="step-pill req-pill req-pill-${escapeHtml(req.derivedState || req.status)}">${escapeHtml(label)}</span>`;
+}
+
+function rentalForm(id, draftValues = null) {
   const item = listingById(id);
-  const date = state.filters.date >= today() ? state.filters.date : today();
-  const endDate = state.filters.dateEnd >= date ? state.filters.dateEnd : date;
+  if (!item) return;
+  if (!isLoggedIn()) {
+    savePendingIntentAndRedirectLogin({
+      type: "rental",
+      listingId: id,
+      draftValues,
+    });
+    return;
+  }
+  const minToday = today();
+  const initialStart = draftValues?.start || (state.filters.date >= minToday ? state.filters.date : minToday);
+  const initialEnd = draftValues?.end || (state.filters.dateEnd >= initialStart ? state.filters.dateEnd : initialStart);
+  const initialNote = draftValues?.note || "";
+  let draftRequestId = draftValues?.requestId || crypto.randomUUID();
+
   openForm(`
     <span class="step-pill">간편 대여 신청</span>
     <h2 id="formTitle">농기계 대여 요청하기</h2>
     <p><strong>${escapeHtml(item.title)}</strong> (${money(item.price)}/일) · 일정을 선택해 요청을 보내면 소유 농가에서 확인 후 승인해 드립니다.</p>
     <form class="stack-form" id="rentalForm">
       <div class="form-row-2">
-        <label>대여 시작일<input type="date" id="rentStart" min="${today()}" value="${date}" required></label>
-        <label>반납 예정일<input type="date" id="rentEnd" min="${date}" value="${endDate}" required></label>
+        <label>대여 시작일<input type="date" id="rentStart" min="${minToday}" value="${escapeHtml(initialStart)}" required></label>
+        <label>반납 예정일<input type="date" id="rentEnd" min="${escapeHtml(initialStart)}" value="${escapeHtml(initialEnd)}" required></label>
       </div>
       <p id="rentalEstimate" aria-live="polite"></p>
       <label>작업 내용 · 방문 메모 (선택)
-        <textarea id="rentNote" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다."></textarea>
+        <textarea id="rentNote" maxlength="500" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다.">${escapeHtml(initialNote)}</textarea>
       </label>
       <div class="form-actions">
         <button class="button button-primary button-large" type="submit" id="rentalSubmitButton">대여 요청 보내기</button>
       </div>
     </form>
   `);
+
+  let lastPayloadFingerprint = null;
+  let busy = false;
+
   const updateEstimate = () => {
     const start = $("rentStart").value;
     const end = $("rentEnd").value;
-    $("rentEnd").min = start || today();
+    $("rentEnd").min = start || minToday;
     const days = (Date.parse(end) - Date.parse(start)) / 86400000 + 1;
-    const valid = Number.isInteger(days) && days > 0;
+    const valid = Number.isInteger(days) && days > 0 && start >= minToday;
     const button = $("rentalSubmitButton");
     if (valid) {
       const totalPrice = item.price * days;
       $("rentalEstimate").textContent = "운송비와 보증금은 소유 농가에 확인해 주세요.";
       button.textContent = `${days}일 · ${money(totalPrice)} 대여 신청하기`;
-      button.disabled = false;
+      if (!busy) button.disabled = false;
     } else {
       $("rentalEstimate").textContent = "시작일과 반납일을 확인해 주세요.";
       button.textContent = "대여 기간을 확인해 주세요";
       button.disabled = true;
     }
   };
-  $("rentalForm").addEventListener("input", updateEstimate);
+  $("rentalForm").addEventListener("input", () => {
+    const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}`;
+    if (lastPayloadFingerprint && fp !== lastPayloadFingerprint) {
+      draftRequestId = crypto.randomUUID();
+      lastPayloadFingerprint = null;
+    }
+    updateEstimate();
+  });
   updateEstimate();
-  $("rentalForm").addEventListener("submit", (event) => {
+
+  $("rentalForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (busy) return;
     const start = $("rentStart").value;
     const end = $("rentEnd").value;
-    if (end < start) return toast("반납일을 시작일 이후로 선택하세요.");
-    if (!available(listingById(id), start, end)) return toast("해당 기간에는 이미 예약이 있어 대여할 수 없습니다.");
-    state.requests.push({ id: crypto.randomUUID(), listingId: id, start, end, note: $("rentNote").value.trim(), status: "pending" });
-    persist();
-    hideDialog($("formBackdrop"));
-    renderOwner();
-    renderBuyerRequests();
-    toast("대여 요청을 성공적으로 보냈습니다! 상단 '내 기계 등록·관리'에서 승인 시연을 해볼 수 있어요.");
+    const note = $("rentNote").value.trim();
+    if (end < start || start < today()) return toast("대여 시작일과 반납일을 다시 확인하세요.");
+    if (!available(listingById(id), start, end)) return toast("해당 기간에는 이미 확정된 예약이 있어 대여할 수 없습니다.");
+
+    lastPayloadFingerprint = `${start}|${end}|${note}`;
+    busy = true;
+    const button = $("rentalSubmitButton");
+    button.disabled = true;
+    try {
+      await apiFetch("/api/requests", {
+        method: "POST",
+        json: { action: "create", id: draftRequestId, listingId: id, start, end, note },
+      });
+      hideDialog($("formBackdrop"));
+      await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData()]);
+      toast("대여 요청을 보냈습니다! 상대방이 승인하면 예약이 확정됩니다.");
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+      if (error?.status === 401) {
+        savePendingIntentAndRedirectLogin(
+          { type: "rental", listingId: id, draftValues: { start, end, note, requestId: draftRequestId } },
+          "세션이 만료되었습니다. 로그인 후 이어서 신청할 수 있어요."
+        );
+        return;
+      }
+      toast(error?.message || "대여 요청을 보내지 못했습니다.");
+    } finally {
+      busy = false;
+      if ($("rentalSubmitButton")) updateEstimate();
+    }
   });
 }
 
-function chatForm(id) {
-  const item = listingById(id);
-  const role = state.view === "owner" ? "owner" : "buyer";
+function chatForm(target) {
+  const opts = typeof target === "string" ? { listingId: target } : (target || {});
+  const listingId = opts.listingId || null;
+  let conversationId = opts.conversationId || null;
+  const draftBody = typeof opts.draftBody === "string" ? opts.draftBody : "";
+  const item = listingId ? listingById(listingId) : null;
+
+  if (!isLoggedIn()) {
+    savePendingIntentAndRedirectLogin({
+      type: "chat",
+      listingId,
+      conversationId,
+      draftBody,
+    });
+    return;
+  }
+
   openForm(`
     <span class="step-pill">1:1 농기계 채팅 문의</span>
-    <h2 id="formTitle">${role === "owner" ? "이웃 농가(구매·대여 희망자)" : "기계 소유 농가"}와 대화하기</h2>
-    <p><strong>${escapeHtml(item.title)}</strong> · 궁금한 기계 상태나 인수 시간을 편하게 물어보세요.</p>
-    <div id="chatLog" class="chat-log"></div>
+    <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
+    <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
+    <div style="margin-bottom:8px">
+      <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
+    </div>
+    <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
     <form id="chatForm" class="chat-send">
-      <input id="chatMessage" maxlength="500" placeholder="예: 초보자도 작동하기 쉬운가요? 이번 주 토요일에 보러 가도 될까요?" aria-label="메시지 입력" required>
-      <button type="submit" class="button button-primary">보내기</button>
+      <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
+      <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
     </form>
   `);
-  const renderChat = () => {
-    $("chatLog").innerHTML =
-      state.messages
-        .filter((message) => message.listingId === id)
-        .map(
-          (message) =>
-            `<div class="chat-line ${message.role === role ? "mine" : ""}">
-              <b>${message.role === "owner" ? "기계 소유자" : "문의 농가"}</b>
-              <div>${escapeHtml(message.text)}</div>
-            </div>`
-        )
-        .join("") || `<div class="chat-empty">아직 나눈 대화가 없어요. 기계 상태와 인수 조건을 먼저 물어보세요!</div>`;
-    $("chatLog").scrollTop = $("chatLog").scrollHeight;
+
+  const epoch = authEpoch;
+  const bySeq = new Map();
+  let hasMoreOlder = false;
+  let busy = false;
+  let draftMessageId = crypto.randomUUID();
+  let lastSubmittedBody = null;
+
+  const sortedMessages = () => [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  const maxSeq = () => {
+    const list = sortedMessages();
+    return list.length ? list[list.length - 1].seq : 0;
   };
-  renderChat();
-  $("chatForm").addEventListener("submit", (event) => {
+  const minSeq = () => {
+    const list = sortedMessages();
+    return list.length ? list[0].seq : null;
+  };
+
+  function renderChat({ keepScroll = false } = {}) {
+    if (!$("chatLog")) return;
+    const log = $("chatLog");
+    const prevHeight = log.scrollHeight;
+    const list = sortedMessages();
+    log.innerHTML = list.length
+      ? list.map((msg) => {
+          const mine = msg.senderId === accountUser?.id;
+          return `<div class="chat-line ${mine ? "mine" : ""}">
+            <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}</b>
+            <div>${escapeHtml(msg.body)}</div>
+          </div>`;
+        }).join("")
+      : `<div class="chat-empty">아직 나눈 대화가 없어요. 기계 상태와 인수 조건을 먼저 물어보세요!</div>`;
+    $("chatLoadOlder").hidden = !hasMoreOlder;
+    if (keepScroll) {
+      log.scrollTop += log.scrollHeight - prevHeight;
+    } else {
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+
+  function applyConvMetadata(conv) {
+    if (!conv) return;
+    conversationId = conv.id;
+    const isBuyer = conv.buyerId === accountUser?.id;
+    const peerLabel = isBuyer ? `소유 농가 ${conv.ownerName}` : `문의 농가 ${conv.buyerName}`;
+    if ($("formTitle")) $("formTitle").textContent = `${conv.listingTitle || item?.title || "농기계"} · 1:1 대화`;
+    if ($("chatSubtitle")) $("chatSubtitle").textContent = `${peerLabel}님과의 대화`;
+  }
+
+  async function loadInitialMessages() {
+    try {
+      const qs = conversationId
+        ? `conversationId=${encodeURIComponent(conversationId)}&limit=50`
+        : `listingId=${encodeURIComponent(listingId)}&limit=50`;
+      const data = await apiFetch(`/api/conversations?${qs}`);
+      if (epoch !== authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
+      if (data.conversation) applyConvMetadata(data.conversation);
+      for (const m of data.messages || []) bySeq.set(m.seq, m);
+      hasMoreOlder = Boolean(data.hasMoreOlder);
+      renderChat();
+      startPolling();
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+      if ($("chatLog")) {
+        $("chatLog").innerHTML = `<div class="chat-empty">${escapeHtml(error?.message || "대화를 불러오지 못했습니다.")}</div>`;
+      }
+    }
+  }
+
+  async function pollNewMessages() {
+    if (!conversationId || epoch !== authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
+    try {
+      const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(conversationId)}&after_seq=${maxSeq()}&limit=50`);
+      if (epoch !== authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
+      const incoming = data.messages || [];
+      if (incoming.length) {
+        for (const m of incoming) bySeq.set(m.seq, m);
+        renderChat();
+      }
+    } catch {
+      // Transient polling errors recover on next tick unless auth changed
+    }
+  }
+
+  function startPolling() {
+    stopChatPolling();
+    if (!conversationId || epoch !== authEpoch || $("formBackdrop").hidden) return;
+    chatPollTimer = setInterval(pollNewMessages, 2500);
+  }
+
+  $("chatLoadOlder").addEventListener("click", async () => {
+    const oldest = minSeq();
+    if (!conversationId || !oldest || oldest <= 1) return;
+    $("chatLoadOlder").disabled = true;
+    try {
+      const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(conversationId)}&before_seq=${oldest}&limit=50`);
+      if (epoch !== authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
+      for (const m of data.messages || []) bySeq.set(m.seq, m);
+      hasMoreOlder = Boolean(data.hasMoreOlder);
+      renderChat({ keepScroll: true });
+    } catch (error) {
+      toast(error?.message || "이전 대화를 불러오지 못했습니다.");
+    } finally {
+      if ($("chatLoadOlder")) $("chatLoadOlder").disabled = false;
+    }
+  });
+
+  $("chatMessage").addEventListener("input", () => {
+    const val = $("chatMessage").value.trim();
+    if (lastSubmittedBody !== null && val !== lastSubmittedBody) {
+      draftMessageId = crypto.randomUUID();
+      lastSubmittedBody = null;
+    }
+  });
+
+  $("chatForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (busy) return;
     const text = $("chatMessage").value.trim();
     if (!text) return;
-    state.messages.push({ id: crypto.randomUUID(), listingId: id, role, text });
-    $("chatMessage").value = "";
-    persist();
-    renderChat();
-    renderOwner();
+    lastSubmittedBody = text;
+    busy = true;
+    $("chatSendButton").disabled = true;
+    try {
+      const res = await apiFetch("/api/conversations", {
+        method: "POST",
+        json: {
+          action: "send",
+          id: draftMessageId,
+          conversationId,
+          listingId: listingId || undefined,
+          body: text,
+        },
+      });
+      if (epoch !== authEpoch) return;
+      if (res.conversation) applyConvMetadata(res.conversation);
+      if (res.message) bySeq.set(res.message.seq, res.message);
+      $("chatMessage").value = "";
+      draftMessageId = crypto.randomUUID();
+      lastSubmittedBody = null;
+      renderChat();
+      startPolling();
+      refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+      if (error?.status === 401) {
+        savePendingIntentAndRedirectLogin(
+          { type: "chat", listingId, conversationId, draftBody: text },
+          "세션이 만료되었습니다. 로그인 후 메시지를 이어서 보낼 수 있어요."
+        );
+        return;
+      }
+      toast(error?.message || "메시지를 보내지 못했습니다.");
+    } finally {
+      busy = false;
+      if ($("chatSendButton")) $("chatSendButton").disabled = false;
+    }
   });
+
+  loadInitialMessages();
+}
+
+async function handleRequestAction(action, requestId, button) {
+  if (button) button.disabled = true;
+  try {
+    await apiFetch("/api/requests", {
+      method: "POST",
+      json: { action, id: requestId },
+    });
+    await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData()]);
+    toast(
+      action === "approve" ? "대여 요청을 승인했습니다. 해당 기간 예약이 확정되었습니다."
+      : action === "reject" ? "대여 요청을 거절했습니다."
+      : "대여 요청을 취소했습니다."
+    );
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+    if (error?.status === 401) {
+      savePendingIntentAndRedirectLogin(null, "세션이 만료되었습니다. 다시 로그인해 주세요.");
+      return;
+    }
+    toast(error?.message || "요청 상태를 변경하지 못했습니다.");
+    if (button) button.disabled = false;
+  }
+}
+
+function renderRequestActionsHtml(req) {
+  const actions = [];
+  if (req.canApprove) {
+    actions.push(`<button type="button" class="button button-primary button-sm" data-req-approve="${escapeHtml(req.id)}">승인</button>`);
+  }
+  if (req.canReject) {
+    actions.push(`<button type="button" class="button button-secondary button-sm" data-req-reject="${escapeHtml(req.id)}">거절</button>`);
+  }
+  if (req.canCancel) {
+    actions.push(`<button type="button" class="button button-secondary button-sm" data-req-cancel="${escapeHtml(req.id)}">요청 취소</button>`);
+  }
+  return actions.join("");
 }
 
 function renderBuyerRequests() {
-  if (!state.requests.length) {
-    $("buyerRequestList").textContent = "아직 보낸 대여 요청이 없어요. 매물 상세에서 대여를 신청하면 여기에서 상태를 볼 수 있어요.";
+  const listEl = $("buyerRequestList");
+  const convEl = $("buyerConversations");
+  if (!listEl) return;
+
+  if (!isLoggedIn()) {
+    listEl.innerHTML = `<div class="empty-panel">로그인하면 내가 보낸 대여 요청과 확정된 예약을 확인할 수 있어요.</div>`;
+    if (convEl) convEl.innerHTML = `<div class="empty-panel">로그인하면 내 1:1 채팅 문의 내역을 확인할 수 있어요.</div>`;
     return;
   }
-  $("buyerRequestList").replaceChildren(...state.requests.slice().reverse().map((request) => {
-    const row = document.createElement("div");
-    row.className = "request-row";
-    const item = listingById(request.listingId);
-    const label = {
-      pending: "승인 대기",
-      approved: "승인됨 · 인수 및 반납 방법을 확인하세요",
-      rejected: "거절됨 · 다른 기간이나 매물을 찾아보세요",
-    }[request.status];
-    row.textContent = [item?.title || "대여 매물", request.start + " ~ " + request.end, label].join(" · ");
-    return row;
-  }));
+
+  listEl.innerHTML = outgoingRequests.length
+    ? outgoingRequests.map((req) => `
+      <div class="request-row">
+        <div class="owner-row-info">
+          <div class="owner-row-badges">
+            ${renderRequestBadge(req)}
+            <span class="spec-tag">${req.days}일 · ${money(req.totalPrice)}</span>
+          </div>
+          <strong>${escapeHtml(req.listingTitle || "농기계 매물")}</strong>
+          <small>대여 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)} · 소유자 ${escapeHtml(req.listingOwnerName || "-")}${req.note ? `<br>내 메모: ${escapeHtml(req.note)}` : ""}</small>
+        </div>
+        <div class="owner-row-actions">
+          <button type="button" class="button button-secondary button-sm" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 채팅</button>
+          ${req.canCancel ? `<button type="button" class="button button-secondary button-sm" data-req-cancel="${escapeHtml(req.id)}">요청 취소</button>` : ""}
+        </div>
+      </div>`).join("")
+    : `<div class="empty-panel">아직 보낸 대여 요청이 없어요. 매물 상세에서 대여를 신청하면 여기에서 상태를 볼 수 있어요.</div>`;
+
+  if (convEl) {
+    const buyerConvs = userConversations.filter((c) => c.buyerId === accountUser?.id);
+    convEl.innerHTML = buyerConvs.length
+      ? buyerConvs.map((c) => `
+        <div class="request-row">
+          <div class="owner-row-info">
+            <span class="step-pill">판매자: ${escapeHtml(c.ownerName)}</span>
+            <strong>${escapeHtml(c.listingTitle)}</strong>
+            <small>${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
+          </div>
+          <div class="owner-row-actions">
+            <button type="button" class="button button-primary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화 보기</button>
+          </div>
+        </div>`).join("")
+      : `<div class="empty-panel">아직 시작한 채팅 문의가 없습니다.</div>`;
+  }
+}
+
+function renderGuestImportBanner() {
+  const banner = $("guestImportBanner");
+  if (!banner) return;
+  if (!isLoggedIn() || dismissGuestImport) {
+    banner.hidden = true;
+    banner.innerHTML = "";
+    return;
+  }
+  const gFavs = readGuestFavorites();
+  const gOwned = garage?.getGuestOwned() || [];
+  if (!gFavs.length && !gOwned.length) {
+    banner.hidden = true;
+    banner.innerHTML = "";
+    return;
+  }
+  banner.hidden = false;
+  banner.innerHTML = `
+    <div class="guest-import-copy">
+      <strong>로그인 전에 담은 항목을 내 계정으로 가져올까요?</strong>
+      <small>브라우저 임시 보관함: 찜한 매물 ${gFavs.length}건 · 보유 농기계 ${gOwned.length}대</small>
+    </div>
+    <div class="guest-import-actions">
+      <button type="button" class="button button-primary button-sm" id="importGuestConfirm">내 계정에 가져오기</button>
+      <button type="button" class="button button-secondary button-sm" id="importGuestDismiss">건너뛰기</button>
+    </div>
+  `;
 }
 
 function renderOwner() {
   if (!isLoggedIn()) return;
-  const ownerIds = new Set(getOwnerData()?.listingIds || []);
-  const owned = allListings().filter((item) => ownerIds.has(item.id));
-  const pending = state.requests.filter((request) => request.status === "pending" && owned.some((item) => item.id === request.listingId));
+  if ($("ownerAccountLabel")) {
+    $("ownerAccountLabel").textContent = `${accountUser.name} 님의 농기계 관리`;
+  }
+  renderGuestImportBanner();
+
+  const owned = allListings().filter((item) => item.ownerId === accountUser.id && item.status !== "removed");
+
   $("ownerStats").innerHTML = `
     <div class="stat-box">
       <span class="stat-icon" aria-hidden="true">${pictureIcon("sprout")}</span>
@@ -1107,7 +1584,7 @@ function renderOwner() {
     </div>
     <div class="stat-box">
       <span class="stat-icon" aria-hidden="true">${pictureIcon("envelope")}</span>
-      <div><small>대기 중인 대여 요청</small><strong>${pending.length}건</strong></div>
+      <div><small>승인 가능한 대여 요청</small><strong>${approvableRequestCount}건</strong></div>
     </div>
     <div class="stat-box">
       <span class="stat-icon" aria-hidden="true">${pictureIcon("handshake")}</span>
@@ -1115,10 +1592,8 @@ function renderOwner() {
     </div>
   `;
 
-  $("ownerListings").innerHTML =
-    owned
-      .map(
-        (item) => `
+  $("ownerListings").innerHTML = owned.length
+    ? owned.map((item) => `
       <div class="owner-row">
         <div class="owner-row-info">
           <div class="owner-row-badges">
@@ -1133,140 +1608,266 @@ function renderOwner() {
             : "없음"}</small>` : ""}
         </div>
         <div class="owner-row-actions">
-          <button type="button" class="button button-secondary button-sm" data-owner-detail="${item.id}">상세 보기</button>
+          <select class="owner-status-select" data-owner-status="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 상태 변경">
+            <option value="open" ${item.status === "open" ? "selected" : ""}>${item.type === "rent" ? "대여 가능" : "판매 가능"}</option>
+            <option value="dealing" ${item.status === "dealing" ? "selected" : ""}>거래 중</option>
+            <option value="done" ${item.status === "done" ? "selected" : ""}>거래 완료</option>
+          </select>
+          <button type="button" class="button button-secondary button-sm" data-owner-detail="${escapeHtml(item.id)}">상세</button>
+          <button type="button" class="button button-secondary button-sm" data-owner-edit="${escapeHtml(item.id)}">수정</button>
+          <button type="button" class="button button-secondary button-sm" data-owner-remove="${escapeHtml(item.id)}">숨기기</button>
         </div>
-      </div>`
-      )
-      .join("") || `<div class="empty-panel">이 계정에 연결된 시연용 농기계가 없습니다.</div>`;
+      </div>`).join("")
+    : `<div class="empty-panel">아직 등록한 농기계가 없습니다. 상단 '+ 새 농기계 등록' 버튼을 눌러 등록해 보세요.</div>`;
 
-  const inquiries = state.messages.filter((message) => message.role === "buyer" && owned.some((item) => item.id === message.listingId));
-  const latestByListing = [...new Map(inquiries.map((message) => [message.listingId, message])).values()];
-
-  $("ownerRequests").innerHTML =
-    pending
-      .map(
-        (request) => `
+  $("ownerRequests").innerHTML = incomingRequests.length
+    ? incomingRequests.map((req) => `
       <div class="request-row">
         <div class="owner-row-info">
-          <span class="step-pill"> 대여 승인 대기</span>
-          <strong>${escapeHtml(listingById(request.listingId)?.title || "농기계")}</strong>
-          <small>희망 기간: ${request.start} ~ ${request.end}${request.note ? `<br>메모: ${escapeHtml(request.note)}` : ""}</small>
+          <div class="owner-row-badges">
+            ${renderRequestBadge(req)}
+            <span class="spec-tag">${req.days}일 · ${money(req.totalPrice)}</span>
+          </div>
+          <strong>${escapeHtml(req.listingTitle || "농기계")}</strong>
+          <small>요청자: ${escapeHtml(req.requesterName)} · 희망 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)}${req.note ? `<br>메모: ${escapeHtml(req.note)}` : ""}</small>
         </div>
         <div class="owner-row-actions">
+          ${renderRequestActionsHtml(req)}
+        </div>
+      </div>`).join("")
+    : `<div class="empty-panel">도착한 대여 요청이 없습니다.</div>`;
 
-        </div>
-      </div>`
-      )
-      .join("") +
-      latestByListing
-        .map(
-          (message) => `
-      <div class="request-row">
-        <div class="owner-row-info">
-          <span class="step-pill"> 채팅 문의</span>
-          <strong>${escapeHtml(listingById(message.listingId)?.title || "농기계")}</strong>
-          <small>"${escapeHtml(message.text)}"</small>
-        </div>
-        <div class="owner-row-actions">
-
-        </div>
-      </div>`
-        )
-        .join("") || `<div class="empty-panel">아직 도착한 대여 요청이나 문의가 없습니다.</div>`;
+  const ownerConvsEl = $("ownerConversations");
+  if (ownerConvsEl) {
+    const ownerConvs = userConversations.filter((c) => c.ownerId === accountUser?.id);
+    ownerConvsEl.innerHTML = ownerConvs.length
+      ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div>` + ownerConvs.map((c) => `
+        <div class="request-row">
+          <div class="owner-row-info">
+            <span class="step-pill">문의자: ${escapeHtml(c.buyerName)}</span>
+            <strong>${escapeHtml(c.listingTitle)}</strong>
+            <small>${c.lastMessage ? `"${escapeHtml(c.lastMessage.body)}"` : "새 대화"}</small>
+          </div>
+          <div class="owner-row-actions">
+            <button type="button" class="button button-secondary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화하기</button>
+          </div>
+        </div>`).join("")
+      : "";
+  }
 }
 
-function openNewListing() {
-  openForm(`
-    <span class="step-pill">농기계 등록</span>
-    <h2 id="formTitle">내 농기계 올리기</h2>
-    <p>이웃 농가에게 빌려주거나 판매할 농기계 정보를 입력해 주세요. (이 브라우저에 데모로 저장됩니다)</p>
-    <form class="stack-form" id="newListingForm">
-      <div class="form-row-2">
-        <label>거래 방식
-          <select id="newType"><option value="rent">빌려주기 (일일 대여)</option><option value="sale">중고로 판매하기</option></select>
-        </label>
-        <label>농기계 종류
-          <select id="newMachine">${MACHINE_TYPES.map((item) => `<option value="${item.id}">${item.emoji} ${item.label}</option>`).join("")}</select>
-        </label>
-      </div>
-      <label>게시글 제목<input id="newTitle" maxlength="80" required placeholder="예: 초보자도 쉬운 관리기 + 두둑성형기 세트 대여"></label>
-      <div class="form-row-2">
-        <label>추천 작물<select id="newCrop">${CROPS.map((item) => `<option value="${item.id}">${item.emoji} ${item.name}</option>`).join("")}</select></label>
-        <label>세부 작업<select id="newOperation">${OPERATIONS.map((item) => `<option value="${item.id}">${item.label}</option>`).join("")}</select></label>
-      </div>
-      <div class="form-row-3">
-        <label>요금/가격(원)<input id="newPrice" type="number" min="0" step="1000" required placeholder="예: 50000"></label>
-        <label>최소 권장 면적(㎡)<input id="newAreaMin" type="number" min="1" required placeholder="예: 300"></label>
-        <label>최대 권장 면적(㎡)<input id="newAreaMax" type="number" min="1" required placeholder="예: 1500"></label>
-      </div>
-      <div class="form-row-2">
-        <label>기계 상태
-          <select id="newCondition"><option value="good">정상 작동</option><option value="used">사용감 있음</option><option value="repair">정비 필요</option></select>
-        </label>
-        <label>최근 점검일<input id="newInspection" type="date" max="${today()}" value="${today()}" required></label>
-      </div>
-      <label>기계 사진 업로드 (JPG·PNG·WebP, 1MB 이하)<input id="newPhoto" type="file" accept="image/png,image/jpeg,image/webp" required></label>
-      <div class="form-row-2">
-        <label>포함 작업기·부속품<input id="newIncluded" required placeholder="예: 로터리, 두둑성형기 포함"></label>
-        <label>인수·전달 방법<input id="newPickup" required placeholder="예: 영양읍 창고 직접 방문 인수"></label>
-      </div>
-      <label>상세 설명 및 초보자 안내<textarea id="newDescription" required placeholder="기계 작동 상태와 초보 농부님이 사용할 때 주의할 점을 친절하게 적어주세요."></textarea></label>
-      <button class="button button-primary button-large" type="submit">+ 매물 등록 완료하기</button>
-    </form>
-  `);
-  if (state.selectedCrop && state.selectedCrop !== "all") {
-    $("newCrop").value = state.selectedCrop;
-  }
-  $("newListingForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const file = $("newPhoto").files[0];
-    if (!file || file.size > 1024 * 1024) return toast("JPG·PNG·WebP 사진을 1MB 이하로 선택해 주세요.");
-    const areaMin = Number($("newAreaMin").value);
-    const areaMax = Number($("newAreaMax").value);
-    if (areaMin > areaMax) return toast("최대 면적이 최소 면적보다 작습니다.");
-    const photo = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    const machineType = $("newMachine").value;
-    const cropId = $("newCrop").value;
-    const operationId = $("newOperation").value;
-    const item = {
-      id: crypto.randomUUID(),
-      type: $("newType").value,
-      title: $("newTitle").value.trim(),
-      brand: "직접 등록",
-      machineType,
-      cropIds: [cropId],
-      operations: [operationId],
-      areaMin,
-      areaMax,
-      price: Number($("newPrice").value),
-      region: state.region,
-      condition: $("newCondition").value,
-      inspectedAt: $("newInspection").value,
-      included: $("newIncluded").value.trim(),
-      pickup: $("newPickup").value.trim(),
-      description: $("newDescription").value.trim(),
-      summary: `${CROP_BY_ID[cropId].name} ${OPERATION_BY_ID[operationId].label} 작업에 쓰는 ${MACHINE_BY_ID[machineType].label}입니다. 권장 면적 ${areaMin.toLocaleString()}~${areaMax.toLocaleString()}㎡.`,
-      booked: [],
-      owner: true,
-      photo,
-      status: "open",
-    };
-    state.customListings.unshift(item);
-    persist();
-    hideDialog($("formBackdrop"));
-    renderOwner();
-    renderAll();
-    toast("새 농기계 매물을 등록했습니다!");
+function readImageFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("사진 파일을 읽지 못했습니다."));
+    reader.readAsDataURL(file);
   });
 }
 
+function listingFormModal({ mode = "create", item = null, draftValues = null } = {}) {
+  const isEdit = mode === "edit" && Boolean(item);
+  if (!isLoggedIn()) {
+    savePendingIntentAndRedirectLogin({ type: isEdit ? "editListing" : "newListing", listingId: item?.id, draftValues });
+    return;
+  }
+
+  let draftListingId = isEdit ? item.id : (draftValues?.id || crypto.randomUUID());
+  const val = (key, fallback) => (draftValues && draftValues[key] !== undefined ? draftValues[key] : (item ? item[key] : fallback));
+  const initialType = val("type", "rent");
+  const initialModelId = val("modelId", "");
+  const initialMachineType = val("machineType", MACHINE_TYPES[0].id);
+  const initialBrand = val("brand", "직접 등록");
+  const initialTitle = val("title", "");
+  const initialCrop = (Array.isArray(val("cropIds", null)) ? val("cropIds", null)[0] : null)
+    || (state.selectedCrop && state.selectedCrop !== "all" ? state.selectedCrop : CROPS[0].id);
+  const initialOp = (Array.isArray(val("operations", null)) ? val("operations", null)[0] : null) || OPERATIONS[0].id;
+  const initialPrice = val("price", "");
+  const initialAreaMin = val("areaMin", 300);
+  const initialAreaMax = val("areaMax", 1500);
+  const initialRegion = val("region", state.region || "영양읍");
+  const initialCondition = val("condition", "good");
+  const initialInspected = val("inspectedAt", today());
+  const initialIncluded = val("included", "");
+  const initialPickup = val("pickup", "");
+  const initialDescription = val("description", "");
+
+  openForm(`
+    <span class="step-pill">${isEdit ? "매물 수정" : "농기계 등록"}</span>
+    <h2 id="formTitle">${isEdit ? "내 농기계 정보 수정" : "내 농기계 올리기"}</h2>
+    <p>모든 회원이 직접 매물을 등록하고 관리할 수 있으며 서버 데이터베이스에 안전하게 저장됩니다.</p>
+    <form class="stack-form" id="listingEditorForm">
+      <div class="form-row-2">
+        <label>거래 방식
+          <select id="editType">
+            <option value="rent" ${initialType === "rent" ? "selected" : ""}>빌려주기 (일일 대여)</option>
+            <option value="sale" ${initialType === "sale" ? "selected" : ""}>중고로 판매하기</option>
+          </select>
+        </label>
+        <label>등록 기종 (선택 시 사양 자동 연결)
+          <select id="editModelId">
+            <option value="">목록에 없는 기종 (직접 입력)</option>
+            ${MACHINE_SPECIFICATIONS.map((m) => `<option value="${escapeHtml(m.id)}" ${initialModelId === m.id ? "selected" : ""}>${escapeHtml(m.brand)} ${escapeHtml(m.model)}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <div class="form-row-2">
+        <label>농기계 종류
+          <select id="editMachine">${MACHINE_TYPES.map((m) => `<option value="${escapeHtml(m.id)}" ${initialMachineType === m.id ? "selected" : ""}>${escapeHtml(m.label)}</option>`).join("")}</select>
+        </label>
+        <label>제조사
+          <input id="editBrand" maxlength="40" required value="${escapeHtml(initialBrand)}">
+        </label>
+      </div>
+      <div class="form-row-2">
+        <label>게시글 제목<input id="editTitle" maxlength="80" required value="${escapeHtml(initialTitle)}" placeholder="예: 초보자도 쉬운 관리기 + 두둑성형기 세트 대여"></label>
+        <label>보관/거래 지역
+          <select id="editRegion">
+            ${["영양읍", "청기면", "입암면", "수비면"].map((r) => `<option value="${escapeHtml(r)}" ${initialRegion === r ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <div class="form-row-2">
+        <label>추천 작물<select id="editCrop">${CROPS.map((c) => `<option value="${escapeHtml(c.id)}" ${initialCrop === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select></label>
+        <label>세부 작업<select id="editOperation">${OPERATIONS.map((o) => `<option value="${escapeHtml(o.id)}" ${initialOp === o.id ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}</select></label>
+      </div>
+      <div class="form-row-3">
+        <label>요금/가격(원)<input id="editPrice" type="number" min="0" step="1000" required value="${escapeHtml(initialPrice)}" placeholder="예: 50000"></label>
+        <label>최소 권장 면적(㎡)<input id="editAreaMin" type="number" min="1" required value="${escapeHtml(initialAreaMin)}" placeholder="예: 300"></label>
+        <label>최대 권장 면적(㎡)<input id="editAreaMax" type="number" min="1" required value="${escapeHtml(initialAreaMax)}" placeholder="예: 1500"></label>
+      </div>
+      <div class="form-row-2">
+        <label>기계 상태
+          <select id="editCondition">
+            <option value="good" ${initialCondition === "good" ? "selected" : ""}>정상 작동</option>
+            <option value="used" ${initialCondition === "used" ? "selected" : ""}>사용감 있음</option>
+            <option value="repair" ${initialCondition === "repair" ? "selected" : ""}>정비 필요</option>
+          </select>
+        </label>
+        <label>최근 점검일<input id="editInspection" type="date" max="${today()}" value="${escapeHtml(initialInspected)}" required></label>
+      </div>
+      <label>기계 사진 업로드 (선택, JPG·PNG·WebP, 1MB 이하)<input id="editPhoto" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      ${isEdit && hasListingPhoto(item) ? `<label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="editRemovePhoto" style="width:auto"> 등록된 기존 사진 삭제하기</label>` : ""}
+      <div class="form-row-2">
+        <label>포함 작업기·부속품<input id="editIncluded" maxlength="120" required value="${escapeHtml(initialIncluded)}" placeholder="예: 로터리, 두둑성형기 포함"></label>
+        <label>인수·전달 방법<input id="editPickup" maxlength="120" required value="${escapeHtml(initialPickup)}" placeholder="예: 영양읍 창고 직접 방문 인수"></label>
+      </div>
+      <label>상세 설명 및 초보자 안내<textarea id="editDescription" maxlength="1000" required placeholder="기계 작동 상태와 초보 농부님이 사용할 때 주의할 점을 적어주세요.">${escapeHtml(initialDescription)}</textarea></label>
+      <button class="button button-primary button-large" type="submit" id="listingSubmitButton">${isEdit ? "수정 내용 저장하기" : "+ 매물 등록 완료하기"}</button>
+    </form>
+  `);
+
+  const syncModelLock = () => {
+    const modelId = $("editModelId").value;
+    const spec = modelId ? SPEC_BY_ID[modelId] : null;
+    if (spec) {
+      $("editBrand").value = spec.brand;
+      $("editMachine").value = spec.machineType;
+      $("editBrand").disabled = true;
+      $("editMachine").disabled = true;
+    } else {
+      $("editBrand").disabled = false;
+      $("editMachine").disabled = false;
+    }
+  };
+  syncModelLock();
+  $("editModelId").addEventListener("change", syncModelLock);
+
+  let busy = false;
+  let lastSubmitHash = null;
+
+  $("listingEditorForm").addEventListener("input", () => {
+    if (!isEdit && lastSubmitHash !== null) {
+      draftListingId = crypto.randomUUID();
+      lastSubmitHash = null;
+    }
+  });
+
+  $("listingEditorForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    const areaMin = Number($("editAreaMin").value);
+    const areaMax = Number($("editAreaMax").value);
+    if (!Number.isFinite(areaMin) || !Number.isFinite(areaMax) || areaMin < 1 || areaMin > areaMax) {
+      return toast("권장 면적 범위를 올바르게 입력해 주세요.");
+    }
+
+    const file = $("editPhoto").files[0];
+    if (file && file.size > 1024 * 1024) {
+      return toast("JPG·PNG·WebP 사진을 1MB 이하로 선택해 주세요.");
+    }
+
+    let photoDataUrl = draftValues?.photoDataUrl || undefined;
+    if (file) {
+      try {
+        photoDataUrl = await readImageFileAsDataUrl(file);
+      } catch (err) {
+        return toast(err?.message || "사진을 읽지 못했습니다.");
+      }
+    }
+
+    const modelId = $("editModelId").value || null;
+    const payload = {
+      action: isEdit ? "update" : "create",
+      id: draftListingId,
+      type: $("editType").value,
+      modelId,
+      brand: $("editBrand").value.trim(),
+      machineType: $("editMachine").value,
+      title: $("editTitle").value.trim(),
+      region: $("editRegion").value,
+      cropIds: [$("editCrop").value],
+      operations: [$("editOperation").value],
+      price: Number($("editPrice").value),
+      areaMin,
+      areaMax,
+      condition: $("editCondition").value,
+      inspectedAt: $("editInspection").value,
+      included: $("editIncluded").value.trim(),
+      pickup: $("editPickup").value.trim(),
+      description: $("editDescription").value.trim(),
+      ...(photoDataUrl ? { photoDataUrl } : {}),
+      ...(isEdit && $("editRemovePhoto")?.checked ? { removePhoto: true } : {}),
+    };
+
+    lastSubmitHash = JSON.stringify(payload);
+    busy = true;
+    $("listingSubmitButton").disabled = true;
+
+    try {
+      await apiFetch("/api/listings", { method: "POST", json: payload });
+      hideDialog($("formBackdrop"));
+      await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData()]);
+      renderOwner();
+      toast(isEdit ? "매물 정보를 수정했습니다." : "새 농기계 매물을 등록했습니다!");
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+      if (error?.status === 401) {
+        savePendingIntentAndRedirectLogin(
+          { type: isEdit ? "editListing" : "newListing", listingId: item?.id, draftValues: payload },
+          "세션이 만료되었습니다. 로그인 후 이어서 등록할 수 있어요."
+        );
+        return;
+      }
+      toast(error?.message || "매물을 저장하지 못했습니다.");
+    } finally {
+      busy = false;
+      if ($("listingSubmitButton")) $("listingSubmitButton").disabled = false;
+    }
+  });
+}
+
+function openNewListing(draftValues = null) {
+  listingFormModal({ mode: "create", draftValues });
+}
+
+function openEditListing(item, draftValues = null) {
+  listingFormModal({ mode: "edit", item, draftValues });
+}
+
 function openFavoritesModal() {
-  const items = allListings().filter((item) => state.favorites.includes(item.id));
+  const favIds = activeFavorites();
+  const items = allListings().filter((item) => favIds.includes(item.id));
   openForm(`
     <span class="step-pill">관심 농기계 보관함</span>
     <h2 id="formTitle"> 내가 찜한 농기계 (${items.length}대)</h2>
@@ -1307,11 +1908,7 @@ function openFavoritesModal() {
     .querySelectorAll("[data-fav-remove]")
     .forEach((button) =>
       button.addEventListener("click", () => {
-        const removeId = button.dataset.favRemove;
-        state.favorites = state.favorites.filter((id) => id !== removeId);
-        persist();
-        renderAll();
-        openFavoritesModal();
+        toggleFavorite(button.dataset.favRemove, { favorite: false, fromModal: true });
       })
     );
 }
@@ -1825,18 +2422,144 @@ function bindEvents() {
   $("detailContent").addEventListener("click", (event) => {
     const favBtn = event.target.closest("[data-detail-fav]");
     if (favBtn) return toggleFavorite(favBtn.dataset.detailFav);
+    const manageBtn = event.target.closest("[data-detail-manage]");
+    if (manageBtn) {
+      hideDialog($("detailBackdrop"));
+      setView("owner");
+      return;
+    }
+    const chatBtn = event.target.closest("[data-detail-chat]");
+    if (chatBtn) {
+      hideDialog($("detailBackdrop"));
+      chatForm({ listingId: chatBtn.dataset.detailChat });
+      return;
+    }
     const button = event.target.closest("[data-detail-action]");
     if (!button) return;
     hideDialog($("detailBackdrop"));
     const item = listingById(button.dataset.detailAction);
-    item.type === "rent" ? rentalForm(item.id) : chatForm(item.id);
+    if (!item) return;
+    item.type === "rent" ? rentalForm(item.id) : chatForm({ listingId: item.id });
   });
 
-  $("ownerListings").addEventListener("click", (event) => {
+  $("newListingButton")?.addEventListener("click", () => openNewListing());
+
+  $("guestImportBanner")?.addEventListener("click", async (event) => {
+    if (event.target.closest("#importGuestDismiss")) {
+      dismissGuestImport = true;
+      renderGuestImportBanner();
+      return;
+    }
+    const confirmBtn = event.target.closest("#importGuestConfirm");
+    if (!confirmBtn) return;
+    confirmBtn.disabled = true;
+    try {
+      const gFavs = readGuestFavorites();
+      const gOwned = garage?.getGuestOwned() || [];
+      const res = await apiFetch("/api/me", {
+        method: "POST",
+        json: { action: "importGuest", favorites: gFavs, ownedMachines: gOwned },
+      });
+      clearGuestFavorites();
+      garage?.clearGuestOwned();
+      if (res?.userData) {
+        serverFavorites = Array.isArray(res.userData.favorites) ? res.userData.favorites : [];
+        garage?.setExternalOwned(res.userData.ownedMachines || [], res.userData.selectedOwnedMachineId || "");
+      }
+      renderGuestImportBanner();
+      updateBadges();
+      renderAll();
+      toast(`가져오기 완료: 찜 ${res.importedFavorites || 0}건, 보유 기계 ${res.importedMachines || 0}대`);
+    } catch (error) {
+      toast(error?.message || "임시 항목을 가져오지 못했습니다.");
+      confirmBtn.disabled = false;
+    }
+  });
+
+  $("ownerListings").addEventListener("change", async (event) => {
+    const select = event.target.closest("[data-owner-status]");
+    if (!select) return;
+    const id = select.dataset.ownerStatus;
+    const item = listingById(id);
+    const prevStatus = item?.status || "open";
+    const nextStatus = select.value;
+    select.disabled = true;
+    try {
+      await apiFetch("/api/listings", {
+        method: "POST",
+        json: { action: "status", id, status: nextStatus },
+      });
+      await loadCatalog({ quiet: true });
+      renderOwner();
+      toast("매물 상태를 변경했습니다.");
+    } catch (error) {
+      select.value = prevStatus;
+      if (error?.status === 401) {
+        savePendingIntentAndRedirectLogin(null, "세션이 만료되었습니다. 다시 로그인해 주세요.");
+        return;
+      }
+      toast(error?.message || "매물 상태를 변경하지 못했습니다.");
+    } finally {
+      select.disabled = false;
+    }
+  });
+
+  $("ownerListings").addEventListener("click", async (event) => {
     const detailBtn = event.target.closest("[data-owner-detail]");
     if (detailBtn) return openDetail(detailBtn.dataset.ownerDetail);
-
+    const editBtn = event.target.closest("[data-owner-edit]");
+    if (editBtn) {
+      const target = listingById(editBtn.dataset.ownerEdit);
+      if (target) openEditListing(target);
+      return;
+    }
+    const removeBtn = event.target.closest("[data-owner-remove]");
+    if (removeBtn) {
+      const id = removeBtn.dataset.ownerRemove;
+      removeBtn.disabled = true;
+      try {
+        await apiFetch("/api/listings", {
+          method: "POST",
+          json: { action: "remove", id },
+        });
+        await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData()]);
+        renderOwner();
+        toast("매물을 목록에서 숨겼습니다.");
+      } catch (error) {
+        if (error?.status === 401) {
+          savePendingIntentAndRedirectLogin(null, "세션이 만료되었습니다. 다시 로그인해 주세요.");
+          return;
+        }
+        toast(error?.message || "매물을 숨기지 못했습니다.");
+        removeBtn.disabled = false;
+      }
+    }
   });
+
+  const handleRequestsAndChatsClick = (event) => {
+    const approveBtn = event.target.closest("[data-req-approve]");
+    if (approveBtn) return handleRequestAction("approve", approveBtn.dataset.reqApprove, approveBtn);
+    const rejectBtn = event.target.closest("[data-req-reject]");
+    if (rejectBtn) return handleRequestAction("reject", rejectBtn.dataset.reqReject, rejectBtn);
+    const cancelBtn = event.target.closest("[data-req-cancel]");
+    if (cancelBtn) return handleRequestAction("cancel", cancelBtn.dataset.reqCancel, cancelBtn);
+    const openChatBtn = event.target.closest("[data-open-chat]");
+    if (openChatBtn) {
+      return chatForm({
+        conversationId: openChatBtn.dataset.openChat,
+        listingId: openChatBtn.dataset.chatListing || null,
+      });
+    }
+    const openListingChatBtn = event.target.closest("[data-open-chat-listing]");
+    if (openListingChatBtn) {
+      return chatForm({ listingId: openListingChatBtn.dataset.openChatListing });
+    }
+  };
+
+  $("ownerRequests")?.addEventListener("click", handleRequestsAndChatsClick);
+  $("ownerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
+  $("buyerRequestList")?.addEventListener("click", handleRequestsAndChatsClick);
+  $("buyerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
 
 
   $("aiLauncher").addEventListener("click", openAiPanel);
@@ -1984,8 +2707,67 @@ function initLoginForm() {
 
   function renderAccount(user) {
     accountUser = user ?? null;
-    headerButton.textContent = isLoggedIn() ? "내 계정" : "로그인";
+    headerButton.textContent = isLoggedIn() ? `${accountUser.name} · 내 계정` : "로그인";
     updateBadges();
+  }
+
+  async function applyAccountTransition(nextUser) {
+    const prevId = accountUser?.id || null;
+    const nextId = nextUser?.id || null;
+    const changed = prevId !== nextId;
+    if (changed) {
+      bumpAuthEpoch();
+      resetAccountRuntimeState();
+    }
+    renderAccount(nextUser);
+    if (changed) {
+      catalogReady = loadCatalog({ quiet: true });
+      await Promise.all([catalogReady, refreshAuthenticatedData()]);
+    } else if (nextId) {
+      await refreshAuthenticatedData();
+    } else {
+      garage?.refreshNote?.();
+      updateBadges();
+      renderBuyerRequests();
+    }
+  }
+
+  onSessionExpiredHandler = () => {
+    bumpAuthEpoch();
+    resetAccountRuntimeState();
+    renderAccount(null);
+    garage?.resetToGuest();
+  };
+
+  function resumePendingIntentIfAny() {
+    const intent = pendingIntent;
+    pendingIntent = null;
+    if (!intent) return false;
+    if (intent.type === "rental") {
+      setView("browse");
+      rentalForm(intent.listingId, intent.draftValues || null);
+      return true;
+    }
+    if (intent.type === "chat") {
+      chatForm({
+        listingId: intent.listingId,
+        conversationId: intent.conversationId,
+        draftBody: intent.draftBody || "",
+      });
+      return true;
+    }
+    if (intent.type === "newListing") {
+      setView("owner");
+      openNewListing(intent.draftValues || null);
+      return true;
+    }
+    if (intent.type === "editListing") {
+      setView("owner");
+      const target = listingById(intent.listingId);
+      if (target) openEditListing(target, intent.draftValues || null);
+      return true;
+    }
+    return false;
   }
 
   function openLogin() {
@@ -2025,9 +2807,11 @@ function initLoginForm() {
       const data = { username: username.value.trim(), password: password.value };
       if (signup) data.name = name.value.trim();
       const result = await accountRequest(signup ? "signup" : "login", data);
-      renderAccount(result.user);
+      await applyAccountTransition(result.user);
       password.value = confirm.value = "";
-      setView("owner");
+      if (!resumePendingIntentIfAny()) {
+        setView("owner");
+      }
     } catch (error) {
       showError(error instanceof TypeError || error instanceof SyntaxError
         ? "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
@@ -2041,7 +2825,8 @@ function initLoginForm() {
     logout.disabled = true;
     try {
       await accountRequest("logout", {});
-      renderAccount(null);
+      pendingIntent = null;
+      await applyAccountTransition(null);
       setView("home");
       toast("로그아웃되었습니다.");
     } catch {
@@ -2056,8 +2841,8 @@ function initLoginForm() {
   }
 
   accountRequest("session")
-    .then((result) => {
-      renderAccount(result.user);
+    .then(async (result) => {
+      await applyAccountTransition(result.user);
       if (isLoggedIn() && state.view === "ownerLoginRequired") setView("owner");
     })
     .catch(() => {})
@@ -2177,6 +2962,19 @@ function initScrollMotion() {
 garage = createGarage({
   root: $("garageView"), getListings: allListings, getCatalogState: () => catalogState,
   today, openListing: openDetail, notify: toast,
+  isAuthenticated: isLoggedIn,
+  async onAddMachine(item) {
+    const res = await apiFetch("/api/me", { method: "POST", json: { action: "addOwned", ...item } });
+    return res.userData;
+  },
+  async onSelectMachine(id) {
+    const res = await apiFetch("/api/me", { method: "POST", json: { action: "selectOwned", id } });
+    return res.userData;
+  },
+  async onRemoveMachine(id) {
+    const res = await apiFetch("/api/me", { method: "POST", json: { action: "removeOwned", id } });
+    return res.userData;
+  },
   openRental(id, start, end) {
     state.filters.date = start;
     state.filters.dateEnd = end;
@@ -2202,4 +3000,4 @@ initMainPageScrollSpy();
 setTransaction(state.transaction);
 setView("home");
 renderAll();
-const catalogReady = loadCatalog();
+catalogReady = loadCatalog();

@@ -1,7 +1,8 @@
 import { readRentalDates } from "../src/ai/rental-dates.js";
 import { CROPS, CROP_BY_ID, OPERATIONS, OPERATION_BY_ID } from "../src/data/farm-machines.js";
 import { recommendationGuide, selectMatchingListings } from "../src/data/recommendation.js";
-import { listListings } from "./listings-db.js";
+import { buildMockListings } from "./listing-seed.js";
+import { fetchListings } from "./listings-db.js";
 
 function extractText(response) {
   return (response.output || []).flatMap((item) => item.content || []).filter((item) => item.type === "output_text").map((item) => item.text).join("");
@@ -88,16 +89,19 @@ async function interpret(message, context) {
   }
 }
 
-export function selectCandidates(message, context = {}) {
+export function selectCandidates(message, context = {}, listings = buildMockListings()) {
   const allowedIds = Array.isArray(context.candidateIds) ? new Set(context.candidateIds.slice(0, 8)) : null;
-  const listings = listListings().filter(({ id }) => !allowedIds || allowedIds.has(id));
-  return selectMatchingListings(message, context, listings);
+  const scoped = Array.isArray(listings)
+    ? listings.filter(({ id, status }) => status !== "removed" && (!allowedIds || allowedIds.has(id)))
+    : [];
+  return selectMatchingListings(message, context, scoped);
 }
 
-export async function recommend(message, context = {}) {
+export async function recommend(message, context = {}, { listings, pool } = {}) {
   if (context.action === "interpret") return interpret(message, context);
   if (typeof context.draft === "string" && context.draft.trim()) return answerDialogue(context);
-  const selection = selectCandidates(message, context);
+  const resolvedListings = Array.isArray(listings) ? listings : await fetchListings({ pool });
+  const selection = selectCandidates(message, context, resolvedListings);
   const { cropId, operations, transaction, candidates } = selection;
   const guide = recommendationGuide(selection);
   if (!guide.listingIds.length || !process.env.OPENAI_API_KEY) return guide;

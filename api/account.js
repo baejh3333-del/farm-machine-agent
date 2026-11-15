@@ -1,5 +1,6 @@
 import { fromNodeHeaders } from "better-auth/node";
 import { accountAuth } from "../server/account-auth.js";
+import { assertWritesAllowed, HttpError } from "../server/http.js";
 
 const routes = new Map([
   ["session", ["GET", "/get-session"]],
@@ -74,6 +75,7 @@ export default async function accountHandler(request, response) {
   }
 
   try {
+    if (action === "signup") await assertWritesAllowed();
     const auth = await accountAuth();
     const result = await auth.handler(new Request(`${origin}/api/auth${path}`, { method, headers, body }));
     const data = await result.json();
@@ -82,6 +84,7 @@ export default async function accountHandler(request, response) {
     response.writeHead(result.status, { "Content-Type": "application/json; charset=utf-8" })
       .end(JSON.stringify(result.ok ? { user: data?.user ?? null } : { code: data?.code }));
   } catch (error) {
+    if (error instanceof HttpError) return json(response, error.status, error.code);
     console.error("account failed", error.message);
     return json(response, 503, "ACCOUNT_UNAVAILABLE");
   }

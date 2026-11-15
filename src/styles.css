@@ -3401,3 +3401,32 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .model-spec-list > div { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid #dce7da; font-size: 14px; }
 .model-spec-list dt { color: #596554; }
 .model-spec-list dd { margin: 0; font-weight: 600; }
+
+/* DB rebuild: guest import banner, owner controls, derived rental request pills */
+.guest-import-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin: 0 0 16px;
+  border: 1.5px solid #2d7f4e;
+  border-radius: 14px;
+  background: #f2f9f4;
+}
+.guest-import-copy { display: grid; gap: 3px; }
+.guest-import-copy small { color: var(--text-muted); font-size: 13px; }
+.guest-import-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.owner-status-select {
+  min-height: 36px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid #cdd6ce;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+.req-pill-approvable, .req-pill-upcoming, .req-pill-active { background: #e8f5ec; color: #1f5e39; }
+.req-pill-conflict { background: #fdf0ed; color: #a13224; }
+.req-pill-expired, .req-pill-rejected, .req-pill-cancelled, .req-pill-completed { background: #f1f3f1; color: #555c56; }

@@ -1,5 +1,6 @@
 import { getMigrations } from "better-auth/db/migration";
 import { postgresAuth } from "../server/account-auth.js";
+import { closePool } from "../server/db.js";
 
 const auth = postgresAuth();
 try {
@@ -7,5 +8,5 @@ try {
   await runMigrations();
   console.log("계정 데이터베이스 준비 완료");
 } finally {
-  await auth.options.database.end();
+  await closePool();
 }

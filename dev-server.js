@@ -1,54 +1,143 @@
+import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { extname, join, resolve } from "node:path";
+import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recommend } from "./server/agent.js";
-import accountHandler from "./api/account.js";
-import { initListingsDb, listListings, localDatabase } from "./server/listings-db.js";
+import { closePool, usesLocalDatabase } from "./server/db.js";
+import { ensureLocalDevReady } from "./server/migrator.js";
 
-initListingsDb(localDatabase);
+const rootDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
+const allowedStaticDirs = [resolve(rootDir, "src"), resolve(rootDir, "assets"), resolve(rootDir, "public")];
+const mimeTypes = new Map([
+  [".html", "text/html; charset=utf-8"],
+  [".js", "application/javascript; charset=utf-8"],
+  [".mjs", "application/javascript; charset=utf-8"],
+  [".css", "text/css; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
+  [".svg", "image/svg+xml"],
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"],
+  [".ico", "image/x-icon"],
+]);
 
-const root = fileURLToPath(new URL(".", import.meta.url));
-const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
-const allowed = /^\/(?:$|index\.html$|src\/[\w./-]+\.(?:js|css|svg|png|jpg)$)/;
+const apiRouteLoaders = new Map([
+  ["/api/account", () => import("./api/account.js")],
+  ["/api/listings", () => import("./api/listings.js")],
+  ["/api/recommend", () => import("./api/recommend.js")],
+  ["/api/me", () => import("./api/me.js")],
+  ["/api/requests", () => import("./api/requests.js")],
+  ["/api/conversations", () => import("./api/conversations.js")],
+  ["/api/photos", () => import("./api/photos.js")],
+]);
 
-const server = createServer(async (request, response) => {
-  const path = new URL(request.url, "http://localhost").pathname;
-  if (path === "/api/account") return accountHandler(request, response);
-  if (path === "/api/listings") {
-    if (request.method !== "GET") { response.writeHead(405, { allow: "GET" }).end(); return; }
-    const headers = { "content-type": "application/json; charset=utf-8" };
-    try {
-      const body = JSON.stringify({ listings: listListings() });
-      response.writeHead(200, headers).end(body);
-    } catch (error) {
-      console.error("listings failed", error.message);
-      response.writeHead(500, headers).end(JSON.stringify({ error: "매물을 불러오지 못했습니다." }));
+function patchResponse(response) {
+  let pendingStatus = 200;
+  response.status = (code) => {
+    pendingStatus = code;
+    return response;
+  };
+  response.json = (payload) => {
+    if (!response.headersSent) {
+      response.writeHead(pendingStatus, { "Content-Type": "application/json; charset=utf-8" });
     }
+    response.end(JSON.stringify(payload));
+    return response;
+  };
+  return response;
+}
+
+function resolveStaticPath(pathname) {
+  if (pathname === "/" || pathname === "/index.html") {
+    return resolve(rootDir, "index.html");
+  }
+  const cleanRel = pathname.replace(/^\/+/, "");
+  if (!cleanRel || cleanRel.includes("\0")) return null;
+  const candidate = resolve(rootDir, cleanRel);
+  const inAllowed = allowedStaticDirs.some(
+    (dir) => candidate === dir || candidate.startsWith(`${dir}${sep}`)
+  );
+  return inAllowed ? candidate : null;
+}
+
+async function serveStatic(request, response, pathname) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    response.writeHead(405, { Allow: "GET, HEAD" }).end();
     return;
   }
-  if (path === "/api/recommend") {
-    if (request.method !== "POST") { response.writeHead(405).end(); return; }
-    let body = "";
-    for await (const chunk of request) { body += chunk; if (body.length > 10000) { response.writeHead(413).end(); return; } }
-    try {
-      const data = JSON.parse(body);
-      const message = typeof data.message === "string" ? data.message.trim() : "";
-      if (!message || message.length > 500) { response.writeHead(400).end(); return; }
-      const result = await recommend(message, data.context && typeof data.context === "object" ? data.context : {});
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(result));
-    } catch (error) {
-      console.error("recommend failed", error instanceof Error ? error.message : "unknown");
-      response.writeHead(502, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify({ error: "추천에 실패했습니다." }));
-    }
+  const filePath = resolveStaticPath(pathname);
+  if (!filePath) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
     return;
   }
-  if (request.method !== "GET" || !allowed.test(path) || path.includes("..")) { response.writeHead(404).end(); return; }
-  const file = resolve(join(root, path === "/" ? "index.html" : path.slice(1)));
-  if (!file.startsWith(root)) { response.writeHead(404).end(); return; }
-  try { const content = await readFile(file); response.writeHead(200, { "content-type": mime[extname(file)] || "application/octet-stream" }).end(content); }
-  catch { response.writeHead(404).end(); }
-});
+  try {
+    const info = await stat(filePath);
+    if (!info.isFile()) {
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      return;
+    }
+    const contentType = mimeTypes.get(extname(filePath).toLowerCase()) || "application/octet-stream";
+    if (request.method === "HEAD") {
+      response.writeHead(200, { "Content-Type": contentType, "Content-Length": String(info.size) }).end();
+      return;
+    }
+    const body = await readFile(filePath);
+    response.writeHead(200, { "Content-Type": contentType, "Content-Length": String(body.length) }).end(body);
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") {
+      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      return;
+    }
+    response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }).end("Server error");
+  }
+}
 
-const port = Number(process.env.PORT) || 3000;
-server.listen(port, "127.0.0.1", () => console.log(`모아농기계: http://localhost:${port}`));
+export async function createAppServer() {
+  if (!process.env.VERCEL && usesLocalDatabase()) {
+    await ensureLocalDevReady();
+  }
+
+  return createServer(async (request, response) => {
+    patchResponse(response);
+    const { pathname } = new URL(request.url || "/", "http://localhost");
+    const loader = apiRouteLoaders.get(pathname);
+    if (loader) {
+      try {
+        const mod = await loader();
+        await mod.default(request, response);
+      } catch (error) {
+        console.error("dev-server route error", pathname, error instanceof Error ? error.message : "unknown");
+        if (!response.headersSent) {
+          response.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+        }
+        if (!response.writableEnded) {
+          response.end(JSON.stringify({ code: "SERVER_ERROR", error: "요청을 처리하지 못했습니다." }));
+        }
+      }
+      return;
+    }
+    await serveStatic(request, response, pathname);
+  });
+}
+
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const host = process.env.HOST || "127.0.0.1";
+  const requestedPort = Number.isFinite(Number(process.env.PORT)) ? Number(process.env.PORT) : 3000;
+  const server = await createAppServer();
+  await new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(requestedPort, host, resolveListen);
+  });
+  const addr = server.address();
+  const actualPort = typeof addr === "object" && addr ? addr.port : requestedPort;
+  console.log(`moa dev-server listening on http://${host}:${actualPort}`);
+
+  const shutdown = async () => {
+    await new Promise((r) => server.close(r));
+    await closePool();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}

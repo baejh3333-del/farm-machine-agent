@@ -1,0 +1,29 @@
+﻿# DB rebuild — coordinator proposal (pending cross-review)
+
+Baseline: origin/main b6a90b02c588df7a11f78519e81989be91c9a01f. Branch feature/db-rebuild. Planning only: no application edits, live migration, deployment or main merge.
+
+## Evidence
+- server/listings-db.js: SQLite defaults to :memory:, runtime demo seeding, owner boolean, booked JSON, catalog enrichment.
+- server/account-auth.js: Better Auth uses PostgreSQL in deployment; SQLite locally. Preserve authentication and existing user identifiers.
+- src/main.js: moa-farm-v1 stores customListings, statuses, bookings, requests, messages, favorites; moa-owner-db-v1 binds ownership to 10jo. allListings merges local overrides and artificial reservations. chat uses client role and listingId only.
+- src/garage.js: moa-owned-machines-v1 stores garage across browser users.
+- server/agent.js: selectCandidates synchronously reads listListings; async DB changes propagate through recommendation, APIs, dev-server and tests.
+- tests/app.test.js: recommendation logic and fixture contracts exist; no demonstrated multi-user persistence coverage.
+
+## Proposed decisions for review
+D1 Use PostgreSQL for all authoritative business data in dev/test/preview/prod; retain pg + Better Auth initially. Versioned SQL migrations with checksums/lock; explicit deploy job, no request-time DDL or auto seed. Separate preview database and auth secrets from production.
+D2 Preserve current UX and search/compatibility logic. Introduce repository -> transactional service -> validated API -> frontend data store boundaries. Split main.js incrementally along changed features; avoid framework rewrite.
+D3 Entities: Better Auth tables; profiles (only application fields); machine_models/catalog references; owned_machines(user_id,model_id,name); listings(owner_id, optional owned_machine_id, type, model_id, price, status, version, timestamps); listing_images(object key, order); crop/operation associations; favorites(user_id,listing_id); rental_requests(buyer_id,listing_id, dates,status,quoted price); reservations; conversations(listing_id,buyer_id,owner_id); messages(conversation_id,sender_id,body,created_at); status_events. Explicit FK, uniqueness, money/date/status checks and pagination indexes. Keep rich manufacturer specs versioned in code initially, seeded model IDs for FK; no generic EAV.
+D4 pending requests do not reserve inventory. Approval transaction locks listing/request, checks ownership, status and dates, inserts unique non-overlapping active reservation and transitions request atomically. PostgreSQL date range constraint (extension support to verify) or per-listing serialized lock with mandatory transaction on every availability writer. Inclusive Korean calendar dates preserved. Quote server-calculated and snapshotted. Idempotency and optimistic concurrency prevent retries/stale approvals. Define rejected/cancelled/completed semantics and overlapping pending handling explicitly.
+D5 Server session determines every identity/role. Public listing reads omit personal data. Authenticated mutations and participant-only conversations; owner-only listing updates/approval. Never trust browser owner, role, userId or totals. Same-origin validation, limits and validated parameters.
+D6 SQL DB stores image metadata; object storage stores bytes. Upload limits, content checks, ownership/finalization and orphan cleanup. No base64 images in localStorage/database.
+D7 Browser retains only presentation filters and optional guest favorites. Never auto-import legacy ownership/requests/chat. Optional explicit validated import of user's own drafts/garage/favorites only. Demo fixtures isolated, no artificial production bookings. Audit actual existing DB/SQLite before irreversible migration; legacy data provenance currently unknown.
+D8 Stable API DTO adapter for UI; async listListings dependency migration must cover server recommendation, dev server, API, tests. Search/recommendation reads same persisted catalog and availability. Mutations update all dependent views after server success; failure shows retry, no false success. Account switch clears cache and late responses.
+D9 Chat MVP uses bounded polling/cursor pagination; realtime/push and AI chat-history persistence deferred unless required. Separate buyer conversations for same listing, no listing-wide chat leakage.
+D10 Work phases: P0 behavior inventory and baseline checks; P1 schema+isolated DB+migration tooling; P2 identity/CRUD+images+favorites/garage; P3 transactional rental workflow; P4 conversations; P5 frontend integration+recommendation; P6 migration rehearsal+Vercel preview; P7 acceptance and reviewed merge. Deliver vertical slices per phase, not broken intermediary releases.
+
+## Acceptance requirements
+Existing checks/build; real PostgreSQL integration (FK/rollback/idempotency/double approval/date boundaries); API authorization A/B/C users; browser end-to-end signup/login -> owner listing+image -> buyer search/detail/favorite/garage -> rental -> owner approval -> buyer reload on second browser -> conversation -> cancellation. Deny cross-user mutations and messages; test expiration/offline/retries/account switch. Recommendation and compatible set behavior retained, including independent approval of each machine. Preview auth/cookies, cold-start persistence, upload, actual DB isolation verified. Backup/restore and expand-contract compatible rollback rehearsed before main. No claim that current tests prove production readiness.
+
+## Review protocol
+Claude independently inspect targeted source, then mark D1-D10 agree/amend/reject with concrete evidence. One focused follow-up only for material differences; accepted items closed. Final plan distinguishes accepted decisions, unverified infrastructure facts, and product questions. No repeated full repo scans or subagents.

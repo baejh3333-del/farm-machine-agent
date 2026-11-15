@@ -255,7 +255,7 @@ export async function runMigrations({
           "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
           [file, checksum]
         );
-      }, pool);
+      }, pool, { statementMs: 0, lockMs: 0, idleInTransactionMs: 0 });
       applied.push(file);
     }
 

@@ -3,6 +3,8 @@ import { getPool, kstToday, withTransaction } from "./db.js";
 import { fail, HttpError } from "./http.js";
 import { formatIsoDate, normalizeText, requireUuid } from "./validate.js";
 
+export const MAX_RENTAL_DAYS = 365;
+
 function deriveRequestFields(row, approvedRanges, viewerId, today) {
   const start = formatIsoDate(row.start_date);
   const end = formatIsoDate(row.end_date);
@@ -149,6 +151,9 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
   const days = rentalDays(start, end);
   if (!days || start < today) {
     fail(400, "INVALID_RENTAL_PERIOD", "오늘 이후의 올바른 대여 시작일과 반납일을 선택해 주세요.");
+  }
+  if (days > MAX_RENTAL_DAYS) {
+    fail(400, "RENTAL_PERIOD_TOO_LONG", `대여 기간은 최대 ${MAX_RENTAL_DAYS}일까지 요청할 수 있습니다.`);
   }
   const note = normalizeText(payload?.note ?? "", { min: 0, max: 500, field: "요청 메모", allowNewlines: true });
 

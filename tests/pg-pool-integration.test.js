@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 
 import { getConversationMessages, sendMessage } from "../server/chat.js";
-import { createPgPool, createPglitePool, describeDatabaseTarget, kstToday } from "../server/db.js";
+import {
+  createPgPool,
+  createPglitePool,
+  describeDatabaseTarget,
+  kstToday,
+  transactionTimeouts,
+  withTransaction,
+} from "../server/db.js";
 import { createListing } from "../server/listings-service.js";
 import { initEnvironment, inspectDatabase, runMigrations } from "../server/migrator.js";
 import { approveRentalRequest, createRentalRequest } from "../server/rentals.js";
@@ -600,4 +607,41 @@ test("[실제 PG 서버 pg.Pool] B4. 0행 시작 동시 보유 기계 추가 및
   assert.equal(retryPair.filter((r) => r.idempotent).length, 1);
   assert.equal(retryPair[1].userData.ownedMachines.length, 3);
   assert.equal(retryPair[1].userData.ownedMachines.filter((m) => m.isSelected).length, 1);
+});
+
+test("[pg.Pool 실행 경로] withTransaction이 서버 풀에서 트랜잭션 단위 타임아웃을 적용하고 롤백 시 해제한다", async () => {
+  // 실제 PostgreSQL 엔진(PGlite)에 서버 풀 경로(isLocal=false)의 SQL을 그대로 실행해 구문과 범위를 검증한다.
+  const engine = createPglitePool("memory://");
+  const serverLike = { isLocal: false, connect: () => engine.connect() };
+  const show = async (db, name) => (await db.query(`SHOW ${name}`)).rows[0][name];
+  try {
+    const defaults = await withTransaction(async (client) => ({
+      statement: await show(client, "statement_timeout"),
+      lock: await show(client, "lock_timeout"),
+      idle: await show(client, "idle_in_transaction_session_timeout"),
+    }), serverLike);
+    assert.deepEqual(defaults, { statement: "10s", lock: "5s", idle: "15s" });
+
+    const disabled = await withTransaction(
+      (client) => show(client, "statement_timeout"),
+      serverLike,
+      { statementMs: 0, lockMs: 0, idleInTransactionMs: 0 }
+    );
+    assert.equal(disabled, "0");
+
+    await engine.query("CREATE TABLE tx_probe (id INT PRIMARY KEY)");
+    await assert.rejects(
+      () => withTransaction(async (client) => {
+        await client.query("INSERT INTO tx_probe VALUES (1)");
+        throw new Error("boom");
+      }, serverLike),
+      /boom/
+    );
+    assert.equal((await engine.query("SELECT count(*)::int AS n FROM tx_probe")).rows[0].n, 0, "실패 시 롤백");
+    assert.equal(await show(engine, "statement_timeout"), "0", "SET LOCAL은 트랜잭션 밖으로 새지 않는다");
+
+    assert.deepEqual(transactionTimeouts({ lockMs: 250 }), { statementMs: 10_000, lockMs: 250, idleInTransactionMs: 15_000 });
+  } finally {
+    await engine.end();
+  }
 });

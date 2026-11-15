@@ -1,4 +1,5 @@
 import { assertWritesAllowed, fail, handle, queryParams, readJson, requireUser } from "../server/http.js";
+import { enforceRateLimit } from "../server/rate-limit.js";
 import { getConversationMessages, listConversationsForUser, sendMessage } from "../server/chat.js";
 
 export default handle(["GET", "POST"], async (request) => {
@@ -28,6 +29,7 @@ export default handle(["GET", "POST"], async (request) => {
   }
 
   await assertWritesAllowed();
+  await enforceRateLimit(request, "message", { userId: user.id });
   const body = await readJson(request);
   const action = typeof body.action === "string" ? body.action.trim() : "send";
   if (action !== "send") {

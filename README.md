@@ -38,6 +38,15 @@ OPENAI_MODEL=gpt-6-luna
 
 Vercel에서는 프로젝트의 서버 환경 변수 `OPENAI_API_KEY`를 설정한 뒤 다시 배포합니다. 키를 넣으면 `/api/recommend`가 OpenAI Responses API를 호출하고, 추천된 등록 매물에 대한 한줄 요약을 카드에 표시합니다. 키가 없을 때는 등록 데이터 기반 안내가 동작합니다. 키는 브라우저 코드에 포함되지 않습니다.
 
+## 호출 제한과 DB 타임아웃
+
+- `/api/recommend`는 OpenAI 비용을 막기 위해 IP당 분당 15회·하루 150회, 서비스 전체 하루 3,000회로 제한합니다. `RECOMMEND_LIMIT_PER_MINUTE`, `RECOMMEND_LIMIT_PER_DAY`, `RECOMMEND_GLOBAL_LIMIT_PER_DAY`로 바꿀 수 있고 0이면 해당 제한을 끕니다. 횟수를 확인할 수 없으면 OpenAI를 호출하지 않고 `503`을 돌려줍니다.
+- 메시지 전송(분당 30회), 매물 등록·수정(분당 20회), 대여 요청(분당 10회)은 계정 단위로 제한합니다. 한도를 넘으면 `429`와 `Retry-After`를 돌려줍니다.
+- 횟수는 `rate_limits` 테이블에 저장해 모든 인스턴스가 공유하며, IP는 `BETTER_AUTH_SECRET`으로 HMAC 처리해 원래 값을 남기지 않습니다.
+- 트랜잭션에는 문장 10초·잠금 대기 5초·유휴 15초 타임아웃을 적용합니다(`DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `DB_QUERY_TIMEOUT_MS`).
+- 대여 요청은 최대 365일까지 가능합니다.
+- 이 변경은 `0002_rate_limits_and_rental_bounds.sql` 마이그레이션이 필요합니다. 배포 전에 `npm run db:migrate -- --env <환경>`을 실행하세요.
+
 ## 파일
 
 - `src/data/farm-machines.js`: 작물, 재배 작업, 농기계 종류

@@ -7,7 +7,8 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-haiku-5-5";
 export const DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
-export const DEFAULT_ZAI_MODEL = "glm-5.1";
+export const DEFAULT_ZAI_MODEL = "glm-5.3";
+export const DEFAULT_ZAI_VISION_MODEL = "glm-5.3-flash";
 
 const env = (name) => process.env[name]?.trim() || "";
 
@@ -25,8 +26,10 @@ export function llmEnabled() {
   return llmProvider() !== null;
 }
 
-export function llmModel(provider = llmProvider()) {
-  if (provider === "zai") return env("ZAI_MODEL") || DEFAULT_ZAI_MODEL;
+export function llmModel(provider = llmProvider(), { vision = false } = {}) {
+  if (provider === "zai") {
+    return vision ? env("ZAI_VISION_MODEL") || DEFAULT_ZAI_VISION_MODEL : env("ZAI_MODEL") || DEFAULT_ZAI_MODEL;
+  }
   return env("ANTHROPIC_MODEL") || DEFAULT_ANTHROPIC_MODEL;
 }
 
@@ -53,14 +56,22 @@ export function toOpenAiMessages(system, messages) {
       out.push({ role: "assistant", content: text || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) });
       continue;
     }
-    const text = [];
+    const parts = [];
     for (const block of blocks) {
       if (block.type === "tool_result") out.push({ role: "tool", tool_call_id: block.tool_use_id, content: stringify(block.content) });
-      else if (block.type === "text") text.push(block.text);
+      else if (block.type === "text") parts.push({ type: "text", text: block.text });
+      else if (block.type === "image" && block.source?.type === "base64") {
+        parts.push({ type: "image_url", image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` } });
+      }
     }
-    if (text.length) out.push({ role: "user", content: text.join("\n") });
+    if (parts.some((part) => part.type === "image_url")) out.push({ role: "user", content: parts });
+    else if (parts.length) out.push({ role: "user", content: parts.map((part) => part.text).join("\n") });
   }
   return out;
+}
+
+export function hasImage(messages) {
+  return messages.some((message) => Array.isArray(message.content) && message.content.some((block) => block.type === "image"));
 }
 
 export function toOpenAiTools(tools = []) {
@@ -113,7 +124,7 @@ async function callZai({ system, messages, tools, toolChoice, maxTokens, timeout
     signal: AbortSignal.timeout(timeoutMs),
     headers: { authorization: `Bearer ${env("ZAI_API_KEY")}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: llmModel("zai"),
+      model: llmModel("zai", { vision: hasImage(messages) }),
       max_tokens: maxTokens,
       messages: toOpenAiMessages(systemText, messages),
       thinking: { type: "disabled" },

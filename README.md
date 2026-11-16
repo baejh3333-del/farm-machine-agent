@@ -34,7 +34,8 @@ Vercel 배포에서는 PostgreSQL을 연결합니다.
 ```dotenv
 # Z.ai 사용 (권장 설정)
 ZAI_API_KEY=your_zai_key
-ZAI_MODEL=            # 선택, 기본값 glm-5.1
+ZAI_MODEL=            # 선택, 글 상담 모델 · 기본값 glm-5.3
+ZAI_VISION_MODEL=     # 선택, 사진 상담 모델 · 기본값 glm-5.3-flash
 ZAI_BASE_URL=         # 선택, 기본값 https://api.z.ai/api/paas/v4 · GLM Coding Plan 키는 https://api.z.ai/api/coding/paas/v4
 
 # 또는 Claude 사용

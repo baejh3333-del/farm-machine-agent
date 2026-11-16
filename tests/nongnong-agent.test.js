@@ -15,7 +15,7 @@ const TODAY = "2026-11-16";
 const rentable = LISTINGS.find((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair" && !item.booked.length);
 const forSale = LISTINGS.find((item) => item.type === "sale");
 
-const AI_ENV = ["AI_PROVIDER", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+const AI_ENV = ["AI_PROVIDER", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_VISION_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
 
 function withEnv(t, values) {
   const previous = Object.fromEntries(AI_ENV.map((name) => [name, process.env[name]]));
@@ -225,7 +225,7 @@ test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는
   const chat = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ name: "x", description: "d", input_schema: { type: "object" } }] });
   assert.equal(requests[0].url, "https://api.z.ai/api/coding/paas/v4/chat/completions");
   assert.equal(requests[0].request.headers.authorization, "Bearer zkey");
-  assert.equal(requests[0].body.model, "glm-5.1");
+  assert.equal(requests[0].body.model, "glm-5.3");
   assert.equal(requests[0].body.tool_choice, "auto");
   assert.equal(requests[0].body.tools[0].function.name, "x");
   assert.deepEqual(chat.content, [{ type: "text", text: "안녕하세요" }]);
@@ -263,4 +263,40 @@ test("Z.ai가 오류를 돌려주면 null로 처리해 규칙 기반 안내로 �
   withEnv(t, { ZAI_API_KEY: "zkey" });
   t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code: "1113" } }, { status: 429 }));
   assert.equal(await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }] }), null);
+});
+
+const IMAGE_BLOCK = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAA" } };
+
+test("Z.ai 기본 모델은 glm-5.3, 사진이 있으면 glm-5.3-flash를 쓴다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey" });
+  const models = [];
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    models.push(JSON.parse(request.body).model);
+    return Response.json({ choices: [{ message: { content: "ok" } }] });
+  });
+  await callLLM({ system: "S", messages: [{ role: "user", content: "글만" }] });
+  await callLLM({ system: "S", messages: [{ role: "user", content: [{ type: "text", text: "사진" }, IMAGE_BLOCK] }] });
+  process.env.ZAI_VISION_MODEL = "x";
+  await callLLM({ system: "S", messages: [{ role: "user", content: [IMAGE_BLOCK] }] });
+  assert.deepEqual(models, ["glm-5.3", "glm-5.3-flash", "x"]);
+});
+
+test("이미지 블록을 Z.ai image_url 형식으로 바꾼다", () => {
+  const messages = toOpenAiMessages("", [{ role: "user", content: [{ type: "text", text: "이거 뭐예요" }, IMAGE_BLOCK] }]);
+  assert.deepEqual(messages, [{ role: "user", content: [
+    { type: "text", text: "이거 뭐예요" },
+    { type: "image_url", image_url: { url: "data:image/jpeg;base64,AAA" } },
+  ] }]);
+});
+
+test("Anthropic 호출은 이미지 블록을 그대로 보낸다", async (t) => {
+  withEnv(t, { ANTHROPIC_API_KEY: "akey" });
+  let body;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    body = JSON.parse(request.body);
+    return Response.json({ content: [{ type: "text", text: "ok" }] });
+  });
+  await callLLM({ system: "S", messages: [{ role: "user", content: [{ type: "text", text: "사진" }, IMAGE_BLOCK] }] });
+  assert.equal(body.messages[0].content[1].type, "image");
+  assert.equal(body.model, "claude-haiku-5-5");
 });

@@ -64,6 +64,37 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 
 `npm run db:inspect`는 데이터를 변경하지 않고 `pendingMigrations`, `checksumMismatches`, `unknownMigrations`, `unvalidatedConstraints`와 상담 테이블 건수를 표시합니다. 미검증 제약은 기존 데이터 검사 후 별도 변경으로 검증해야 합니다. `0003` 테이블 생성만으로 AI 상담 이력 저장이 구현되지는 않습니다.
 
+## 농농이 음성 대화
+
+채팅창의 🎤 **말하기** 버튼으로 말하면 글자로 바뀌어 입력창에 들어갑니다. 사용자가 확인하고 고친 뒤 **전송**을 눌러야 보내집니다(자동 전송 없음). 농농이 답변에는 🔊 듣기·다시 듣기·멈춤 버튼이 붙습니다.
+
+**음성 → 글 (인식)**
+- 서버 인식: `OPENAI_API_KEY`가 있으면 `/api/voice`가 OpenAI `gpt-4o-mini-transcribe`(언어 `ko`, 농기계·작업·영양 지명 힌트)로 인식합니다.
+- `VOICE_STT_PROVIDER=zai`로 지정하면 Z.ai `glm-asr-2512`를 씁니다. Z.ai 공식 문서에 한국어 지원이 명시돼 있지 않아 자동으로는 고르지 않습니다. 실제 한국어 사투리 녹음으로 확인한 뒤 켜세요.
+- 서버 인식이 없으면 브라우저 음성 인식(크롬·엣지·사파리, `ko-KR`)을 쓰고, 그것도 없으면 글 입력을 안내합니다.
+- 브라우저가 녹음을 16kHz 모노 16비트 WAV로 바꿔 보냅니다. **최대 30초, 1MB**입니다. 음성은 인식에만 쓰고 저장하지 않으며, 로그에는 공급자·상태·길이만 남깁니다.
+
+**글 → 음성 (읽어 주기)**
+- 브라우저에 들어 있는 한국어 목소리(`speechSynthesis`)로 읽습니다. 서버 키가 필요 없고, 한국어 목소리가 없는 기기에서는 듣기 버튼을 숨깁니다.
+- 자동 읽기 기본값은 **말로 물었을 때만**입니다(브라우저 자동 재생 정책). 「항상」·「끄기」를 고를 수 있습니다.
+- 말 빠르기 기본값은 **조금 천천히(0.9배)**입니다. 설정은 그 브라우저에 저장됩니다.
+- 서버 음성 합성은 쓰지 않습니다. OpenAI `tts-1`·`gpt-4o-mini-tts`는 2027년 1월 6일 종료가 예고됐고, Z.ai GLM-TTS는 중국어·영어 중심입니다.
+
+**안전**
+- 음성으로 들어온 질문이면 농농이가 숫자·날짜·금액·농기계 이름을 되읽고, 모호하면 한두 가지씩 되묻습니다.
+- 대여 요청은 지금처럼 승인 카드의 **버튼으로만** 실행됩니다. 음성 요청이면 카드에 확인 당부와 「요청 내용 듣기」가 붙습니다.
+
+**환경 변수(모두 선택)**
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `VOICE_STT_PROVIDER` | (비움) | 비우면 OpenAI 키가 있을 때 OpenAI. `zai`, `openai`, `none`(서버 인식 끄기) |
+| `OPENAI_STT_MODEL` | `gpt-4o-mini-transcribe` | OpenAI 인식 모델 |
+| `ZAI_ASR_MODEL` | `glm-asr-2512` | Z.ai 인식 모델 |
+| `VOICE_LIMIT_PER_MINUTE` / `VOICE_LIMIT_PER_DAY` / `VOICE_GLOBAL_LIMIT_PER_DAY` | 10 / 100 / 3000 | 음성 인식 호출 제한(IP 기준, 전체 하루) |
+
+마이크는 **HTTPS**(또는 localhost)에서만 동작합니다. Vercel에서는 `api/voice.js`의 `maxDuration`을 30초로 두었습니다.
+
 ## 호출 제한과 DB 타임아웃
 
 - `/api/recommend`와 `/api/agent` 대화는 AI 비용을 막기 위해 같은 한도를 쓰며 IP당 분당 15회·하루 150회, 서비스 전체 하루 3,000회로 제한합니다. `RECOMMEND_LIMIT_PER_MINUTE`, `RECOMMEND_LIMIT_PER_DAY`, `RECOMMEND_GLOBAL_LIMIT_PER_DAY`로 바꿀 수 있고 0이면 해당 제한을 끕니다. 횟수를 확인할 수 없으면 AI를 호출하지 않고 `503`을 돌려줍니다.
@@ -79,6 +110,8 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 - `server/listings-db.js`, `server/listing-seed.js`: PostgreSQL 매물 조회와 데모 데이터
 - `api/listings.js`: 매물 조회 API
 - `src/ai/recommend-agent.js`: 화면과 추천 API 연결
+- `src/ai/voice.js`, `src/ai/voice-panel.js`: 녹음·WAV 변환·브라우저 인식·읽어 주기와 채팅창 음성 조작
+- `server/voice.js`, `api/voice.js`: 서버 음성 인식(OpenAI·Z.ai)
 - `server/agent.js`: 서버 추천 후보 선정과 AI 호출
 - `server/llm.js`: AI 호출(Z.ai·Claude 공급자 선택과 형식 변환)
 - `server/nongnong-agent.js`: 농농이 도구 호출 에이전트(질문·검색·대여 제안, 승인 후 실행·상태 확인)

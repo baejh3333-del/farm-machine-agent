@@ -129,6 +129,13 @@ const MACHINE_IMAGE_FALLBACK = {
   mower: "cultivator",
   shredder: "cultivator",
   thresher: "combine",
+  excavator: "tractor",
+  aerialLift: "carrier",
+  seeder: "potatoPlanter",
+  ridger: "ridgeMulcher",
+  dryer: "combine",
+  sorter: "combine",
+  forageHarvester: "combine",
 };
 export const machineImage = (type) => {
   const id = typeof type === "string" ? type : type?.id;

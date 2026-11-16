@@ -12,6 +12,7 @@ export const INSURANCE_PRODUCTS = [
     machineTypes: [
       "cultivator", "tractor", "combine", "ricePlanter", "sprayer", "carrier",
       "tiller", "speedSprayer", "agriDrone", "loader", "baler", "ridingCultivator",
+      "excavator", "aerialLift",
     ],
     summary: "농기계를 운전하거나 농작업을 하다 생긴 사고를 보상해요. 대인배상, 대물배상, 자기신체사고, 농기계 손해를 보장해요.",
     coveredTypesNote: "가입 대상은 경운기, 트랙터, 콤바인, 관리기, 이앙기, SS분무기, 항공방제기, 농업용 동력운반차, 농업용 로우더, 광역방제기, 농업용 굴착기, 베일러 12종에 고소작업차·리프트가 추가됐어요. 작업기만 따로는 대상이 아닐 수 있어요.",
@@ -71,6 +72,13 @@ export const MACHINERY_INSURANCE_ELIGIBILITY = {
   thresher: { status: "no", note: "탈곡기는 대상 목록에 없어요." },
   garlicOnionPlanter: { status: "no", note: "마늘·양파 파종기는 대상 목록에 없어요." },
   rootHarvester: { status: "no", note: "땅속작물 수확기는 대상 목록에 없어요." },
+  excavator: { status: "eligible", note: "농업용 굴착기는 가입 대상이에요." },
+  aerialLift: { status: "eligible", note: "고소작업차·리프트는 가입 대상이에요." },
+  seeder: { status: "no", note: "밭작물·콩 파종기(부착 작업기)는 대상 목록에 없어요." },
+  ridger: { status: "no", note: "배토기·논두렁조성기(부착 작업기)는 대상 목록에 없어요." },
+  dryer: { status: "no", note: "농산물·곡물 건조기는 대상 목록에 없어요." },
+  sorter: { status: "no", note: "농산물 선별기는 대상 목록에 없어요." },
+  forageHarvester: { status: "check", note: "자주식 사료작물 수확기(예초·수확 겸용)는 모델에 따라 달라요. 농협에서 확인해 주세요." },
 };
 
 // 영양군 보험 가입처(지역 농협). 전화번호는 공식 자료로 확인한 뒤에만 채운다(null이면 안내하지 않는다).

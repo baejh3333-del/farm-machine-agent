@@ -52,8 +52,8 @@ test("대여·구매 예약에만 묻고, 매물 등록에는 묻지 않는다",
   assert.equal(cleanInsuranceOffer({ stage: "offer_consult", kind: "purchase", officeId: LOCAL_NH_FALLBACK.id }).officeId, LOCAL_NH_FALLBACK.id);
 });
 
-test("24개 모든 기종에 농기계종합보험 대상 여부가 있고, 가입처는 영양군·전국 지역으로 고른다", () => {
-  assert.equal(MACHINE_TYPES.length, 24);
+test("31개 모든 기종에 농기계종합보험 대상 여부가 있고, 가입처는 영양군·전국 지역으로 고른다", () => {
+  assert.equal(MACHINE_TYPES.length, 31);
   for (const { id } of MACHINE_TYPES) assert.ok(MACHINERY_INSURANCE_ELIGIBILITY[id], id);
   assert.equal(pickOffice("석보면").id, "nam-yeongyang-nh");
   assert.equal(pickOffice("청기면").id, "yeongyang-nh");

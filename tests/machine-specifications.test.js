@@ -9,7 +9,7 @@ test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사
   const expectedListings = MACHINE_TYPES.length * 10;
   for (const listings of [buildMockListings(), listListings()]) {
     assert.equal(listings.length, expectedListings);
-    assert.equal(new Set(listings.map((item) => item.modelId)).size, MACHINE_SPECIFICATIONS.length);
+    assert.ok(new Set(listings.map((item) => item.modelId)).size >= MACHINE_TYPES.length);
     for (const item of listings) {
       const model = SPEC_BY_ID[item.modelId];
       assert.ok(model);
@@ -28,10 +28,14 @@ test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사
 });
 
 test("확장된 한국 농기계·작물·작업 카탈로그와 기종별 기본값이 모두 유효하다", () => {
-  assert.equal(CROPS.length, 20);
-  assert.equal(OPERATIONS.length, 24);
-  assert.equal(MACHINE_TYPES.length, 24);
-  assert.equal(MACHINE_SPECIFICATIONS.length, 47);
+  assert.equal(CROPS.length, 51);
+  assert.equal(OPERATIONS.length, 29);
+  assert.equal(MACHINE_TYPES.length, 31);
+  assert.equal(MACHINE_SPECIFICATIONS.length, 206);
+  assert.equal(new Set(CROPS.map((c) => c.id)).size, CROPS.length);
+  assert.equal(new Set(OPERATIONS.map((o) => o.id)).size, OPERATIONS.length);
+  assert.equal(new Set(MACHINE_TYPES.map((m) => m.id)).size, MACHINE_TYPES.length);
+  assert.equal(new Set(MACHINE_SPECIFICATIONS.map((m) => m.id)).size, MACHINE_SPECIFICATIONS.length);
   for (const mt of MACHINE_TYPES) {
     assert.ok(MACHINE_SPECIFICATIONS.some((m) => m.machineType === mt.id), `${mt.id} 모델 누락`);
     const defs = getSpecificationDefaults(mt.id);

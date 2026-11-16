@@ -42,6 +42,9 @@ import {
 import { checkRateLimit, enforceRateLimit } from "../server/rate-limit.js";
 import { getPhotoObject, listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
 import { addOwnedMachine } from "../server/user-data.js";
+import { CROPS, OPERATIONS, MACHINE_TYPES } from "../src/data/farm-machines.js";
+import { MACHINE_SPECIFICATIONS } from "../src/data/machine-specifications.js";
+import { buildMockListings } from "../server/listing-seed.js";
 
 function shiftDate(isoDate, deltaDays) {
   const d = new Date(`${isoDate}T12:00:00Z`);
@@ -185,10 +188,10 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
   assert.equal(info.userIdType, "text");
   assert.equal(info.btreeGistInstalled, true);
   assert.equal(info.writesFrozen, false);
-  assert.equal(info.counts.crop_catalog, 20);
-  assert.equal(info.counts.operation_catalog, 24);
-  assert.equal(info.counts.machine_type_catalog, 24);
-  assert.equal(info.counts.machine_model_specs, 47);
+  assert.equal(info.counts.crop_catalog, CROPS.length);
+  assert.equal(info.counts.operation_catalog, OPERATIONS.length);
+  assert.equal(info.counts.machine_type_catalog, MACHINE_TYPES.length);
+  assert.equal(info.counts.machine_model_specs, MACHINE_SPECIFICATIONS.length);
 
   // Tampered migration checksum must be rejected
   const badMigrationsDir = join(tempDir, "bad-migrations");
@@ -214,14 +217,15 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
     await prodPool.end();
   }
 
-  // Seed test DB and confirm 240 demo items in PostgreSQL + live recommend uses PG
+  const expectedMockCount = buildMockListings().length;
+  // Seed test DB and confirm all demo items in PostgreSQL + live recommend uses PG
   const seedRes = await seedDemoListings({ env: "test", pool });
-  assert.equal(seedRes.inserted, 240);
+  assert.equal(seedRes.inserted, expectedMockCount);
 
   const rec = await recommend("고추 두둑 대여", { maxPrice: 70000 }, { pool });
   assert.ok(rec.listingIds.length > 0);
   const pgListings = await fetchListings({ pool });
-  assert.equal(pgListings.length, 240);
+  assert.equal(pgListings.length, expectedMockCount);
 });
 
 test("[PGlite 로컬 엔진] 2. 회원가입 및 A/B/C 계정 세션, write-freeze 503 차단 및 복구", async () => {
@@ -235,7 +239,7 @@ test("[PGlite 로컬 엔진] 2. 회원가입 및 A/B/C 계정 세션, write-free
     // Reads remain available
     const getListings = await apiReq(baseUrl, "/api/listings");
     assert.equal(getListings.status, 200);
-    assert.equal(getListings.body.listings.length, 240);
+    assert.equal(getListings.body.listings.length, buildMockListings().length);
 
     const getSess = await apiReq(baseUrl, "/api/account?action=session", { cookie: userA.cookie });
     assert.equal(getSess.status, 200);

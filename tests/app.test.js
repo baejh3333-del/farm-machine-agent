@@ -252,3 +252,30 @@ test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞
     else process.env.ANTHROPIC_API_KEY = previous;
   }
 });
+
+test("초안을 등록 화면 값으로 바꾸고, 저장 안 된 초안은 사진 data URL을 넘긴다", async () => {
+  const { listingDraftToFormValues } = await import("../src/ai/photo.js");
+  const base = {
+    type: "rent", title: "관리기 빌려드려요", description: "소개글", price: 45000,
+    machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍",
+    priceBasis: { count: 3, min: 40000, max: 50000, unit: "day", lowConfidence: false },
+  };
+  const saved = listingDraftToFormValues(
+    { ...base, listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/a.webp", photoUrl: "/api/photos?key=x" },
+    "data:image/jpeg;base64,AAA",
+  );
+  assert.equal(saved.id, "11111111-1111-4111-8111-111111111111");
+  assert.equal(saved.draftPhotoKey, "listings/11111111-1111-4111-8111-111111111111/a.webp");
+  assert.equal(saved.draftPhotoUrl, "/api/photos?key=x");
+  assert.equal(saved.photoDataUrl, undefined);
+  assert.deepEqual(
+    { type: saved.type, title: saved.title, description: saved.description, price: saved.price, machineType: saved.machineType, modelId: saved.modelId, brand: saved.brand },
+    { type: "rent", title: "관리기 빌려드려요", description: "소개글", price: 45000, machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍" },
+  );
+
+  const unsaved = listingDraftToFormValues({ ...base, listingId: null, photoKey: null, photoUrl: null, price: null }, "data:image/jpeg;base64,AAA");
+  assert.match(unsaved.id, /^[0-9a-f-]{36}$/);
+  assert.equal(unsaved.draftPhotoKey, undefined);
+  assert.equal(unsaved.photoDataUrl, "data:image/jpeg;base64,AAA");
+  assert.equal(unsaved.price, "");
+});

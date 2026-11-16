@@ -14,11 +14,11 @@ export async function askRecommendation(message, context) {
 }
 
 // 농농이 AI 도구 호출 에이전트. 서버에 AI 키가 없으면 { mode: "unavailable" }를 받는다.
-export async function askAgent(message, { history = [], region } = {}) {
+export async function askAgent(message, { history = [], region, image, savedDraft } = {}) {
   const result = await apiFetch("/api/agent", {
     method: "POST",
-    timeoutMs: 30000,
-    json: { action: "chat", message, history, region },
+    timeoutMs: image ? 45000 : 30000,
+    json: { action: "chat", message, history, region, ...(image ? { image } : {}), ...(savedDraft ? { savedDraft } : {}) },
   });
   if (!result || typeof result.mode !== "string") throw new Error("농농이 응답 형식이 올바르지 않습니다.");
   return result;

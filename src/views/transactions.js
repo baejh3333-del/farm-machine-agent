@@ -1,7 +1,9 @@
 import { CROPS, OPERATIONS, MACHINE_TYPES, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID } from "../data/farm-machines.js";
-import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
+import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto, pictureIcon } from "../core/utils.js";
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
+import { MACHINE_SPECIFICATIONS, SPEC_BY_ID } from "../data/machine-specifications.js";
+import { available } from "../data/recommendation.js";
 
 export function createTransactionViews(deps) {
 function openForm(html) {
@@ -632,6 +634,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
         </label>
         <label>최근 점검일<input id="editInspection" type="date" max="${today()}" value="${escapeHtml(initialInspected)}" required></label>
       </div>
+      ${!isEdit && (draftValues?.draftPhotoUrl || draftValues?.photoDataUrl) ? `<div class="draft-photo-preview"><img src="${escapeHtml(draftValues.draftPhotoUrl || draftValues.photoDataUrl)}" alt="농농이 상담에서 올린 사진" /><small>농농이 상담에서 올린 사진이 등록돼요. 바꾸려면 아래에서 새 사진을 고르세요.</small></div>` : ""}
       <label>기계 사진 업로드 (선택, JPG·PNG·WebP, 1MB 이하)<input id="editPhoto" type="file" accept="image/png,image/jpeg,image/webp"></label>
       ${isEdit && hasListingPhoto(item) ? `<label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="editRemovePhoto" style="width:auto"> 등록된 기존 사진 삭제하기</label>` : ""}
       <div class="form-row-2">
@@ -684,6 +687,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
     }
 
     let photoDataUrl = draftValues?.photoDataUrl || undefined;
+    const draftPhotoKey = !isEdit && !file ? draftValues?.draftPhotoKey : undefined;
     if (file) {
       try {
         photoDataUrl = await readImageFileAsDataUrl(file);
@@ -712,7 +716,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       included: $("editIncluded").value.trim(),
       pickup: $("editPickup").value.trim(),
       description: $("editDescription").value.trim(),
-      ...(photoDataUrl ? { photoDataUrl } : {}),
+      ...(draftPhotoKey ? { draftPhotoKey } : (photoDataUrl ? { photoDataUrl } : {})),
       ...(isEdit && $("editRemovePhoto")?.checked ? { removePhoto: true } : {}),
     };
 

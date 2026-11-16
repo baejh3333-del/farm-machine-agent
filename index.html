@@ -523,8 +523,15 @@
       </div>
     </div>
 
+    <div class="ai-photo-preview" id="aiPhotoPreview" hidden>
+      <img id="aiPhotoPreviewImg" alt="보낼 사진 미리보기" />
+      <span>사진을 함께 보내요</span>
+      <button type="button" class="icon-button" id="aiPhotoRemove" aria-label="보낼 사진 빼기">✕</button>
+    </div>
     <form id="aiForm" class="ai-form">
-      <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" required />
+      <input type="file" id="aiPhotoInput" accept="image/*" hidden />
+      <button type="button" class="button button-secondary ai-photo-btn" id="aiPhotoButton" aria-label="농기계 사진 올리기" title="농기계 사진 올리기">📷</button>
+      <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" />
       <button type="submit" class="button button-primary ai-send-btn" aria-label="질문 보내기">전송</button>
     </form>
     <p class="ai-footnote">추천은 등록된 매물 기준이며, 작업기 호환성과 기계 상태는 거래 전 꼭 확인하세요.</p>

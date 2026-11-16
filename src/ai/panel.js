@@ -2,6 +2,7 @@ import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
 import { recommendationGuide, selectMatchingListings } from "../data/recommendation.js";
 import { $, areaLabel, escapeHtml, money, toast } from "../core/utils.js";
 import { conversationTurn, unrelatedTurn } from "./conversation.js";
+import { downscaleImage, listingDraftToFormValues } from "./photo.js";
 import { askAgent, askRecommendation, executeAgentAction } from "./recommend-agent.js";
 
 export function createAiPanel({
@@ -15,6 +16,7 @@ export function createAiPanel({
   renderListings,
   refreshAuthenticatedData,
   savePendingIntentAndRedirectLogin,
+  openNewListing,
 }) {
   let conversation;
   let recommendationPending = false;
@@ -22,6 +24,12 @@ export function createAiPanel({
   let agentHistory = [];
   let agentAvailable = null;
   const MAX_AGENT_HISTORY = 12;
+  // 사진 상담 상태: 보낼 사진, 마지막으로 보낸 사진(등록 화면용), 저장된 판매·대여 초안
+  let pendingPhoto = null;
+  let lastPhotoDataUrl = null;
+  let savedDraft = null;
+  const MACHINE_LABELS = { cultivator: "관리기", tractor: "트랙터", ridgeMulcher: "휴립·멀칭기", transplanter: "정식기", ricePlanter: "이앙기", sprayer: "방제기", potatoPlanter: "감자 파종기", combine: "콤바인", potatoHarvester: "감자 굴취기", carrier: "운반차" };
+  const CONFIDENCE_LABELS = { high: "높음", medium: "보통", low: "낮음" };
   const aiDefaultPlaceholder = $("aiInput").placeholder;
   const aiInputExamples = {
     crop: "예: 감자",
@@ -212,11 +220,181 @@ export function createAiPanel({
     });
   }
 
-  function renderAgentResult(message, result) {
+
+  function setPendingPhoto(dataUrl) {
+    pendingPhoto = dataUrl;
+    $("aiPhotoPreview").hidden = !dataUrl;
+    if (dataUrl) $("aiPhotoPreviewImg").src = dataUrl;
+    else $("aiPhotoPreviewImg").removeAttribute("src");
+  }
+
+  async function choosePhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setPendingPhoto(await downscaleImage(file));
+      $("aiInput").placeholder = "예: 시동이 안 걸려요 / 이거 팔고 싶어요";
+      $("aiInput").focus({ preventScroll: true });
+    } catch (error) {
+      toast(error?.message || "JPG·PNG 사진만 올릴 수 있어요.");
+    }
+  }
+
+  function bindPhotoControls() {
+    $("aiPhotoButton").addEventListener("click", () => $("aiPhotoInput").click());
+    $("aiPhotoInput").addEventListener("change", choosePhoto);
+    $("aiPhotoRemove").addEventListener("click", () => setPendingPhoto(null));
+  }
+
+  function appendUserPhoto(bubble, dataUrl) {
+    const img = document.createElement("img");
+    img.className = "ai-user-photo";
+    img.src = dataUrl;
+    img.alt = "보낸 농기계 사진";
+    bubble.prepend(img);
+  }
+
+  function photoSummaryText(summary) {
+    if (!summary) return "";
+    const parts = [
+      summary.machineType ? `기종 ${MACHINE_LABELS[summary.machineType] || summary.machineType}` : "기종 확인 안 됨",
+      `확신 ${CONFIDENCE_LABELS[summary.confidence] || "낮음"}`,
+      ...summary.observations,
+    ];
+    return `(사진 인식: ${parts.join(", ")})`;
+  }
+
+  function linkButton(label, href, external = false) {
+    const link = document.createElement("a");
+    link.className = "button button-secondary ai-card-action";
+    link.href = href;
+    link.textContent = label;
+    if (external) {
+      link.target = "_blank";
+      link.rel = "noopener";
+    }
+    return link;
+  }
+
+  function appendRepairCenters(bubble, centers) {
+    const wrap = document.createElement("div");
+    wrap.className = "ai-centers";
+    const title = document.createElement("strong");
+    title.className = "ai-confirm-title";
+    title.textContent = "🔧 수리·상담 연락처";
+    wrap.append(title);
+    for (const center of centers.slice(0, 5)) {
+      const card = document.createElement("div");
+      card.className = "ai-center-card";
+      const name = document.createElement("strong");
+      name.textContent = center.name;
+      const services = document.createElement("small");
+      services.textContent = center.services || "";
+      const actions = document.createElement("div");
+      actions.className = "ai-confirm-actions";
+      if (center.phone) actions.append(linkButton(`📞 ${center.phone}`, `tel:${center.phone.replace(/[^0-9]/g, "")}`));
+      if (center.url) actions.append(linkButton("🌐 사이트", center.url, true));
+      const checked = document.createElement("small");
+      checked.className = "ai-center-checked";
+      checked.textContent = `확인일 ${center.checkedAt || "-"}`;
+      card.append(name, services, actions, checked);
+      wrap.append(card);
+    }
+    bubble.append(wrap);
+  }
+
+  function priceText(draft) {
+    const basis = draft.priceBasis || {};
+    if (!draft.price) return "비슷한 매물이 없어 가격은 직접 정해 주세요.";
+    const unit = basis.unit === "day" ? "/일" : "";
+    const range = basis.min && basis.max && basis.min !== basis.max ? ` (${money(basis.min)}~${money(basis.max)}${unit})` : "";
+    return `참고가 ${money(draft.price)}${unit}${range} · 비슷한 매물 ${basis.count || 0}건${basis.lowConfidence ? " · 근거가 적어요" : ""}`;
+  }
+
+  function appendListingDraft(bubble, draft) {
+    const card = document.createElement("div");
+    card.className = "ai-confirm ai-draft";
+    const title = document.createElement("strong");
+    title.className = "ai-confirm-title";
+    title.textContent = draft.type === "sale" ? "🏷️ 판매 글 초안" : "🤝 대여 글 초안";
+    card.append(title);
+    const photoSrc = draft.photoUrl || lastPhotoDataUrl;
+    if (photoSrc) {
+      const img = document.createElement("img");
+      img.className = "ai-draft-photo";
+      img.src = photoSrc;
+      img.alt = "매물 사진";
+      card.append(img);
+    }
+    const name = document.createElement("div");
+    name.className = "ai-draft-title";
+    name.textContent = draft.title;
+    const price = document.createElement("div");
+    price.className = "ai-rec-row";
+    price.textContent = priceText(draft);
+    const desc = document.createElement("p");
+    desc.className = "ai-draft-desc";
+    desc.textContent = draft.description;
+    const notice = document.createElement("div");
+    notice.className = "ai-rec-notice";
+    notice.textContent = "💡 플랫폼 등록 매물 기준 참고가예요. [확인 필요] 부분은 직접 채워 주세요.";
+    const actions = document.createElement("div");
+    actions.className = "ai-confirm-actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "button button-secondary";
+    copy.textContent = "📋 소개글 복사";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(`${draft.title}\n\n${draft.description}`);
+        toast("소개글을 복사했어요.");
+      } catch {
+        toast("복사하지 못했어요. 글을 길게 눌러 복사해 주세요.");
+      }
+    });
+    const register = document.createElement("button");
+    register.type = "button";
+    register.className = "button button-primary";
+    register.textContent = "📝 이 내용으로 매물 등록하기";
+    register.addEventListener("click", () => openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl)));
+    actions.append(copy, register);
+    card.append(name, price, desc, notice, actions);
+    bubble.append(card);
+  }
+
+  function appendSources(bubble, sources) {
+    const line = document.createElement("div");
+    line.className = "ai-sources";
+    line.append(document.createTextNode("근거: "));
+    sources.slice(0, 4).forEach((source, index) => {
+      if (index) line.append(document.createTextNode(" · "));
+      const link = document.createElement("a");
+      link.href = source.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = source.title;
+      line.append(link);
+    });
+    bubble.append(line);
+  }
+
+  function renderAgentResult(message, result, { photo = false } = {}) {
     const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
-    rememberAgentTurn({ role: "user", content: message }, { role: "assistant", content: reply });
+    const summary = photoSummaryText(result.photoSummary);
+    rememberAgentTurn(
+      { role: "user", content: photo ? `[사진 첨부] ${message}`.trim() : message },
+      { role: "assistant", content: [reply, summary].filter(Boolean).join("\n") },
+    );
+    if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
+      savedDraft = { listingId: result.listingDraft.listingId, photoKey: result.listingDraft.photoKey, photoUrl: result.listingDraft.photoUrl };
+    }
     const listingIds = (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
     const bubble = appendAiMessage(reply, "assistant", listingIds);
+    if (Array.isArray(result.repairCenters) && result.repairCenters.length) appendRepairCenters(bubble, result.repairCenters);
+    if (result.listingDraft) appendListingDraft(bubble, result.listingDraft);
+    if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
+    scrollAiToEnd();
     if (Array.isArray(result.choices) && result.choices.length) appendChoices(bubble, result.choices.slice(0, 5));
     if (result.pendingAction?.type === "rental_request") appendConfirmation(bubble, result.pendingAction);
     $("aiModeLabel").textContent = "AI 상담 · 등록 매물 기반";
@@ -225,7 +403,8 @@ export function createAiPanel({
   async function sendAiQuestion(event) {
     event.preventDefault();
     const message = $("aiInput").value.trim();
-    if (!message || recommendationPending) return;
+    const photo = pendingPhoto;
+    if ((!message && !photo) || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
 
     recommendationPending = true;
@@ -235,26 +414,50 @@ export function createAiPanel({
     $("aiInput").placeholder = aiDefaultPlaceholder;
     $("aiStarters").hidden = true;
     $("aiMessages").querySelectorAll(".ai-follow-up").forEach((choices) => choices.remove());
-    appendAiMessage(message, "user");
+    const userBubble = appendAiMessage(message || "사진을 봐 주세요", "user");
+    if (photo) {
+      appendUserPhoto(userBubble, photo);
+      lastPhotoDataUrl = photo;
+      setPendingPhoto(null);
+    }
     let pending;
 
     try {
-      const resetRequested = /^(?:새 상담(?: 시작)?|처음부터 다시)/.test(message);
-      if (resetRequested) agentHistory = [];
+      const resetRequested = !photo && /^(?:새 상담(?: 시작)?|처음부터 다시)/.test(message);
+      if (resetRequested) {
+        agentHistory = [];
+        savedDraft = null;
+        lastPhotoDataUrl = null;
+      }
+      if (photo && agentAvailable === false) {
+        appendAiMessage("사진 상담은 지금 쓸 수 없어요. 궁금한 점을 글로 적어 주시면 도와드릴게요.", "assistant");
+        return;
+      }
       if (agentAvailable !== false && !resetRequested) {
-        pending = appendAiMessage("농농이가 생각하고 있어요…", "assistant");
+        pending = appendAiMessage(photo ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
         if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
-        const agentResult = await askAgent(message, { history: agentHistory, region: state.region }).catch((error) => {
-          console.warn("농농이 에이전트 응답 실패, 규칙 기반 상담으로 전환", error?.status || error?.name);
+        let agentError = null;
+        const agentResult = await askAgent(message, { history: agentHistory, region: state.region, image: photo || undefined, savedDraft }).catch((error) => {
+          agentError = error;
+          console.warn("농농이 에이전트 응답 실패", error?.status || error?.name);
           return null;
         });
         pending.remove();
         pending = undefined;
         if (agentResult?.mode === "unavailable") {
           agentAvailable = false;
+          if (photo) {
+            appendAiMessage("사진 상담은 지금 쓸 수 없어요. 궁금한 점을 글로 적어 주시면 도와드릴게요.", "assistant");
+            return;
+          }
         } else if (agentResult?.mode === "agent") {
           agentAvailable = true;
-          renderAgentResult(message, agentResult);
+          renderAgentResult(message, agentResult, { photo: Boolean(photo) });
+          return;
+        } else if (photo) {
+          // 사진은 규칙 기반 상담이 볼 수 없으니 넘기지 않고 이유를 알려 준다.
+          const known = ["INVALID_PHOTO", "PHOTO_UNAVAILABLE"].includes(agentError?.code);
+          appendAiMessage(known ? agentError.message : "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.", "assistant");
           return;
         }
       }
@@ -454,6 +657,8 @@ export function createAiPanel({
     button.title = expanded ? "채팅창 원래 크기로" : "채팅창 확대";
     button.firstElementChild.textContent = expanded ? "⤡" : "⤢";
   }
+
+  bindPhotoControls();
 
   return {
     appendAiMessage,

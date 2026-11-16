@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createToolRunner, formatKoreanDate, isAffirmative, nearestFreeWindow, runNongnong, sanitizeHistory } from "../server/nongnong.js";
+import { composeListingDescription, createToolRunner, formatKoreanDate, isAffirmative, nearestFreeWindow, priceStats, runNongnong, sanitizeHistory, validPhoto } from "../server/nongnong.js";
 
 const TODAY = "2026-11-16";
 const user = { id: "user-1", name: "한준규" };
@@ -29,13 +29,18 @@ function makeDeps(overrides = {}) {
       calls.listing.push(payload);
       return { listing: { id: payload.id, title: payload.title } };
     },
+    fetchOwnListings: async () => [{ id: "own-1", ownerId: "user-1", status: "open", title: "LS 트랙터 팝니다", price: 15000000, description: "연식: 2019년식\n보증금: 300,000원\n잘 관리했어요" }],
+    updateListing: async (u, payload) => {
+      calls.update = [...(calls.update || []), payload];
+      return { listing: { id: payload.id, title: payload.title ?? "LS 트랙터 팝니다", price: payload.price ?? 15000000, description: payload.description } };
+    },
     ...overrides,
   };
   return { deps, calls };
 }
 
 test("긍정·부정·애매 판단", () => {
-  for (const yes of ["네", "네!", "예", "응", "좋아요", "그걸로 해 주세요", "예약해 줘", "그거 할게요", "진행해 주세요", "ㅇㅇ", "ㅇㅋ", "오케이", "콜", "네, 예약해 주세요", "1번으로 해 주세요"]) {
+  for (const yes of ["올려 주세요", "이대로 올려 주세요", "네", "네!", "예", "응", "좋아요", "그걸로 해 주세요", "예약해 줘", "그거 할게요", "진행해 주세요", "ㅇㅇ", "ㅇㅋ", "오케이", "콜", "네, 예약해 주세요", "1번으로 해 주세요"]) {
     assert.equal(isAffirmative(yes), true, yes);
   }
   for (const no of ["아니요", "다른 거요", "별로예요", "비싸요", "그날은 안 돼요", "음…", "글쎄요", "생각해 볼게요", "괜찮은 거예요?", "다른 것도 있어요?", "네?", "트랙터 말고 관리기로 해줘", ""]) {
@@ -161,4 +166,63 @@ test("대화 흐름: 모델의 도구 호출 결과를 넣어 다시 묻고, 최
   assert.match(requests[0].instructions, /로그인함/);
   const output = requests[1].input.find((item) => item.type === "function_call_output");
   assert.equal(JSON.parse(output.output).ok, true);
+});
+
+const TINY_JPEG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
+
+test("시세 조회: 같은 종류의 최저·중간·최고, 매물이 없으면 지어내지 않도록 안내", async () => {
+  assert.deepEqual(priceStats([300, 100, 200, 400]), { count: 4, min: 100, median: 250, max: 400 });
+  const { deps } = makeDeps();
+  const runner = createToolRunner({ user, today: TODAY, lastUserMessage: "", deps });
+  const tractor = await runner.run("get_market_price", JSON.stringify({ type: "rent", machineType: "tractor", condition: "good" }));
+  assert.equal(tractor.allConditions.min, 1000);
+  assert.equal(tractor.allConditions.max, 120000);
+  assert.equal(tractor.sameCondition.count, 2);
+  const none = await runner.run("get_market_price", JSON.stringify({ type: "sale", machineType: "combine" }));
+  assert.equal(none.allConditions, null);
+  assert.match(none.note, /지어내지 말고/);
+});
+
+test("연식·보증금은 상세 설명 앞줄에 적고, 고칠 때 앞줄만 바꾼다", () => {
+  assert.equal(composeListingDescription({ year: "2019년식", deposit: 300000, description: "잘 관리했어요" }), "연식: 2019년식\n보증금: 300,000원\n잘 관리했어요");
+  assert.equal(composeListingDescription({ year: "2020년식", deposit: 0, description: "연식: 2019년식\n보증금: 300,000원\n잘 관리했어요" }), "연식: 2020년식\n잘 관리했어요");
+});
+
+test("사진: 형식·크기 검사, 등록할 때 함께 올라간다", async () => {
+  assert.equal(validPhoto(TINY_JPEG), TINY_JPEG);
+  assert.equal(validPhoto("data:image/gif;base64,AAAA"), null);
+  assert.equal(validPhoto(`data:image/jpeg;base64,${"A".repeat(1_400_000)}`), null);
+  const { deps, calls } = makeDeps();
+  const runner = createToolRunner({ user, today: TODAY, lastUserMessage: "이대로 올려 주세요", deps, listingPhoto: TINY_JPEG });
+  const result = await runner.run("create_listing", JSON.stringify({ type: "rent", machineType: "tractor", title: "트랙터 빌려드려요", brand: "LS", year: "2019년식", condition: "used", price: 100000, deposit: 300000, region: "영양읍", cropIds: ["potato"], operations: ["till"] }));
+  assert.equal(result.photoAttached, true);
+  assert.equal(calls.listing[0].photoDataUrl, TINY_JPEG);
+  assert.match(calls.listing[0].description, /보증금: 300,000원/);
+});
+
+test("등록 후 수정: 긍정해야만, 내 매물만, 바뀐 항목만 고친다", async () => {
+  const { deps, calls } = makeDeps();
+  const unsure = createToolRunner({ user, today: TODAY, lastUserMessage: "음… 가격 좀 내릴까요?", deps });
+  assert.equal((await unsure.run("update_listing", JSON.stringify({ listingId: "own-1", price: 14000000 }))).error, "CONFIRMATION_REQUIRED");
+  const runner = createToolRunner({ user, today: TODAY, lastUserMessage: "네 그렇게 올려 주세요", deps });
+  assert.match((await runner.run("update_listing", JSON.stringify({ listingId: "rent-1", price: 1 }))).error, /찾을 수 없습니다/);
+  const ok = await runner.run("update_listing", JSON.stringify({ listingId: "own-1", price: 14000000, year: "2020년식" }));
+  assert.equal(ok.ok, true);
+  assert.deepEqual(Object.keys(calls.update[0]).sort(), ["action", "description", "id", "price"]);
+  assert.equal(calls.update[0].description, "연식: 2020년식\n보증금: 300,000원\n잘 관리했어요");
+});
+
+test("새로 올린 사진만 모델에 보여준다", async () => {
+  const { deps } = makeDeps();
+  const seen = [];
+  const callModel = async (body) => {
+    seen.push(body);
+    return { output: [{ type: "message", content: [{ type: "output_text", text: "사진으로 보면 트랙터 같아요 (추정)." }] }] };
+  };
+  const messages = [{ role: "user", content: "이 기계 팔고 싶어요 [사진 첨부]" }];
+  await runNongnong({ messages, user, today: TODAY, deps, model: "m", callModel, photo: TINY_JPEG, photoIsNew: true });
+  assert.equal(seen[0].input[0].content[1].type, "input_image");
+  assert.match(seen[0].instructions, /등록용 사진: 있음/);
+  await runNongnong({ messages, user, today: TODAY, deps, model: "m", callModel, photo: TINY_JPEG, photoIsNew: false });
+  assert.equal(typeof seen[1].input[0].content, "string");
 });

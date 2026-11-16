@@ -3943,3 +3943,27 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* 농농 사진 올리기 */
+.ai-photo-btn {
+  flex: none;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ai-photo-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 0;
+  background: #ffffff;
+  font-size: 0.8125rem;
+}
+.ai-photo-preview[hidden] { display: none; }
+.ai-photo-preview img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; }
+.ai-photo-preview button { margin-left: auto; border: 0; background: none; text-decoration: underline; cursor: pointer; }
+.chat-bubble .ai-chat-photo { display: block; max-width: 160px; border-radius: 10px; margin-top: 6px; }

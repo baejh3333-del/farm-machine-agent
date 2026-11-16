@@ -1,11 +1,11 @@
 // 농농 대화형 에이전트(/api/nongnong) 호출. 대화 기록은 화면이 들고 있다가 매번 함께 보낸다.
-export async function askNongnong(messages) {
+export async function askNongnong(messages, { photo = null, photoIsNew = false } = {}) {
   const response = await fetch("/api/nongnong", {
     method: "POST",
     credentials: "same-origin",
-    signal: AbortSignal.timeout(65_000),
+    signal: AbortSignal.timeout(70_000),
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, ...(photo ? { photo, photoIsNew } : {}) }),
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {

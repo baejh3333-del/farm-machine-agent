@@ -23,6 +23,64 @@ export function createAiPanel({
   let agentHistory = [];
   const AGENT_HISTORY_LIMIT = 16;
   const agentReset = /^(?:새 상담(?: 시작)?|처음부터 다시(?: 할래요?)?|대화 초기화)[.!?\s]*$/;
+  // 사진: 등록할 때 함께 올라가도록 대화가 끝날 때까지 들고 있고, 처음 보낼 때만 AI가 다시 본다.
+  let agentPhoto = null;
+  let photoIsNew = false;
+
+  function showPhotoPreview() {
+    $("aiPhotoPreview").hidden = !agentPhoto || !photoIsNew;
+    if (agentPhoto) $("aiPhotoThumb").src = agentPhoto;
+  }
+
+  function clearPhoto() {
+    agentPhoto = null;
+    photoIsNew = false;
+    $("aiPhotoInput").value = "";
+    showPhotoPreview();
+  }
+
+  async function shrinkPhoto(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("사진을 열 수 없어요."));
+        el.src = url;
+      });
+      for (const [side, quality] of [[1280, 0.82], [1024, 0.75], [800, 0.7]]) {
+        const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        if (dataUrl.length <= 1_200_000) return dataUrl;
+      }
+      throw new Error("사진이 너무 커요. 다른 사진으로 올려 주세요.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  $("aiPhotoButton").addEventListener("click", () => {
+    if (agentMode === false) return toast("사진 분석은 AI가 연결된 상태에서만 쓸 수 있어요.");
+    $("aiPhotoInput").click();
+  });
+  $("aiPhotoInput").addEventListener("change", async () => {
+    const file = $("aiPhotoInput").files?.[0];
+    if (!file) return;
+    try {
+      agentPhoto = await shrinkPhoto(file);
+      photoIsNew = true;
+      showPhotoPreview();
+      $("aiInput").focus();
+    } catch (error) {
+      clearPhoto();
+      toast(error.message);
+    }
+  });
+  $("aiPhotoRemove").addEventListener("click", clearPhoto);
   const aiDefaultPlaceholder = $("aiInput").placeholder;
   const aiInputExamples = {
     crop: "예: 감자",
@@ -38,12 +96,19 @@ export function createAiPanel({
     scroll.scrollTop = scroll.scrollHeight;
   }
 
-  function appendAiMessage(text, role, listingIds = []) {
+  function appendAiMessage(text, role, listingIds = [], photo = null) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
     const textNode = document.createElement("div");
     textNode.textContent = text;
     bubble.append(textNode);
+    if (photo) {
+      const img = document.createElement("img");
+      img.className = "ai-chat-photo";
+      img.alt = "보낸 기계 사진";
+      img.src = photo;
+      bubble.append(img);
+    }
 
     if (listingIds.length) {
       const results = document.createElement("div");
@@ -84,7 +149,7 @@ export function createAiPanel({
   }
 
   function renderAgentReply(result) {
-    const listingIds = result.reservation || result.createdListing ? [] : (result.listingIds || []).filter((id) => listingById(id));
+    const listingIds = result.reservation || result.createdListing || result.updatedListing ? [] : (result.listingIds || []).filter((id) => listingById(id));
     const bubble = appendAiMessage(result.reply, "assistant", listingIds);
     const done = result.reservation;
     if (done) {
@@ -114,11 +179,12 @@ export function createAiPanel({
       box.append(go);
       bubble.append(box);
     }
-    if (result.createdListing) {
+    const listed = result.createdListing || result.updatedListing;
+    if (listed) {
       const go = document.createElement("button");
       go.type = "button";
       go.className = "ai-rec-card-btn";
-      go.textContent = "내 기계 관리에서 사진 올리기 ›";
+      go.textContent = `${listed.number ? `등록 번호 ${listed.number} · ` : ""}내 기계 관리에서 보기 ›`;
       go.addEventListener("click", () => setView("owner"));
       bubble.append(go);
       loadCatalog({ quiet: true }).catch(() => {});
@@ -148,7 +214,8 @@ export function createAiPanel({
 
   async function sendAiQuestion(event) {
     event.preventDefault();
-    const message = $("aiInput").value.trim();
+    const sendingPhoto = agentMode !== false && photoIsNew && agentPhoto ? agentPhoto : null;
+    const message = $("aiInput").value.trim() || (sendingPhoto ? "이 기계 사진이에요." : "");
     if (!message || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
 
@@ -159,7 +226,7 @@ export function createAiPanel({
     $("aiInput").placeholder = aiDefaultPlaceholder;
     $("aiStarters").hidden = true;
     $("aiMessages").querySelectorAll(".ai-follow-up").forEach((choices) => choices.remove());
-    appendAiMessage(message, "user");
+    appendAiMessage(message, "user", [], sendingPhoto);
     let pending;
 
     try {
@@ -167,17 +234,23 @@ export function createAiPanel({
         if (agentReset.test(message)) {
           agentHistory = [];
           conversation = undefined;
+          clearPhoto();
           appendAiMessage("새로 시작할게요. 빌리기, 사기, 팔기 중 무엇을 도와드릴까요?", "assistant");
           return;
         }
         pending = appendAiMessage("농농이가 확인하고 있어요…", "assistant");
-        const outgoing = [...agentHistory, { role: "user", content: message }].slice(-AGENT_HISTORY_LIMIT);
-        const outcome = await askNongnong(outgoing).catch((error) => ({ mode: "error", error }));
+        const outgoing = [...agentHistory, { role: "user", content: sendingPhoto ? `${message} [사진 첨부]` : message }].slice(-AGENT_HISTORY_LIMIT);
+        const outcome = await askNongnong(outgoing, { photo: agentPhoto, photoIsNew: Boolean(sendingPhoto) }).catch((error) => ({ mode: "error", error }));
         pending.remove();
         pending = undefined;
         if (outcome.mode === "agent") {
           agentMode = true;
           agentHistory = [...outgoing, { role: "assistant", content: outcome.reply }].slice(-AGENT_HISTORY_LIMIT);
+          if (sendingPhoto) {
+            photoIsNew = false;
+            showPhotoPreview();
+          }
+          if (outcome.createdListing) clearPhoto();
           renderAgentReply(outcome);
           $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
           return;

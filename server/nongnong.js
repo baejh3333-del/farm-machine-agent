@@ -157,6 +157,21 @@ export const TOOL_DEFINITIONS = [
   },
   {
     type: "function",
+    name: "get_market_price",
+    description: "시세 조회. 같은 종류(와 상태)의 매물 가격 범위를 최저·중간·최고로 돌려준다. 대여는 하루 대여료 기준.",
+    parameters: {
+      type: "object",
+      properties: {
+        type: str("rent=대여료 시세, sale=판매가 시세", { enum: ["rent", "sale"] }),
+        machineType: str("기종 ID", { enum: MACHINE_TYPES.map(({ id }) => id) }),
+        condition: str("상태(있으면)", { enum: ["good", "used", "repair"] }),
+      },
+      required: ["type", "machineType"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
     name: "create_rental_request",
     description: "대여 예약을 만든다. 직전에 추천한 매물에 사용자가 긍정했을 때만 부른다.",
     parameters: {
@@ -191,6 +206,7 @@ export const TOOL_DEFINITIONS = [
         year: str("연식(예: 2019년식). 모르면 빈 문자열"),
         condition: str("상태", { enum: ["good", "used", "repair"] }),
         price: { type: "integer", description: "가격(원). 대여는 하루 대여료" },
+        deposit: { type: "integer", description: "빌려주기일 때 보증금(원). 없으면 0" },
         region: str("지역", { enum: REGIONS }),
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
         operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) } },
@@ -200,9 +216,56 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function",
+    name: "update_listing",
+    description: "이번 대화에서 등록한 내 매물을 고친다. 바뀐 요약을 다시 보여주고 사용자가 긍정했을 때만 부른다. 바꿀 항목만 넣는다.",
+    parameters: {
+      type: "object",
+      properties: {
+        listingId: str("등록할 때 받은 매물 ID"),
+        title: str("새 제목"),
+        price: { type: "integer", description: "새 가격(원)" },
+        condition: str("새 상태", { enum: ["good", "used", "repair"] }),
+        year: str("새 연식"),
+        deposit: { type: "integer", description: "새 보증금(원)" },
+        description: str("새 상세 설명"),
+      },
+      required: ["listingId"],
+      additionalProperties: false,
+    },
+  },
 ];
 
-const WRITE_TOOLS = new Set(["create_rental_request", "create_purchase_request", "create_listing"]);
+const WRITE_TOOLS = new Set(["create_rental_request", "create_purchase_request", "create_listing", "update_listing"]);
+
+/** 연식·보증금은 매물 칸이 없어 상세 설명 앞줄에 적는다. */
+export function composeListingDescription({ year, deposit, description }) {
+  const lines = [];
+  const y = String(year || "").trim().slice(0, 20);
+  if (y) lines.push(`연식: ${y}`);
+  if (Number.isSafeInteger(deposit) && deposit > 0) lines.push(`보증금: ${won(deposit)}`);
+  const rest = String(description || "")
+    .split("\n")
+    .filter((line) => !/^(연식|보증금):/.test(line.trim()))
+    .join("\n")
+    .trim();
+  if (rest) lines.push(rest);
+  return lines.join("\n").slice(0, 1000);
+}
+
+function readDescriptionField(description, label) {
+  const line = String(description || "").split("\n").find((l) => l.startsWith(`${label}:`));
+  return line ? line.slice(label.length + 1).trim() : "";
+}
+
+export function priceStats(prices) {
+  const sorted = prices.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  return { count: sorted.length, min: sorted[0], median, max: sorted.at(-1) };
+}
 
 // ───────────────────────── 도구 실행 ─────────────────────────
 
@@ -220,9 +283,9 @@ function requireDates(args, today) {
   return { start, end, days };
 }
 
-export function createToolRunner({ user, today, lastUserMessage, deps }) {
+export function createToolRunner({ user, today, lastUserMessage, deps, listingPhoto = null }) {
   let listingsCache = null;
-  const state = { shownListingIds: [], reservation: null, createdListing: null };
+  const state = { shownListingIds: [], reservation: null, createdListing: null, updatedListing: null };
 
   async function listings() {
     listingsCache ??= await deps.fetchListings();
@@ -371,10 +434,28 @@ export function createToolRunner({ user, today, lastUserMessage, deps }) {
       };
     },
 
+    async get_market_price(args) {
+      const type = args.type === "sale" ? "sale" : "rent";
+      const same = (await listings()).filter((l) => l.type === type && l.machineType === args.machineType && l.status !== "removed");
+      const all = priceStats(same.map((l) => l.price));
+      const sameCondition = args.condition ? priceStats(same.filter((l) => l.condition === args.condition).map((l) => l.price)) : null;
+      const fmt = (st) => st && { ...st, text: `${won(st.min)} ~ ${won(st.max)} (중간 ${won(st.median)})` };
+      return {
+        machine: MACHINE_BY_ID[args.machineType]?.label || args.machineType,
+        unit: type === "rent" ? "하루 대여료" : "판매가",
+        allConditions: fmt(all),
+        sameCondition: fmt(sameCondition),
+        note: [
+          all ? "" : "비슷한 매물이 없습니다. 가격을 지어내지 말고 희망 가격을 물어보세요.",
+          "연식 정보는 매물 데이터에 없어 연식별 비교는 할 수 없습니다.",
+          type === "rent" ? "보증금 시세 데이터는 없습니다. 보증금은 사용자에게 희망 금액을 물어보세요." : "",
+        ].filter(Boolean).join(" "),
+      };
+    },
+
     async create_listing(args) {
       const id = randomUUID();
-      const year = String(args.year || "").trim().slice(0, 20);
-      const description = [year ? `연식: ${year}` : "", String(args.description || "").trim()].filter(Boolean).join("\n").slice(0, 1000);
+      const description = composeListingDescription({ year: args.year, deposit: args.type === "rent" ? args.deposit : 0, description: args.description });
       const result = await deps.createListing(user, {
         id,
         type: args.type,
@@ -387,15 +468,43 @@ export function createToolRunner({ user, today, lastUserMessage, deps }) {
         cropIds: args.cropIds,
         operations: args.operations,
         description,
+        ...(listingPhoto ? { photoDataUrl: listingPhoto } : {}),
       });
       const listing = result.listing || {};
-      state.createdListing = { id: listing.id || id, title: listing.title || args.title };
+      state.createdListing = { id: listing.id || id, number: reservationNumber("L", listing.id || id), title: listing.title || args.title, photoAttached: Boolean(listingPhoto) };
       return {
         ok: true,
-        listingNumber: reservationNumber("L", listing.id || id),
-        title: listing.title || args.title,
-        nextStep: "사진은 [내 기계 관리]에서 매물을 열어 올리도록 안내.",
+        listingId: state.createdListing.id,
+        listingNumber: state.createdListing.number,
+        title: state.createdListing.title,
+        price: won(args.price),
+        description,
+        photoAttached: Boolean(listingPhoto),
+        nextStep: listingPhoto ? "사진도 함께 올렸다고 안내." : "사진이 있으면 더 빨리 거래된다고 한 번 안내. 사진은 [내 기계 관리]에서 올릴 수 있음.",
       };
+    },
+
+    async update_listing(args) {
+      const current = (await deps.fetchOwnListings()).find((l) => l.id === args.listingId && l.status !== "removed");
+      if (!current) toolFail("내가 등록한 매물을 찾을 수 없습니다.");
+      const touchesDescription = ["year", "deposit", "description"].some((key) => args[key] !== undefined);
+      const payload = { action: "update", id: current.id };
+      if (typeof args.title === "string" && args.title.trim()) payload.title = args.title.trim();
+      if (Number.isSafeInteger(args.price) && args.price >= 0) payload.price = args.price;
+      if (["good", "used", "repair"].includes(args.condition)) payload.condition = args.condition;
+      if (touchesDescription) {
+        const depositText = readDescriptionField(current.description, "보증금").replace(/[^\d]/g, "");
+        payload.description = composeListingDescription({
+          year: args.year ?? readDescriptionField(current.description, "연식"),
+          deposit: args.deposit ?? (depositText ? Number(depositText) : 0),
+          description: args.description ?? current.description,
+        });
+      }
+      if (Object.keys(payload).length === 2) toolFail("바꿀 내용이 없습니다.");
+      const result = await deps.updateListing(user, payload);
+      const listing = result.listing || {};
+      state.updatedListing = { id: current.id, number: reservationNumber("L", current.id), title: listing.title || payload.title || current.title };
+      return { ok: true, listingNumber: state.updatedListing.number, title: state.updatedListing.title, price: won(listing.price ?? payload.price ?? current.price), description: listing.description ?? payload.description ?? current.description };
     },
   };
 
@@ -413,7 +522,7 @@ export function createToolRunner({ user, today, lastUserMessage, deps }) {
       if (!isAffirmative(lastUserMessage)) {
         return { error: "CONFIRMATION_REQUIRED", message: "사용자가 아직 분명히 동의하지 않았습니다. 예약하지 말고 한 번만 짧게 확인하세요." };
       }
-      if (state.reservation || state.createdListing) return { error: "이번 대화 차례에서 이미 하나를 처리했습니다." };
+      if (state.reservation || state.createdListing || state.updatedListing) return { error: "이번 대화 차례에서 이미 하나를 처리했습니다." };
       try {
         await deps.beforeWrite?.(name);
       } catch (error) {
@@ -443,12 +552,13 @@ export function sanitizeHistory(messages) {
     .map((m) => ({ role: m.role, content: m.content.trim().slice(0, MAX_MESSAGE_CHARS) }));
 }
 
-function buildInstructions({ user, today }) {
+function buildInstructions({ user, today, listingPhoto }) {
   return `${NONGNONG_INSTRUCTIONS}
 
 [지금 상황]
 - 오늘: ${today} (${formatKoreanDate(today)}), 시간대: 한국
 - 로그인: ${user ? "로그인함" : "로그인 안 함 (추천까지만 가능)"}
+- 등록용 사진: ${listingPhoto ? "있음 (등록하면 함께 올라감)" : "없음"}
 - 지역 목록: ${REGIONS.join(", ")} (영양군)
 - 사용자가 "다음 주 화요일"처럼 말하면 오늘 날짜를 기준으로 YYYY-MM-DD로 바꿔 도구에 넘긴다.`;
 }
@@ -479,18 +589,36 @@ function outputText(response) {
     .trim();
 }
 
-export async function runNongnong({ messages, user = null, today, deps, callModel = defaultCallModel, model }) {
+const PHOTO_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+export const MAX_PHOTO_CHARS = 1_300_000; // base64 기준 약 0.97MB (서버 사진 한도 1MB 이하)
+
+export function validPhoto(photo) {
+  return typeof photo === "string" && photo.length <= MAX_PHOTO_CHARS && PHOTO_RE.test(photo) ? photo : null;
+}
+
+export async function runNongnong({ messages, user = null, today, deps, callModel = defaultCallModel, model, photo = null, photoIsNew = false }) {
   const history = sanitizeHistory(messages);
   const last = history.at(-1);
   if (!last || last.role !== "user") throw new Error("마지막 메시지는 사용자 메시지여야 합니다.");
   const resolvedModel = model || process.env.OPENAI_MODEL?.trim() || "gpt-6-luna";
-  const tools = createToolRunner({ user, today, lastUserMessage: last.content, deps });
+  const listingPhoto = validPhoto(photo);
+  const tools = createToolRunner({ user, today, lastUserMessage: last.content, deps, listingPhoto });
   const input = history.map(({ role, content }) => ({ role, content }));
+  if (listingPhoto && photoIsNew) {
+    // 이번 메시지와 함께 올린 사진만 모델에 보여준다. 이전 사진 분석 결과는 대화 기록에 남아 있다.
+    input[input.length - 1] = {
+      role: "user",
+      content: [
+        { type: "input_text", text: last.content },
+        { type: "input_image", image_url: listingPhoto, detail: "auto" },
+      ],
+    };
+  }
   const base = {
     model: resolvedModel,
     store: false,
-    max_output_tokens: 700,
-    instructions: buildInstructions({ user, today }),
+    max_output_tokens: 900,
+    instructions: buildInstructions({ user, today, listingPhoto }),
     tools: TOOL_DEFINITIONS,
     include: ["reasoning.encrypted_content"],
     ...(/^gpt-6-(?:luna|sol)\b|^gpt-6\.1-terra\b/.test(resolvedModel) ? { reasoning: { effort: "low" } } : {}),
@@ -501,7 +629,7 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     const calls = (response.output || []).filter((item) => item.type === "function_call");
     if (!calls.length) {
       const reply = outputText(response) || "잠시 문제가 생겼어요. 다시 한 번 말씀해 주세요.";
-      return { mode: "agent", reply, listingIds: tools.state.shownListingIds, reservation: tools.state.reservation, createdListing: tools.state.createdListing };
+      return { mode: "agent", reply, listingIds: tools.state.shownListingIds, reservation: tools.state.reservation, createdListing: tools.state.createdListing, updatedListing: tools.state.updatedListing };
     }
     input.push(...response.output);
     for (const call of calls) {
@@ -517,5 +645,6 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     listingIds: tools.state.shownListingIds,
     reservation: tools.state.reservation,
     createdListing: tools.state.createdListing,
+    updatedListing: tools.state.updatedListing,
   };
 }

@@ -1,98 +1,2865 @@
 // Actual model specifications; rental price, stock, condition and bookings remain demo data.
 // null means unverified, never a wildcard or a compatible connection.
-const asia = (id) => `https://www.asiakor.com/mobile/design/subpage/goods.php?catalog=${id}&category=`;
-const registry = "https://www.gunsan.go.kr/_cms/board/eFileDownload/95/8545851/ed8338a8650cf3cb8a45575fe684aa17#page=117";
-const source = (url, title, note = "제조사 공개 제품 사양") => ({ url, title, note, checkedAt: "2026-11-07" });
-const connection = (hostType, label, extra = {}) => ({ hostType, label, hitchCategory: null, pinDiameterMm: null, ptoSpline: null, ptoRpm: null, ...extra });
-const standalone = connection(null, "독립 구동 · 트랙터/관리기 연결 불필요");
-
 export const MACHINE_SPECIFICATIONS = [
   {
-    id: "asia-amc900", brand: "아세아텍", model: "AMC-900", machineType: "cultivator", role: "powerUnit",
-    specs: { engineModel: "GB290L", displacementCc: 296, ratedPowerKw: 4.8, maxPowerKw: 5.8, weightKg: 162, ptoRpm: [714, 1350] },
-    facts: [["엔진", "GB290L · 296 cc"], ["출력", "정격 4.8 kW / 최대 5.8 kW"], ["기체 중량", "162 kg"], ["PTO 회전수", "714 / 1,350 rpm"]],
-    connection: connection("cultivator", "아세아 관리기 전용 히치핀 방식", { family: "asia-900", ptoRpm: [714, 1350] }),
-    sources: [source(asia("G1619677688"), "아세아텍 AMC-900")],
-    unknowns: ["히치핀 직경", "PTO 축 치수", "연식별 엔진 사양"],
-  },
-  ...[["450", 45, 33.5], ["550", 55, 41], ["600", 58, 43]].map(([series, ps, kw]) => ({
-    id: `daedong-dk${series}`, brand: "대동", model: `DK${series}HSRQ5`, machineType: "tractor", role: "powerUnit",
-    specs: { nominalPowerPs: ps, enginePowerKw: kw, engineRpm: 2600, displacementCc: 1826, ptoRpm: [540, 750, 1000], rearHydraulicPorts: 6 },
-    facts: [["호칭 마력", `${ps} PS`], ["엔진 출력", `${kw} kW / 2,600 rpm`], ["배기량", "1,826 cc"], ["독립형 PTO", "540 / 750 / 1,000 rpm"], ["후방 유압 인출구", "6개"]],
-    connection: connection("tractor", "트랙터 작업기 연결 · 히치 세부 규격 확인 필요", { ptoRpm: [540, 750, 1000] }),
-    sources: [source("https://ko.daedong.co.kr/product/12", "대동 DK 시리즈 · 상세 형식별 제원")],
-    unknowns: ["3점 히치 카테고리", "핀 직경", "PTO 축 규격", "작업 위치별 승강력"],
-  })),
-  {
-    id: "asia-fm120n", brand: "아세아텍", model: "FM-120N", machineType: "ridgeMulcher", role: "implement",
-    specs: { dimensionsMm: [1400, 1420, 800], roundRidgeFilmWidthMm: [750, 1200], squareRidgeFilmWidthMm: [750, 1800] },
-    facts: [["크기 (로타리 부착 상태)", "1,400 × 1,420 × 800 mm"], ["둥근 두둑 비닐 폭", "750~1,200 mm"], ["각 두둑 비닐 폭", "750~1,800 mm"], ["제조사 부착 가능 기종", "아세아 880 / 900 / 1000 시리즈"]],
-    connection: connection("cultivator", "아세아 관리기 전용", { approvedModelIds: ["asia-amc900"] }),
-    sources: [source(asia("G1619677610"), "아세아텍 FM-120N")],
-    unknowns: ["히치핀 직경", "PTO 입력 회전수", "중량: 원문 단위 오류로 수치 채택 보류"],
-  },
-  {
-    id: "yanmar-ph1r", brand: "얀마", model: "PH1,R", machineType: "transplanter", role: "standalone",
-    specs: { dimensionsMm: [1900, 1340, 1220], weightKg: 163, ratedPowerKw: 1.6, rows: 1, plantSpacingMm: [200, 500], ridgeHeightMm: [0, 300] },
-    facts: [["형식", "1조식 · 일본 R 사양"], ["크기", "1,900 × 1,340 × 1,220 mm"], ["중량 / 정격 출력", "163 kg / 1.6 kW"], ["주간 / 두둑 높이", "200~500 mm / 0~300 mm"]],
-    connection: standalone,
-    sources: [source("https://www.yanmar.com/jp/agri/products/vegetable/vegetable_replant/ph1r/spec.html", "얀마 PH1,R 제원", "일본 R 사양. 국내 유통 사양과 동일하다고 가정하지 않음")],
-    unknowns: ["국내 유통 사양", "실제 모종·트레이 적합성"],
-  },
-  {
-    id: "daedong-drp60d", brand: "대동", model: "DRP60D", machineType: "ricePlanter", role: "standalone",
-    specs: { nominalPowerPs: 24, maxPowerKw: 17.9, displacementCc: 1007, rows: 6, dimensionsMm: [3330, 2200, 2275] },
-    facts: [["이앙 조수", "6조식"], ["디젤 엔진", "24 PS · 1,007 cc"], ["최대 출력", "17.9 kW / 3,000 rpm"], ["크기", "3,330 × 2,200 × 2,275 mm"]],
-    connection: standalone, sources: [source("https://ko.daedong.co.kr/product/34", "대동 DRP60D")], unknowns: ["육묘 상자·모 상태 적합성"],
-  },
-  {
-    id: "honda-wjr2525t", brand: "혼다", model: "WJR2525T", machineType: "sprayer", role: "standalone",
-    specs: { chemicalTankL: 25, dryWeightKg: 10, displacementCc: 25, flowLMin: 6.6 },
-    facts: [["형식", "배부식 동력분무기 · 에콰도르 공개 사양"], ["약액 탱크", "25 L"], ["건조 중량", "10 kg"], ["배기량 / 토출량", "25 cc / 6.6 L/min"]],
-    connection: standalone, sources: [source("https://motos.honda.com.ec/producto-de-fuerza/fumigadora-de-mochila-wjr2525-1", "혼다 WJR2525T 제원", "해외 사양. 엔진 행정·출력 표기에 의문이 있어 해당 값 제외")], unknowns: ["국내 유통 사양", "노즐·호스 연결 규격"],
-  },
-  {
-    id: "knong-kgph9000", brand: "강농", model: "KG-PH9000", machineType: "potatoPlanter", role: "implement",
-    specs: { rows: 2, publishedTractorPowerRange: { min: 50, max: 90, unit: "마력(원문)", basis: "unspecified" } },
-    facts: [["파종", "2줄 재배"], ["부착 방식", "트랙터 부착형"], ["제조사 안내 트랙터 범위", "50~90마력 (원문 단위·출력 기준 미명시)"], ["배종 구동", "지륜 바퀴 동력 전달"]],
-    connection: connection("tractor", "트랙터 부착형 · 로터리/성형부 구성 확인 필요"),
-    sources: [source("https://www.knong.kr/blank-6", "강농 KG-PH9000")], unknowns: ["히치 카테고리·핀", "로터리 PTO 입력 규격", "유압 요구량", "기체 중량", "적용 마력의 PS/HP 및 엔진/PTO 기준"],
+    "id": "kubota-b2320",
+    "brand": "한국구보다",
+    "model": "B2320",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 20
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "20 PS"
+      ],
+      [
+        "체급",
+        "소형 콤팩트 트랙터 (B 시리즈)"
+      ],
+      [
+        "주 용도",
+        "비닐하우스 및 소규모 농지 경운·관리"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 히치 · 세부 규격(Cat I 예상) 및 PTO 회전수 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.kubotakorea.com/",
+        "title": "한국구보다 공식 제품 라인업 (B2320)",
+        "note": "제조사 공식 홈페이지 트랙터 B시리즈 20마력 표기",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "엔진 배기량",
+      "기체 치수 및 중량",
+      "3점 히치 카테고리(Cat I 여부)",
+      "PTO 회전수",
+      "후방 양력"
+    ]
   },
   {
-    id: "daedong-dxm73gf5", brand: "대동", model: "DXM73GF5", machineType: "combine", role: "standalone",
-    specs: { nominalPowerPs: 73, rows: 4, dimensionsMm: [4390, 2505, 3155] },
-    facts: [["예취 조수", "4조식"], ["호칭 마력", "73 PS"], ["크기", "4,390 × 2,505 × 3,155 mm"]],
-    connection: standalone, sources: [source("https://ko.daedong.co.kr/product/25", "대동 DXM73GF5", "웹 제원표 일부 행이 어긋나 있어 중량·배기량 등 제외")], unknowns: ["중량·엔진 세부 제원: 원문 표 오류로 재확인 필요"],
+    "id": "tym-t25",
+    "brand": "TYM",
+    "model": "T25",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 24.2,
+      "dimensionsMm": [
+        2395,
+        1170,
+        2500
+      ],
+      "wheelbaseMm": 1460,
+      "weightKg": 835,
+      "threePointLiftKgf": 730.1,
+      "fuelTankL": 20
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "24.2 PS (얀마 3기통 엔진)"
+      ],
+      [
+        "크기 (접이식 ROPS)",
+        "2,395 × 1,170 × 2,500 mm"
+      ],
+      [
+        "중량",
+        "835 kg (기계식) / 820 kg (HST)"
+      ],
+      [
+        "3점 히치 양력",
+        "730.1 kgf"
+      ],
+      [
+        "연료탱크",
+        "20 L"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 히치 · 양력 730.1 kgf, 세부 히치 카테고리·PTO 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://tym.world/",
+        "title": "TYM T25 (시리즈 1) 공식 제품 제원",
+        "note": "기계식 835kg / HST 820kg 병기",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리(Cat I 여부)",
+      "핀 직경",
+      "PTO 회전수 및 스플라인"
+    ]
   },
   {
-    id: "duru-dr950an", brand: "두루기계통상", model: "DR-950AN", machineType: "potatoHarvester", role: "implement",
-    specs: { workingWidthMm: 950, publishedTractorPowerRange: { min: 43, max: null, unit: "마력(원문)", basis: "unspecified" } },
-    facts: [["작업 폭", "950 mm"], ["적용 트랙터", "43마력 이상 (2026 목록집 기준)"], ["용도", "트랙터용 감자 수확기"]],
-    connection: connection("tractor", "트랙터 부착형 · 상세 연결 규격 확인 필요"),
-    sources: [source(registry, "한국농기계공업협동조합 2026 목록집 · 인쇄 115쪽", "군산시 공개 원문. 유통 자료의 35마력과 달라 2026 목록의 43마력 채택")],
-    unknowns: ["연식별 적용 마력 차이", "마력의 PS/HP 및 엔진/PTO 기준", "히치·PTO 규격", "승강력·중량"],
+    "id": "daedong-dk450",
+    "brand": "대동",
+    "model": "DK450HSRQ5",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 45,
+      "enginePowerKw": 33.5,
+      "engineRpm": 2600,
+      "displacementCc": 1826,
+      "ptoRpm": [
+        540,
+        750,
+        1000
+      ],
+      "rearHydraulicPorts": 6
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "45 PS"
+      ],
+      [
+        "엔진 출력",
+        "33.5 kW / 2,600 rpm"
+      ],
+      [
+        "배기량",
+        "1,826 cc"
+      ],
+      [
+        "독립형 PTO",
+        "540 / 750 / 1,000 rpm"
+      ],
+      [
+        "후방 유압 인출구",
+        "6개"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 작업기 연결 · PTO 540/750/1000 rpm, 히치 세부 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": [
+        540,
+        750,
+        1000
+      ]
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/product/12",
+        "title": "대동 DK 시리즈 · 상세 형식별 제원",
+        "note": "제조사 공식 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "핀 직경",
+      "PTO 축 규격",
+      "작업 위치별 승강력"
+    ]
   },
   {
-    id: "daedong-mechron2450", brand: "대동", model: "Mechron2450", machineType: "carrier", role: "standalone",
-    specs: { maxPowerKw: 18, displacementCc: 1007, dimensionsMm: [3045, 1640, 1990], weightKg: 1050 },
-    facts: [["최대 출력", "18 kW / 3,200 rpm"], ["디젤 엔진 배기량", "1,007 cc"], ["크기", "3,045 × 1,640 × 1,990 mm"], ["중량", "1,050 kg"]],
-    connection: standalone, sources: [source("https://ko.daedong.co.kr/product/36", "대동 Mechron2450")], unknowns: ["세부 옵션별 적재 한도"],
+    "id": "daedong-dk550",
+    "brand": "대동",
+    "model": "DK550HSRQ5",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 55,
+      "enginePowerKw": 41,
+      "engineRpm": 2600,
+      "displacementCc": 1826,
+      "ptoRpm": [
+        540,
+        750,
+        1000
+      ],
+      "rearHydraulicPorts": 6
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "55 PS"
+      ],
+      [
+        "엔진 출력",
+        "41 kW / 2,600 rpm"
+      ],
+      [
+        "배기량",
+        "1,826 cc"
+      ],
+      [
+        "독립형 PTO",
+        "540 / 750 / 1,000 rpm"
+      ],
+      [
+        "후방 유압 인출구",
+        "6개"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 작업기 연결 · PTO 540/750/1000 rpm, 히치 세부 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": [
+        540,
+        750,
+        1000
+      ]
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/product/12",
+        "title": "대동 DK 시리즈 · 상세 형식별 제원",
+        "note": "제조사 공식 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "핀 직경",
+      "PTO 축 규격",
+      "작업 위치별 승강력"
+    ]
   },
+  {
+    "id": "daedong-dk600",
+    "brand": "대동",
+    "model": "DK600HSRQ5",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 58,
+      "enginePowerKw": 43,
+      "engineRpm": 2600,
+      "displacementCc": 1826,
+      "ptoRpm": [
+        540,
+        750,
+        1000
+      ],
+      "rearHydraulicPorts": 6
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "58 PS"
+      ],
+      [
+        "엔진 출력",
+        "43 kW / 2,600 rpm"
+      ],
+      [
+        "배기량",
+        "1,826 cc"
+      ],
+      [
+        "독립형 PTO",
+        "540 / 750 / 1,000 rpm"
+      ],
+      [
+        "후방 유압 인출구",
+        "6개"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 작업기 연결 · PTO 540/750/1000 rpm, 히치 세부 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": [
+        540,
+        750,
+        1000
+      ]
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/product/12",
+        "title": "대동 DK 시리즈 · 상세 형식별 제원",
+        "note": "제조사 공식 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "핀 직경",
+      "PTO 축 규격",
+      "작업 위치별 승강력"
+    ]
+  },
+  {
+    "id": "ls-mt3-58",
+    "brand": "LS엠트론",
+    "model": "MT3.58",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "enginePowerPs": 58.9,
+      "ptoPowerPs": 48.9,
+      "fuelTankL": 52
+    },
+    "facts": [
+      [
+        "엔진 마력",
+        "58.9 PS"
+      ],
+      [
+        "PTO 마력",
+        "48.9 PS"
+      ],
+      [
+        "연료탱크",
+        "52 L"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 작업기 연결 · 히치 카테고리 및 PTO 회전수 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.lstractor.com/",
+        "title": "LS엠트론 MT3.58 공식 제품 사양",
+        "note": "엔진 마력과 PTO 마력을 구분 표기한 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 치수 및 중량",
+      "3점 히치 카테고리·핀 직경",
+      "PTO 회전수 단수",
+      "후방 양력"
+    ]
+  },
+  {
+    "id": "yanmar-yt470a",
+    "brand": "얀마",
+    "model": "YT470A",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 70,
+      "weightKg": 2975
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "70.0 PS"
+      ],
+      [
+        "기체 중량",
+        "약 2,975 kg"
+      ],
+      [
+        "체급",
+        "중형 YT4 시리즈"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 작업기 연결 · 히치 세부 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.yanmar.com/kr/agri/",
+        "title": "얀마농기코리아 YT470A 공식 제품 정보",
+        "note": "제조사 한국 사이트 공개 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 외형 치수",
+      "3점 히치 카테고리",
+      "PTO 회전수 및 출력",
+      "후방 승강력"
+    ]
+  },
+  {
+    "id": "tym-t75",
+    "brand": "TYM",
+    "model": "K75E",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 75,
+      "dimensionsMm": [
+        3685,
+        1890,
+        2720
+      ],
+      "wheelbaseMm": 2200,
+      "weightKg": 2935,
+      "threePointLiftKgf": 2376,
+      "fuelTankL": 90
+    },
+    "facts": [
+      [
+        "마력",
+        "73.9 ~ 75 PS (4기통 디젤 터보)"
+      ],
+      [
+        "크기",
+        "3,685 × 1,890 × 2,720 mm"
+      ],
+      [
+        "중량",
+        "2,935 kg"
+      ],
+      [
+        "3점 히치 양력",
+        "2,376 kgf"
+      ],
+      [
+        "변속",
+        "파워셔틀 전진 16단 × 후진 16단"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 작업기 연결 · 양력 2,376 kgf, 히치 카테고리·PTO 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://tym.world/",
+        "title": "TYM K75E (75마력급) 공식 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "핀 직경",
+      "PTO 회전수"
+    ]
+  },
+  {
+    "id": "tym-t110",
+    "brand": "TYM",
+    "model": "T110",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 111,
+      "threePointLiftKgf": 4170,
+      "hydraulicPorts": 6
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "111 ~ 111.5 PS (대형 시리즈 6)"
+      ],
+      [
+        "3점 히치 양력",
+        "약 4,170 kgf"
+      ],
+      [
+        "외부 유압 밸브",
+        "전후방 6포트"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "대형 트랙터 작업기 연결 · 양력 4,170 kgf, 히치·PTO 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://tym.world/",
+        "title": "TYM T110 (시리즈 6) 공식 제품 사양",
+        "note": "제조사 공개 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 치수 및 중량",
+      "3점 히치 카테고리(Cat II 여부)",
+      "PTO 회전수 단수"
+    ]
+  },
+  {
+    "id": "daedong-hx1400",
+    "brand": "대동",
+    "model": "HX1400",
+    "machineType": "tractor",
+    "role": "powerUnit",
+    "specs": {
+      "nominalPowerPs": 142,
+      "displacementCc": 3800
+    },
+    "facts": [
+      [
+        "호칭 마력",
+        "142 PS (대형 플래그십)"
+      ],
+      [
+        "엔진",
+        "대동 자체 개발 3.8L 디젤 엔진"
+      ],
+      [
+        "특징",
+        "로드센싱 유압 시스템·LSD 앞차축"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "대형 트랙터 작업기 연결 · 히치 카테고리 및 PTO 회전수 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/",
+        "title": "대동 HX1400 공식 제품 소개",
+        "note": "제조사 공식 웹사이트",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 치수 및 중량",
+      "3점 히치 카테고리",
+      "PTO 회전수 단수",
+      "후방 양력"
+    ]
+  },
+  {
+    "id": "asia-amc900",
+    "brand": "아세아텍",
+    "model": "AMC-900",
+    "machineType": "cultivator",
+    "role": "powerUnit",
+    "specs": {
+      "engineModel": "GB290L",
+      "displacementCc": 296,
+      "ratedPowerKw": 4.8,
+      "maxPowerKw": 5.8,
+      "weightKg": 162,
+      "ptoRpm": [
+        714,
+        1350
+      ]
+    },
+    "facts": [
+      [
+        "엔진",
+        "GB290L · 296 cc 공냉 OHV 가솔린"
+      ],
+      [
+        "출력",
+        "정격 4.8 kW / 최대 5.8 kW"
+      ],
+      [
+        "기체 중량",
+        "162 kg"
+      ],
+      [
+        "PTO 회전수",
+        "714 / 1,350 rpm"
+      ]
+    ],
+    "connection": {
+      "hostType": "cultivator",
+      "label": "아세아 관리기 전용 히치핀 방식",
+      "family": "asia-900",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": [
+        714,
+        1350
+      ]
+    },
+    "sources": [
+      {
+        "url": "https://www.asiakor.com/mobile/design/subpage/goods.php?catalog=G1619677688&category=",
+        "title": "아세아텍 AMC-900",
+        "note": "제조사 공개 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "히치핀 직경",
+      "PTO 축 치수",
+      "연식별 엔진 사양"
+    ]
+  },
+  {
+    "id": "asia-amc1000",
+    "brand": "아세아텍",
+    "model": "AMC-1000",
+    "machineType": "cultivator",
+    "role": "powerUnit",
+    "specs": {
+      "engineModel": "GB300L",
+      "displacementCc": 296,
+      "weightKg": 163
+    },
+    "facts": [
+      [
+        "엔진",
+        "GB300L · 296 cc 공냉 OHV 4사이클 가솔린"
+      ],
+      [
+        "기체 중량",
+        "약 163 kg (로타리 포함)"
+      ],
+      [
+        "규격",
+        "전장 1,490~1,700 × 전폭 680~850 × 전고 820~1,140 mm"
+      ]
+    ],
+    "connection": {
+      "hostType": "cultivator",
+      "label": "아세아 관리기 전용 히치핀 방식",
+      "family": "asia-900",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.asiakor.com/",
+        "title": "아세아텍 AMC-1000 공식 제품 사양",
+        "note": "아세아 880/900/1000 시리즈 호환 히치핀 공유",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "정격/최대 출력(kW)",
+      "히치핀 직경",
+      "PTO 회전수"
+    ]
+  },
+  {
+    "id": "daedong-dt100",
+    "brand": "대동",
+    "model": "DT100 / DT100N",
+    "machineType": "tiller",
+    "role": "powerUnit",
+    "specs": {
+      "engineModel": "ND10DE",
+      "displacementCc": 673,
+      "ratedPowerPs": 10,
+      "fuelTankL": 11
+    },
+    "facts": [
+      [
+        "엔진",
+        "ND10DE · 673 cc 횡형 수냉 단기통 디젤"
+      ],
+      [
+        "상용 마력",
+        "10 PS"
+      ],
+      [
+        "중량",
+        "약 383 ~ 469 kg (트레일러·로터리 옵션별 상이)"
+      ],
+      [
+        "연료탱크",
+        "11 L"
+      ]
+    ],
+    "connection": {
+      "hostType": "tiller",
+      "label": "경운기 전용 히치·벨트/PTO 연결 (트랙터/관리기와 비호환)",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/",
+        "title": "대동 경운기 DT100 / DT100N 제원",
+        "note": "유통·임대사업소 제원표 기준 상용 10마력",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "세부 트레일러 적재중량",
+      "로터리 작업폭",
+      "히치핀 직경"
+    ]
+  },
+  {
+    "id": "yanmar-md20",
+    "brand": "얀마",
+    "model": "MD20",
+    "machineType": "ridingCultivator",
+    "role": "powerUnit",
+    "specs": {
+      "enginePowerKw": 13.4,
+      "nominalPowerPs": 18,
+      "engineRpm": 2800,
+      "displacementCc": 688,
+      "weightKg": 665
+    },
+    "facts": [
+      [
+        "출력",
+        "13.4 kW (18.0 PS) / 2,800 rpm"
+      ],
+      [
+        "엔진",
+        "공냉 4행정 가솔린 · 688 cc"
+      ],
+      [
+        "구동 방식",
+        "3륜 구동 · 미드마운트 작업기 구조"
+      ],
+      [
+        "중량",
+        "665 kg"
+      ]
+    ],
+    "connection": {
+      "hostType": "ridingCultivator",
+      "label": "얀마 MD20 미드마운트 전용 작업기 연결",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.yanmar.com/kr/agri/",
+        "title": "얀마농기코리아 MD20 3륜 승용관리기 제원",
+        "note": "제조사 한국 사이트 공개 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "외형 치수",
+      "전용 부착 작업기 상세 규격"
+    ]
+  },
+  {
+    "id": "wecan-sgw",
+    "brand": "위캔글로벌",
+    "model": "SGW 시리즈",
+    "machineType": "rotavator",
+    "role": "implement",
+    "specs": {
+      "publishedTractorPowerRange": {
+        "min": 35,
+        "max": 75,
+        "unit": "마력(원문)",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "용도",
+        "논 전용 트랙터 부착형 로타베이터"
+      ],
+      [
+        "작업폭 범위",
+        "1,650 ~ 3,000 mm (세부 형식별 상이)"
+      ],
+      [
+        "적용 트랙터",
+        "35 ~ 75 마력"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 히치 부착형 · 모델별 작업폭·히치 카테고리 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://wecan21.com/",
+        "title": "위캔글로벌 SGW 논 전용 로타베이터",
+        "note": "제조사 공개 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "개별 세부 형식명별 중량 및 치수",
+      "3점 히치 카테고리(Cat I/II)",
+      "PTO 입력 회전수(540 rpm 여부)"
+    ]
+  },
+  {
+    "id": "woongjin-wj230se",
+    "brand": "웅진기계",
+    "model": "WJ230SE",
+    "machineType": "rotavator",
+    "role": "implement",
+    "specs": {
+      "publishedTractorPowerRange": {
+        "min": 85,
+        "max": 105,
+        "unit": "마력(원문)",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "용도",
+        "대형 보강형 트랙터 로타베이터"
+      ],
+      [
+        "작업폭",
+        "약 2,200 ~ 2,250 mm"
+      ],
+      [
+        "적용 트랙터",
+        "85 ~ 105 마력 (최대 150마력대 대응 언급)"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 히치 부착형 · 대형 트랙터(85PS 이상) 권장, 히치/PTO 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.kamico.or.kr/",
+        "title": "웅진기계 WJ230SE 로타베이터 제원",
+        "note": "농기계 전문지 및 KAMICO 목록 참조",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 중량 및 외형 치수",
+      "3점 히치 카테고리(Cat II 여부)",
+      "PTO 입력 회전수"
+    ]
+  },
+  {
+    "id": "asia-fm120n",
+    "brand": "아세아텍",
+    "model": "FM-120N",
+    "machineType": "ridgeMulcher",
+    "role": "implement",
+    "specs": {
+      "dimensionsMm": [
+        1400,
+        1420,
+        800
+      ],
+      "roundRidgeFilmWidthMm": [
+        750,
+        1200
+      ],
+      "squareRidgeFilmWidthMm": [
+        750,
+        1800
+      ]
+    },
+    "facts": [
+      [
+        "크기 (로타리 부착 상태)",
+        "1,400 × 1,420 × 800 mm"
+      ],
+      [
+        "둥근 두둑 비닐 폭",
+        "750 ~ 1,200 mm"
+      ],
+      [
+        "각 두둑 비닐 폭",
+        "750 ~ 1,800 mm"
+      ],
+      [
+        "제조사 부착 가능 기종",
+        "아세아 880 / 900 / 1000 시리즈"
+      ]
+    ],
+    "connection": {
+      "hostType": "cultivator",
+      "label": "아세아 관리기 전용",
+      "approvedModelIds": [
+        "asia-amc900",
+        "asia-amc1000"
+      ],
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.asiakor.com/mobile/design/subpage/goods.php?catalog=G1619677610&category=",
+        "title": "아세아텍 FM-120N",
+        "note": "제조사 공개 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "히치핀 직경",
+      "PTO 입력 회전수",
+      "중량(원문 단위 오류로 보류)"
+    ]
+  },
+  {
+    "id": "dooroo-drb1200pc",
+    "brand": "두루기계통상",
+    "model": "DRB-1200PC",
+    "machineType": "ridgeMulcher",
+    "role": "implement",
+    "specs": {
+      "dimensionsMm": [
+        2500,
+        1950,
+        1380
+      ],
+      "weightKg": 830,
+      "rotaryRpm": 168
+    },
+    "facts": [
+      [
+        "규격",
+        "1두둑용 휴립복토·비닐피복기 (마늘·양파 등)"
+      ],
+      [
+        "크기",
+        "2,500 × 1,950 × 1,380 mm"
+      ],
+      [
+        "중량",
+        "830 kg"
+      ],
+      [
+        "로터리",
+        "168 rpm · L형 경운날 30개 · 스크류 495 mm"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 부착형 · 830 kg 중량에 따른 트랙터 승강력·히치 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.dooroo21.com/",
+        "title": "두루기계통상 DRB-1200PC 제원",
+        "note": "제조사 공식 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "권장 트랙터 마력 범위",
+      "3점 히치 카테고리",
+      "PTO 입력 회전수(540 rpm 여부)"
+    ]
+  },
+  {
+    "id": "woongjin-uj3ps",
+    "brand": "웅진기계",
+    "model": "UJ3PS",
+    "machineType": "plow",
+    "role": "implement",
+    "specs": {
+      "workingWidthMm": 950,
+      "weightKg": 420,
+      "dimensionsMm": [
+        2660,
+        1370,
+        1540
+      ],
+      "publishedTractorPowerRange": {
+        "min": 50,
+        "max": 70,
+        "unit": "마력(원문)",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "구분",
+        "단용 3련 대형 삭쟁기"
+      ],
+      [
+        "경운폭",
+        "950 mm"
+      ],
+      [
+        "중량",
+        "420 kg"
+      ],
+      [
+        "크기",
+        "2,660 × 1,370 × 1,540 mm"
+      ],
+      [
+        "적용 트랙터",
+        "50 ~ 70 마력"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 히치 부착형 · 50~70마력, 히치 카테고리 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.komachine.com/",
+        "title": "웅진기계 삭쟁기 UJ3PS 제원",
+        "note": "제조사 공개 카탈로그 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리(Cat I/II)",
+      "핀 직경"
+    ]
+  },
+  {
+    "id": "woongjin-w62dp",
+    "brand": "웅진기계",
+    "model": "W62-DP",
+    "machineType": "plow",
+    "role": "implement",
+    "specs": {
+      "workingWidthMm": 1800,
+      "weightKg": 425,
+      "dimensionsMm": [
+        1060,
+        2200,
+        1150
+      ],
+      "publishedTractorPowerRange": {
+        "min": 35,
+        "max": 55,
+        "unit": "마력(원문)",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "구분",
+        "원판쟁기 (원판 6+2개 구성)"
+      ],
+      [
+        "경운폭",
+        "1,800 mm"
+      ],
+      [
+        "중량",
+        "425 kg"
+      ],
+      [
+        "크기",
+        "1,060 × 2,200 × 1,150 mm"
+      ],
+      [
+        "적용 트랙터",
+        "35 ~ 55 마력"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 히치 부착형 · 35~55마력, 히치 카테고리 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.komachine.com/",
+        "title": "웅진기계 원판쟁기 W62-DP 제원",
+        "note": "제조사 공개 카탈로그 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "핀 직경"
+    ]
+  },
+  {
+    "id": "knong-kgph9000",
+    "brand": "강농",
+    "model": "KG-PH9000",
+    "machineType": "potatoPlanter",
+    "role": "implement",
+    "specs": {
+      "rows": 2,
+      "dimensionsMm": [
+        1910,
+        1980,
+        1620
+      ],
+      "weightKg": 819,
+      "plantSpacingMm": [
+        250,
+        350
+      ],
+      "publishedTractorPowerRange": {
+        "min": 50,
+        "max": 200,
+        "unit": "HP",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "파종",
+        "2조식 (1두둑 2줄 재배, 주간 250~350 mm)"
+      ],
+      [
+        "크기 / 중량",
+        "1,910 × 1,980 × 1,620 mm / 819 kg"
+      ],
+      [
+        "부착 방식",
+        "트랙터 3점 링크 Cat I"
+      ],
+      [
+        "적용 마력",
+        "50 ~ 200 HP (일부 자료 50~90마력 안내)"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 3점 링크 Cat I 부착형 · 로터리 PTO 및 유압 확인 필요",
+      "hitchCategory": "Cat I",
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.knong.kr/blank-6",
+        "title": "강농 KG-PH9000 공식 제품 사양",
+        "note": "제조사 페이지에서 Cat I, 치수, 중량 819kg, 50~200HP 확인",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "로터리 PTO 입력 회전수",
+      "유압 요구량",
+      "Cat II 트랙터 장착 시 부싱 필요 여부"
+    ]
+  },
+  {
+    "id": "dooroo-drp1006sg",
+    "brand": "두루기계통상",
+    "model": "DRP-1006SG",
+    "machineType": "garlicOnionPlanter",
+    "role": "implement",
+    "specs": {
+      "rows": 6,
+      "dimensionsMm": [
+        1800,
+        1880,
+        1770
+      ],
+      "weightKg": 1085,
+      "seedHopperL": 210,
+      "publishedTractorPowerRange": {
+        "min": 70,
+        "max": null,
+        "unit": "HP",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "파종 조수",
+        "6조 (7조 DRP-1007SG / 8조 DRP-1008SG)"
+      ],
+      [
+        "크기",
+        "1,800 × 1,880 × 1,770 mm"
+      ],
+      [
+        "중량",
+        "1,085 kg (비닐피복기 부착 시 1,220 kg)"
+      ],
+      [
+        "종자함",
+        "210 L (약 100 kg)"
+      ],
+      [
+        "필요 트랙터",
+        "70 HP 이상"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 PTO 및 접지륜 구동 · 70HP 이상 및 1,220kg 승강력 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.dooroo21.com/",
+        "title": "두루기계통상 DRP-1006SG 마늘 파종기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리(Cat II 예상)",
+      "PTO 입력 회전수",
+      "유압 포트 요구 개수"
+    ]
+  },
+  {
+    "id": "knong-tj6000",
+    "brand": "강농",
+    "model": "TJ-6000",
+    "machineType": "garlicOnionPlanter",
+    "role": "implement",
+    "specs": {
+      "rows": 7,
+      "dimensionsMm": [
+        2100,
+        1570,
+        1700
+      ],
+      "weightKg": 660,
+      "publishedTractorPowerRange": {
+        "min": 45,
+        "max": 100,
+        "unit": "HP",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "파종 방식",
+        "종이줄·실 매립 줄파종 · 7조"
+      ],
+      [
+        "크기 / 중량",
+        "2,100 × 1,570 × 1,700 mm / 660 kg"
+      ],
+      [
+        "적용 트랙터",
+        "45 ~ 100 HP (50~90마력 최적화)"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 부착형 · 45~100HP, 히치·PTO 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.knong.kr/",
+        "title": "강농 TJ-6000 마늘파종기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "PTO 입력 회전수"
+    ]
+  },
+  {
+    "id": "duru-dr950an",
+    "brand": "두루기계통상",
+    "model": "DR-950AN",
+    "machineType": "potatoHarvester",
+    "role": "implement",
+    "specs": {
+      "workingWidthMm": 950,
+      "publishedTractorPowerRange": {
+        "min": 43,
+        "max": null,
+        "unit": "마력(원문)",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "작업 폭",
+        "950 mm"
+      ],
+      [
+        "적용 트랙터",
+        "43마력 이상 (2026 목록집 기준)"
+      ],
+      [
+        "용도",
+        "트랙터용 감자 수확기"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 부착형 · 상세 연결 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.gunsan.go.kr/_cms/board/eFileDownload/95/8545851/ed8338a8650cf3cb8a45575fe684aa17#page=117",
+        "title": "한국농기계공업협동조합 2026 목록집 · 인쇄 115쪽",
+        "note": "군산시 공개 원문 기준 43마력 이상 채택",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "연식별 적용 마력 차이",
+      "히치·PTO 규격",
+      "승강력·중량"
+    ]
+  },
+  {
+    "id": "dooroo-drgh1400",
+    "brand": "두루기계통상",
+    "model": "DRGH-1400",
+    "machineType": "rootHarvester",
+    "role": "implement",
+    "specs": {
+      "workingWidthMm": 1400,
+      "dimensionsMm": [
+        1244,
+        1700,
+        1165
+      ],
+      "weightKg": 450,
+      "publishedTractorPowerRange": {
+        "min": 43,
+        "max": 55,
+        "unit": "HP",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "용도",
+        "마늘·양파·생강 등 땅속작물 진동 굴취기"
+      ],
+      [
+        "굴취폭",
+        "1,400 mm (시리즈 1,200/1,400/1,500 mm)"
+      ],
+      [
+        "크기 / 중량",
+        "1,244 × 1,700 × 1,165 mm / 450 kg"
+      ],
+      [
+        "필요 트랙터",
+        "43 ~ 55 HP 이상 (기어박스 직결식)"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 기어박스 직결식 · 43~55HP 이상, 히치/PTO 규격 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.dooroo21.com/",
+        "title": "두루기계통상 DRGH-1400 땅속작물 수확기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "3점 히치 카테고리",
+      "PTO 입력 회전수"
+    ]
+  },
+  {
+    "id": "yanmar-ph1r",
+    "brand": "얀마",
+    "model": "PH1,R",
+    "machineType": "transplanter",
+    "role": "standalone",
+    "specs": {
+      "dimensionsMm": [
+        1900,
+        1340,
+        1220
+      ],
+      "weightKg": 163,
+      "ratedPowerKw": 1.6,
+      "rows": 1,
+      "plantSpacingMm": [
+        200,
+        500
+      ],
+      "ridgeHeightMm": [
+        0,
+        300
+      ]
+    },
+    "facts": [
+      [
+        "형식",
+        "1조식 · 일본 R 사양"
+      ],
+      [
+        "크기",
+        "1,900 × 1,340 × 1,220 mm"
+      ],
+      [
+        "중량 / 정격 출력",
+        "163 kg / 1.6 kW"
+      ],
+      [
+        "주간 / 두둑 높이",
+        "200~500 mm / 0~300 mm"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.yanmar.com/jp/agri/products/vegetable/vegetable_replant/ph1r/spec.html",
+        "title": "얀마 PH1,R 제원",
+        "note": "일본 R 사양 기준",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "국내 유통 사양 차이",
+      "실제 모종·트레이 적합성"
+    ]
+  },
+  {
+    "id": "kubota-skp101kr",
+    "brand": "한국구보다",
+    "model": "SKP-101-KR",
+    "machineType": "transplanter",
+    "role": "standalone",
+    "specs": {
+      "rows": 1,
+      "dimensionsMm": [
+        2160,
+        890,
+        1365
+      ],
+      "weightKg": 238,
+      "nominalPowerPs": 2.98
+    },
+    "facts": [
+      [
+        "형식",
+        "1조식 전자동 채소 정식기 (200구/128구 트레이 호환)"
+      ],
+      [
+        "크기 / 중량",
+        "2,160 × 890 × 1,365 mm / 238 kg"
+      ],
+      [
+        "엔진",
+        "공냉 4사이클 가솔린 약 2.98 PS / 1,600 rpm"
+      ],
+      [
+        "식부 속도",
+        "1속 0.40 m/s · 2속 0.55 m/s"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.kubotakorea.com/",
+        "title": "한국구보다 SKP-101-KR 채소 정식기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "주간·조간 조절 범위",
+      "연료탱크 용량"
+    ]
+  },
+  {
+    "id": "jukam-jopr48a",
+    "brand": "죽암기계",
+    "model": "JOPR-4/8A",
+    "machineType": "transplanter",
+    "role": "standalone",
+    "specs": {
+      "rows": 4,
+      "dimensionsMm": [
+        3230,
+        1980,
+        2330
+      ],
+      "weightKg": 728,
+      "displacementCc": 391,
+      "maxPowerPs": 11.4
+    },
+    "facts": [
+      [
+        "형식",
+        "승용 4조(왕복 8조) 4WD 양파·채소 정식기"
+      ],
+      [
+        "크기 / 중량",
+        "3,230 × 1,980 × 2,330 mm / 728 kg"
+      ],
+      [
+        "엔진",
+        "391 cc 공냉 OHV 가솔린 · 최대 11.4 PS / 3,600 rpm"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.jukam.co.kr/",
+        "title": "죽암기계 JOPR-4/8A 승용 정식기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "적합 트레이 규격",
+      "식부 깊이·주간 조절 범위"
+    ]
+  },
+  {
+    "id": "daedong-drp60d",
+    "brand": "대동",
+    "model": "DRP60D",
+    "machineType": "ricePlanter",
+    "role": "standalone",
+    "specs": {
+      "nominalPowerPs": 24,
+      "maxPowerKw": 17.9,
+      "displacementCc": 1007,
+      "rows": 6,
+      "dimensionsMm": [
+        3330,
+        2200,
+        2275
+      ]
+    },
+    "facts": [
+      [
+        "이앙 조수",
+        "6조식"
+      ],
+      [
+        "디젤 엔진",
+        "24 PS · 1,007 cc"
+      ],
+      [
+        "최대 출력",
+        "17.9 kW / 3,000 rpm"
+      ],
+      [
+        "크기",
+        "3,330 × 2,200 × 2,275 mm"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/product/34",
+        "title": "대동 DRP60D 공식 제원",
+        "note": "제조사 공식 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "육묘 상자·모 상태 적합성",
+      "기체 중량"
+    ]
+  },
+  {
+    "id": "yanmar-yr60d",
+    "brand": "얀마",
+    "model": "YR60D",
+    "machineType": "ricePlanter",
+    "role": "standalone",
+    "specs": {
+      "rows": 6,
+      "nominalPowerPs": 21.3,
+      "weightKg": 760
+    },
+    "facts": [
+      [
+        "이앙 조수",
+        "6조식"
+      ],
+      [
+        "마력",
+        "21.3 PS"
+      ],
+      [
+        "기체 중량",
+        "약 760 ~ 829 kg (사양별 상이)"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.yanmar.com/kr/agri/",
+        "title": "얀마농기코리아 YR60D 이앙기 제원",
+        "note": "제조사 한국 사이트 공개 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "외형 치수",
+      "엔진 배기량"
+    ]
+  },
+  {
+    "id": "daedong-dxm73gf5",
+    "brand": "대동",
+    "model": "DXM73GF5",
+    "machineType": "combine",
+    "role": "standalone",
+    "specs": {
+      "nominalPowerPs": 73,
+      "rows": 4,
+      "dimensionsMm": [
+        4390,
+        2505,
+        3155
+      ]
+    },
+    "facts": [
+      [
+        "예취 조수",
+        "4조식 자탈형"
+      ],
+      [
+        "호칭 마력",
+        "73 PS"
+      ],
+      [
+        "크기",
+        "4,390 × 2,505 × 3,155 mm"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/product/25",
+        "title": "대동 DXM73GF5 공식 제원",
+        "note": "웹 제원표 일부 행 어긋남으로 중량·배기량 제외",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "중량·엔진 세부 제원(원문 표 오류로 재확인 필요)",
+      "곡물탱크 용량"
+    ]
+  },
+  {
+    "id": "kubota-zr6130",
+    "brand": "한국구보다",
+    "model": "ZR6130",
+    "machineType": "combine",
+    "role": "standalone",
+    "specs": {
+      "rows": 6,
+      "nominalPowerPs": 128,
+      "grainTankL": 2000
+    },
+    "facts": [
+      [
+        "예취 조수",
+        "6조식 대형 플래그십"
+      ],
+      [
+        "마력",
+        "약 128 PS"
+      ],
+      [
+        "그레인탱크 용량",
+        "2,000 L"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.kubotakorea.com/",
+        "title": "한국구보다 ZR6130 콤바인 제원",
+        "note": "제조사 공식 라인업 및 국내 공개 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "외형 치수",
+      "기체 중량",
+      "엔진 배기량"
+    ]
+  },
+  {
+    "id": "honda-wjr2525t",
+    "brand": "혼다",
+    "model": "WJR2525T",
+    "machineType": "sprayer",
+    "role": "standalone",
+    "specs": {
+      "chemicalTankL": 25,
+      "dryWeightKg": 10,
+      "displacementCc": 25,
+      "flowLMin": 6.6
+    },
+    "facts": [
+      [
+        "형식",
+        "배부식 동력분무기"
+      ],
+      [
+        "약액 탱크",
+        "25 L"
+      ],
+      [
+        "건조 중량",
+        "10 kg"
+      ],
+      [
+        "배기량 / 토출량",
+        "25 cc / 6.6 L/min"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 트랙터/관리기 연결 불필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://motos.honda.com.ec/producto-de-fuerza/fumigadora-de-mochila-wjr2525-1",
+        "title": "혼다 WJR2525T 제원",
+        "note": "해외 사양 기준",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "국내 유통 사양 차이",
+      "노즐·호스 연결 규격"
+    ]
+  },
+  {
+    "id": "asia-d10",
+    "brand": "아세아텍",
+    "model": "D10",
+    "machineType": "speedSprayer",
+    "role": "standalone",
+    "specs": {
+      "chemicalTankL": 1000,
+      "engineModel": "KUBOTA V1505T",
+      "nominalPowerPs": 41.5,
+      "engineRpm": 2600,
+      "groundClearanceMm": 215
+    },
+    "facts": [
+      [
+        "약액 탱크",
+        "1,000 L"
+      ],
+      [
+        "엔진",
+        "구보다 V1505T 터보 디젤 · 41.5 PS / 2,600 rpm"
+      ],
+      [
+        "최저지상고",
+        "215 mm (트랙터 타입 차축)"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 과수 방제용 자주식 SS기",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.asiakor.com/",
+        "title": "아세아텍 D10 디젤 스피드스프레이어 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "외형 치수",
+      "공차 중량",
+      "분무 펌프 토출량"
+    ]
+  },
+  {
+    "id": "hansung-atom4-1000",
+    "brand": "한성티앤아이",
+    "model": "SS-ATOMⅣ-1000",
+    "machineType": "speedSprayer",
+    "role": "standalone",
+    "specs": {
+      "chemicalTankL": 1000,
+      "engineModel": "현대 D4BB"
+    },
+    "facts": [
+      [
+        "약액 탱크",
+        "1,000 L"
+      ],
+      [
+        "엔진",
+        "현대 D4BB 디젤"
+      ],
+      [
+        "특징",
+        "4륜 조향(4WS) · 밀폐형 냉난방 방제 캐빈"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 캐빈형 과수 방제 SS기",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.hstni.com/",
+        "title": "한성티앤아이 SS-ATOMⅣ-1000 공식 제품 소개",
+        "note": "제조사 공식 홈페이지",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "엔진 정격 마력(PS)",
+      "외형 치수 및 중량",
+      "분무 펌프 토출량"
+    ]
+  },
+  {
+    "id": "dji-agras-t50",
+    "brand": "DJI (대동 공급)",
+    "model": "Agras T50",
+    "machineType": "agriDrone",
+    "role": "standalone",
+    "specs": {
+      "chemicalTankL": 40,
+      "granuleTankL": 75,
+      "maxGranulePayloadKg": 50
+    },
+    "facts": [
+      [
+        "액체 방제 탱크",
+        "40 L (최대 작동 페이로드 40 kg)"
+      ],
+      [
+        "입제 살포 탱크",
+        "75 L (최대 적재 하중 50 kg)"
+      ],
+      [
+        "국내 공급",
+        "대동 공식 파트너십 공급 및 A/S 망 연계"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 비행 · 무인항공방제 자격·비행승인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ag.dji.com/kr/t50",
+        "title": "DJI Agras T50 한국 공식 사양",
+        "note": "대동 공식 공급 라인업 동일 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "배터리 1회 비행 시간 및 충전기 요구 전력",
+      "살포 폭 세부 조건별 수치"
+    ]
+  },
+  {
+    "id": "dji-agras-t25",
+    "brand": "DJI (대동 공급)",
+    "model": "Agras T25",
+    "machineType": "agriDrone",
+    "role": "standalone",
+    "specs": {
+      "chemicalTankL": 20,
+      "granuleTankL": 25
+    },
+    "facts": [
+      [
+        "액체 방제 탱크",
+        "20 L"
+      ],
+      [
+        "입제 살포 탱크",
+        "25 L (최대 25 kg)"
+      ],
+      [
+        "특징",
+        "중·소규모 필지 및 1인 운용 최적화 콤팩트 기체"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 비행 · 무인항공방제 자격·비행승인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/",
+        "title": "대동 공급 DJI T25 농업용 드론 안내",
+        "note": "제조사·공급사 공식 발표 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 중량",
+      "1회 비행 살포 면적"
+    ]
+  },
+  {
+    "id": "asia-fs300d",
+    "brand": "아세아텍",
+    "model": "FS-300D",
+    "machineType": "spreader",
+    "role": "implement",
+    "specs": {
+      "hopperCapacityL": 120,
+      "dimensionsMm": [
+        1100,
+        1100,
+        980
+      ],
+      "weightKg": 60,
+      "spreadingWidthMm": 16000
+    },
+    "facts": [
+      [
+        "구분",
+        "승용관리기 부착형 비료살포기"
+      ],
+      [
+        "탱크 용량",
+        "120 L"
+      ],
+      [
+        "크기 / 중량",
+        "1,100 × 1,100 × 980 mm / 60 kg"
+      ],
+      [
+        "살포폭",
+        "약 16 m (배출구 8단 조절)"
+      ]
+    ],
+    "connection": {
+      "hostType": "ridingCultivator",
+      "label": "아세아 승용관리기 전용 장착 (일반 트랙터와 별도 확인 필요)",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.asiakor.com/",
+        "title": "아세아텍 FS-300D 비료살포기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "호환 아세아 승용관리기 정확한 형식 목록",
+      "PTO/전원 연결 규격"
+    ]
+  },
+  {
+    "id": "won-matador3",
+    "brand": "원인터내셔널",
+    "model": "MATADOR 3",
+    "machineType": "spreader",
+    "role": "implement",
+    "specs": {
+      "payloadKg": 3000,
+      "dimensionsMm": [
+        4885,
+        2150,
+        1850
+      ],
+      "weightKg": 2000,
+      "publishedTractorPowerRange": {
+        "min": 50,
+        "max": null,
+        "unit": "HP",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "구분",
+        "트랙터 견인형 수직형 퇴비살포기 (3톤급)"
+      ],
+      [
+        "적재 용량",
+        "3,000 kg (3톤)"
+      ],
+      [
+        "크기 / 중량",
+        "4,885 × 2,150 × 1,850 mm / 2,000 kg"
+      ],
+      [
+        "권장 트랙터",
+        "50 HP 이상 (시리즈 3~10톤)"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 견인(드로바)·PTO 구동 · 50HP 이상 및 브레이크/유압 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.wonitl.com/",
+        "title": "원인터내셔널 MATADOR 3 퇴비살포기 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "PTO 입력 회전수(540/1000 rpm)",
+      "외부 유압 포트 요구 수"
+    ]
+  },
+  {
+    "id": "ansung-2050qb",
+    "brand": "안성공업",
+    "model": "2050-QB",
+    "machineType": "loader",
+    "role": "implement",
+    "specs": {
+      "publishedTractorPowerRange": {
+        "min": 40,
+        "max": 55,
+        "unit": "HP",
+        "basis": "unspecified"
+      },
+      "maxLiftHeightMm": 2675,
+      "groundLiftCapacityKgf": 1480
+    },
+    "facts": [
+      [
+        "적용 마력",
+        "40 ~ 55 HP 트랙터"
+      ],
+      [
+        "최대 상승 높이",
+        "2,675 mm"
+      ],
+      [
+        "지면 인양 하중",
+        "1,480 kgf"
+      ],
+      [
+        "버켓 용량",
+        "평적 0.36 ㎥ / 산적 0.45 ㎥"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 전방 브라켓 전용 장착 · 트랙터 기종별 마운팅 브라켓 일치 필수",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.ansung.co.kr/",
+        "title": "안성공업 2050-QB 프런트 로우더 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기종별 전용 서브프레임 호환표",
+      "로더 단품 중량"
+    ]
+  },
+  {
+    "id": "daedong-dl7000",
+    "brand": "대동",
+    "model": "DL7000",
+    "machineType": "loader",
+    "role": "implement",
+    "specs": {
+      "publishedTractorPowerRange": {
+        "min": 63,
+        "max": 73,
+        "unit": "HP",
+        "basis": "unspecified"
+      },
+      "maxLiftHeightMm": 3061,
+      "maxLiftCapacityKg": 954
+    },
+    "facts": [
+      [
+        "적용 마력",
+        "63 ~ 73 HP 대동 트랙터"
+      ],
+      [
+        "최고 인양 높이",
+        "3,061 mm"
+      ],
+      [
+        "최대 인양 하중",
+        "약 954 kg"
+      ],
+      [
+        "버켓 용량",
+        "0.45 ~ 0.53 ㎥ · 셀프 레벨링 탑재"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "대동 중형 트랙터(63~73HP급) 전용 로더 브라켓 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null,
+      "approvedBrands": [
+        "대동"
+      ]
+    },
+    "sources": [
+      {
+        "url": "https://www.kamico.or.kr/",
+        "title": "KAMICO 목록집 · 대동 DL7000 로더 제원",
+        "note": "대동모빌리티 생산 정품 로더",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "대동 외 타사 트랙터 브라켓 호환 여부",
+      "로더 중량"
+    ]
+  },
+  {
+    "id": "myungsung-rb1100df",
+    "brand": "명성",
+    "model": "RB1100DF",
+    "machineType": "baler",
+    "role": "implement",
+    "specs": {
+      "pickupWidthMm": 1830,
+      "baleSizeCm": [
+        110,
+        100
+      ],
+      "publishedTractorPowerRange": {
+        "min": 60,
+        "max": null,
+        "unit": "HP",
+        "basis": "unspecified"
+      }
+    },
+    "facts": [
+      [
+        "베일 크기",
+        "직경 110 cm × 폭 100 cm (16개 스틸 롤러)"
+      ],
+      [
+        "픽업 폭",
+        "1,830 mm"
+      ],
+      [
+        "적용 트랙터",
+        "60 HP (약 44 kW) 이상"
+      ]
+    ],
+    "connection": {
+      "hostType": "tractor",
+      "label": "트랙터 견인·PTO 구동 · 60HP 이상 및 외부 유압·PTO rpm 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.myungsung.co.kr/",
+        "title": "명성 RB1100DF 중형 원형 베일러 제원",
+        "note": "제조사 공식 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "기체 외형 치수 및 중량",
+      "PTO 입력 회전수(540 rpm 여부)",
+      "유압 밸브 요구 수"
+    ]
+  },
+  {
+    "id": "honda-umk435",
+    "brand": "혼다",
+    "model": "UMK435",
+    "machineType": "mower",
+    "role": "standalone",
+    "specs": {
+      "engineModel": "GX35",
+      "displacementCc": 35.8,
+      "ratedPowerKw": 1,
+      "nominalPowerPs": 1.3
+    },
+    "facts": [
+      [
+        "엔진",
+        "혼다 GX35 미니 4행정 가솔린 · 35.8 cc"
+      ],
+      [
+        "출력",
+        "약 1.0 kW (1.3 PS) / 7,000 rpm"
+      ],
+      [
+        "중량",
+        "약 7.5 ~ 8.6 kg (핸들 사양별 상이)"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 휴대/배부식 예초기",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.hondaoutdoors.co.nz/",
+        "title": "혼다 UMK435 (GX35) 제원",
+        "note": "국내 시판 4행정 예초기 대표 모델",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "국내 유통 세부 트림별 정확한 중량",
+      "연료탱크 용량"
+    ]
+  },
+  {
+    "id": "orec-srm981",
+    "brand": "오렉 (OREC)",
+    "model": "SRM981",
+    "machineType": "mower",
+    "role": "standalone",
+    "specs": {
+      "nominalPowerPs": 22,
+      "workingWidthMm": 980,
+      "weightKg": 315,
+      "dimensionsMm": [
+        2000,
+        1070,
+        830
+      ]
+    },
+    "facts": [
+      [
+        "마력",
+        "22 PS (공냉식 2기통 가솔린)"
+      ],
+      [
+        "제초폭",
+        "980 mm"
+      ],
+      [
+        "크기 / 중량",
+        "약 2,000 × 1,070 × 830 mm / 약 315 kg"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 과수원용 승용제초기",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.dktools.co.kr/",
+        "title": "오렉 SRM981 승용제초기 국내 판매 제원",
+        "note": "국내 농기계임대사업소·과수농가 보급 모델",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "예초 높이 조절 단수",
+      "구동 방식(2WD/4WD)"
+    ]
+  },
+  {
+    "id": "kumsung-gs460",
+    "brand": "금성",
+    "model": "GS-460",
+    "machineType": "shredder",
+    "role": "standalone",
+    "specs": {
+      "engineModel": "혼다 GX200",
+      "nominalPowerPs": 6.5,
+      "maxBranchDiameterMm": 30
+    },
+    "facts": [
+      [
+        "엔진",
+        "혼다 GX200 가솔린 6.5 PS"
+      ],
+      [
+        "최대 파쇄 직경",
+        "약 30 mm (나뭇가지·고춧대·깻대)"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 엔진형 이동식 잔가지파쇄기",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.ikumsung.com/",
+        "title": "금성 잔가지파쇄기 GS-460 제원",
+        "note": "국내 임대사업소 보급형 파쇄기",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "외형 치수",
+      "기체 중량",
+      "시간당 처리량"
+    ]
+  },
+  {
+    "id": "kumsung-gs1500",
+    "brand": "금성",
+    "model": "GS-1500",
+    "machineType": "thresher",
+    "role": "standalone",
+    "specs": {
+      "motorPowerHp": 3,
+      "dimensionsMm": [
+        1230,
+        980,
+        970
+      ],
+      "weightKg": 150
+    },
+    "facts": [
+      [
+        "동력",
+        "전기모터 3마력"
+      ],
+      [
+        "크기 / 중량",
+        "1,230 × 980 × 970 mm / 약 150 kg"
+      ],
+      [
+        "구조",
+        "풍구·정선기 일체형 콩탈곡기"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 단상/삼상 전원 확인 필요",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://www.ikumsung.com/",
+        "title": "금성 GS-1500 콩탈곡기 제원",
+        "note": "제조사 공식 라인업 및 국내 유통 제원",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "정격 전압(220V/380V)",
+      "시간당 탈곡 능력(kg/h)"
+    ]
+  },
+  {
+    "id": "daedong-mechron2450",
+    "brand": "대동",
+    "model": "Mechron2450",
+    "machineType": "carrier",
+    "role": "standalone",
+    "specs": {
+      "maxPowerKw": 18,
+      "engineRpm": 3200,
+      "displacementCc": 1007,
+      "dimensionsMm": [
+        3045,
+        1640,
+        1990
+      ],
+      "weightKg": 1050
+    },
+    "facts": [
+      [
+        "최대 출력",
+        "18 kW / 3,200 rpm"
+      ],
+      [
+        "디젤 엔진 배기량",
+        "1,007 cc"
+      ],
+      [
+        "크기",
+        "3,045 × 1,640 × 1,990 mm"
+      ],
+      [
+        "중량",
+        "1,050 kg"
+      ]
+    ],
+    "connection": {
+      "hostType": null,
+      "label": "독립 구동 · 다목적 농업용 운반차",
+      "hitchCategory": null,
+      "pinDiameterMm": null,
+      "ptoSpline": null,
+      "ptoRpm": null
+    },
+    "sources": [
+      {
+        "url": "https://ko.daedong.co.kr/product/36",
+        "title": "대동 Mechron2450 공식 제원",
+        "note": "제조사 공식 제품 사양",
+        "checkedAt": "2026-11-17"
+      }
+    ],
+    "unknowns": [
+      "세부 옵션별 적재 한도"
+    ]
+  }
 ];
 
 export const SPEC_BY_ID = Object.fromEntries(MACHINE_SPECIFICATIONS.map((model) => [model.id, model]));
 
 const MACHINE_TYPE_DEFAULTS = {
-  cultivator: { cropIds: ["pepper", "cabbage", "potato"], operations: ["till", "ridge"], areaMin: 300, areaMax: 1500 },
-  tractor: { cropIds: ["pepper", "rice", "cabbage", "potato"], operations: ["till", "ridge", "level"], areaMin: 1000, areaMax: 10000 },
-  ridgeMulcher: { cropIds: ["pepper", "cabbage", "potato"], operations: ["ridge", "mulch"], areaMin: 300, areaMax: 1500 },
-  transplanter: { cropIds: ["pepper", "cabbage"], operations: ["transplant"], areaMin: 300, areaMax: 1500 },
-  ricePlanter: { cropIds: ["rice"], operations: ["ricePlant"], areaMin: 1000, areaMax: 10000 },
-  sprayer: { cropIds: ["pepper", "rice", "cabbage", "potato"], operations: ["spray"], areaMin: 300, areaMax: 2000 },
-  potatoPlanter: { cropIds: ["potato"], operations: ["seed"], areaMin: 1000, areaMax: 10000 },
-  combine: { cropIds: ["rice"], operations: ["riceHarvest"], areaMin: 1500, areaMax: 15000 },
-  potatoHarvester: { cropIds: ["potato"], operations: ["potatoHarvest"], areaMin: 1000, areaMax: 10000 },
-  carrier: { cropIds: ["pepper", "rice", "cabbage", "potato"], operations: ["transport"], areaMin: 300, areaMax: 5000 },
+  "cultivator": {
+    "cropIds": [
+      "pepper",
+      "cabbage",
+      "potato"
+    ],
+    "operations": [
+      "till",
+      "ridge"
+    ],
+    "areaMin": 300,
+    "areaMax": 1500
+  },
+  "tractor": {
+    "cropIds": [
+      "pepper",
+      "rice",
+      "cabbage",
+      "potato"
+    ],
+    "operations": [
+      "till",
+      "ridge",
+      "level"
+    ],
+    "areaMin": 1000,
+    "areaMax": 30000
+  },
+  "ridgeMulcher": {
+    "cropIds": [
+      "pepper",
+      "cabbage",
+      "potato"
+    ],
+    "operations": [
+      "ridge",
+      "mulch"
+    ],
+    "areaMin": 300,
+    "areaMax": 10000
+  },
+  "transplanter": {
+    "cropIds": [
+      "pepper",
+      "cabbage",
+      "onion"
+    ],
+    "operations": [
+      "transplant"
+    ],
+    "areaMin": 300,
+    "areaMax": 5000
+  },
+  "ricePlanter": {
+    "cropIds": [
+      "rice"
+    ],
+    "operations": [
+      "ricePlant"
+    ],
+    "areaMin": 1000,
+    "areaMax": 20000
+  },
+  "sprayer": {
+    "cropIds": [
+      "pepper",
+      "rice",
+      "cabbage",
+      "potato"
+    ],
+    "operations": [
+      "spray"
+    ],
+    "areaMin": 300,
+    "areaMax": 3000
+  },
+  "potatoPlanter": {
+    "cropIds": [
+      "potato"
+    ],
+    "operations": [
+      "seed"
+    ],
+    "areaMin": 1000,
+    "areaMax": 15000
+  },
+  "combine": {
+    "cropIds": [
+      "rice",
+      "soybean",
+      "barleyWheat"
+    ],
+    "operations": [
+      "riceHarvest"
+    ],
+    "areaMin": 1500,
+    "areaMax": 30000
+  },
+  "potatoHarvester": {
+    "cropIds": [
+      "potato"
+    ],
+    "operations": [
+      "potatoHarvest"
+    ],
+    "areaMin": 1000,
+    "areaMax": 15000
+  },
+  "carrier": {
+    "cropIds": [
+      "pepper",
+      "rice",
+      "cabbage",
+      "potato"
+    ],
+    "operations": [
+      "transport"
+    ],
+    "areaMin": 300,
+    "areaMax": 10000
+  },
+  "tiller": {
+    "cropIds": [
+      "pepper",
+      "ginger",
+      "sesame"
+    ],
+    "operations": [
+      "till",
+      "transport"
+    ],
+    "areaMin": 500,
+    "areaMax": 5000
+  },
+  "rotavator": {
+    "cropIds": [
+      "rice",
+      "soybean",
+      "pepper",
+      "cabbage"
+    ],
+    "operations": [
+      "till",
+      "level"
+    ],
+    "areaMin": 1000,
+    "areaMax": 30000
+  },
+  "speedSprayer": {
+    "cropIds": [
+      "apple",
+      "pear",
+      "peach",
+      "grape"
+    ],
+    "operations": [
+      "orchardSpray"
+    ],
+    "areaMin": 2000,
+    "areaMax": 30000
+  },
+  "agriDrone": {
+    "cropIds": [
+      "rice",
+      "soybean",
+      "barleyWheat"
+    ],
+    "operations": [
+      "droneSpray"
+    ],
+    "areaMin": 2000,
+    "areaMax": 50000
+  },
+  "ridingCultivator": {
+    "cropIds": [
+      "soybean",
+      "corn",
+      "potato",
+      "greenOnion"
+    ],
+    "operations": [
+      "hill",
+      "weedMow"
+    ],
+    "areaMin": 1000,
+    "areaMax": 15000
+  },
+  "garlicOnionPlanter": {
+    "cropIds": [
+      "garlic",
+      "onion"
+    ],
+    "operations": [
+      "garlicOnionPlant"
+    ],
+    "areaMin": 1000,
+    "areaMax": 20000
+  },
+  "rootHarvester": {
+    "cropIds": [
+      "garlic",
+      "onion",
+      "sweetPotato",
+      "ginger"
+    ],
+    "operations": [
+      "rootHarvest"
+    ],
+    "areaMin": 1000,
+    "areaMax": 20000
+  },
+  "plow": {
+    "cropIds": [
+      "rice",
+      "soybean",
+      "pepper",
+      "garlic"
+    ],
+    "operations": [
+      "deepTill"
+    ],
+    "areaMin": 1000,
+    "areaMax": 30000
+  },
+  "spreader": {
+    "cropIds": [
+      "rice",
+      "corn",
+      "apple",
+      "cabbage"
+    ],
+    "operations": [
+      "spreadFertilizer"
+    ],
+    "areaMin": 1000,
+    "areaMax": 30000
+  },
+  "loader": {
+    "cropIds": [
+      "rice",
+      "corn",
+      "garlic",
+      "apple"
+    ],
+    "operations": [
+      "spreadFertilizer",
+      "transport"
+    ],
+    "areaMin": 1000,
+    "areaMax": 30000
+  },
+  "baler": {
+    "cropIds": [
+      "corn"
+    ],
+    "operations": [
+      "forageBale"
+    ],
+    "areaMin": 3000,
+    "areaMax": 50000
+  },
+  "mower": {
+    "cropIds": [
+      "apple",
+      "pear",
+      "peach",
+      "grape"
+    ],
+    "operations": [
+      "weedMow"
+    ],
+    "areaMin": 300,
+    "areaMax": 10000
+  },
+  "shredder": {
+    "cropIds": [
+      "apple",
+      "pear",
+      "peach",
+      "grape"
+    ],
+    "operations": [
+      "pruneShred"
+    ],
+    "areaMin": 500,
+    "areaMax": 15000
+  },
+  "thresher": {
+    "cropIds": [
+      "soybean",
+      "barleyWheat",
+      "sesame"
+    ],
+    "operations": [
+      "thresh"
+    ],
+    "areaMin": 500,
+    "areaMax": 10000
+  }
 };
 
 export function getSpecificationDefaults(specOrMachineType) {
@@ -112,7 +2879,12 @@ export function applyModelSpecification(listing, index = 0) {
   const model = models[index % models.length];
   if (!model) return listing;
   const label = model.role === "implement" ? "작업기 단품 · 동력 본체 별도" : model.role === "powerUnit" ? "본체 · 부착 작업기 별도 확인" : "독립 구동 본체";
-  return { ...listing, modelId: model.id, model: model.model, brand: model.brand, specification: model,
+  return {
+    ...listing,
+    modelId: model.id,
+    model: model.model,
+    brand: model.brand,
+    specification: model,
     title: `${model.brand} ${model.model} · ${listing.region}`,
     included: label,
     description: `실제 ${model.model}의 공개 사양을 참조한 가상 매물입니다. 가격·점검일·예약·작업 면적은 시연용입니다. ${label}.`,
@@ -132,6 +2904,13 @@ export function checkModelCompatibility(powerUnitId, implementId) {
   }
   if (implement.connection.approvedModelIds?.includes(power.id)) {
     return { status: "compatible", reason: "제조사가 부착 가능 기종으로 명시했습니다. 실제 연식·부속 구성은 인수 전에 확인하세요." };
+  }
+  if (implement.connection.approvedBrands?.length && !implement.connection.approvedBrands.includes(power.brand)) {
+    return { status: "incompatible", reason: "제조사 전용 브라켓/부착 규격으로 타사 본체와 호환되지 않습니다" };
+  }
+  const minPs = implement.specs?.publishedTractorPowerRange?.min;
+  if (minPs != null && power.specs?.nominalPowerPs != null && power.specs.nominalPowerPs < minPs) {
+    return { status: "incompatible", reason: `동력 본체 마력(${power.specs.nominalPowerPs} PS)이 작업기 권장 최소 마력(${minPs}) 미만입니다` };
   }
   return { status: "check", reason: "히치·PTO·승강력 등 상세 연결 규격 확인 필요" };
 }

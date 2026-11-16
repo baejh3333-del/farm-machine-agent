@@ -34,6 +34,20 @@ const profiles = {
   combine: [["rice"], ["riceHarvest"], [1800, 22000], [190000, 9500000], "곡물 배출 장치", ["3조식", "4조식", "5조식"]],
   potatoHarvester: [["potato"], ["potatoHarvest"], [400, 9000], [75000, 1100000], "굴취날·진동 선별판", ["1열", "2열", "굴취 깊이 조절형"]],
   carrier: [allCrops, ["transport"], [100, 18000], [45000, 1300000], "적재함·고정 고리", ["소형 궤도형", "덤프형", "사륜형"]],
+  tiller: [["pepper", "ginger", "sesame"], ["till", "transport"], [500, 5000], [35000, 750000], "로터리·트레일러", ["로터리형", "트레일러형", "보행 디젤"]],
+  rotavator: [["rice", "soybean", "pepper", "cabbage"], ["till"], [1000, 25000], [50000, 1400000], "로타베이터 본체", ["논 전용", "밭 겸용", "광폭형"]],
+  speedSprayer: [["apple", "pear", "peach", "grape"], ["orchardSpray"], [2000, 30000], [180000, 12000000], "약액 탱크·송풍기", ["1000L 캐빈형", "4WS 조향형", "과원 광역형"]],
+  agriDrone: [["rice", "soybean", "barleyWheat"], ["droneSpray"], [2000, 50000], [220000, 15000000], "배터리·입제 살포통", ["40L 대형", "20L 표준형", "입제 겸용"]],
+  ridingCultivator: [["soybean", "corn", "potato", "greenOnion"], ["hill"], [1000, 15000], [110000, 5500000], "배토판·고랑 주행 타이어", ["미드마운트", "고랑 주행형", "배토 겸용"]],
+  garlicOnionPlanter: [["garlic", "onion"], ["garlicOnionPlant"], [1000, 20000], [120000, 4200000], "종자함·복토판", ["6조 점파형", "7조 종이줄형", "복토 겸용"]],
+  rootHarvester: [["garlic", "onion", "sweetPotato", "ginger"], ["rootHarvest"], [1000, 20000], [110000, 3200000], "진동 굴취날·흙분리 컨베이어", ["1400mm 광폭", "진동 선별형", "줄기절단 연계"]],
+  plow: [["rice", "soybean", "pepper", "garlic"], ["deepTill"], [1000, 25000], [55000, 1500000], "쟁기 본체·3점 히치 핀", ["원판 쟁기", "3련 삭쟁기", "심경 반전형"]],
+  spreader: [["rice", "corn", "apple", "cabbage"], ["spreadFertilizer"], [1000, 30000], [60000, 2100000], "살포 호퍼·PTO 샤프트", ["3톤 견인형", "승용 부착형", "원판 살포형"]],
+  loader: [["rice", "corn", "garlic", "apple"], ["spreadFertilizer", "transport"], [1000, 30000], [85000, 3500000], "버킷·서브프레임 브라켓", ["중소형 퀵버킷", "대형 고상승형", "톤백 리프트"]],
+  baler: [["corn"], ["forageBale"], [3000, 50000], [200000, 14000000], "네트·결속 장치", ["원형 곤포기", "16롤러형", "고압축형"]],
+  mower: [["apple", "pear", "peach", "grape"], ["weedMow"], [300, 10000], [45000, 2800000], "예초날·안전 커버", ["배부식 예초기", "승용 제초기", "과원 열간형"]],
+  shredder: [["apple", "pear", "peach", "grape"], ["pruneShred"], [500, 15000], [50000, 1600000], "파쇄 칼날·배출 슈트", ["엔진 이동식", "전정가지 전용", "30mm 파쇄형"]],
+  thresher: [["soybean", "barleyWheat", "sesame"], ["thresh"], [500, 10000], [45000, 1400000], "선별망·풍구 팬", ["콩·잡곡용", "전동 3마력", "이동식 선별"]],
 };
 
 export function buildMockListings() {

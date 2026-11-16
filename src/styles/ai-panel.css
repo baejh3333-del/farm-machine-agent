@@ -500,3 +500,118 @@
 .ai-weather-proceed-btn:hover {
   background: #fef3c7;
 }
+
+/* 7. Camera Capture Button & WebRTC Modal */
+.ai-camera-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .ai-camera-btn .ai-camera-label {
+    display: none;
+  }
+}
+
+.edit-photo-field {
+  display: grid;
+  gap: 8px;
+}
+
+.edit-camera-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.camera-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 18, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.camera-modal {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.camera-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.camera-modal-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--forest, #183a26);
+}
+
+.camera-modal-hint {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c6860);
+}
+
+.camera-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111814;
+  display: grid;
+  place-items: center;
+}
+
+.camera-viewport video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(17, 24, 20, 0.65);
+}
+
+.camera-status[hidden] {
+  display: none;
+}
+
+.camera-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.camera-modal-actions .button-primary {
+  flex: 1 1 140px;
+}

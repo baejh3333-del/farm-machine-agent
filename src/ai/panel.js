@@ -70,6 +70,207 @@ const PLAN_FIELD_LABELS = {
   transaction: "거래 유형",
 };
 
+const MAX_PHOTO_DATA_URL_LENGTH = 1_200_000;
+let activeCameraCleanup = null;
+
+function compressSourceToDataUrl(source, naturalWidth, naturalHeight) {
+  if (!naturalWidth || !naturalHeight) {
+    throw new Error("사진 크기를 확인할 수 없어요.");
+  }
+  for (const [side, quality] of [[1280, 0.82], [1024, 0.75], [800, 0.7]]) {
+    const scale = Math.min(1, side / Math.max(naturalWidth, naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(naturalHeight * scale));
+    canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    if (dataUrl.length <= MAX_PHOTO_DATA_URL_LENGTH) return dataUrl;
+  }
+  throw new Error("사진이 너무 커요. 다른 사진으로 올려 주세요.");
+}
+
+export async function shrinkPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("사진을 열 수 없어요."));
+      el.src = url;
+    });
+    return compressSourceToDataUrl(img, img.naturalWidth, img.naturalHeight);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function openCameraCapture({ fallbackInput = null, triggerButton = null, onCapture } = {}) {
+  const isTouchMobile = Boolean(
+    window.matchMedia?.("(pointer: coarse)")?.matches
+    && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")
+  );
+  if (isTouchMobile || !navigator.mediaDevices?.getUserMedia) {
+    fallbackInput?.click();
+    return;
+  }
+
+  activeCameraCleanup?.({ restoreFocus: false });
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "camera-modal-backdrop";
+  backdrop.innerHTML = `
+    <section class="camera-modal" role="dialog" aria-modal="true" aria-labelledby="cameraModalTitle">
+      <div class="camera-modal-head">
+        <div>
+          <h2 id="cameraModalTitle">카메라로 사진 찍기</h2>
+          <p class="camera-modal-hint">농기계 전체나 모델명이 잘 보이도록 맞춰주세요.</p>
+        </div>
+        <button type="button" class="icon-button" data-camera-close aria-label="카메라 닫기">✕</button>
+      </div>
+      <div class="camera-viewport">
+        <video autoplay playsinline muted></video>
+        <div class="camera-status" data-camera-status>카메라를 켜는 중...</div>
+      </div>
+      <div class="camera-modal-actions">
+        <button type="button" class="button button-primary" data-camera-snap disabled>📸 촬영하기</button>
+        <button type="button" class="button button-secondary" data-camera-switch>🔄 카메라 전환</button>
+        <button type="button" class="button button-secondary" data-camera-fallback>기기 카메라/파일 앱 열기</button>
+        <button type="button" class="button button-secondary" data-camera-close>취소</button>
+      </div>
+    </section>
+  `;
+  document.body.append(backdrop);
+
+  const video = backdrop.querySelector("video");
+  const statusEl = backdrop.querySelector("[data-camera-status]");
+  const snapBtn = backdrop.querySelector("[data-camera-snap]");
+  const switchBtn = backdrop.querySelector("[data-camera-switch]");
+  const fallbackBtn = backdrop.querySelector("[data-camera-fallback]");
+  const closeBtns = backdrop.querySelectorAll("[data-camera-close]");
+
+  let stream = null;
+  let facingMode = "environment";
+  let closed = false;
+
+  const stopStream = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+    if (video) video.srcObject = null;
+  };
+
+  const closeModal = ({ restoreFocus = true } = {}) => {
+    if (closed) return;
+    closed = true;
+    stopStream();
+    document.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("pagehide", onPageHide);
+    backdrop.remove();
+    if (activeCameraCleanup === closeModal) activeCameraCleanup = null;
+    if (restoreFocus && triggerButton?.isConnected) triggerButton.focus();
+  };
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal();
+    }
+  };
+  const onPageHide = () => closeModal({ restoreFocus: false });
+
+  activeCameraCleanup = closeModal;
+  document.addEventListener("keydown", onKeyDown);
+  window.addEventListener("pagehide", onPageHide);
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) closeModal();
+  });
+  closeBtns.forEach((btn) => btn.addEventListener("click", () => closeModal()));
+
+  fallbackBtn.addEventListener("click", () => {
+    closeModal({ restoreFocus: false });
+    fallbackInput?.click();
+  });
+
+  const startStream = async (mode) => {
+    stopStream();
+    snapBtn.disabled = true;
+    if (statusEl) {
+      statusEl.textContent = "카메라를 켜는 중...";
+      statusEl.hidden = false;
+    }
+    const nextStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: mode } },
+      audio: false,
+    });
+    if (closed) {
+      nextStream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    stream = nextStream;
+    video.srcObject = nextStream;
+    await new Promise((resolve) => {
+      if (video.readyState >= 1 && video.videoWidth > 0) return resolve();
+      const onReady = () => {
+        video.removeEventListener("loadedmetadata", onReady);
+        resolve();
+      };
+      video.addEventListener("loadedmetadata", onReady);
+    });
+    await video.play().catch(() => {});
+    if (closed) return;
+    if (statusEl) statusEl.hidden = true;
+    snapBtn.disabled = false;
+    snapBtn.focus();
+  };
+
+  switchBtn.addEventListener("click", async () => {
+    const prevMode = facingMode;
+    const nextMode = prevMode === "environment" ? "user" : "environment";
+    switchBtn.disabled = true;
+    try {
+      await startStream(nextMode);
+      facingMode = nextMode;
+    } catch {
+      toast("전환할 수 있는 다른 카메라가 없어요.");
+      try {
+        await startStream(prevMode);
+      } catch {
+        closeModal({ restoreFocus: false });
+        fallbackInput?.click();
+      }
+    } finally {
+      if (!closed) switchBtn.disabled = false;
+    }
+  });
+
+  snapBtn.addEventListener("click", () => {
+    if (!video.videoWidth || !video.videoHeight) {
+      toast("카메라 화면이 아직 준비되지 않았어요.");
+      return;
+    }
+    try {
+      const dataUrl = compressSourceToDataUrl(video, video.videoWidth, video.videoHeight);
+      closeModal({ restoreFocus: false });
+      onCapture?.(dataUrl);
+    } catch (error) {
+      toast(error?.message || "사진 촬영에 실패했어요.");
+    }
+  });
+
+  try {
+    await startStream(facingMode);
+  } catch (error) {
+    closeModal({ restoreFocus: false });
+    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+      toast("카메라 권한이 거부되었어요. 기기 카메라/파일 앱에서 사진을 선택해 주세요.");
+    } else {
+      toast("사용 가능한 카메라를 찾지 못했어요. 기기 카메라/파일 앱을 열어드릴게요.");
+    }
+    fallbackInput?.click();
+  }
+}
+
 export function createAiPanel({
   state,
   runtime,
@@ -385,48 +586,40 @@ export function createAiPanel({
     photoIsNew = false;
     const input = $("aiPhotoInput");
     if (input) input.value = "";
+    const cameraInput = $("aiCameraInput");
+    if (cameraInput) cameraInput.value = "";
     showPhotoPreview();
   }
 
-  async function shrinkPhoto(file) {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await new Promise((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error("사진을 열 수 없어요."));
-        el.src = url;
-      });
-      for (const [side, quality] of [[1280, 0.82], [1024, 0.75], [800, 0.7]]) {
-        const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.naturalWidth * scale);
-        canvas.height = Math.round(img.naturalHeight * scale);
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
-        if (dataUrl.length <= 1_200_000) return dataUrl;
-      }
-      throw new Error("사진이 너무 커요. 다른 사진으로 올려 주세요.");
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+  function applySelectedPhotoDataUrl(dataUrl) {
+    agentPhoto = dataUrl;
+    photoIsNew = true;
+    savedDraft = null;
+    showPhotoPreview();
+    $("aiInput")?.focus();
   }
 
-  $("aiPhotoButton")?.addEventListener("click", () => $("aiPhotoInput")?.click());
-  $("aiPhotoInput")?.addEventListener("change", async () => {
-    const file = $("aiPhotoInput").files?.[0];
+  async function handlePhotoFileInput(inputEl) {
+    const file = inputEl?.files?.[0];
     if (!file) return;
     try {
-      agentPhoto = await shrinkPhoto(file);
-      photoIsNew = true;
-      savedDraft = null;
-      showPhotoPreview();
-      $("aiInput").focus();
+      applySelectedPhotoDataUrl(await shrinkPhoto(file));
     } catch (error) {
       clearPhoto();
       toast(error.message);
     }
+  }
+
+  $("aiPhotoButton")?.addEventListener("click", () => $("aiPhotoInput")?.click());
+  $("aiPhotoInput")?.addEventListener("change", () => handlePhotoFileInput($("aiPhotoInput")));
+  $("aiCameraButton")?.addEventListener("click", () => {
+    openCameraCapture({
+      fallbackInput: $("aiCameraInput"),
+      triggerButton: $("aiCameraButton"),
+      onCapture: applySelectedPhotoDataUrl,
+    });
   });
+  $("aiCameraInput")?.addEventListener("change", () => handlePhotoFileInput($("aiCameraInput")));
   $("aiPhotoRemove")?.addEventListener("click", clearPhoto);
 
   function scrollAiToEnd() {

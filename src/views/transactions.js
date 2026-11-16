@@ -3,6 +3,7 @@ import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, getSpecificationDefaults } from "..
 import { available } from "../data/recommendation.js";
 import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictureIcon, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
+import { openCameraCapture, shrinkPhoto } from "../ai/panel.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
 
 export function createTransactionViews(deps) {
@@ -638,7 +639,18 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
         <label>최근 점검일<input id="editInspection" type="date" max="${today()}" value="${escapeHtml(initialInspected)}" required></label>
       </div>
       ${!isEdit && (draftValues?.draftPhotoUrl || draftValues?.photoDataUrl) ? `<div class="draft-photo-preview"><img src="${escapeHtml(draftValues.draftPhotoUrl || draftValues.photoDataUrl)}" alt="농농이 상담에서 올린 사진" /><small>농농이 상담에서 올린 사진이 등록돼요. 바꾸려면 아래에서 새 사진을 고르세요.</small></div>` : ""}
-      <label>기계 사진 업로드 (선택, JPG·PNG·WebP, 1MB 이하)<input id="editPhoto" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      <div class="edit-photo-field">
+        <label>기계 사진 업로드 (선택, JPG·PNG·WebP, 1MB 이하)<input id="editPhoto" type="file" accept="image/png,image/jpeg,image/webp"></label>
+        <div class="edit-camera-row">
+          <input id="editCameraInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+          <button type="button" class="button button-secondary button-sm" id="editCameraButton">📷 카메라로 찍기</button>
+        </div>
+        <div class="draft-photo-preview" id="editCapturedPhotoPreview" hidden>
+          <img id="editCapturedPhotoImg" alt="촬영한 기계 사진 미리보기" />
+          <small>카메라로 찍은 사진이 등록돼요.</small>
+          <button type="button" class="button button-secondary button-sm" id="editCapturedPhotoClear">빼기</button>
+        </div>
+      </div>
       ${isEdit && hasListingPhoto(item) ? `<label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="editRemovePhoto" style="width:auto"> 등록된 기존 사진 삭제하기</label>` : ""}
       <div class="form-row-2">
         <label>포함 작업기·부속품<input id="editIncluded" maxlength="120" required value="${escapeHtml(initialIncluded)}" placeholder="예: 로터리, 두둑성형기 포함"></label>
@@ -701,6 +713,47 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
 
   let busy = false;
   let lastSubmitHash = null;
+  let capturedPhotoDataUrl = null;
+
+  const setCapturedPhoto = (dataUrl) => {
+    capturedPhotoDataUrl = dataUrl || null;
+    const preview = $("editCapturedPhotoPreview");
+    const img = $("editCapturedPhotoImg");
+    if (preview && img) {
+      preview.hidden = !capturedPhotoDataUrl;
+      if (capturedPhotoDataUrl) img.src = capturedPhotoDataUrl;
+    }
+    if (capturedPhotoDataUrl) {
+      if ($("editPhoto")) $("editPhoto").value = "";
+      if ($("editRemovePhoto")) $("editRemovePhoto").checked = false;
+    } else if ($("editCameraInput")) {
+      $("editCameraInput").value = "";
+    }
+  };
+
+  $("editCameraButton")?.addEventListener("click", () => {
+    openCameraCapture({
+      fallbackInput: $("editCameraInput"),
+      triggerButton: $("editCameraButton"),
+      onCapture: (dataUrl) => setCapturedPhoto(dataUrl),
+    });
+  });
+
+  $("editCameraInput")?.addEventListener("change", async () => {
+    const file = $("editCameraInput")?.files?.[0];
+    if (!file) return;
+    try {
+      setCapturedPhoto(await shrinkPhoto(file));
+    } catch (error) {
+      setCapturedPhoto(null);
+      toast(error?.message || "사진을 읽지 못했습니다.");
+    }
+  });
+
+  $("editCapturedPhotoClear")?.addEventListener("click", () => setCapturedPhoto(null));
+  $("editPhoto")?.addEventListener("change", () => {
+    if ($("editPhoto")?.files?.[0]) setCapturedPhoto(null);
+  });
 
   $("listingEditorForm").addEventListener("input", () => {
     if (!isEdit && lastSubmitHash !== null) {
@@ -727,8 +780,8 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       return toast("JPG·PNG·WebP 사진을 1MB 이하로 선택해 주세요.");
     }
 
-    let photoDataUrl = draftValues?.photoDataUrl || undefined;
-    const draftPhotoKey = !isEdit && !file ? draftValues?.draftPhotoKey : undefined;
+    let photoDataUrl = capturedPhotoDataUrl || draftValues?.photoDataUrl || undefined;
+    const draftPhotoKey = !isEdit && !file && !capturedPhotoDataUrl ? draftValues?.draftPhotoKey : undefined;
     if (file) {
       try {
         photoDataUrl = await readImageFileAsDataUrl(file);
@@ -757,7 +810,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       pickup: $("editPickup").value.trim(),
       description: $("editDescription").value.trim(),
       ...(draftPhotoKey ? { draftPhotoKey } : (photoDataUrl ? { photoDataUrl } : {})),
-      ...(isEdit && $("editRemovePhoto")?.checked ? { removePhoto: true } : {}),
+      ...(isEdit && $("editRemovePhoto")?.checked && !file && !capturedPhotoDataUrl ? { removePhoto: true } : {}),
     };
 
     lastSubmitHash = JSON.stringify(payload);

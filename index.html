@@ -566,7 +566,9 @@
     </div>
     <form id="aiForm" class="ai-form">
       <input type="file" id="aiPhotoInput" accept="image/jpeg,image/png,image/webp" hidden />
+      <input type="file" id="aiCameraInput" accept="image/jpeg,image/png,image/webp" capture="environment" hidden />
       <button type="button" class="ai-photo-btn" id="aiPhotoButton" aria-label="기계 사진 올리기" title="기계 사진 올리기">사진</button>
+      <button type="button" class="ai-photo-btn ai-camera-btn" id="aiCameraButton" aria-label="카메라로 기계 사진 찍기" title="카메라로 기계 사진 찍기"><span aria-hidden="true">📷</span><span class="ai-camera-label">카메라</span></button>
       <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" />
       <button type="submit" class="button button-primary ai-send-btn" aria-label="질문 보내기">전송</button>
     </form>

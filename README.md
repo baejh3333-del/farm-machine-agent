@@ -64,6 +64,12 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 
 `npm run db:inspect`는 데이터를 변경하지 않고 `pendingMigrations`, `checksumMismatches`, `unknownMigrations`, `unvalidatedConstraints`와 상담 테이블 건수를 표시합니다. 미검증 제약은 기존 데이터 검사 후 별도 변경으로 검증해야 합니다. `0003` 테이블 생성만으로 AI 상담 이력 저장이 구현되지는 않습니다.
 
+### 예약 뒤 보험 추천
+
+대여·구매 예약을 마치면 채팅이 "보험을 추천해드릴까요?"를 대화마다 한 번만 묻습니다. 팔기·빌려주기에는 묻지 않습니다.
+긍정·부정은 `server/insurance-flow.js`가 코드로 판단합니다. 긍정이면 `server/knowledge/insurance.js`에 등록된 정보로만 추천합니다(빌릴 때 농업인안전보험, 살 때 대상 기종이면 농기계종합보험). 다시 긍정하면 `insurance_consult_requests`에 상담 신청을 남깁니다. 가입·결제는 하지 않고, 보험료 금액은 말하지 않습니다.
+이 기능은 `0004_insurance_consults.sql` 마이그레이션이 필요합니다. 배포 전에 `npm run db:migrate -- --env <환경>`을 실행하세요. 가입처(지역 농협) 전화번호는 공식 자료로 확인한 뒤 `INSURANCE_OFFICES`에 채웁니다.
+
 ## 호출 제한과 DB 타임아웃
 
 - `/api/recommend`와 `/api/agent` 대화는 AI 비용을 막기 위해 같은 한도를 쓰며 IP당 분당 15회·하루 150회, 서비스 전체 하루 3,000회로 제한합니다. `RECOMMEND_LIMIT_PER_MINUTE`, `RECOMMEND_LIMIT_PER_DAY`, `RECOMMEND_GLOBAL_LIMIT_PER_DAY`로 바꿀 수 있고 0이면 해당 제한을 끕니다. 횟수를 확인할 수 없으면 AI를 호출하지 않고 `503`을 돌려줍니다.

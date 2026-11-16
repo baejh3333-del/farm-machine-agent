@@ -250,6 +250,27 @@ export function createAiPanel({
     scroll.scrollTop = scroll.scrollHeight;
   }
 
+  // 예약 뒤 보험 추천: 대화마다 한 번만 묻는다. 진행 상태는 서버가 돌려준 값을 그대로 다음 요청에 보낸다.
+  let insuranceOffer = null;
+  let insuranceAsked = false;
+
+  function trackInsurance(result) {
+    if (!result || !Object.hasOwn(result, "insuranceOffer")) {
+      insuranceOffer = null;
+      return;
+    }
+    insuranceAsked = true;
+    insuranceOffer = result.insuranceOffer && result.insuranceOffer.stage !== "done" ? result.insuranceOffer : null;
+  }
+
+  function appendInsuranceAsk(result) {
+    if (!result?.insuranceAsk) return;
+    trackInsurance(result);
+    const bubble = appendAiMessage(result.insuranceAsk, "assistant");
+    rememberAgentTurn({ role: "assistant", content: result.insuranceAsk });
+    appendChoices(bubble, ["네, 추천해 주세요", "괜찮아요"]);
+  }
+
   function rememberAgentTurn(...entries) {
     agentHistory = [...agentHistory, ...entries.filter((entry) => entry.content)].slice(-MAX_AGENT_HISTORY);
   }
@@ -323,10 +344,11 @@ export function createAiPanel({
     onBusy?.();
     if (triggerButton) triggerButton.disabled = true;
     try {
-      const result = await executeAgentAction(pendingAction, requestId);
+      const result = await executeAgentAction(pendingAction, requestId, { insuranceAsked });
       if (result?.outcome === "completed") {
         const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
         if (result.reservation) renderReservationBox(bubble, result.reservation);
+        appendInsuranceAsk(result);
         if (result.createdListing) {
           savedDraft = null;
           clearPhoto();
@@ -869,6 +891,7 @@ export function createAiPanel({
     if (result.pendingAction?.type === "rental_request" || result.pendingAction?.type === "purchase_request") {
       appendConfirmation(bubble, result.pendingAction);
     }
+    appendInsuranceAsk(result);
     $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
   }
@@ -940,10 +963,13 @@ export function createAiPanel({
         uiContext,
         image: sendingPhoto || undefined,
         savedDraft,
+        insuranceOffer,
+        insuranceAsked,
       });
       pending.remove();
       pending = undefined;
       if (agentResult?.mode === "agent") {
+        if (!agentResult.insuranceAsk) trackInsurance(agentResult);
         if (sendingPhoto) {
           photoIsNew = false;
           showPhotoPreview();
@@ -992,6 +1018,8 @@ export function createAiPanel({
 
   function performReset() {
     agentHistory = [];
+    insuranceOffer = null;
+    insuranceAsked = false;
     savedDraft = null;
     lastPhotoDataUrl = null;
     qbState.mode = "rent";

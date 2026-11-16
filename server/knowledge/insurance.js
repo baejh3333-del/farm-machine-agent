@@ -1,4 +1,5 @@
-// 보험 안내 데이터. 사용자가 보험을 물었을 때만 쓴다. 보험료는 확정해 말하지 않는다.
+// 보험 안내 데이터. 사용자가 물었을 때, 또는 예약 뒤 "보험을 추천해드릴까요?"에 긍정했을 때만 쓴다.
+// 보험료는 확정해 말하지 않는다.
 
 const CHECKED_AT = "2026-11-16";
 
@@ -6,6 +7,7 @@ export const INSURANCE_PRODUCTS = [
   {
     id: "farm-machinery-comprehensive",
     name: "농기계종합보험 (정책보험)",
+    insurer: "NH농협손해보험",
     audience: ["owner"],
     machineTypes: ["cultivator", "tractor", "combine", "ricePlanter", "sprayer", "carrier"],
     summary: "농기계를 운전하거나 농작업을 하다 생긴 사고를 보상해요. 대인배상, 대물배상, 자기신체사고, 농기계 손해를 보장해요.",
@@ -23,6 +25,7 @@ export const INSURANCE_PRODUCTS = [
   {
     id: "farmer-safety",
     name: "농업인안전보험 (정책보험)",
+    insurer: "NH농협생명",
     audience: ["renter", "owner"],
     machineTypes: "all",
     summary: "농작업을 하다 다치거나 관련 질병이 생겼을 때 본인을 보상해요. 기계를 빌려 쓰는 분에게도 해당돼요.",
@@ -35,5 +38,44 @@ export const INSURANCE_PRODUCTS = [
     ],
     source: { title: "농업인안전재해보험 지원 지침 (농업인안전보험 및 농기계종합보험)", url: "https://uni.agrix.go.kr/guide/lmxsrv/law/lawFullContent.do?SEQ=9149&SEQ_HISTORY=5992" },
     checkedAt: CHECKED_AT,
+  },
+];
+
+// 농기계종합보험 가입 대상인지 (농식품부 2024.8.26 보도자료 기준 12종 + 고소작업차·리프트).
+// eligible: 대상, check: 세부 종류에 따라 다름, no: 대상 목록에 없음
+export const MACHINERY_INSURANCE_ELIGIBILITY = {
+  cultivator: { status: "eligible", note: "관리기는 가입 대상이에요." },
+  tractor: { status: "eligible", note: "트랙터는 가입 대상이에요." },
+  ricePlanter: { status: "eligible", note: "이앙기는 가입 대상이에요." },
+  combine: { status: "eligible", note: "콤바인은 가입 대상이에요." },
+  carrier: { status: "eligible", note: "농업용 동력운반차는 가입 대상이에요." },
+  sprayer: { status: "check", note: "SS분무기·광역방제기·항공방제기는 대상이에요. 다른 방제기는 농협에서 확인해 주세요." },
+  ridgeMulcher: { status: "no", note: "휴립·멀칭 작업기는 대상 목록에 없어요." },
+  transplanter: { status: "no", note: "정식기는 대상 목록에 없어요." },
+  potatoPlanter: { status: "no", note: "감자 파종기는 대상 목록에 없어요." },
+  potatoHarvester: { status: "no", note: "감자 굴취기는 대상 목록에 없어요." },
+};
+
+// 영양군 보험 가입처(지역 농협). 전화번호는 공식 자료로 확인한 뒤에만 채운다(null이면 안내하지 않는다).
+export const INSURANCE_OFFICES = [
+  {
+    id: "yeongyang-nh",
+    name: "영양농협",
+    regions: ["영양읍", "청기면", "일월면", "수비면"],
+    address: "경북 영양군 영양읍",
+    phone: null,
+    note: "읍·면 지점은 영양농협에 확인해 주세요.",
+    source: { title: "쿠키뉴스 · 영양군·영양농협·남영양농협 업무협약 (2026.2.10)", url: "https://www.kukinews.com/article/view/kuk202602100210" },
+    checkedAt: "2026-11-17",
+  },
+  {
+    id: "nam-yeongyang-nh",
+    name: "남영양농협",
+    regions: ["입암면", "석보면"],
+    address: "입암지소: 경북 영양군 입암로 129-3 · 석보지소: 경북 영양군 석보면 원리길 19",
+    phone: null,
+    note: "",
+    source: { title: "경북매일 · 남영양농협 신규조합원 교육 (2026.5.28)", url: "https://www.kbmaeil.com/article/20260528500441" },
+    checkedAt: "2026-11-17",
   },
 ];

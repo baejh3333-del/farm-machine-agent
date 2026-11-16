@@ -87,6 +87,7 @@ export function textForSpeech(text) {
     .replace(/\p{Extended_Pictographic}|️/gu, "")
     .replace(/[*_`#>]/g, "")
     .replace(/(\d{4}-\d{2}-\d{2})/g, (date) => monthDay(date))
+    .replace(/(\d+일)\(([일월화수목금토])\)/g, "$1 $2요일")
     .replace(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/g, (_, number) => koreanWon(Number(number.replaceAll(",", ""))))
     .replace(/\s*\/\s*일/g, " 하루에")
     .replace(/\s*~\s*/g, "부터 ")
@@ -104,6 +105,13 @@ export function rentalSummaryForSpeech(action) {
     `대여료는 하루 ${koreanWon(action?.dailyPrice)}, 모두 ${koreanWon(action?.totalPrice)}이에요.`,
     "내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.",
   ].join(" ");
+}
+
+/** 농농 승인 카드(제목과 항목 줄)를 소리로 요약한다. 말로는 승인되지 않는다는 것도 알려 준다. */
+export function actionSummaryForSpeech(pending) {
+  const title = String(pending?.title || "요청").replace(/\s*확인$/, "");
+  const rows = (Array.isArray(pending?.rows) ? pending.rows : []).map(([label, value]) => `${label}, ${textForSpeech(value)}.`);
+  return [`${title} 내용이에요.`, ...rows, "내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요."].join(" ");
 }
 
 export function loadVoiceSettings(storage = globalThis.localStorage) {
@@ -172,7 +180,14 @@ export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onTick, 
     throw micError(error);
   }
   const chunks = [];
-  const recorder = new globalThis.MediaRecorder(stream);
+  let recorder;
+  try {
+    recorder = new globalThis.MediaRecorder(stream);
+  } catch {
+    // 녹음기를 만들 수 없으면 켜 둔 마이크를 바로 끈다.
+    stream.getTracks().forEach((track) => track.stop());
+    throw new VoiceInputError("unsupported", "이 기기에서는 녹음을 할 수 없어요. 글로 적어 주셔도 돼요.");
+  }
   recorder.addEventListener("dataavailable", (event) => { if (event.data?.size) chunks.push(event.data); });
   const started = Date.now();
   const ticker = setInterval(() => {
@@ -223,7 +238,7 @@ export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onTick, 
  * 브라우저 음성 인식(서버 인식을 쓸 수 없을 때). 천천히 말하고 쉬어도 끊기지 않게 continuous로 듣는다.
  * stop()은 받아 적은 문장을 돌려준다.
  */
-export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInterim, onLimit } = {}) {
+export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInterim, onLimit, onFailure } = {}) {
   const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
   if (!Recognition) throw new VoiceInputError("unsupported", "이 브라우저에서는 음성 인식을 할 수 없어요. 글로 적어 주셔도 돼요.");
   const recognition = new Recognition();
@@ -233,6 +248,8 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
   recognition.maxAlternatives = 1;
   let finalText = "";
   let failure = null;
+  let stopping = false;
+  const deadline = Date.now() + maxSeconds * 1000;
   let ended;
   const done = new Promise((resolve) => { ended = resolve; });
   recognition.onresult = (event) => {
@@ -252,12 +269,25 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
     } else if (event.error === "audio-capture") {
       failure = new VoiceInputError("no-mic", "마이크를 찾지 못했어요. 글로 적어 주셔도 돼요.");
     }
+    if (failure) onFailure?.(failure);
   };
-  recognition.onend = () => ended();
+  // 휴대폰 브라우저는 잠깐만 쉬어도 듣기를 끝낸다. 사용자가 멈추기 전이면 앞의 말은 두고 다시 듣는다.
+  recognition.onend = () => {
+    if (!stopping && !failure && Date.now() < deadline) {
+      try {
+        recognition.start();
+        return;
+      } catch {
+        // 다시 시작할 수 없으면 여기서 끝낸다.
+      }
+    }
+    ended();
+  };
   const limit = setTimeout(() => onLimit?.(), maxSeconds * 1000);
   recognition.start();
   return {
     async stop() {
+      stopping = true;
       clearTimeout(limit);
       try { recognition.stop(); } catch { /* 이미 멈춤 */ }
       await done;
@@ -265,6 +295,7 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
       return finalText.replace(/\s+/g, " ").trim();
     },
     cancel() {
+      stopping = true;
       clearTimeout(limit);
       try { recognition.abort(); } catch { /* 이미 멈춤 */ }
     },
@@ -289,20 +320,47 @@ export function prepareSpeech(timeoutMs = 1500) {
   });
 }
 
-/** 글을 한국어 목소리로 읽는다. 읽을 수 없으면 false. */
+// 읽는 중인 문장들. 브라우저가 중간에 치우지 않도록 참조를 들고 있는다.
+let queue = [];
+let primed = false;
+
+/** 사용자가 버튼을 누른 그 순간에 한 번 빈 소리를 내 둔다. 아이폰은 이렇게 해야 나중에 자동으로 읽을 수 있다. */
+export function primeSpeech() {
+  const synth = globalThis.speechSynthesis;
+  if (primed || !synth || !globalThis.SpeechSynthesisUtterance) return;
+  primed = true;
+  try {
+    synth.speak(new globalThis.SpeechSynthesisUtterance(""));
+  } catch {
+    // 길을 터 두지 못해도 듣기 버튼은 그대로 쓸 수 있다.
+  }
+}
+
+/** 글을 한국어 목소리로 읽는다. 긴 글이 중간에 끊기지 않게 문장마다 나눠 읽는다. 읽을 수 없으면 false. */
 export function speak(text, { rate = DEFAULT_SETTINGS.rate, onStart, onEnd } = {}) {
   const synth = globalThis.speechSynthesis;
   const spoken = textForSpeech(text);
   if (!synth || !globalThis.SpeechSynthesisUtterance || !koreanVoice || !spoken) return false;
   synth.cancel();
-  const utterance = new globalThis.SpeechSynthesisUtterance(spoken);
-  utterance.voice = koreanVoice;
-  utterance.lang = koreanVoice.lang || "ko-KR";
-  utterance.rate = rate;
-  utterance.onstart = () => onStart?.();
-  utterance.onend = () => onEnd?.();
-  utterance.onerror = () => onEnd?.();
-  synth.speak(utterance);
+  const sentences = spoken.match(/[^.!?。]+[.!?。]*/g)?.map((part) => part.trim()).filter(Boolean) || [spoken];
+  const batch = sentences.map((sentence) => new globalThis.SpeechSynthesisUtterance(sentence));
+  queue = batch;
+  let finished = false;
+  const end = () => {
+    if (finished) return;
+    finished = true;
+    if (queue === batch) queue = [];
+    onEnd?.();
+  };
+  batch.forEach((utterance, index) => {
+    utterance.voice = koreanVoice;
+    utterance.lang = koreanVoice.lang || "ko-KR";
+    utterance.rate = rate;
+    if (index === 0) utterance.onstart = () => onStart?.();
+    utterance.onend = index === batch.length - 1 ? end : () => {};
+    utterance.onerror = end;
+    synth.speak(utterance);
+  });
   return true;
 }
 

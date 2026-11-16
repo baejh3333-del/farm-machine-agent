@@ -10,6 +10,12 @@ import {
   resampleToMono,
   saveVoiceSettings,
   textForSpeech,
+  actionSummaryForSpeech,
+  prepareSpeech,
+  primeSpeech,
+  speak,
+  startBrowserRecognition,
+  startRecording,
 } from "../src/ai/voice.js";
 import { parseWav } from "../server/voice.js";
 
@@ -85,4 +91,121 @@ test("음성 설정은 기본값(말했을 때만 자동 재생, 조금 느리�
   const throwing = { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } };
   assert.deepEqual(loadVoiceSettings(throwing), { autoplay: "voice", rate: 0.9 });
   assert.doesNotThrow(() => saveVoiceSettings({ autoplay: "off", rate: 1 }, throwing));
+});
+
+test("농농 승인 카드 요약: 날짜·요일·금액을 풀어 읽고, 말로는 승인되지 않는다고 알려 준다", () => {
+  const spoken = actionSummaryForSpeech({
+    title: "대여 예약 확인",
+    rows: [
+      ["기계", "대동 트랙터 RX"],
+      ["기간", "11월 17일(화) ~ 11월 18일(수) · 2일"],
+      ["내야 하는 돈", "180,000원 (하루 90,000원)"],
+    ],
+  });
+  assert.equal(
+    spoken,
+    "대여 예약 내용이에요. 기계, 대동 트랙터 RX. 기간, 11월 17일 화요일부터 11월 18일 수요일, 2일. 내야 하는 돈, 18만 원 (하루 9만 원). 내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.",
+  );
+  assert.equal(textForSpeech("(3일) 11월 1일(일)"), "(3일) 11월 1일 일요일");
+});
+
+// ───────────── 브라우저 기능을 흉내 내어 녹음·인식·읽기의 실패 상황을 확인한다 ─────────────
+
+function withGlobals(values, fn) {
+  const saved = {};
+  for (const [key, value] of Object.entries(values)) {
+    saved[key] = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  }
+  const restore = () => {
+    for (const [key, desc] of Object.entries(saved)) {
+      if (desc) Object.defineProperty(globalThis, key, desc);
+      else delete globalThis[key];
+    }
+  };
+  return Promise.resolve().then(fn).finally(restore);
+}
+
+test("녹음기를 만들 수 없으면 마이크를 바로 끄고 알기 쉬운 오류를 낸다", async () => {
+  let stoppedTracks = 0;
+  const stream = { getTracks: () => [{ stop: () => { stoppedTracks += 1; } }] };
+  await withGlobals({
+    navigator: { mediaDevices: { getUserMedia: async () => stream } },
+    MediaRecorder: class { constructor() { throw new Error("no codec"); } },
+  }, async () => {
+    await assert.rejects(startRecording({ maxSeconds: 30 }), (error) => error.code === "unsupported");
+  });
+  assert.equal(stoppedTracks, 1);
+});
+
+class FakeRecognition {
+  static instances = [];
+  constructor() { FakeRecognition.instances.push(this); this.starts = 0; }
+  start() { this.starts += 1; }
+  stop() { setTimeout(() => this.onend?.(), 0); }
+  abort() { setTimeout(() => this.onend?.(), 0); }
+  say(text, isFinal = true) {
+    this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal })] });
+  }
+}
+
+test("브라우저 인식: 말하다 쉬어서 끊겨도 다시 듣고, 앞에서 들은 말은 지키다", async () => {
+  FakeRecognition.instances = [];
+  await withGlobals({ SpeechRecognition: FakeRecognition }, async () => {
+    const session = startBrowserRecognition({ maxSeconds: 30 });
+    const rec = FakeRecognition.instances[0];
+    rec.say("관리기 ");
+    rec.onend(); // 잠깐 쉬어서 브라우저가 스스로 끝냄
+    assert.equal(rec.starts, 2);
+    rec.say("빌릴라꼬예");
+    assert.equal(await session.stop(), "관리기 빌릴라꼬예");
+  });
+});
+
+test("브라우저 인식: 마이크가 막히면 기다리지 않고 바로 알린다", async () => {
+  FakeRecognition.instances = [];
+  await withGlobals({ SpeechRecognition: FakeRecognition }, async () => {
+    const failures = [];
+    startBrowserRecognition({ maxSeconds: 30, onFailure: (error) => failures.push(error.code) });
+    const rec = FakeRecognition.instances[0];
+    rec.onerror({ error: "not-allowed" });
+    rec.onend();
+    assert.deepEqual(failures, ["denied"]);
+    assert.equal(rec.starts, 1);
+  });
+});
+
+function fakeSynth() {
+  const spoken = [];
+  return {
+    spoken,
+    getVoices: () => [{ lang: "ko-KR", name: "Yuna" }],
+    cancel() {},
+    speak(utterance) { spoken.push(utterance); },
+  };
+}
+
+test("읽기: 긴 글은 문장마다 나눠 읽고, 마지막 문장이 끝나야 끝났다고 알린다", async () => {
+  const synth = fakeSynth();
+  await withGlobals({ speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } } }, async () => {
+    await prepareSpeech();
+    let ended = 0;
+    assert.equal(speak("트랙터를 찾았어요. 하루 90,000원이에요! 예약할까요?", { onEnd: () => { ended += 1; } }), true);
+    assert.deepEqual(synth.spoken.map((u) => u.text), ["트랙터를 찾았어요.", "하루 9만 원이에요!", "예약할까요?"]);
+    synth.spoken[0].onend();
+    synth.spoken[1].onend();
+    assert.equal(ended, 0);
+    synth.spoken[2].onend();
+    assert.equal(ended, 1);
+  });
+});
+
+test("읽기 준비: 사용자가 누를 때 한 번만 빈 소리로 길을 터 둔다(아이폰 자동 읽기)", async () => {
+  const synth = fakeSynth();
+  await withGlobals({ speechSynthesis: synth, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } } }, async () => {
+    primeSpeech();
+    primeSpeech();
+    assert.equal(synth.spoken.length, 1);
+    assert.equal(synth.spoken[0].text, "");
+  });
 });

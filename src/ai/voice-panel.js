@@ -7,7 +7,7 @@ import {
   loadVoiceSettings,
   MAX_RECORD_SECONDS,
   prepareSpeech,
-  rentalSummaryForSpeech,
+  primeSpeech,
   saveVoiceSettings,
   speak,
   startBrowserRecognition,
@@ -18,6 +18,7 @@ import {
 
 const MIC_LABELS = {
   idle: ["🎤", "말하기", "말로 질문하기"],
+  starting: ["⏳", "준비 중", "마이크 준비 중"],
   recording: ["⏹", "다 말했어요", "녹음 끝내기"],
   processing: ["⏳", "바꾸는 중", "말씀을 글자로 바꾸는 중"],
 };
@@ -33,6 +34,7 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
   let session = null;
   let voiceOrigin = false;
   let speakingButton = null;
+  let discardPending = false;
 
   const say = (text) => { status.textContent = text; };
 
@@ -44,7 +46,7 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
     mic.setAttribute("aria-label", aria);
     mic.setAttribute("aria-pressed", String(next === "recording"));
     mic.dataset.state = next;
-    mic.disabled = next === "processing";
+    mic.disabled = next === "processing" || next === "starting";
   }
 
   async function detectMode() {
@@ -72,15 +74,24 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
   function friendly(error) {
     if (error?.code === "denied" || error?.code === "no-mic" || error?.code === "unsupported" || error?.code === "network" || error?.code === "decode") return error.message;
     if (error?.status === 429) return "음성 입력을 너무 자주 쓰셨어요. 잠시 뒤에 다시 하시거나 글로 적어 주세요.";
-    if (error?.status && error.message) return error.message;
+    if (error?.status && error.message) return /다시/.test(error.message) ? error.message : `${error.message} 다시 말씀하시거나 글로 적어 주세요.`;
     if (error?.name === "AbortError" || error?.name === "TimeoutError") return "시간이 너무 걸려요. 다시 말씀하시거나 글로 적어 주세요.";
     return "인터넷 연결이 불안정해요. 다시 말씀하시거나 글로 적어 주세요.";
   }
 
   async function begin() {
-    if (isBusy()) return;
+    if (state !== "idle") return;
+    if (isBusy()) {
+      say("농농이가 답하는 중이에요. 답이 나온 뒤에 다시 눌러 주세요.");
+      return;
+    }
+    // 두 번 눌러도 마이크가 하나만 켜지도록, 기다리기 전에 상태부터 바꾼다.
+    setState("starting");
     stopSpeaking();
+    primeSpeech();
+    await detected; // 서버 인식을 쓸 수 있는지 확인이 끝날 때까지 기다린다.
     if (mode === "none") {
+      setState("idle");
       say("이 기기에서는 음성 입력을 쓸 수 없어요. 아래 칸에 글로 적어 주세요.");
       input.focus();
       return;
@@ -99,6 +110,13 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
           maxSeconds: MAX_RECORD_SECONDS,
           onInterim: (text) => { if (text) say(`들리는 말: ${text}`); },
           onLimit,
+          onFailure: (error) => {
+            if (state !== "recording" || !session) return;
+            session.cancel();
+            session = null;
+            setState("idle");
+            say(error.message);
+          },
         });
       }
     } catch (error) {
@@ -124,23 +142,34 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
         try {
           text = (await apiFetch("/api/voice", { method: "POST", json: { audio: base64 }, timeoutMs: 25000 }))?.text || "";
         } catch (error) {
-          // 서버 인식이 꺼져 있으면 다음부터 브라우저 인식으로 바꾼다.
-          if (error?.code === "VOICE_UNAVAILABLE") mode = support.recognize ? "browser" : "none";
+          // 서버 인식이 꺼져 있거나 서버 쪽 문제면 다음부터 브라우저 인식으로 바꾼다.
+          if ((error?.code === "VOICE_UNAVAILABLE" || error?.status >= 500) && support.recognize) {
+            mode = "browser";
+            mic.dataset.mode = mode;
+            throw Object.assign(new Error("지금은 서버에서 말을 알아듣지 못해요. 마이크 버튼을 다시 눌러 말씀해 주세요."), { status: error.status });
+          }
           throw error;
         }
       } else {
         text = await current.stop();
       }
+      if (discardPending) return;
       if (text) fillInput(text);
       else say("잘 못 들었어요. 버튼을 누르고 다시 한 번 천천히 말씀해 주세요.");
     } catch (error) {
-      say(friendly(error));
+      if (!discardPending) say(friendly(error));
     } finally {
+      discardPending = false;
       setState("idle");
     }
   }
 
   function cancel() {
+    if (state === "processing") {
+      // 글자로 바꾸는 중에 글로 보내면, 늦게 온 결과가 입력칸에 끼어들지 않게 버린다.
+      discardPending = true;
+      return;
+    }
     if (state !== "recording" || !session) return;
     session.cancel();
     session = null;
@@ -205,9 +234,8 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
     play(text, listen);
   }
 
-  /** 대여 승인 카드에 음성 안내를 더한다. 말로 한 요청이면 내용 확인을 한 번 더 당부한다. */
-  function decorateConfirmation(card, action, inputMode) {
-    const summary = rentalSummaryForSpeech(action);
+  /** 승인 카드에 음성 안내를 더한다. 말로 한 요청이면 내용 확인을 한 번 더 당부한다. summary는 읽어 줄 요약이다. */
+  function decorateConfirmation(card, summary, inputMode) {
     if (inputMode === "voice") {
       const warn = document.createElement("div");
       warn.className = "ai-rec-notice ai-voice-warning";
@@ -224,8 +252,14 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
     return summary;
   }
 
+  /** 말로 이어 가던 대화에서 선택지를 누르면 그 차례도 음성 대화로 본다. */
+  function keepVoiceMode() {
+    voiceOrigin = true;
+  }
+
   /** 다음 전송이 음성에서 왔는지 알려 주고 표시를 지운다. */
   function consumeInputMode() {
+    primeSpeech(); // 전송 버튼을 누른 순간이라 자동 읽기 길을 터 둘 수 있다.
     const result = voiceOrigin ? "voice" : "text";
     voiceOrigin = false;
     say("");
@@ -255,10 +289,11 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
   input.addEventListener("input", () => { if (!input.value.trim()) voiceOrigin = false; });
   bindSettings();
   setState("idle");
+  const detected = detectMode().catch(() => {});
   const ready = Promise.all([
-    detectMode(),
+    detected,
     prepareSpeech().then(() => { $("aiVoiceSettings").hidden = !canSpeak(); }),
   ]).catch(() => {});
 
-  return { ready, attachSpeech, autoSpeak, decorateConfirmation, consumeInputMode, stopSpeaking, cancel, isRecording: () => state !== "idle" };
+  return { ready, attachSpeech, autoSpeak, decorateConfirmation, keepVoiceMode, consumeInputMode, stopSpeaking, cancel, isRecording: () => state !== "idle" };
 }

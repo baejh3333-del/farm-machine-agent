@@ -10,6 +10,7 @@ import sharp from "sharp";
 import accountHandler from "../api/account.js";
 import agentHandler from "../api/agent.js";
 import voiceHandler from "../api/voice.js";
+import nongnongHandler from "../api/nongnong.js";
 import conversationsHandler from "../api/conversations.js";
 import listingsHandler from "../api/listings.js";
 import meHandler from "../api/me.js";
@@ -122,6 +123,7 @@ before(async () => {
     ["/api/recommend", recommendHandler],
     ["/api/agent", agentHandler],
     ["/api/voice", voiceHandler],
+    ["/api/nongnong", nongnongHandler],
     ["/api/me", meHandler],
     ["/api/requests", requestsHandler],
     ["/api/conversations", conversationsHandler],
@@ -1029,4 +1031,53 @@ test("[PGlite 로컬 엔진] 9. 농농이 음성 인식: 기능 확인, WAV 검�
     statuses.push((await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: "not-base64-audio" } })).status);
   }
   assert.ok(statuses.includes(429), `호출 제한: ${statuses}`);
+});
+
+test("[PGlite 로컬 엔진] 10. 농농 음성 승인 카드: 화면 승인 버튼으로만, 쓰기 작업만, 로그인 사용자로 처리", async () => {
+  const today = kstToday();
+  const start = shiftDate(today, 20);
+  const end = shiftDate(today, 21);
+  const listingId = randomUUID();
+  const created = await createListing(userA.user, {
+    id: listingId,
+    type: "rent",
+    modelId: "asia-amc900",
+    title: "음성 승인 테스트 관리기",
+    region: "청기면",
+    cropIds: ["pepper"],
+    operations: ["ridge"],
+    price: 45000,
+    areaMin: 200,
+    areaMax: 1000,
+    condition: "good",
+    inspectedAt: today,
+  }, { pool });
+  assert.equal(created.status, 201);
+  const action = { tool: "create_rental_request", args: { listingId, start, end } };
+
+  // 읽기 도구나 이상한 형식은 승인 경로로 처리하지 않는다
+  const notWrite = await apiReq(baseUrl, "/api/nongnong", { method: "POST", cookie: userB.cookie, json: { confirmAction: { tool: "search_listings", args: {} } } });
+  assert.equal(notWrite.status, 400);
+  const badArgs = await apiReq(baseUrl, "/api/nongnong", { method: "POST", cookie: userB.cookie, json: { confirmAction: { tool: "create_rental_request", args: "x" } } });
+  assert.equal(badArgs.status, 400);
+
+  // 로그인하지 않으면 처리하지 않고 이유를 알려 준다
+  const anonymous = await apiReq(baseUrl, "/api/nongnong", { method: "POST", json: { confirmAction: action } });
+  assert.equal(anonymous.status, 200);
+  assert.equal(anonymous.body.failed, true);
+  assert.match(anonymous.body.reply, /로그인/);
+
+  // 승인 버튼을 누르면 모델 없이 그대로 대여 요청을 만든다(AI 키가 없어도)
+  const prevKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const done = await apiReq(baseUrl, "/api/nongnong", { method: "POST", cookie: userB.cookie, json: { confirmAction: action } });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.equal(done.body.reservation.kind, "rental");
+    assert.match(done.body.reply, /대여 요청을 보냈어요/);
+  } finally {
+    if (prevKey !== undefined) process.env.OPENAI_API_KEY = prevKey;
+  }
+  const { outgoing } = await listRequestsForUser(userB.user.id, { pool });
+  assert.ok(outgoing.some((item) => item.listingId === listingId && item.start === start));
 });

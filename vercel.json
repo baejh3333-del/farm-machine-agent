@@ -4,11 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/agent.js": {
-      "maxDuration": 30
-    },
-    "api/voice.js": {
-      "maxDuration": 30
-    }
+    "api/agent.js": { "maxDuration": 30 },
+    "api/nongnong.js": { "maxDuration": 60 },
+    "api/voice.js": { "maxDuration": 30 }
   }
 }

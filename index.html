@@ -520,12 +520,20 @@
         <button type="button" data-prompt="배추밭에 비닐 씌우는 기계를 빌리고 싶어요.">배추밭 비닐 씌우기</button>
         <button type="button" data-prompt="벼를 수확할 기계를 사고 싶어요.">벼 수확기 구매</button>
         <button type="button" data-prompt="감자 캐는 기계를 빌리고 싶어요.">감자 캐는 기계 대여</button>
+        <button type="button" data-prompt="제 트랙터를 팔고 싶어요.">내 기계 팔기</button>
       </div>
     </div>
 
+    <div class="ai-photo-preview" id="aiPhotoPreview" hidden>
+      <img id="aiPhotoThumb" alt="올릴 기계 사진 미리보기" />
+      <span>이 사진을 함께 보내요</span>
+      <button type="button" id="aiPhotoRemove" aria-label="사진 빼기">빼기</button>
+    </div>
     <form id="aiForm" class="ai-form">
+      <input type="file" id="aiPhotoInput" accept="image/jpeg,image/png,image/webp" hidden />
+      <button type="button" class="ai-photo-btn" id="aiPhotoButton" aria-label="기계 사진 올리기" title="기계 사진 올리기">사진</button>
       <button type="button" class="button button-secondary ai-mic-btn" id="aiMicButton" aria-label="말로 질문하기" aria-pressed="false" aria-describedby="aiVoiceStatus"><span class="ai-mic-icon" aria-hidden="true">🎤</span><span class="ai-mic-label">말하기</span></button>
-      <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" required />
+      <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" />
       <button type="submit" class="button button-primary ai-send-btn" aria-label="질문 보내기">전송</button>
     </form>
     <div class="ai-voice-bar">

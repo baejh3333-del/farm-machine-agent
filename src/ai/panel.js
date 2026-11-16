@@ -2,7 +2,7 @@ import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
 import { recommendationGuide, selectMatchingListings } from "../data/recommendation.js";
 import { $, areaLabel, escapeHtml, money, toast } from "../core/utils.js";
 import { conversationTurn, unrelatedTurn } from "./conversation.js";
-import { askRecommendation } from "./recommend-agent.js";
+import { askAgent, askRecommendation, executeAgentAction } from "./recommend-agent.js";
 
 export function createAiPanel({
   state,
@@ -13,9 +13,15 @@ export function createAiPanel({
   loadCatalog,
   openDetail,
   renderListings,
+  refreshAuthenticatedData,
+  savePendingIntentAndRedirectLogin,
 }) {
   let conversation;
   let recommendationPending = false;
+  // Claude 에이전트 대화 기록. 서버에 Claude 키가 없으면 agentAvailable=false로 바꾸고 규칙 기반 상담을 쓴다.
+  let agentHistory = [];
+  let agentAvailable = null;
+  const MAX_AGENT_HISTORY = 12;
   const aiDefaultPlaceholder = $("aiInput").placeholder;
   const aiInputExamples = {
     crop: "예: 감자",
@@ -90,6 +96,132 @@ export function createAiPanel({
     scrollAiToEnd();
   }
 
+
+  function rememberAgentTurn(...entries) {
+    agentHistory = [...agentHistory, ...entries.filter((entry) => entry.content)].slice(-MAX_AGENT_HISTORY);
+  }
+
+  function appendChoices(bubble, choiceList) {
+    const choices = document.createElement("div");
+    choices.className = "prompt-suggestions ai-follow-up";
+    for (const choice of choiceList) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = choice;
+      button.addEventListener("click", () => {
+        if (recommendationPending || !choices.isConnected) return;
+        $("aiInput").value = choice;
+        $("aiForm").requestSubmit();
+      });
+      choices.append(button);
+    }
+    bubble.append(choices);
+    scrollAiToEnd();
+  }
+
+  // 흐름도의 "실행 내용을 보여주고 확인 → 사용자 승인 → 서비스 API 호출 → 실제 상태 확인 → 결과 안내" 단계
+  function appendConfirmation(bubble, action) {
+    const requestId = crypto.randomUUID();
+    const card = document.createElement("div");
+    card.className = "ai-confirm";
+    const title = document.createElement("strong");
+    title.className = "ai-confirm-title";
+    title.textContent = "대여 요청 확인";
+    card.append(title);
+    const rows = [
+      ["매물", action.title],
+      ["지역", action.region],
+      ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
+      ["대여료", `${money(action.dailyPrice)}/일 × ${action.days}일 = ${money(action.totalPrice)}`],
+      ["메모", action.note],
+    ];
+    for (const [label, value] of rows) {
+      if (!value) continue;
+      const row = document.createElement("div");
+      row.className = "ai-rec-row";
+      const labelNode = document.createElement("strong");
+      labelNode.textContent = `${label}:`;
+      row.append(labelNode, document.createTextNode(` ${value}`));
+      card.append(row);
+    }
+    const notice = document.createElement("div");
+    notice.className = "ai-rec-notice";
+    notice.textContent = "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+    const actions = document.createElement("div");
+    actions.className = "ai-confirm-actions";
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.className = "button button-primary";
+    approve.textContent = "승인하고 요청 보내기";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "button button-secondary";
+    cancel.textContent = "취소";
+    actions.append(approve, cancel);
+    card.append(notice, actions);
+    bubble.append(card);
+    scrollAiToEnd();
+
+    const setBusy = (busy) => {
+      approve.disabled = busy;
+      cancel.disabled = busy;
+    };
+    const finish = (text, state) => {
+      card.dataset.state = state;
+      actions.remove();
+      appendAiMessage(text, "assistant");
+      rememberAgentTurn({ role: "assistant", content: text });
+    };
+
+    cancel.addEventListener("click", () => {
+      rememberAgentTurn({ role: "user", content: "대여 요청은 보내지 않을게요." });
+      finish("알겠어요. 대여 요청은 보내지 않았어요. 다른 날짜나 매물이 필요하면 말씀해 주세요.", "cancelled");
+    });
+
+    approve.addEventListener("click", async () => {
+      setBusy(true);
+      approve.textContent = "요청을 보내는 중…";
+      rememberAgentTurn({ role: "user", content: "승인합니다. 대여 요청을 보내 주세요." });
+      try {
+        const result = await executeAgentAction(action, requestId);
+        if (result?.outcome === "completed") finish(`✅ ${result.message}`, "completed");
+        else if (result?.outcome === "partial") finish(`⚠️ ${result.message}`, "partial");
+        else finish(`❌ 대여 요청을 보내지 못했어요. ${result?.message || ""}`.trim(), "failed");
+        if (result?.outcome === "completed" || result?.outcome === "partial") {
+          await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+        }
+      } catch (error) {
+        if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") {
+          setBusy(false);
+          approve.textContent = "승인하고 요청 보내기";
+          return;
+        }
+        if (error?.status === 401) {
+          finish("🔒 대여 요청은 로그인한 뒤 보낼 수 있어요. 로그인하면 신청서에서 이어서 보낼 수 있어요.", "login");
+          savePendingIntentAndRedirectLogin?.(
+            { type: "rental", listingId: action.listingId, draftValues: { start: action.start, end: action.end, note: action.note || "", requestId } },
+            "로그인 후 대여 요청을 이어서 보낼 수 있어요.",
+          );
+          return;
+        }
+        // 결과를 받지 못하면 같은 요청 ID로 다시 시도할 수 있게 둔다(중복 요청은 서버가 막는다).
+        setBusy(false);
+        approve.textContent = "다시 시도";
+        appendAiMessage("요청 결과를 확인하지 못했어요. ‘다시 시도’를 누르거나 거래 화면에서 요청이 보내졌는지 확인해 주세요.", "assistant");
+      }
+    });
+  }
+
+  function renderAgentResult(message, result) {
+    const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
+    rememberAgentTurn({ role: "user", content: message }, { role: "assistant", content: reply });
+    const listingIds = (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
+    const bubble = appendAiMessage(reply, "assistant", listingIds);
+    if (Array.isArray(result.choices) && result.choices.length) appendChoices(bubble, result.choices.slice(0, 5));
+    if (result.pendingAction?.type === "rental_request") appendConfirmation(bubble, result.pendingAction);
+    $("aiModeLabel").textContent = "Claude AI 상담 · 등록 매물 기반";
+  }
+
   async function sendAiQuestion(event) {
     event.preventDefault();
     const message = $("aiInput").value.trim();
@@ -107,6 +239,25 @@ export function createAiPanel({
     let pending;
 
     try {
+      const resetRequested = /^(?:새 상담(?: 시작)?|처음부터 다시)/.test(message);
+      if (resetRequested) agentHistory = [];
+      if (agentAvailable !== false && !resetRequested) {
+        pending = appendAiMessage("농농이가 생각하고 있어요…", "assistant");
+        if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
+        const agentResult = await askAgent(message, { history: agentHistory, region: state.region }).catch((error) => {
+          console.warn("농농이 에이전트 응답 실패, 규칙 기반 상담으로 전환", error?.status || error?.name);
+          return null;
+        });
+        pending.remove();
+        pending = undefined;
+        if (agentResult?.mode === "unavailable") {
+          agentAvailable = false;
+        } else if (agentResult?.mode === "agent") {
+          agentAvailable = true;
+          renderAgentResult(message, agentResult);
+          return;
+        }
+      }
       const filters = {
         transaction: state.transaction,
         region: state.region,

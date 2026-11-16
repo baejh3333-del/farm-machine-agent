@@ -68,3 +68,13 @@ test("보험은 빌려주는 사람과 빌리는 사람 모두에게 안내할 �
     assert.ok(product.whereToJoin.length >= 1 && product.checklist.length >= 1, product.id);
   }
 });
+
+test("[리뷰] 기계를 다시 움직이는 단계는 시동을 다시 건 뒤라고 밝히고, 배터리 단자 연결은 맡기지 않는다", () => {
+  const rerun = /속도를 낮|예열|돌려 보|돌려 새|돌려|시동이 걸리면/;
+  for (const guide of REPAIR_GUIDES) {
+    for (const step of guide.steps) {
+      if (rerun.test(step.text)) assert.match(step.text, /^\(다시 시동한 뒤\)/, `${guide.id}: ${step.text}`);
+      assert.doesNotMatch(step.text, /단자는 다시 연결/, `${guide.id}: ${step.text}`);
+    }
+  }
+});

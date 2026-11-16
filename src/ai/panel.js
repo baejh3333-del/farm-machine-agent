@@ -357,7 +357,11 @@ export function createAiPanel({
     register.type = "button";
     register.className = "button button-primary";
     register.textContent = "📝 이 내용으로 매물 등록하기";
-    register.addEventListener("click", () => openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl)));
+    register.addEventListener("click", () => {
+      // 등록 화면으로 넘긴 초안은 다시 쓰지 않는다(같은 매물 ID로 두 번 등록하면 409).
+      if (savedDraft?.listingId === draft.listingId) savedDraft = null;
+      openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl));
+    });
     actions.append(copy, register);
     card.append(name, price, desc, notice, actions);
     bubble.append(card);

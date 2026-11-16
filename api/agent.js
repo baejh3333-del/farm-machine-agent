@@ -36,8 +36,9 @@ export default handle(["POST"], async (request) => {
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const hasImage = typeof body.image === "string" && body.image.length > 0;
     if (message.length > 500 || (!message && !hasImage)) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
-    const image = hasImage ? await preparePhoto(body.image) : undefined;
+    // 호출 제한을 먼저 검사해 사진 디코딩 비용도 횟수에 넣는다.
     await enforceRateLimit(request, "recommend");
+    const image = hasImage ? await preparePhoto(body.image) : undefined;
     const user = await currentUser(request).catch(() => null);
     const result = await runAgentTurn(message, {
       history: Array.isArray(body.history) ? body.history : [],

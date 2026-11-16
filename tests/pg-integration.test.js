@@ -929,6 +929,24 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
     // 사진도 질문도 없으면 400
     const empty = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "" } });
     assert.equal(empty.status, 400);
+
+    // [리뷰] 사진 디코딩보다 호출 제한을 먼저 검사한다(디코딩 비용을 횟수에 넣음)
+    const prevLimit = { ENABLE_RATE_LIMIT: process.env.ENABLE_RATE_LIMIT, RECOMMEND_LIMIT_PER_MINUTE: process.env.RECOMMEND_LIMIT_PER_MINUTE };
+    process.env.ENABLE_RATE_LIMIT = "1";
+    process.env.RECOMMEND_LIMIT_PER_MINUTE = "1";
+    try {
+      const statuses = [];
+      for (let i = 0; i < 4; i += 1) {
+        const res = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "x", image: "data:image/heic;base64,AAAAGGZ0eXBoZWlj" } });
+        statuses.push(res.status);
+      }
+      assert.ok(statuses.includes(429), `호출 제한이 사진 검사보다 먼저여야 함: ${statuses}`);
+    } finally {
+      for (const [k, v] of Object.entries(prevLimit)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   } finally {
     for (const [k, v] of Object.entries(prevKeys)) if (v !== undefined) process.env[k] = v;
   }

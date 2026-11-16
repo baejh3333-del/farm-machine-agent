@@ -319,7 +319,7 @@ function asksInsurance(message, history) {
 export async function runAgentTurn(
   message,
   { history = [], region, image, user, savedDraft } = {},
-  { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices } = {},
+  { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices, now = Date.now } = {},
 ) {
   if (!llmEnabled()) return { mode: "unavailable" };
   const text = String(message || "").trim();
@@ -341,7 +341,10 @@ export async function runAgentTurn(
   const addSources = (items) => {
     for (const item of items || []) if (item?.url && !sources.some((source) => source.url === item.url)) sources.push({ title: item.title, url: item.url });
   };
-  let draft = cleanSavedDraft(savedDraft);
+  // 새 사진이 온 턴은 이전 초안을 쓰지 않는다(다른 기계 사진이 잘못 붙지 않게).
+  let draft = image ? null : cleanSavedDraft(savedDraft);
+  // 턴 전체 제한 시간: 화면이 기다리는 시간(사진 45초, 글 30초)보다 짧게 잡는다.
+  const deadline = now() + (image ? 40000 : 25000);
   const texts = [];
   const finish = (reply, extra = {}) => {
     const result = { mode: "agent", reply, listingIds: out.listingIds, ...extra };
@@ -351,7 +354,9 @@ export async function runAgentTurn(
   };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const data = await call({ system, messages, tools, maxTokens: 1200, timeoutMs: image ? 25000 : 12000 });
+    const remaining = deadline - now();
+    if (remaining < 3000) break;
+    const data = await call({ system, messages, tools, maxTokens: 1200, timeoutMs: Math.min(image ? 25000 : 12000, remaining) });
     if (!data) return image ? { error: "PHOTO_UNAVAILABLE" } : null;
     addSources(data.sources);
     const reply = textOf(data);
@@ -359,7 +364,12 @@ export async function runAgentTurn(
     const toolUses = data.content.filter((block) => block.type === "tool_use");
     if (!toolUses.length) break;
 
-    messages.push({ role: "assistant", content: data.content.filter((block) => block.type === "text" || block.type === "tool_use") });
+    messages.push({
+      role: "assistant",
+      content: data.content
+        .filter((block) => block.type === "text" || block.type === "tool_use")
+        .map((block) => (block.type === "text" ? { type: "text", text: block.text } : { type: "tool_use", id: block.id, name: block.name, input: block.input })),
+    });
     const results = [];
     let choices = null;
     let pendingAction = null;
@@ -444,6 +454,13 @@ export async function runAgentTurn(
     }
     if (choices) {
       return finish([texts.at(-1), choices.question].filter(Boolean).join("\n\n"), { choices: choices.choices });
+    }
+    // 사진은 첫 호출에만 보내고, 다음 라운드에는 인식 요약 글로 바꿔 빠르고 가볍게 한다.
+    for (const item of messages) {
+      if (!Array.isArray(item.content)) continue;
+      item.content = item.content.map((part) => (part.type === "image"
+        ? { type: "text", text: `(사진은 이미 확인했어요. 사진 인식: ${out.photoSummary ? JSON.stringify(out.photoSummary) : "기록 없음"})` }
+        : part));
     }
     messages.push({ role: "user", content: results });
   }

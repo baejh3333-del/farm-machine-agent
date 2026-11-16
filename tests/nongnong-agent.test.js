@@ -366,7 +366,7 @@ test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 �
   assert.ok(r1.listingDraft.price > 0);
 
   const second = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "고쳤어요." }] }]);
-  const r2 = await runAgentTurn("제목만 바꿔 줘", { image: PHOTO, user: USER, savedDraft: { listingId: r1.listingDraft.listingId, photoKey: r1.listingDraft.photoKey, photoUrl: r1.listingDraft.photoUrl } }, { listings: LISTINGS, call: second.call, today: TODAY, saveDraft });
+  const r2 = await runAgentTurn("제목만 바꿔 줘", { user: USER, savedDraft: { listingId: r1.listingDraft.listingId, photoKey: r1.listingDraft.photoKey, photoUrl: r1.listingDraft.photoUrl } }, { listings: LISTINGS, call: second.call, today: TODAY, saveDraft });
   assert.equal(saves, 1, "같은 대화에서 사진을 다시 저장하지 않는다");
   assert.equal(r2.listingDraft.photoKey, r1.listingDraft.photoKey);
 });
@@ -448,4 +448,64 @@ test("웹 검색 도구는 공급자별 형식으로 바뀌고 결과 출처를 
   const a = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
   assert.deepEqual(aBody.tools[0], { type: "web_search_20250305", name: "web_search", max_uses: 3 });
   assert.deepEqual(a.sources, [{ title: "농사로", url: "https://www.nongsaro.go.kr/y" }]);
+});
+
+test("[리뷰] 새 사진을 보내면 이전 초안을 쓰지 않고 새로 저장한다", async (t) => {
+  photoEnv(t);
+  let saves = 0;
+  const saveDraft = async () => {
+    saves += 1;
+    return { listingId: "33333333-3333-4333-8333-333333333333", photoKey: "listings/33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444.webp", photoUrl: "/api/photos?key=new" };
+  };
+  const old = { listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", photoUrl: "/api/photos?key=old" };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "관리기", description: "소개", machineType: "cultivator" } }] },
+    { content: [{ type: "text", text: "새 초안" }] },
+  ]);
+  const result = await runAgentTurn("이것도 빌려줄래요", { image: PHOTO, user: USER, savedDraft: old }, { listings: LISTINGS, call, today: TODAY, saveDraft });
+  assert.equal(saves, 1);
+  assert.equal(result.listingDraft.listingId, "33333333-3333-4333-8333-333333333333");
+});
+
+test("[리뷰] 사진은 첫 호출에만 보내고 다음 라운드에는 인식 요약 글로 바꾼다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "note_photo", input: { machineType: "cultivator", confidence: "high", observations: ["녹"] } }] },
+    { content: [{ type: "text", text: "관리기예요." }] },
+  ]);
+  await runAgentTurn("이거 뭐예요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  const hasImage = (request) => request.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "image"));
+  assert.equal(hasImage(calls[0]), true);
+  assert.equal(hasImage(calls[1]), false);
+  assert.match(JSON.stringify(calls[1].messages), /사진 인식/);
+});
+
+test("[리뷰] 턴 전체 제한 시간을 넘기면 더 호출하지 않고 끝내며, 호출마다 남은 시간만 준다", async (t) => {
+  photoEnv(t);
+  let clock = 0;
+  const timeouts = [];
+  const call = async (request) => {
+    timeouts.push(request.timeoutMs);
+    clock += 30000;
+    return { content: [{ type: "tool_use", id: `g${timeouts.length}`, name: "get_crop_guidance", input: { cropId: "potato" } }] };
+  };
+  const result = await runAgentTurn("감자", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY, now: () => clock });
+  assert.ok(timeouts.length <= 2, `호출 ${timeouts.length}회`);
+  assert.ok(timeouts.every((ms) => ms <= 40000));
+  assert.ok(timeouts[1] === undefined || timeouts[1] <= 10000);
+  assert.equal(result.mode, "agent");
+});
+
+test("[리뷰] 다음 라운드로 넘기는 글 블록에서 citations 같은 부가 필드를 뺀다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [
+      { type: "text", text: "찾아볼게요", citations: [{ type: "web_search_result_location", url: "https://x" }] },
+      { type: "tool_use", id: "g1", name: "get_crop_guidance", input: { cropId: "rice" } },
+    ] },
+    { content: [{ type: "text", text: "끝" }] },
+  ]);
+  await runAgentTurn("벼", {}, { listings: LISTINGS, call, today: TODAY });
+  const assistant = calls[1].messages.find((m) => m.role === "assistant" && Array.isArray(m.content));
+  assert.deepEqual(assistant.content[0], { type: "text", text: "찾아볼게요" });
 });

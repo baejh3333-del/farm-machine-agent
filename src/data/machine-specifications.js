@@ -82,6 +82,31 @@ export const MACHINE_SPECIFICATIONS = [
 
 export const SPEC_BY_ID = Object.fromEntries(MACHINE_SPECIFICATIONS.map((model) => [model.id, model]));
 
+const MACHINE_TYPE_DEFAULTS = {
+  cultivator: { cropIds: ["pepper", "cabbage", "potato"], operations: ["till", "ridge"], areaMin: 300, areaMax: 1500 },
+  tractor: { cropIds: ["pepper", "rice", "cabbage", "potato"], operations: ["till", "ridge", "level"], areaMin: 1000, areaMax: 10000 },
+  ridgeMulcher: { cropIds: ["pepper", "cabbage", "potato"], operations: ["ridge", "mulch"], areaMin: 300, areaMax: 1500 },
+  transplanter: { cropIds: ["pepper", "cabbage"], operations: ["transplant"], areaMin: 300, areaMax: 1500 },
+  ricePlanter: { cropIds: ["rice"], operations: ["ricePlant"], areaMin: 1000, areaMax: 10000 },
+  sprayer: { cropIds: ["pepper", "rice", "cabbage", "potato"], operations: ["spray"], areaMin: 300, areaMax: 2000 },
+  potatoPlanter: { cropIds: ["potato"], operations: ["seed"], areaMin: 1000, areaMax: 10000 },
+  combine: { cropIds: ["rice"], operations: ["riceHarvest"], areaMin: 1500, areaMax: 15000 },
+  potatoHarvester: { cropIds: ["potato"], operations: ["potatoHarvest"], areaMin: 1000, areaMax: 10000 },
+  carrier: { cropIds: ["pepper", "rice", "cabbage", "potato"], operations: ["transport"], areaMin: 300, areaMax: 5000 },
+};
+
+export function getSpecificationDefaults(specOrMachineType) {
+  const machineType = typeof specOrMachineType === "string" ? specOrMachineType : specOrMachineType?.machineType;
+  const fallback = { cropIds: ["pepper"], operations: ["till"], areaMin: 300, areaMax: 1500 };
+  const base = MACHINE_TYPE_DEFAULTS[machineType] || fallback;
+  return {
+    cropIds: [...base.cropIds],
+    operations: [...base.operations],
+    areaMin: base.areaMin,
+    areaMax: base.areaMax,
+  };
+}
+
 export function applyModelSpecification(listing, index = 0) {
   const models = MACHINE_SPECIFICATIONS.filter((model) => model.machineType === listing.machineType);
   const model = models[index % models.length];

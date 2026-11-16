@@ -105,10 +105,11 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
 
     await pageA.locator("#newListingButton").click();
     await pageA.locator("#listingEditorForm").waitFor({ state: "visible" });
+    await pageA.locator("#manualSpecFields").waitFor({ state: "visible" });
     await pageA.locator("#editModelId").selectOption("asia-amc900");
+    await pageA.locator("#modelSpecSummary").waitFor({ state: "visible" });
+    await pageA.locator("#manualSpecFields").waitFor({ state: "hidden" });
     await pageA.locator("#editTitle").fill(uniqueTitle);
-    await pageA.locator("#editCrop").selectOption("pepper");
-    await pageA.locator("#editOperation").selectOption("till");
     await pageA.locator("#editPrice").fill("65000");
     await pageA.locator("#editPhoto").setInputFiles(pngFixturePath);
     await pageA.locator("#editIncluded").fill("로터리, 두둑성형기 포함");
@@ -119,13 +120,17 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageA.locator("#formBackdrop").waitFor({ state: "hidden" });
     await pageA.locator(`#ownerListings:has-text("${uniqueTitle}")`).waitFor({ state: "visible" });
 
-    // Confirm uploaded WebP photo serves cleanly
+    // Confirm uploaded WebP photo and auto-populated specs serve cleanly
     const listingsRes = await pageA.evaluate(async () => {
       const r = await fetch("/api/listings");
       return r.json();
     });
     const createdListing = listingsRes.listings.find((l) => l.title === uniqueTitle);
     assert.ok(createdListing, "created listing must appear in GET /api/listings");
+    assert.equal(createdListing.brand, "아세아텍");
+    assert.equal(createdListing.machineType, "cultivator");
+    assert.deepEqual(createdListing.operations, ["till", "ridge"]);
+    assert.ok(createdListing.cropIds.includes("pepper"));
     assert.ok(createdListing.photoUrl?.startsWith("/api/photos?key="), "photoUrl must point to /api/photos");
 
     // 2. Guest B searches, favorites, runs AI recommendation, adds garage machine, triggers login resume on rental request

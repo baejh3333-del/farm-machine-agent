@@ -1,5 +1,5 @@
 import { CROPS, OPERATIONS, MACHINE_TYPES, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID } from "../data/farm-machines.js";
-import { MACHINE_SPECIFICATIONS, SPEC_BY_ID } from "../data/machine-specifications.js";
+import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, getSpecificationDefaults } from "../data/machine-specifications.js";
 import { available } from "../data/recommendation.js";
 import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictureIcon, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
@@ -599,30 +599,33 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
           </select>
         </label>
       </div>
-      <div class="form-row-2">
-        <label>농기계 종류
-          <select id="editMachine">${MACHINE_TYPES.map((m) => `<option value="${escapeHtml(m.id)}" ${initialMachineType === m.id ? "selected" : ""}>${escapeHtml(m.label)}</option>`).join("")}</select>
-        </label>
-        <label>제조사
-          <input id="editBrand" maxlength="40" required value="${escapeHtml(initialBrand)}">
-        </label>
+      <div id="modelSpecSummary" class="model-spec-summary" hidden aria-live="polite"></div>
+      <div id="manualSpecFields" class="manual-spec-fields">
+        <div class="form-row-2">
+          <label>농기계 종류
+            <select id="editMachine">${MACHINE_TYPES.map((m) => `<option value="${escapeHtml(m.id)}" ${initialMachineType === m.id ? "selected" : ""}>${escapeHtml(m.label)}</option>`).join("")}</select>
+          </label>
+          <label>제조사
+            <input id="editBrand" maxlength="40" required value="${escapeHtml(initialBrand)}">
+          </label>
+        </div>
+        <div class="form-row-2">
+          <label>추천 작물<select id="editCrop">${CROPS.map((c) => `<option value="${escapeHtml(c.id)}" ${initialCrop === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select></label>
+          <label>세부 작업<select id="editOperation">${OPERATIONS.map((o) => `<option value="${escapeHtml(o.id)}" ${initialOp === o.id ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}</select></label>
+        </div>
+        <div class="form-row-2">
+          <label>최소 권장 면적(㎡)<input id="editAreaMin" type="number" min="1" required value="${escapeHtml(initialAreaMin)}" placeholder="예: 300"></label>
+          <label>최대 권장 면적(㎡)<input id="editAreaMax" type="number" min="1" required value="${escapeHtml(initialAreaMax)}" placeholder="예: 1500"></label>
+        </div>
       </div>
+      <label>게시글 제목<input id="editTitle" maxlength="80" required value="${escapeHtml(initialTitle)}" placeholder="예: 초보자도 쉬운 관리기 + 두둑성형기 세트 대여"></label>
       <div class="form-row-2">
-        <label>게시글 제목<input id="editTitle" maxlength="80" required value="${escapeHtml(initialTitle)}" placeholder="예: 초보자도 쉬운 관리기 + 두둑성형기 세트 대여"></label>
+        <label>요금/가격(원)<input id="editPrice" type="number" min="0" step="1000" required value="${escapeHtml(initialPrice)}" placeholder="예: 50000"></label>
         <label>보관/거래 지역
           <select id="editRegion">
             ${["영양읍", "청기면", "입암면", "수비면"].map((r) => `<option value="${escapeHtml(r)}" ${initialRegion === r ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}
           </select>
         </label>
-      </div>
-      <div class="form-row-2">
-        <label>추천 작물<select id="editCrop">${CROPS.map((c) => `<option value="${escapeHtml(c.id)}" ${initialCrop === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select></label>
-        <label>세부 작업<select id="editOperation">${OPERATIONS.map((o) => `<option value="${escapeHtml(o.id)}" ${initialOp === o.id ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}</select></label>
-      </div>
-      <div class="form-row-3">
-        <label>요금/가격(원)<input id="editPrice" type="number" min="0" step="1000" required value="${escapeHtml(initialPrice)}" placeholder="예: 50000"></label>
-        <label>최소 권장 면적(㎡)<input id="editAreaMin" type="number" min="1" required value="${escapeHtml(initialAreaMin)}" placeholder="예: 300"></label>
-        <label>최대 권장 면적(㎡)<input id="editAreaMax" type="number" min="1" required value="${escapeHtml(initialAreaMax)}" placeholder="예: 1500"></label>
       </div>
       <div class="form-row-2">
         <label>기계 상태
@@ -646,17 +649,51 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
     </form>
   `);
 
+  const resolveAutoSpecValues = (spec) => {
+    const defaults = getSpecificationDefaults(spec);
+    if (isEdit && item && item.modelId === spec.id) {
+      return {
+        cropIds: Array.isArray(item.cropIds) && item.cropIds.length ? item.cropIds : defaults.cropIds,
+        operations: Array.isArray(item.operations) && item.operations.length ? item.operations : defaults.operations,
+        areaMin: Number.isFinite(Number(item.areaMin)) ? Number(item.areaMin) : defaults.areaMin,
+        areaMax: Number.isFinite(Number(item.areaMax)) ? Number(item.areaMax) : defaults.areaMax,
+      };
+    }
+    return defaults;
+  };
+
   const syncModelLock = () => {
     const modelId = $("editModelId").value;
     const spec = modelId ? SPEC_BY_ID[modelId] : null;
+    const manualSection = $("manualSpecFields");
+    const summaryBox = $("modelSpecSummary");
+    const manualInputs = manualSection.querySelectorAll("input, select");
+
     if (spec) {
-      $("editBrand").value = spec.brand;
-      $("editMachine").value = spec.machineType;
-      $("editBrand").disabled = true;
-      $("editMachine").disabled = true;
+      const auto = resolveAutoSpecValues(spec);
+      const machineLabel = MACHINE_BY_ID[spec.machineType]?.label || spec.machineType;
+      const cropNames = auto.cropIds.map((id) => CROP_BY_ID[id]?.name || id).join("·");
+      const opLabels = auto.operations.map((id) => OPERATION_BY_ID[id]?.label || id).join("·");
+      const factsHtml = (spec.facts || [])
+        .map(([k, v]) => `<span><strong>${escapeHtml(k)}</strong> ${escapeHtml(v)}</span>`)
+        .join("");
+
+      summaryBox.innerHTML = `
+        <div class="model-spec-head">
+          <strong>${escapeHtml(spec.brand)} ${escapeHtml(spec.model)} · ${escapeHtml(machineLabel)}</strong>
+          <span class="step-pill">사양 자동 등록</span>
+        </div>
+        <div class="model-spec-facts">${factsHtml}</div>
+        <p class="model-spec-meta">추천 작물: ${escapeHtml(cropNames)} · 세부 작업: ${escapeHtml(opLabels)} · 권장 면적: ${escapeHtml(areaLabel(auto.areaMin, auto.areaMax))}</p>
+      `;
+      summaryBox.hidden = false;
+      manualSection.hidden = true;
+      manualInputs.forEach((el) => { el.disabled = true; });
     } else {
-      $("editBrand").disabled = false;
-      $("editMachine").disabled = false;
+      summaryBox.innerHTML = "";
+      summaryBox.hidden = true;
+      manualSection.hidden = false;
+      manualInputs.forEach((el) => { el.disabled = false; });
     }
   };
   syncModelLock();
@@ -675,8 +712,12 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   $("listingEditorForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (busy) return;
-    const areaMin = Number($("editAreaMin").value);
-    const areaMax = Number($("editAreaMax").value);
+    const modelId = $("editModelId").value || null;
+    const spec = modelId ? SPEC_BY_ID[modelId] : null;
+    const autoSpec = spec ? resolveAutoSpecValues(spec) : null;
+
+    const areaMin = autoSpec ? autoSpec.areaMin : Number($("editAreaMin").value);
+    const areaMax = autoSpec ? autoSpec.areaMax : Number($("editAreaMax").value);
     if (!Number.isFinite(areaMin) || !Number.isFinite(areaMax) || areaMin < 1 || areaMin > areaMax) {
       return toast("권장 면적 범위를 올바르게 입력해 주세요.");
     }
@@ -696,18 +737,17 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       }
     }
 
-    const modelId = $("editModelId").value || null;
     const payload = {
       action: isEdit ? "update" : "create",
       id: draftListingId,
       type: $("editType").value,
       modelId,
-      brand: $("editBrand").value.trim(),
-      machineType: $("editMachine").value,
+      brand: spec ? spec.brand : $("editBrand").value.trim(),
+      machineType: spec ? spec.machineType : $("editMachine").value,
       title: $("editTitle").value.trim(),
       region: $("editRegion").value,
-      cropIds: [$("editCrop").value],
-      operations: [$("editOperation").value],
+      cropIds: autoSpec ? autoSpec.cropIds : [$("editCrop").value],
+      operations: autoSpec ? autoSpec.operations : [$("editOperation").value],
       price: Number($("editPrice").value),
       areaMin,
       areaMax,

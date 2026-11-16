@@ -2080,6 +2080,67 @@ img {
   margin-top: 8px;
 }
 
+.manual-spec-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.manual-spec-fields[hidden],
+.model-spec-summary[hidden] {
+  display: none;
+}
+
+.model-spec-summary {
+  background: #f4f9f5;
+  border: 1.5px solid #cfe3d4;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.model-spec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.model-spec-head strong {
+  font-size: 0.95rem;
+  color: var(--text-strong);
+}
+
+.model-spec-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.model-spec-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  font-size: 0.8125rem;
+  color: var(--text-body);
+}
+
+.model-spec-facts strong {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.model-spec-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 .chat-log {
   height: 280px;
   overflow: auto;

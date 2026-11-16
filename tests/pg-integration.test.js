@@ -913,6 +913,22 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
     const chat = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "고추 두둑 빌릴래요" } });
     assert.equal(chat.status, 200);
     assert.equal(chat.body.mode, "unavailable");
+
+    // 사진만 보내도(질문 없음) 400이 아니다
+    const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 10, g: 120, b: 60 } } }).png().toBuffer();
+    const photoOnly = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "", image: `data:image/png;base64,${png.toString("base64")}` } });
+    assert.equal(photoOnly.status, 200, JSON.stringify(photoOnly.body));
+    assert.equal(photoOnly.body.mode, "unavailable");
+
+    // HEIC 등 지원하지 않는 사진은 친절한 400
+    const heic = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "이거 뭐예요", image: "data:image/heic;base64,AAAAGGZ0eXBoZWlj" } });
+    assert.equal(heic.status, 400);
+    assert.equal(heic.body.code, "INVALID_PHOTO");
+    assert.match(heic.body.error, /JPG·PNG·WebP/);
+
+    // 사진도 질문도 없으면 400
+    const empty = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "" } });
+    assert.equal(empty.status, 400);
   } finally {
     for (const [k, v] of Object.entries(prevKeys)) if (v !== undefined) process.env[k] = v;
   }

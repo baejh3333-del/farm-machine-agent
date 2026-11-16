@@ -300,3 +300,152 @@ test("Anthropic 호출은 이미지 블록을 그대로 보낸다", async (t) =>
   assert.equal(body.messages[0].content[1].type, "image");
   assert.equal(body.model, "claude-haiku-5-5");
 });
+
+// ---------- 사진 상담 (Task 5) ----------
+const PHOTO = { mediaType: "image/webp", base64: "UkFXV0VCUA==", dataUrl: "data:image/webp;base64,UkFXV0VCUA==" };
+const USER = { id: "user-1", name: "농부" };
+
+function photoEnv(t, extra = {}) {
+  withEnv(t, { ANTHROPIC_API_KEY: "akey", ...extra });
+}
+
+test("사진이 있으면 첫 사용자 메시지에 이미지 블록이 붙고 응답에는 data URL이 없다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([{ content: [{ type: "text", text: "관리기로 보여요." }] }]);
+  const result = await runAgentTurn("", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  const content = calls[0].messages.at(-1).content;
+  assert.ok(Array.isArray(content));
+  assert.ok(content.some((block) => block.type === "image" && block.source.data === PHOTO.base64));
+  assert.ok(content.some((block) => block.type === "text" && block.text.trim()));
+  assert.doesNotMatch(JSON.stringify(result), /base64,/);
+});
+
+test("note_photo 결과가 photoSummary로 돌아오고 modelId는 카탈로그에 있는 것만 남는다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "note_photo", input: { machineType: "cultivator", modelId: "fake-model", confidence: "medium", observations: ["바퀴에 흙", "녹 약간"] } }] },
+    { content: [{ type: "text", text: "관리기로 보여요." }] },
+  ]);
+  const result = await runAgentTurn("이거 뭐예요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.photoSummary, { machineType: "cultivator", modelId: null, confidence: "medium", observations: ["바퀴에 흙", "녹 약간"] });
+});
+
+test("수리 흐름: get_repair_guide → find_repair_centers 결과가 repairCenters로 돌아온다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [
+      { type: "tool_use", id: "r1", name: "get_repair_guide", input: { machineType: "cultivator" } },
+      { type: "tool_use", id: "r2", name: "find_repair_centers", input: { brand: "아세아텍" } },
+    ] },
+    { content: [{ type: "text", text: "먼저 연료를 확인해 보세요." }] },
+  ]);
+  const result = await runAgentTurn("시동이 안 걸려요", { image: PHOTO, region: "영양읍" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  const guideResult = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(guideResult.guides[0].symptom, "noStart");
+  assert.ok(result.repairCenters.length > 0);
+  assert.ok(result.repairCenters.some((center) => center.brands.includes("아세아텍")));
+  assert.ok(result.sources.some((source) => /nongsaro|danyang|jincheon|gijang/.test(source.url)));
+});
+
+test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 턴은 savedDraft를 재사용한다", async (t) => {
+  photoEnv(t);
+  const draftCall = { type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "아세아 관리기 빌려드려요", description: "소개글", machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍" } };
+  let saves = 0;
+  const saveDraft = async (user, dataUrl) => {
+    saves += 1;
+    assert.equal(user.id, USER.id);
+    assert.equal(dataUrl, PHOTO.dataUrl);
+    return { listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", photoUrl: "/api/photos?key=x" };
+  };
+  const first = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "초안을 만들었어요." }] }]);
+  const r1 = await runAgentTurn("빌려주고 싶어요", { image: PHOTO, user: USER }, { listings: LISTINGS, call: first.call, today: TODAY, saveDraft });
+  assert.equal(saves, 1);
+  assert.equal(r1.listingDraft.listingId, "11111111-1111-4111-8111-111111111111");
+  assert.equal(r1.listingDraft.type, "rent");
+  assert.equal(r1.listingDraft.priceBasis.unit, "day");
+  assert.ok(r1.listingDraft.price > 0);
+
+  const second = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "고쳤어요." }] }]);
+  const r2 = await runAgentTurn("제목만 바꿔 줘", { image: PHOTO, user: USER, savedDraft: { listingId: r1.listingDraft.listingId, photoKey: r1.listingDraft.photoKey, photoUrl: r1.listingDraft.photoUrl } }, { listings: LISTINGS, call: second.call, today: TODAY, saveDraft });
+  assert.equal(saves, 1, "같은 대화에서 사진을 다시 저장하지 않는다");
+  assert.equal(r2.listingDraft.photoKey, r1.listingDraft.photoKey);
+});
+
+test("비로그인 판매 초안은 저장 없이 listingId·photoKey가 null이다", async (t) => {
+  photoEnv(t);
+  let saves = 0;
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터 팝니다", description: "소개글", machineType: "tractor", modelId: null, brand: null } }] },
+    { content: [{ type: "text", text: "초안이에요." }] },
+  ]);
+  const result = await runAgentTurn("팔고 싶어요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY, saveDraft: async () => { saves += 1; } });
+  assert.equal(saves, 0);
+  assert.equal(result.listingDraft.listingId, null);
+  assert.equal(result.listingDraft.photoKey, null);
+  assert.match(calls[1].messages.at(-1).content[0].content, /loginRequired/);
+});
+
+test("보험을 묻지 않았으면 get_insurance_info를 거부한다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "owner" } }] },
+    { content: [{ type: "text", text: "알겠어요." }] },
+  ]);
+  await runAgentTurn("빌려주고 싶어요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  assert.match(calls[0].system, /사용자가 보험을 물었을 때만/);
+  const toolResult = calls[1].messages.at(-1).content[0];
+  assert.equal(toolResult.is_error, true);
+  assert.match(toolResult.content, /보험은 요청하실 때만 안내해요/);
+
+  const asked = scripted([
+    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "renter" } }] },
+    { content: [{ type: "text", text: "농업인안전보험이 있어요." }] },
+  ]);
+  await runAgentTurn("빌릴 때 보험도 들어야 해요?", {}, { listings: LISTINGS, call: asked.call, today: TODAY });
+  assert.notEqual(asked.calls[1].messages.at(-1).content[0].is_error, true);
+});
+
+test("AI_WEB_SEARCH가 없으면 웹 검색 도구를 보내지 않고, 켜면 보낸다", async (t) => {
+  photoEnv(t);
+  const off = scripted([{ content: [{ type: "text", text: "ok" }] }]);
+  await runAgentTurn("고추", {}, { listings: LISTINGS, call: off.call, today: TODAY });
+  assert.ok(!off.calls[0].tools.some((tool) => tool.type === "web_search"));
+  process.env.AI_WEB_SEARCH = "1";
+  const on = scripted([{ content: [{ type: "text", text: "ok" }] }]);
+  await runAgentTurn("고추", {}, { listings: LISTINGS, call: on.call, today: TODAY });
+  assert.ok(on.calls[0].tools.some((tool) => tool.type === "web_search"));
+  delete process.env.AI_WEB_SEARCH;
+});
+
+test("이미지 + 모델 실패면 PHOTO_UNAVAILABLE로 구분된다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([]);
+  assert.deepEqual(await runAgentTurn("", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY }), { error: "PHOTO_UNAVAILABLE" });
+});
+
+test("웹 검색 도구는 공급자별 형식으로 바뀌고 결과 출처를 돌려준다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey" });
+  let zBody;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    zBody = JSON.parse(request.body);
+    return Response.json({ choices: [{ message: { content: "결과" } }], web_search: [{ title: "농진청", link: "https://www.rda.go.kr/x" }] });
+  });
+  const z = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
+  assert.equal(zBody.tools[0].type, "web_search");
+  assert.equal(zBody.tools[0].web_search.enable, true);
+  assert.deepEqual(z.sources, [{ title: "농진청", url: "https://www.rda.go.kr/x" }]);
+
+  delete process.env.ZAI_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "akey";
+  let aBody;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    aBody = JSON.parse(request.body);
+    return Response.json({ content: [
+      { type: "web_search_tool_result", tool_use_id: "s1", content: [{ type: "web_search_result", title: "농사로", url: "https://www.nongsaro.go.kr/y" }] },
+      { type: "text", text: "결과" },
+    ] });
+  });
+  const a = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
+  assert.deepEqual(aBody.tools[0], { type: "web_search_20250305", name: "web_search", max_uses: 3 });
+  assert.deepEqual(a.sources, [{ title: "농사로", url: "https://www.nongsaro.go.kr/y" }]);
+});

@@ -74,8 +74,25 @@ export function hasImage(messages) {
   return messages.some((message) => Array.isArray(message.content) && message.content.some((block) => block.type === "image"));
 }
 
+// { type: "web_search" }는 공급자 내장 웹 검색을 뜻하는 표시다. 공급자마다 형식으로 바꿔 보낸다.
+const isWebSearch = (tool) => tool?.type === "web_search";
+
 export function toOpenAiTools(tools = []) {
-  return tools.map(({ name, description, input_schema: parameters }) => ({ type: "function", function: { name, description, parameters } }));
+  return tools.map((tool) => (isWebSearch(tool)
+    ? { type: "web_search", web_search: { enable: true, search_engine: "search_pro", search_result: true, count: 5 } }
+    : { type: "function", function: { name: tool.name, description: tool.description, parameters: tool.input_schema } }));
+}
+
+function toAnthropicTools(tools = []) {
+  return tools.map((tool) => (isWebSearch(tool) ? { type: "web_search_20250305", name: "web_search", max_uses: 3 } : tool));
+}
+
+function cleanSources(items) {
+  const seen = new Set();
+  return items
+    .filter((item) => typeof item?.url === "string" && /^https?:\/\//.test(item.url) && !seen.has(item.url) && seen.add(item.url))
+    .slice(0, 5)
+    .map((item) => ({ title: String(item.title || item.url).slice(0, 120), url: item.url }));
 }
 
 function parseJson(text) {
@@ -98,6 +115,7 @@ export function fromOpenAiResponse(data, forcedTool) {
     const input = parseJson(text);
     return input ? { content: [{ type: "tool_use", id: "forced_0", name: forcedTool, input }] } : null;
   }
+  const sources = cleanSources((Array.isArray(data.web_search) ? data.web_search : []).map((item) => ({ title: item?.title, url: item?.link })));
   const content = [];
   if (text.trim()) content.push({ type: "text", text });
   (message.tool_calls || []).forEach((call, index) => {
@@ -109,7 +127,7 @@ export function fromOpenAiResponse(data, forcedTool) {
       input: parseJson(call.function?.arguments) ?? {},
     });
   });
-  return { content };
+  return sources.length ? { content, sources } : { content };
 }
 
 async function callZai({ system, messages, tools, toolChoice, maxTokens, timeoutMs }) {
@@ -154,7 +172,7 @@ async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, t
       max_tokens: maxTokens,
       system,
       messages,
-      ...(tools?.length ? { tools } : {}),
+      ...(tools?.length ? { tools: toAnthropicTools(tools) } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }),
   });
@@ -164,7 +182,11 @@ async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, t
     return null;
   }
   const data = await response.json();
-  return Array.isArray(data?.content) ? data : null;
+  if (!Array.isArray(data?.content)) return null;
+  const sources = cleanSources(data.content
+    .filter((block) => block.type === "web_search_tool_result" && Array.isArray(block.content))
+    .flatMap((block) => block.content.map((item) => ({ title: item?.title, url: item?.url }))));
+  return sources.length ? { ...data, sources } : data;
 }
 
 /**
@@ -183,6 +205,7 @@ export async function callLLM({ system, messages, tools, toolChoice, maxTokens =
     return null;
   }
 }
+
 
 /**
  * 지정한 JSON 스키마로 구조화된 결과를 받는다.

@@ -1,21 +1,52 @@
-import { assertWritesAllowed, fail, handle, HttpError, readJson, requireUser } from "../server/http.js";
-import { executeRentalRequest, runAgentTurn } from "../server/nongnong-agent.js";
+import {
+  assertWritesAllowed,
+  currentUser,
+  fail,
+  handle,
+  HttpError,
+  MAX_UPLOAD_JSON_BYTES,
+  readJson,
+  requireUser,
+} from "../server/http.js";
+import { validateAndReencodeImage } from "../server/images.js";
+import { cleanSavedDraft, executeRentalRequest, runAgentTurn } from "../server/nongnong-agent.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PHOTO_MESSAGE = "JPG·PNG·WebP 사진을 1MB 이하로 올려 주세요.";
+
+/** 사진을 검사·재인코딩(EXIF 제거)해서 모델에 보낼 형태로 만든다. 저장은 하지 않는다. */
+async function preparePhoto(dataUrl) {
+  try {
+    const encoded = await validateAndReencodeImage(dataUrl);
+    const base64 = encoded.buffer.toString("base64");
+    const mediaType = encoded.contentType || "image/webp";
+    return { mediaType, base64, dataUrl: `data:${mediaType};base64,${base64}` };
+  } catch (error) {
+    if (error instanceof HttpError && error.status < 500) fail(400, "INVALID_PHOTO", PHOTO_MESSAGE);
+    throw error;
+  }
+}
 
 export default handle(["POST"], async (request) => {
-  const body = await readJson(request);
+  const body = await readJson(request, { maxBytes: MAX_UPLOAD_JSON_BYTES });
   const action = body.action === "execute" ? "execute" : "chat";
 
   if (action === "chat") {
     const message = typeof body.message === "string" ? body.message.trim() : "";
-    if (!message || message.length > 500) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
+    const hasImage = typeof body.image === "string" && body.image.length > 0;
+    if (message.length > 500 || (!message && !hasImage)) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
+    const image = hasImage ? await preparePhoto(body.image) : undefined;
     await enforceRateLimit(request, "recommend");
+    const user = await currentUser(request).catch(() => null);
     const result = await runAgentTurn(message, {
       history: Array.isArray(body.history) ? body.history : [],
       region: typeof body.region === "string" ? body.region : undefined,
+      image,
+      user,
+      savedDraft: cleanSavedDraft(body.savedDraft),
     });
+    if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
     if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
     return { status: 200, body: result };
   }

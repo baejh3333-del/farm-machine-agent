@@ -9,6 +9,7 @@ import sharp from "sharp";
 
 import accountHandler from "../api/account.js";
 import agentHandler from "../api/agent.js";
+import voiceHandler from "../api/voice.js";
 import conversationsHandler from "../api/conversations.js";
 import listingsHandler from "../api/listings.js";
 import meHandler from "../api/me.js";
@@ -120,6 +121,7 @@ before(async () => {
     ["/api/listings", listingsHandler],
     ["/api/recommend", recommendHandler],
     ["/api/agent", agentHandler],
+    ["/api/voice", voiceHandler],
     ["/api/me", meHandler],
     ["/api/requests", requestsHandler],
     ["/api/conversations", conversationsHandler],
@@ -963,4 +965,68 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
   assert.equal(selfRental.status, 200);
   assert.equal(selfRental.body.outcome, "failed");
   assert.equal(selfRental.body.code, "SELF_RENTAL_FORBIDDEN");
+});
+
+test("[PGlite 로컬 엔진] 9. 농농이 음성 인식: 기능 확인, WAV 검증, 공급자 없음 503, 호출 제한", async (t) => {
+  const keys = ["VOICE_STT_PROVIDER", "OPENAI_API_KEY", "ZAI_API_KEY", "ENABLE_RATE_LIMIT", "VOICE_LIMIT_PER_MINUTE"];
+  const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  t.after(() => {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+  for (const k of keys) delete process.env[k];
+
+  const wav = (seconds) => {
+    const dataBytes = Math.round(seconds * 16000) * 2;
+    const b = Buffer.alloc(44 + dataBytes);
+    b.write("RIFF", 0, "ascii"); b.writeUInt32LE(36 + dataBytes, 4); b.write("WAVE", 8, "ascii");
+    b.write("fmt ", 12, "ascii"); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+    b.writeUInt32LE(16000, 24); b.writeUInt32LE(32000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+    b.write("data", 36, "ascii"); b.writeUInt32LE(dataBytes, 40);
+    return b.toString("base64");
+  };
+
+  // 키가 없으면 서버 인식이 없다고 알려 주고(브라우저 인식으로), 인식 요청은 503
+  const caps = await apiReq(baseUrl, "/api/voice");
+  assert.equal(caps.status, 200);
+  assert.deepEqual(caps.body, { serverStt: false, provider: null, maxSeconds: 30 });
+  const none = await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: wav(1) } });
+  assert.equal(none.status, 503);
+  assert.equal(none.body.code, "VOICE_UNAVAILABLE");
+
+  process.env.OPENAI_API_KEY = "okey";
+  // 형식이 틀리면 공급자를 부르지 않고 400
+  const realFetch = globalThis.fetch;
+  let providerCalls = 0;
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    if (String(url).startsWith("https://api.openai.com/")) {
+      providerCalls += 1;
+      return Response.json({ text: "관리기 빌릴라꼬예" });
+    }
+    return realFetch(url, init);
+  });
+  const bad = await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: Buffer.from("hello").toString("base64") } });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.body.code, "INVALID_AUDIO");
+  const long = await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: wav(31) } });
+  assert.equal(long.status, 413);
+  const missing = await apiReq(baseUrl, "/api/voice", { method: "POST", json: {} });
+  assert.equal(missing.status, 400);
+  assert.equal(providerCalls, 0);
+
+  const ok = await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: wav(2) } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.deepEqual(ok.body, { text: "관리기 빌릴라꼬예", provider: "openai" });
+  assert.equal(providerCalls, 1);
+
+  // 호출 제한은 음성 해석 전에 검사한다
+  process.env.ENABLE_RATE_LIMIT = "1";
+  process.env.VOICE_LIMIT_PER_MINUTE = "1";
+  const statuses = [];
+  for (let i = 0; i < 4; i += 1) {
+    statuses.push((await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: "not-base64-audio" } })).status);
+  }
+  assert.ok(statuses.includes(429), `호출 제한: ${statuses}`);
 });

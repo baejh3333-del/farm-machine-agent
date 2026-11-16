@@ -38,6 +38,15 @@ export function ratePolicies(env = process.env) {
     message: { failOpen: true, limits: [perMinute(30), perDay(1000)] },
     listing: { failOpen: true, limits: [perMinute(20), perDay(200)] },
     rental: { failOpen: true, limits: [perMinute(10), perDay(50)] },
+    // 음성 인식: 외부 과금이 걸려 있어 횟수를 확인할 수 없으면 거부한다.
+    voice: {
+      failOpen: false,
+      limits: [
+        perMinute(readLimit(env, "VOICE_LIMIT_PER_MINUTE", 10)),
+        perDay(readLimit(env, "VOICE_LIMIT_PER_DAY", 100)),
+        globalPerDay(readLimit(env, "VOICE_GLOBAL_LIMIT_PER_DAY", 3000)),
+      ],
+    },
   };
 }
 

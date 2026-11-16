@@ -705,3 +705,13 @@ test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능
   assert.equal(r3.createdListing.title, "아세아 관리기 빌려드려요");
   assert.match(r3.createdListing.number, /^L-[0-9A-F]{8}$/);
 });
+
+test("[통합 오케스트레이터] 모델이 첫 턴 검색 없이 되물어도 작물·작업 언급 시 서버가 매물을 즉시 보강한다", async (t) => {
+  withKey(t, "test");
+  const { call } = scripted([
+    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 면적과 날짜를 알려주시겠어요?" }] },
+  ]);
+  const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
+  assert.equal(result.mode, "agent");
+  assert.ok(result.listingIds.length > 0 && result.listingIds.length <= 3);
+});

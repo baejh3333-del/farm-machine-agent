@@ -9,9 +9,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
-  <link rel="stylesheet" href="/src/styles.css" />
-  <link rel="stylesheet" href="/src/garage.css" />
-  <script type="module" src="/src/main.js"></script>
+  <link rel="stylesheet" href="/src/styles.css?v=20261117" />
+  <link rel="stylesheet" href="/src/garage.css?v=20261117" />
+  <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -517,12 +517,41 @@
         </div>
       </div>
 
-      <div class="prompt-suggestions" id="aiStarters" role="group" aria-label="작업 예시를 입력창에 넣기">
-        <button type="button" data-prompt="고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.">고추밭 두둑 만들기</button>
-        <button type="button" data-prompt="배추밭에 비닐 씌우는 기계를 빌리고 싶어요.">배추밭 비닐 씌우기</button>
-        <button type="button" data-prompt="벼를 수확할 기계를 사고 싶어요.">벼 수확기 구매</button>
-        <button type="button" data-prompt="감자 캐는 기계를 빌리고 싶어요.">감자 캐는 기계 대여</button>
-        <button type="button" data-prompt="제 트랙터를 팔고 싶어요.">내 기계 팔기</button>
+      <div class="ai-quick-builder" id="aiStarters" role="region" aria-label="원탭 빠른 조건 선택">
+        <div class="ai-qb-tabs" role="group" aria-label="원하는 상담 종류">
+          <button type="button" class="ai-qb-tab is-active" data-qb-mode="rent" aria-pressed="true">🤝 빌리기</button>
+          <button type="button" class="ai-qb-tab" data-qb-mode="sale" aria-pressed="false">🛒 사기</button>
+          <button type="button" class="ai-qb-tab" data-qb-mode="sell" aria-pressed="false">🏷️ 내 기계 팔기</button>
+          <button type="button" class="ai-qb-tab" data-qb-mode="repair" aria-pressed="false">🔧 고장·수리</button>
+        </div>
+        <div class="ai-qb-section" id="aiQbFilterBody">
+          <div class="ai-qb-label">작물 또는 기종 (눌러서 고르기)</div>
+          <div class="ai-qb-chips" data-qb-group="target">
+            <button type="button" class="ai-qb-chip" data-qb-crop="pepper" aria-pressed="false">고추</button>
+            <button type="button" class="ai-qb-chip" data-qb-crop="rice" aria-pressed="false">벼</button>
+            <button type="button" class="ai-qb-chip" data-qb-crop="cabbage" aria-pressed="false">배추</button>
+            <button type="button" class="ai-qb-chip" data-qb-crop="potato" aria-pressed="false">감자</button>
+            <button type="button" class="ai-qb-chip" data-qb-machine="cultivator" aria-pressed="false">관리기</button>
+            <button type="button" class="ai-qb-chip" data-qb-machine="tractor" aria-pressed="false">트랙터</button>
+            <button type="button" class="ai-qb-chip" data-qb-machine="ridgeMulcher" aria-pressed="false">휴립·멀칭기</button>
+            <button type="button" class="ai-qb-chip" data-qb-machine="ricePlanter" aria-pressed="false">이앙기</button>
+          </div>
+          <div class="ai-qb-date-row" id="aiQbDateRow">
+            <div class="ai-qb-label">대여 기간</div>
+            <div class="ai-qb-chips" data-qb-group="date">
+              <button type="button" class="ai-qb-chip is-selected" data-qb-date="none" aria-pressed="true">날짜 미정</button>
+              <button type="button" class="ai-qb-chip" data-qb-date="tomorrow" aria-pressed="false">내일 하루</button>
+              <button type="button" class="ai-qb-chip" data-qb-date="twoDays" aria-pressed="false">모레부터 2일</button>
+              <button type="button" class="ai-qb-chip" data-qb-date="weekend" aria-pressed="false">이번 주말</button>
+            </div>
+          </div>
+          <button type="button" class="button button-primary ai-qb-go" id="aiQbSubmit">⚡ 선택한 조건으로 바로 찾기</button>
+        </div>
+        <div class="prompt-suggestions ai-qb-examples" role="group" aria-label="작업 예시 바로 묻기">
+          <button type="button" data-prompt="고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.">고추밭 두둑 만들기</button>
+          <button type="button" data-prompt="배추밭에 비닐 씌우는 기계를 빌리고 싶어요.">배추밭 비닐 씌우기</button>
+          <button type="button" data-prompt="벼를 수확할 기계를 사고 싶어요.">벼 수확기 구매</button>
+        </div>
       </div>
     </div>
 

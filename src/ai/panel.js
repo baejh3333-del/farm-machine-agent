@@ -77,6 +77,118 @@ export function createAiPanel({
   let savedDraft = null;
   const aiDefaultPlaceholder = $("aiInput").placeholder;
 
+  const qbState = { mode: "rent", cropId: "", machineType: "", datePreset: "none" };
+  const QB_SUBMIT_LABELS = {
+    rent: "⚡ 선택한 조건으로 바로 찾기",
+    sale: "🛒 구매 매물 바로 찾기",
+    sell: "🏷️ 내 기계 등록 상담하기",
+    repair: "🔧 고장·점검 방법 물어보기",
+  };
+
+  function syncQuickBuilderUi() {
+    const root = $("aiStarters");
+    if (!root) return;
+    root.querySelectorAll("[data-qb-mode]").forEach((btn) => {
+      const active = btn.dataset.qbMode === qbState.mode;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+    root.querySelectorAll("[data-qb-crop]").forEach((btn) => {
+      const selected = btn.dataset.qbCrop === qbState.cropId;
+      btn.classList.toggle("is-selected", selected);
+      btn.setAttribute("aria-pressed", String(selected));
+    });
+    root.querySelectorAll("[data-qb-machine]").forEach((btn) => {
+      const selected = btn.dataset.qbMachine === qbState.machineType;
+      btn.classList.toggle("is-selected", selected);
+      btn.setAttribute("aria-pressed", String(selected));
+    });
+    root.querySelectorAll("[data-qb-date]").forEach((btn) => {
+      const selected = btn.dataset.qbDate === qbState.datePreset;
+      btn.classList.toggle("is-selected", selected);
+      btn.setAttribute("aria-pressed", String(selected));
+    });
+    const dateRow = $("aiQbDateRow");
+    if (dateRow) dateRow.hidden = qbState.mode !== "rent";
+    const submitBtn = $("aiQbSubmit");
+    if (submitBtn) submitBtn.textContent = QB_SUBMIT_LABELS[qbState.mode] || QB_SUBMIT_LABELS.rent;
+  }
+
+  function resolveQbDates() {
+    const baseToday = today();
+    if (qbState.datePreset === "tomorrow") {
+      const d = addDays(baseToday, 1);
+      return { start: d, end: d };
+    }
+    if (qbState.datePreset === "twoDays") {
+      return { start: addDays(baseToday, 2), end: addDays(baseToday, 3) };
+    }
+    if (qbState.datePreset === "weekend") {
+      return weekendWindow(baseToday);
+    }
+    return null;
+  }
+
+  function buildQuickPrompt() {
+    const cropName = qbState.cropId ? `${CROP_BY_ID[qbState.cropId]?.name || ""}밭` : "";
+    const machineName = qbState.machineType ? MACHINE_LABELS[qbState.machineType] : "";
+    const target = [cropName, machineName].filter(Boolean).join("에 쓸 ") || "농기계";
+    const region = state.region || "영양읍";
+    if (qbState.mode === "sale") {
+      return `${region} 근처에서 ${target}를 구매하고 싶어요. 맞는 매물을 바로 보여주세요.`;
+    }
+    if (qbState.mode === "sell") {
+      return `제 ${machineName || "농기계"}를 팔거나 빌려주고 싶어요. 시세 확인과 등록 초안을 도와주세요.`;
+    }
+    if (qbState.mode === "repair") {
+      return `${machineName || "농기계"} 시동·작동 점검 및 수리 방법을 알려주세요.`;
+    }
+    const dates = resolveQbDates();
+    const periodText = dates ? `${dates.start}부터 ${dates.end}까지 ` : "";
+    return `${region} 근처에서 ${target}를 ${periodText}빌리고 싶어요. 맞는 매물을 바로 보여주세요.`;
+  }
+
+  $("aiStarters")?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const modeBtn = target.closest("[data-qb-mode]");
+    if (modeBtn) {
+      qbState.mode = modeBtn.dataset.qbMode || "rent";
+      syncQuickBuilderUi();
+      return;
+    }
+    const cropBtn = target.closest("[data-qb-crop]");
+    if (cropBtn) {
+      qbState.cropId = qbState.cropId === cropBtn.dataset.qbCrop ? "" : cropBtn.dataset.qbCrop;
+      syncQuickBuilderUi();
+      return;
+    }
+    const machineBtn = target.closest("[data-qb-machine]");
+    if (machineBtn) {
+      qbState.machineType = qbState.machineType === machineBtn.dataset.qbMachine ? "" : machineBtn.dataset.qbMachine;
+      syncQuickBuilderUi();
+      return;
+    }
+    const dateBtn = target.closest("[data-qb-date]");
+    if (dateBtn) {
+      qbState.datePreset = dateBtn.dataset.qbDate || "none";
+      syncQuickBuilderUi();
+      return;
+    }
+    if (target.closest("#aiQbSubmit")) {
+      if (qbState.mode === "rent" || qbState.mode === "sale") {
+        const dates = qbState.mode === "rent" ? resolveQbDates() : null;
+        if (qbState.cropId && !state.filters.cropIds?.length) state.filters.cropIds = [qbState.cropId];
+        if (dates && !state.filters.date) {
+          state.filters.date = dates.start;
+          state.filters.dateEnd = dates.end;
+        }
+        refreshContextBar();
+      }
+      submitPrompt(buildQuickPrompt());
+    }
+  });
+
   function showPhotoPreview() {
     const preview = $("aiPhotoPreview");
     if (!preview) return;
@@ -882,6 +994,11 @@ export function createAiPanel({
     agentHistory = [];
     savedDraft = null;
     lastPhotoDataUrl = null;
+    qbState.mode = "rent";
+    qbState.cropId = "";
+    qbState.machineType = "";
+    qbState.datePreset = "none";
+    syncQuickBuilderUi();
     clearPhoto();
     $("aiMessages").replaceChildren();
     $("aiStarters").hidden = false;

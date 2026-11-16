@@ -50,11 +50,13 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 
 ## 일하는 순서
 1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
-2. 부족한 정보가 있으면 꼭 필요한 것만 한 번에 1~2개 묻고, 선택지가 있으면 반드시 offer_choices 도구로 원탭 선택 버튼을 제공한다. 모르는 값을 임의로 채우지 않는다(작물을 모르면 고추로 가정하지 않는다).
-3. 매물 검색, 작물 안내, 기상청 날씨, 시세 조회, 제원·수리 안내는 조건이 충분하면 즉시 도구를 호출한다.
+2. **첫 턴 즉시 추천 (매우 중요)**: 사용자가 작물(고추·벼·배추·감자), 작업(두둑·멀칭·로터리·수확 등), 또는 기종(관리기·트랙터·이앙기 등) 중 하나라도 언급하며 빌리기·사기·찾기를 요청하면, 면적·날짜·예산을 먼저 캐묻지 말고 **반드시 첫 턴에 즉시 search_listings 도구를 호출해 추천 매물 카드를 먼저 보여준다**.
+   - 날짜가 아직 없으면 날짜 없이 검색해 후보를 먼저 보여 준 뒤, "어느 날짜에 빌리실지 골라 바로 예약해 보세요"처럼 1줄로 안내한다.
+3. 부족한 정보가 있어 선택을 받아야 하면(예: 작물·기종·작업이 전혀 없는 경우) 꼭 필요한 것만 한 번에 1~2개 묻고, 선택지가 있으면 반드시 offer_choices 도구로 원탭 선택 버튼을 제공한다. 모르는 값을 임의로 채우지 않는다(작물을 모르면 고추로 가정하지 않는다).
+4. 매물 검색, 작물 안내, 기상청 날씨, 시세 조회, 제원·수리 안내는 조건이 충분하면 즉시 도구를 호출한다.
    - 대여 날짜가 정해지면 check_availability와 get_weather로 예약 가능 여부와 비 예보를 확인하고, 비가 오면 맑은 대안을 1줄로 안내한다.
    - 추천할 때는 핵심 조건(기계명, 지역, 기간 또는 가격, 총 대여료)을 함께 보여 주고, 사용자가 "네/예약해줘"만 답해도 바로 실행할 수 있게 묻는다.
-4. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
+5. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
    - 사용자가 "예약해줘", "네", "그걸로 해 주세요", "올려 주세요"처럼 분명히 긍정·실행 의사를 밝혔고 필수 조건(매물 ID, 시작일/반납일 등)이 모두 정해졌으면 create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다.
    - 아직 확정 전이거나 날짜/조건 확인용 카드를 먼저 띄워야 할 때는 propose_rental_request 또는 prepare_listing_draft를 호출한다.
    - 완료되면 도구 결과의 예약·등록 번호와 요약을 안내하고, 결제는 사용자가 [대여 요청] 메뉴나 판매자 채팅에서 직접 한다고 알려 준다.
@@ -87,7 +89,7 @@ const TOOLS = [
       type: "object",
       properties: {
         cropId: { type: ["string", "null"], enum: [null, ...CROPS.map(({ id }) => id)], description: "작물 ID" },
-        operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) }, description: "작업 ID 목록" },
+        operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) }, description: "작업 ID 목록. 작물이나 기종만으로 찾을 때는 빈 배열([])을 넘긴다." },
         machineType: { type: ["string", "null"], enum: [null, ...MACHINE_TYPES.map(({ id }) => id)], description: "기종 ID" },
         transaction: { type: "string", enum: ["rent", "sale"], description: "대여 rent, 구매 sale" },
         region: { type: ["string", "null"], enum: [null, ...REGIONS], description: "지역" },
@@ -96,7 +98,7 @@ const TOOLS = [
         start: { type: ["string", "null"], description: "대여 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "반납일 YYYY-MM-DD" },
       },
-      required: ["operations", "transaction"],
+      required: ["transaction"],
     },
   },
   {
@@ -628,6 +630,64 @@ function mapToolError(error, fallback) {
   return { ok: false, error: fallback };
 }
 
+const FALLBACK_OP_PATTERNS = [
+  ["ridge", /두둑|고랑|이랑/],
+  ["mulch", /멀칭|비닐|피복/],
+  ["till", /흙\s*갈|갈아|로터리|경운|밭\s*갈/],
+  ["level", /논.*고르|균평/],
+  ["transplant", /모종|정식/],
+  ["seed", /씨감자|파종/],
+  ["ricePlant", /모\s*심|모내기|이앙/],
+  ["spray", /방제|농약|병해충|약제/],
+  ["water", /관수|물\s*주기/],
+  ["hill", /북주기/],
+  ["riceHarvest", /벼.*수확|벼.*베|콤바인/],
+  ["potatoHarvest", /감자.*수확|감자.*캐|굴취/],
+  ["transport", /운반|실어나르/],
+];
+
+const FALLBACK_MACHINE_PATTERNS = [
+  ["ridgeMulcher", /휴립|멀칭기/],
+  ["ricePlanter", /이앙기/],
+  ["transplanter", /정식기/],
+  ["potatoPlanter", /파종기/],
+  ["potatoHarvester", /굴취기/],
+  ["cultivator", /관리기/],
+  ["tractor", /트랙터/],
+  ["sprayer", /방제기|분무기|ss기/i],
+  ["combine", /콤바인/],
+  ["carrier", /운반차/],
+];
+
+function inferFallbackSearchInput(text, uiCtx) {
+  if (!text || /(?:팔고|팔래|내놓|등록|빌려주|고장|수리|안\s*걸려|소음|누유|보험|뭐예요|무슨\s*기계)/.test(text)) return null;
+  const cropId = CROPS.find(({ name }) => text.includes(name))?.id || uiCtx.cropIds?.[0] || null;
+  const matchedOps = FALLBACK_OP_PATTERNS.filter(([, re]) => re.test(text)).map(([id]) => id);
+  const operations = matchedOps.length ? matchedOps : (uiCtx.operations || []);
+  const machineType = FALLBACK_MACHINE_PATTERNS.find(([, re]) => re.test(text))?.[0] || null;
+  const hasExplicitSearch = Boolean(
+    CROPS.some(({ name }) => text.includes(name))
+    || matchedOps.length
+    || machineType
+    || (/(?:찾아|추천|보여|빌리|사고|구매|구입)/.test(text) && (cropId || operations.length)),
+  );
+  if (!hasExplicitSearch) return null;
+  const transaction = /(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|구매|구입)/.test(text)
+    ? "sale"
+    : /(?:빌리|빌려|대여|임대)/.test(text)
+      ? "rent"
+      : (uiCtx.transaction || "rent");
+  return {
+    cropId,
+    operations,
+    machineType,
+    transaction,
+    region: uiCtx.region || null,
+    start: uiCtx.date || null,
+    end: uiCtx.dateEnd || null,
+  };
+}
+
 /**
  * 한 번의 사용자 발화를 처리한다. AI 키(OPENAI_API_KEY / ZAI_API_KEY / ANTHROPIC_API_KEY)가 없으면
  * { mode: "unavailable" }를 돌려준다.
@@ -685,6 +745,7 @@ async function runTurn(
   };
   let draft = image ? null : cleanSavedDraft(savedDraft);
   let writeDone = false;
+  let searchedThisTurn = false;
   const texts = [];
   const finish = (reply, extra = {}) => {
     const result = { mode: "agent", reply, listingIds: out.listingIds, ...extra };
@@ -721,6 +782,7 @@ async function runTurn(
       let output;
 
       if (block.name === "search_listings") {
+        searchedThisTurn = true;
         output = searchListingsTool(block.input, await loadCatalog(), { region: effectiveRegion, userId: user?.id });
         if (output.results) out.listingIds = output.results.map(({ id }) => id);
         if (output.start) out.searchDates = { start: output.start, end: output.end || output.start };
@@ -1052,6 +1114,28 @@ async function runTurn(
         : part));
     }
     messages.push({ role: "user", content: results });
+  }
+
+  if (
+    texts.length
+    && !searchedThisTurn
+    && !image
+    && !out.listingIds.length
+    && !out.reservation
+    && !out.createdListing
+    && !out.updatedListing
+    && !out.listingDraft
+    && !out.repairCenters
+    && !/도와드릴 수 없|관계없는/.test(texts.at(-1))
+  ) {
+    const inferred = inferFallbackSearchInput(text, uiCtx);
+    if (inferred) {
+      const autoSearch = searchListingsTool(inferred, await loadCatalog(), { region: effectiveRegion, userId: user?.id });
+      if (autoSearch?.results?.length) {
+        out.listingIds = autoSearch.results.map(({ id }) => id);
+        if (autoSearch.start) out.searchDates = { start: autoSearch.start, end: autoSearch.end || autoSearch.start };
+      }
+    }
   }
 
   const fallbackReply = out.reservation

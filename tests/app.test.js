@@ -62,10 +62,13 @@ test("프롬프트 변경 요청은 조건을 보존하고 새 상담 요청만 
 
 test("모델은 검증된 검색 조건만 전달하며 답변과 매물 ID를 지정할 수 없다", async (t) => {
   const previous = process.env.ANTHROPIC_API_KEY;
+  const previousZai = process.env.ZAI_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test";
+  delete process.env.ZAI_API_KEY;
   t.after(() => {
     if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = previous;
+    if (previousZai !== undefined) process.env.ZAI_API_KEY = previousZai;
   });
   t.mock.method(globalThis, "fetch", async (url, request) => {
     assert.equal(url, "https://api.anthropic.com/v1/messages");

@@ -18,7 +18,7 @@ export function createAiPanel({
 }) {
   let conversation;
   let recommendationPending = false;
-  // Claude 에이전트 대화 기록. 서버에 Claude 키가 없으면 agentAvailable=false로 바꾸고 규칙 기반 상담을 쓴다.
+  // 농농이 AI 에이전트 대화 기록. 서버에 AI 키가 없으면 agentAvailable=false로 바꾸고 규칙 기반 상담을 쓴다.
   let agentHistory = [];
   let agentAvailable = null;
   const MAX_AGENT_HISTORY = 12;
@@ -219,7 +219,7 @@ export function createAiPanel({
     const bubble = appendAiMessage(reply, "assistant", listingIds);
     if (Array.isArray(result.choices) && result.choices.length) appendChoices(bubble, result.choices.slice(0, 5));
     if (result.pendingAction?.type === "rental_request") appendConfirmation(bubble, result.pendingAction);
-    $("aiModeLabel").textContent = "Claude AI 상담 · 등록 매물 기반";
+    $("aiModeLabel").textContent = "AI 상담 · 등록 매물 기반";
   }
 
   async function sendAiQuestion(event) {

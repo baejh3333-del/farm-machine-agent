@@ -904,15 +904,16 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
   assert.equal(created.status, 201);
   const pendingAction = { type: "rental_request", listingId, start, end, note: "농농이로 요청" };
 
-  // Claude 키가 없으면 대화는 규칙 기반 상담으로 넘긴다
-  const prevKey = process.env.ANTHROPIC_API_KEY;
+  // AI 키가 없으면 대화는 규칙 기반 상담으로 넘긴다
+  const prevKeys = { ZAI_API_KEY: process.env.ZAI_API_KEY, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY };
+  delete process.env.ZAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   try {
     const chat = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "고추 두둑 빌릴래요" } });
     assert.equal(chat.status, 200);
     assert.equal(chat.body.mode, "unavailable");
   } finally {
-    if (prevKey !== undefined) process.env.ANTHROPIC_API_KEY = prevKey;
+    for (const [k, v] of Object.entries(prevKeys)) if (v !== undefined) process.env[k] = v;
   }
 
   // 로그인하지 않으면 실행하지 않는다

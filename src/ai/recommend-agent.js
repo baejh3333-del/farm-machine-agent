@@ -13,7 +13,7 @@ export async function askRecommendation(message, context) {
   return result;
 }
 
-// Claude 도구 호출 에이전트(농농이). 서버에 Claude 키가 없으면 { mode: "unavailable" }를 받는다.
+// 농농이 AI 도구 호출 에이전트. 서버에 AI 키가 없으면 { mode: "unavailable" }를 받는다.
 export async function askAgent(message, { history = [], region } = {}) {
   const result = await apiFetch("/api/agent", {
     method: "POST",

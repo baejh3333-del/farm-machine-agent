@@ -1,4 +1,4 @@
-// 농농이 Claude 도구 호출 에이전트.
+// 농농이 AI 도구 호출 에이전트(Z.ai GLM 또는 Claude).
 // 흐름: 의도·대상 파악 → (모호하면) 필요한 것만 질문 → (확인 필요하면) 실행 내용을 보여 주고 승인 대기
 //      → 서비스 API 호출 → 처리 결과와 실제 상태 확인 → 완료·부분 성공·실패 안내.
 // 모델은 읽기 전용 조회와 "제안"만 할 수 있다. 대여 요청 실행은 사용자가 승인한 뒤
@@ -6,7 +6,7 @@
 import { rentalDays } from "../src/data/compatibility.js";
 import { CROPS, CROP_BY_ID, CROP_OPERATIONS, MACHINE_BY_ID, OPERATIONS, OPERATION_BY_ID } from "../src/data/farm-machines.js";
 import { selectMatchingListings } from "../src/data/recommendation.js";
-import { callClaude, claudeEnabled, textOf } from "./claude.js";
+import { callLLM, llmEnabled, textOf } from "./llm.js";
 import { kstToday } from "./db.js";
 import { fetchListings } from "./listings-db.js";
 import { createRentalRequest, listRequestsForUser, MAX_RENTAL_DAYS } from "./rentals.js";
@@ -204,11 +204,11 @@ function cleanChoices(input) {
 }
 
 /**
- * 한 번의 사용자 발화를 처리한다. Claude 키가 없으면 { mode: "unavailable" }를 돌려
+ * 한 번의 사용자 발화를 처리한다. AI 키(ZAI_API_KEY 또는 ANTHROPIC_API_KEY)가 없으면 { mode: "unavailable" }를 돌려
  * 화면이 기존 규칙 기반 상담으로 이어 가게 한다.
  */
-export async function runAgentTurn(message, { history = [], region } = {}, { listings, pool, today = kstToday(), call = callClaude } = {}) {
-  if (!claudeEnabled()) return { mode: "unavailable" };
+export async function runAgentTurn(message, { history = [], region } = {}, { listings, pool, today = kstToday(), call = callLLM } = {}) {
+  if (!llmEnabled()) return { mode: "unavailable" };
   const messages = sanitizeHistory(history, message);
   const system = `${SYSTEM_PROMPT}\n\n오늘 날짜(한국 시간): ${today}${typeof region === "string" && region ? `\n사용자가 고른 지역: ${region.slice(0, 20)}` : ""}`;
   let catalog = Array.isArray(listings) ? listings : null;

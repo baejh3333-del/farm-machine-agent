@@ -8,20 +8,31 @@ import {
   searchListingsTool,
 } from "../server/nongnong-agent.js";
 import { buildMockListings } from "../server/listing-seed.js";
+import { askLLMJson, callLLM, fromOpenAiResponse, llmProvider, toOpenAiMessages } from "../server/llm.js";
 
 const LISTINGS = buildMockListings();
 const TODAY = "2026-11-16";
 const rentable = LISTINGS.find((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair" && !item.booked.length);
 const forSale = LISTINGS.find((item) => item.type === "sale");
 
-function withKey(t, value) {
-  const previous = process.env.ANTHROPIC_API_KEY;
-  if (value === undefined) delete process.env.ANTHROPIC_API_KEY;
-  else process.env.ANTHROPIC_API_KEY = value;
+const AI_ENV = ["AI_PROVIDER", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+
+function withEnv(t, values) {
+  const previous = Object.fromEntries(AI_ENV.map((name) => [name, process.env[name]]));
+  for (const name of AI_ENV) {
+    if (values[name] === undefined) delete process.env[name];
+    else process.env[name] = values[name];
+  }
   t.after(() => {
-    if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = previous;
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
+}
+
+function withKey(t, value) {
+  withEnv(t, { ANTHROPIC_API_KEY: value });
 }
 
 function scripted(responses) {
@@ -161,4 +172,95 @@ test("도구 호출이 끝나지 않아도 최대 횟수에서 멈춘다", async
   assert.equal(calls.length, 5);
   assert.equal(result.mode, "agent");
   assert.ok(result.reply);
+});
+
+test("공급자는 AI_PROVIDER를 따르고, 없으면 Z.ai 키를 먼저 쓴다", (t) => {
+  withEnv(t, { ZAI_API_KEY: "z", ANTHROPIC_API_KEY: "a" });
+  assert.equal(llmProvider(), "zai");
+  process.env.AI_PROVIDER = "anthropic";
+  assert.equal(llmProvider(), "anthropic");
+  process.env.AI_PROVIDER = "zai";
+  delete process.env.ZAI_API_KEY;
+  assert.equal(llmProvider(), null, "지정한 공급자의 키가 없으면 다른 공급자로 몰래 바꾸지 않는다");
+});
+
+test("Anthropic 형식 대화를 Z.ai(OpenAI 호환) 형식으로 바꾼다", () => {
+  const messages = toOpenAiMessages("시스템", [
+    { role: "user", content: "고추 두둑" },
+    { role: "assistant", content: [
+      { type: "text", text: "찾아볼게요." },
+      { type: "tool_use", id: "c1", name: "search_listings", input: { cropId: "pepper" } },
+    ] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: "{\"count\":1}" }] },
+  ]);
+  assert.deepEqual(messages, [
+    { role: "system", content: "시스템" },
+    { role: "user", content: "고추 두둑" },
+    { role: "assistant", content: "찾아볼게요.", tool_calls: [{ id: "c1", type: "function", function: { name: "search_listings", arguments: "{\"cropId\":\"pepper\"}" } }] },
+    { role: "tool", tool_call_id: "c1", content: "{\"count\":1}" },
+  ]);
+});
+
+test("Z.ai 응답의 tool_calls를 tool_use 블록으로 바꾸고 잘못된 인자는 빈 객체로 둔다", () => {
+  const result = fromOpenAiResponse({ choices: [{ message: { content: "", tool_calls: [
+    { id: "c1", type: "function", function: { name: "get_crop_guidance", arguments: "{\"cropId\":\"rice\"}" } },
+    { id: "c2", type: "function", function: { name: "offer_choices", arguments: "{깨진 JSON" } },
+  ] } }] });
+  assert.deepEqual(result.content, [
+    { type: "tool_use", id: "c1", name: "get_crop_guidance", input: { cropId: "rice" } },
+    { type: "tool_use", id: "c2", name: "offer_choices", input: {} },
+  ]);
+  assert.equal(fromOpenAiResponse({ choices: [] }), null);
+});
+
+test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는 JSON 모드로 받는다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey", ZAI_BASE_URL: "https://api.z.ai/api/coding/paas/v4/" });
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    requests.push({ url, request, body: JSON.parse(request.body) });
+    if (requests.length === 1) return Response.json({ choices: [{ message: { content: "안녕하세요" } }] });
+    return Response.json({ choices: [{ message: { content: "```json\n{\"intent\":\"help\"}\n```" } }] });
+  });
+
+  const chat = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ name: "x", description: "d", input_schema: { type: "object" } }] });
+  assert.equal(requests[0].url, "https://api.z.ai/api/coding/paas/v4/chat/completions");
+  assert.equal(requests[0].request.headers.authorization, "Bearer zkey");
+  assert.equal(requests[0].body.model, "glm-5.1");
+  assert.equal(requests[0].body.tool_choice, "auto");
+  assert.equal(requests[0].body.tools[0].function.name, "x");
+  assert.deepEqual(chat.content, [{ type: "text", text: "안녕하세요" }]);
+
+  const json = await askLLMJson("규칙", { message: "뭐해" }, { name: "farm_intent", schema: { type: "object", properties: { intent: { type: "string" } } } });
+  assert.deepEqual(requests[1].body.response_format, { type: "json_object" });
+  assert.equal(requests[1].body.tools, undefined);
+  assert.match(requests[1].body.messages[0].content, /JSON 스키마/);
+  assert.deepEqual(json, { intent: "help" });
+});
+
+test("Z.ai로 에이전트를 돌려도 검색 → 답변 흐름이 같다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey" });
+  const bodies = [];
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    bodies.push(JSON.parse(request.body));
+    if (bodies.length === 1) {
+      return Response.json({ choices: [{ message: { content: null, tool_calls: [
+        { id: "call_1", type: "function", function: { name: "search_listings", arguments: JSON.stringify({ cropId: "pepper", operations: ["ridge"], transaction: "rent" }) } },
+      ] } }] });
+    }
+    return Response.json({ choices: [{ message: { content: "고추 두둑 매물을 찾았어요." } }] });
+  });
+  const result = await runAgentTurn("고추 두둑 빌릴래요", {}, { listings: LISTINGS, today: TODAY });
+  assert.equal(bodies.length, 2);
+  const toolMessage = bodies[1].messages.at(-1);
+  assert.equal(toolMessage.role, "tool");
+  assert.equal(toolMessage.tool_call_id, "call_1");
+  assert.ok(JSON.parse(toolMessage.content).count > 0);
+  assert.equal(result.reply, "고추 두둑 매물을 찾았어요.");
+  assert.ok(result.listingIds.length > 0);
+});
+
+test("Z.ai가 오류를 돌려주면 null로 처리해 규칙 기반 안내로 넘긴다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey" });
+  t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code: "1113" } }, { status: 429 }));
+  assert.equal(await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }] }), null);
 });

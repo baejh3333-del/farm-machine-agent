@@ -14,7 +14,7 @@ import {
   REGION_COORDS,
 } from "../src/data/farm-machines.js";
 import { selectMatchingListings } from "../src/data/recommendation.js";
-import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
+import { checkModelCompatibility, SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { sendMessage as sendChatMessage } from "./chat.js";
 import { getPool, kstToday } from "./db.js";
 import { HttpError } from "./http.js";
@@ -46,17 +46,22 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const REGIONS = Object.keys(REGION_COORDS);
 const won = (n) => `${Number(n).toLocaleString("ko-KR")}원`;
 
-const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모아농"의 통합 AI 도우미 '농농'이다. 초보 농부와 어르신도 이해하기 쉬운 짧고 친절한 한국어 존댓말로 답한다.
+const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모아농"의 통합 AI 도우미 '농농'이다. 초보 농부와 어르신도 이해하기 쉬운 짧고 친절한 한국어 존댓말로, 정해진 틀에 얽매이지 않고 사용자 질문 맥락에 맞춰 자연스럽게 답한다.
 
 ## 일하는 순서
-1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
+1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/호환성/찜/채팅 문의/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물, 보유 농기계)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
 2. **첫 턴 즉시 추천 (매우 중요)**: 사용자가 작물(고추·벼·배추·감자), 작업(두둑·멀칭·로터리·수확 등), 또는 기종(관리기·트랙터·이앙기 등) 중 하나라도 언급하며 빌리기·사기·찾기를 요청하면, 면적·날짜·예산을 먼저 캐묻지 말고 **반드시 첫 턴에 즉시 search_listings 도구를 호출해 추천 매물 카드를 먼저 보여준다**.
    - 날짜가 아직 없으면 날짜 없이 검색해 후보를 먼저 보여 준 뒤, "어느 날짜에 빌리실지 골라 바로 예약해 보세요"처럼 1줄로 안내한다.
-3. 부족한 정보가 있어 선택을 받아야 하면(예: 작물·기종·작업이 전혀 없는 경우) 꼭 필요한 것만 한 번에 1~2개 묻고, 선택지가 있으면 반드시 offer_choices 도구로 원탭 선택 버튼을 제공한다. 모르는 값을 임의로 채우지 않는다(작물을 모르면 고추로 가정하지 않는다).
-4. 매물 검색, 작물 안내, 기상청 날씨, 시세 조회, 제원·수리 안내는 조건이 충분하면 즉시 도구를 호출한다.
-   - 대여 날짜가 정해지면 check_availability와 get_weather로 예약 가능 여부와 비 예보를 확인하고, 비가 오면 맑은 대안을 1줄로 안내한다.
+3. 부족한 정보가 있어 선택을 받아야 할 때는(예: 작물·기종·작업이 전혀 없는 경우) 한 번에 **가장 필요한 질문 1개만** 간결하게 묻고, 선택지가 있으면 offer_choices 도구(missingField, allowCustom, skippable 포함)로 원탭 선택 버튼을 제공한다. 여러 질문을 한꺼번에 쏟아내지 않고, 모르는 값을 임의로 채우지 않는다(작물을 모르면 고추로 가정하지 않는다).
+4. **대여/구매 전 맞춤 확인 & 유연한 답변**:
+   - 사용자가 "우리 농장에 사용 가능한지?", "내 농기계와 호환되는지?", "몇 평에 맞는지?"처럼 호환성·면적 적합성을 물으면 즉시 check_farm_compatibility 도구를 호출해 매물의 areaMin~areaMax(1평≈3.3㎡), 포함 작업기(included), 사용자 보유 농기계(ownedMachines / selectedOwnedModelId)와의 연결 호환성을 정확히 확인해 자연스럽게 설명한다.
+   - 매물 검색, 작물 안내, 기상청 날씨, 시세 조회, 제원·수리 안내는 조건이 충분하면 즉시 도구를 호출한다.
+   - 대여 날짜가 정해지거나 작업 날짜를 물으면 check_availability와 get_weather(또는 날짜 추천 시 suggest_work_dates)로 예약 가능 여부와 날씨를 확인한다. **비·눈·강풍 등 나쁜 날씨(badWeatherWarning)가 감지되면 반드시 날씨 경고를 먼저 알리고, goodAlternatives에 담긴 맑은 대안 날짜 선택지를 함께 제안한다.**
    - 추천할 때는 핵심 조건(기계명, 지역, 기간 또는 가격, 총 대여료)을 함께 보여 주고, 사용자가 "네/예약해줘"만 답해도 바로 실행할 수 있게 묻는다.
-5. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
+5. **찜하기 & 1:1 채팅 문의 (당근마켓 스타일)**:
+   - 사용자가 매물을 찜하고 싶거나 즐겨찾기 추가/해제를 원하면 toggle_favorite 도구를 호출한다.
+   - 찜하기·예약·구매 전에 판매자/소유자에게 먼저 물어보고 싶어 하거나 "채팅으로 물어볼래요", "판매자한테 연락할래요"라고 하면 open_listing_chat 도구를 호출해 1:1 채팅 창을 열어 준다(필요하면 prefillMessage에 짧은 첫 인사/질문을 담아 준다).
+6. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
    - 사용자가 "예약해줘", "네", "그걸로 해 주세요", "올려 주세요"처럼 분명히 긍정·실행 의사를 밝혔고 필수 조건(매물 ID, 시작일/반납일 등)이 모두 정해졌으면 create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다.
    - 아직 확정 전이거나 날짜/조건 확인용 카드를 먼저 띄워야 할 때는 propose_rental_request 또는 prepare_listing_draft를 호출한다.
    - 완료되면 도구 결과의 예약·등록 번호와 요약을 안내하고, 결제는 사용자가 [대여 요청] 메뉴나 판매자 채팅에서 직접 한다고 알려 준다.
@@ -138,15 +143,42 @@ const TOOLS = [
   },
   {
     name: "get_weather",
-    description: "영양군 지역의 날짜별 날씨와 강수 가능성을 확인한다.",
+    description: "영양군 지역의 날짜별 날씨와 농작업 적합도, 나쁜 날씨 시 맑은 대안 날짜를 확인한다.",
     input_schema: {
       type: "object",
       properties: {
         region: { type: ["string", "null"], enum: [null, ...REGIONS] },
         start: { type: "string", description: "시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "종료일 YYYY-MM-DD" },
+        listingId: { type: ["string", "null"], description: "대여 매물 ID (선택, 주면 예약 충돌 날짜를 대안에서 제외)" },
       },
       required: ["start"],
+    },
+  },
+  {
+    name: "suggest_work_dates",
+    description: "앞으로 7일 예보를 확인해 비·강풍을 피한 작업 좋은 날짜(대여 매물이 있으면 빈 날짜)를 추천한다.",
+    input_schema: {
+      type: "object",
+      properties: {
+        region: { type: ["string", "null"], enum: [null, ...REGIONS] },
+        start: { type: ["string", "null"], description: "기준 시작일 YYYY-MM-DD (없으면 오늘)" },
+        days: { type: ["integer", "null"], description: "필요한 작업 일수 (기본 1일)" },
+        listingId: { type: ["string", "null"], description: "대여 매물 ID (선택)" },
+      },
+    },
+  },
+  {
+    name: "check_farm_compatibility",
+    description: "매물이 사용자의 농장 면적(평) 및 보유 농기계(트랙터·관리기 등)와 호환되는지 확인한다. 읽기 전용이다.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listingId: { type: "string", description: "확인할 매물 ID" },
+        areaPyeong: { type: ["number", "null"], description: "농장 작업 면적(평)" },
+        ownedModelId: { type: ["string", "null"], description: "보유 본체 모델 ID (없으면 화면 조건 사용)" },
+      },
+      required: ["listingId"],
     },
   },
   {
@@ -307,6 +339,30 @@ const TOOLS = [
     },
   },
   {
+    name: "toggle_favorite",
+    description: "사용자가 마음에 드는 매물을 찜(즐겨찾기)하거나 찜 해제한다.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listingId: { type: "string", description: "찜할 매물 ID" },
+        favorite: { type: ["boolean", "null"], description: "true면 찜 추가, false면 찜 해제, 생략/null이면 토글" },
+      },
+      required: ["listingId"],
+    },
+  },
+  {
+    name: "open_listing_chat",
+    description: "매물 소유자·판매자와 1:1 채팅 문의 창을 연다. 찜하거나 예약·구매하기 전에 직접 물어보고 싶을 때 사용한다.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listingId: { type: "string", description: "채팅할 매물 ID" },
+        prefillMessage: { type: ["string", "null"], description: "채팅 입력창에 미리 채울 짧은 문의 문장(선택)" },
+      },
+      required: ["listingId"],
+    },
+  },
+  {
     name: "offer_choices",
     description: "사용자에게 꼭 필요한 질문 하나와 고를 수 있는 답(2~5개)을 보여 준다. 호출하면 이번 응답이 끝난다.",
     input_schema: {
@@ -314,6 +370,9 @@ const TOOLS = [
       properties: {
         question: { type: "string" },
         choices: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 5 },
+        missingField: { type: ["string", "null"], description: "부족한 항목 식별자(예: crop, operation, date, region, areaPyeong, transaction)" },
+        allowCustom: { type: "boolean", description: "선택지 외 직접 입력 허용 여부 (기본 true)" },
+        skippable: { type: "boolean", description: "건너뛰기/상관없음 허용 여부 (기본 false)" },
       },
       required: ["question", "choices"],
     },
@@ -354,7 +413,37 @@ export function cleanUiContext(raw) {
   const areaPyeong = Number(raw.areaPyeong) > 0 && Number(raw.areaPyeong) <= 1_000_000 ? Number(raw.areaPyeong) : null;
   const maxPrice = Number.isSafeInteger(raw.maxPrice) && raw.maxPrice > 0 ? raw.maxPrice : null;
   const viewingListingId = typeof raw.viewingListingId === "string" ? raw.viewingListingId.trim().slice(0, 80) : null;
-  return { region, transaction, cropIds, operations, date, dateEnd, areaPyeong, maxPrice, viewingListingId };
+  const ownedMachines = (Array.isArray(raw.ownedMachines) ? raw.ownedMachines : [])
+    .filter((m) => m && typeof m === "object" && typeof m.modelId === "string" && Object.hasOwn(SPEC_BY_ID, m.modelId))
+    .slice(0, 5)
+    .map((m) => ({
+      modelId: m.modelId,
+      name: typeof m.name === "string" && m.name.trim()
+        ? m.name.trim().slice(0, 40)
+        : `${SPEC_BY_ID[m.modelId].brand} ${SPEC_BY_ID[m.modelId].model}`,
+    }));
+  const selectedOwnedModelId = typeof raw.selectedOwnedModelId === "string" && Object.hasOwn(SPEC_BY_ID, raw.selectedOwnedModelId)
+    ? raw.selectedOwnedModelId
+    : null;
+  const favoriteIds = [...new Set(
+    (Array.isArray(raw.favoriteIds) ? raw.favoriteIds : [])
+      .filter((id) => typeof id === "string" && id.trim().length > 0)
+      .map((id) => id.trim().slice(0, 80)),
+  )].slice(0, 50);
+  return {
+    region,
+    transaction,
+    cropIds,
+    operations,
+    date,
+    dateEnd,
+    areaPyeong,
+    maxPrice,
+    viewingListingId,
+    ownedMachines,
+    selectedOwnedModelId,
+    favoriteIds,
+  };
 }
 
 function formatUiContextPrompt(uiCtx, catalog) {
@@ -366,10 +455,20 @@ function formatUiContextPrompt(uiCtx, catalog) {
   if (uiCtx.date) lines.push(`- 화면 선택 기간: ${uiCtx.date} ~ ${uiCtx.dateEnd || uiCtx.date}`);
   if (uiCtx.areaPyeong) lines.push(`- 화면 입력 면적: ${uiCtx.areaPyeong}평`);
   if (uiCtx.maxPrice) lines.push(`- 화면 예산 상한: ${won(uiCtx.maxPrice)}`);
+  if (uiCtx.ownedMachines?.length) {
+    lines.push(`- 사용자 보유 농기계: ${uiCtx.ownedMachines.map((m) => `${m.name}(${m.modelId})`).join(", ")}`);
+  }
+  if (uiCtx.selectedOwnedModelId) {
+    const selSpec = SPEC_BY_ID[uiCtx.selectedOwnedModelId];
+    lines.push(`- 현재 선택된 보유 농기계: ${selSpec ? `${selSpec.brand} ${selSpec.model}` : uiCtx.selectedOwnedModelId}(${uiCtx.selectedOwnedModelId})`);
+  }
+  if (uiCtx.favoriteIds?.length) {
+    lines.push(`- 찜한 매물 ID(${uiCtx.favoriteIds.length}개): ${uiCtx.favoriteIds.slice(0, 10).join(", ")}${uiCtx.favoriteIds.length > 10 ? " 외" : ""}`);
+  }
   if (uiCtx.viewingListingId && Array.isArray(catalog)) {
     const item = catalog.find((l) => l.id === uiCtx.viewingListingId && l.status !== "removed");
     if (item) {
-      lines.push(`- 지금 사용자가 보고 있는 매물: id=${item.id}, 제목="${item.title}", 유형=${item.type === "rent" ? "대여" : "판매"}, 기종=${MACHINE_BY_ID[item.machineType]?.label || item.machineType}, 가격=${won(item.price)}${item.type === "rent" ? "/일" : ""}, 지역=${item.region}, 상태=${item.status}`);
+      lines.push(`- 지금 사용자가 보고 있는 매물: id=${item.id}, 제목="${item.title}", 유형=${item.type === "rent" ? "대여" : "판매"}, 기종=${MACHINE_BY_ID[item.machineType]?.label || item.machineType}, 가격=${won(item.price)}${item.type === "rent" ? "/일" : ""}, 지역=${item.region}, 상태=${item.status}, 면적=${item.areaMin}~${item.areaMax}㎡, 포함=${item.included || "미기재"}${item.modelId ? `, 모델=${item.modelId}` : ""}`);
     }
   }
   return lines.length ? `\n\n[현재 화면 조건]\n${lines.join("\n")}` : "";
@@ -525,13 +624,188 @@ function calculateCostTool(input, listings, today) {
   };
 }
 
+export function checkFarmCompatibilityTool(input, listings, uiCtx = {}) {
+  const item = listings.find((l) => l.id === input?.listingId && l.status !== "removed");
+  if (!item) return { error: "매물을 찾을 수 없습니다." };
+  const areaPyeong = Number(input?.areaPyeong) > 0
+    ? Number(input.areaPyeong)
+    : (Number(uiCtx?.areaPyeong) > 0 ? Number(uiCtx.areaPyeong) : null);
+  const ownedModelId = Object.hasOwn(SPEC_BY_ID, input?.ownedModelId)
+    ? input.ownedModelId
+    : (uiCtx?.selectedOwnedModelId || uiCtx?.ownedMachines?.[0]?.modelId || null);
+
+  const areaMin = Number(item.areaMin) || 0;
+  const areaMax = Number(item.areaMax) || 0;
+  const minPyeong = areaMin ? Math.round(areaMin / 3.3) : 0;
+  const maxPyeong = areaMax ? Math.round(areaMax / 3.3) : 0;
+
+  let areaM2 = null;
+  let areaFit = null;
+  let areaNote = areaMin && areaMax
+    ? `권장 작업 면적은 ${areaMin}~${areaMax}㎡(약 ${minPyeong}~${maxPyeong}평)입니다.`
+    : "매물에 권장 면적 정보가 없습니다.";
+  if (areaPyeong) {
+    areaM2 = Math.round(areaPyeong * 3.3);
+    if (areaMin && areaMax) {
+      if (areaM2 < areaMin) {
+        areaFit = "too_small";
+        areaNote = `입력 면적 ${areaPyeong}평(약 ${areaM2}㎡)은 권장 최소 면적(${areaMin}㎡, 약 ${minPyeong}평)보다 좁아 작업 효율이 떨어질 수 있어요.`;
+      } else if (areaM2 > areaMax) {
+        areaFit = "too_large";
+        areaNote = `입력 면적 ${areaPyeong}평(약 ${areaM2}㎡)은 권장 최대 면적(${areaMax}㎡, 약 ${maxPyeong}평)보다 넓어 작업 시간이 오래 걸릴 수 있어요.`;
+      } else {
+        areaFit = "fit";
+        areaNote = `입력 면적 ${areaPyeong}평(약 ${areaM2}㎡)은 권장 면적(${areaMin}~${areaMax}㎡, 약 ${minPyeong}~${maxPyeong}평)에 잘 맞습니다.`;
+      }
+    }
+  }
+
+  const listingModelId = item.modelId && Object.hasOwn(SPEC_BY_ID, item.modelId) ? item.modelId : null;
+  const listingSpec = listingModelId ? SPEC_BY_ID[listingModelId] : null;
+  let compatibility;
+  if (listingSpec?.role === "standalone") {
+    compatibility = {
+      status: "standalone",
+      reason: "독립 구동 장비라 별도의 트랙터나 관리기 연결이 필요하지 않습니다.",
+    };
+  } else if (listingSpec?.role === "implement") {
+    if (ownedModelId) {
+      const compat = checkModelCompatibility(ownedModelId, listingSpec.id);
+      const ownedSpec = SPEC_BY_ID[ownedModelId];
+      compatibility = {
+        ...compat,
+        ownedModelId,
+        ownedModel: ownedSpec ? `${ownedSpec.brand} ${ownedSpec.model}` : ownedModelId,
+        listingModel: `${listingSpec.brand} ${listingSpec.model}`,
+      };
+    } else {
+      compatibility = {
+        status: "needs_power_unit",
+        hostType: listingSpec.connection?.hostType || null,
+        reason: `부착 작업기(${listingSpec.brand} ${listingSpec.model})입니다. 호환 여부를 확인하려면 보유 중인 트랙터·관리기 기종을 알려 주세요.`,
+      };
+    }
+  } else if (listingSpec?.role === "powerUnit") {
+    compatibility = {
+      status: "power_unit",
+      reason: `${listingSpec.brand} ${listingSpec.model} 본체입니다. 포함 작업기(${item.included || "확인 필요"}) 여부를 확인하세요.`,
+    };
+  } else {
+    const isImplementType = ["ridgeMulcher", "potatoPlanter", "potatoHarvester"].includes(item.machineType);
+    compatibility = {
+      status: isImplementType ? "check" : "standalone",
+      reason: isImplementType
+        ? "작업기 매물입니다. 동력 본체(트랙터/관리기) 연결 규격과 포함 부속을 판매자·소유자에게 확인하세요."
+        : `단독 사용 가능 기종으로 보입니다. 포함 구성(${item.included || "미기재"})을 확인하세요.`,
+    };
+  }
+
+  return {
+    listingId: item.id,
+    title: item.title,
+    machineType: MACHINE_BY_ID[item.machineType]?.label || item.machineType,
+    modelId: listingModelId,
+    included: item.included || "",
+    areaRangeM2: [areaMin, areaMax],
+    areaRangePyeong: [minPyeong, maxPyeong],
+    ...(areaPyeong ? { areaPyeong, areaM2, areaFit } : {}),
+    areaNote,
+    compatibility,
+  };
+}
+
+function isDayGoodWeather(d) {
+  if (!d) return false;
+  if (typeof d.suitability === "string") return d.suitability === "good";
+  return d.icon !== "rain" && d.icon !== "snow" && d.icon !== "wind" && (Number(d.pop) || 0) < 60;
+}
+
+function isDateBooked(ymd, booked = []) {
+  return booked.some((r) => r && ymd >= r.start && ymd <= r.end);
+}
+
+function evaluateWeatherAndAlternatives({ wData, start, end, today, booked = [] }) {
+  const rawChecked = (Array.isArray(wData?.rangeForecast) && wData.rangeForecast.length ? wData.rangeForecast : [wData?.weather])
+    .filter(Boolean)
+    .slice(0, 14);
+  const days = rawChecked.map((d) => ({
+    date: d.date,
+    dateText: formatKoreanDate(d.date),
+    summary: d.summary,
+    icon: d.icon || "sun",
+    suitability: d.suitability || (isDayGoodWeather(d) ? "good" : "caution"),
+    pop: Number(d.pop) || 0,
+    rainChance: Number(d.pop) || 0,
+    tempMin: d.tempMin,
+    tempMax: d.tempMax,
+    temp: `${d.tempMin}~${d.tempMax}도`,
+    advice: d.advice || "",
+    rainy: d.icon === "rain" || d.icon === "snow",
+  }));
+  const badDays = days.filter((d) => !isDayGoodWeather(d));
+  const hasBadWeather = badDays.length > 0;
+  const warning = hasBadWeather
+    ? badDays.map((d) => `${d.dateText} ${d.summary}${d.advice ? ` — ${d.advice}` : ""}`).join(" / ")
+    : null;
+
+  const forecastPool = (Array.isArray(wData?.forecastDays) && wData.forecastDays.length ? wData.forecastDays : rawChecked)
+    .filter((d) => d && DATE.test(d.date || "") && d.date >= today);
+  const spanDays = Math.min(7, Math.max(1, rentalDays(start, end) || 1));
+
+  const windows = [];
+  if (spanDays > 1 && forecastPool.length >= spanDays) {
+    for (let i = 0; i <= forecastPool.length - spanDays; i += 1) {
+      const slice = forecastPool.slice(i, i + spanDays);
+      const contiguous = slice.every((d, idx) => idx === 0 || rentalDays(slice[idx - 1].date, d.date) === 2);
+      if (contiguous && slice.every((d) => isDayGoodWeather(d) && !isDateBooked(d.date, booked))) {
+        windows.push(slice);
+      }
+    }
+  }
+  if (!windows.length) {
+    for (const d of forecastPool) {
+      if (isDayGoodWeather(d) && !isDateBooked(d.date, booked)) {
+        windows.push([d]);
+      }
+    }
+  }
+
+  const goodAlternatives = windows.slice(0, 3).map((w) => ({
+    start: w[0].date,
+    end: w.at(-1).date,
+    label: w.length === 1
+      ? `${formatKoreanDate(w[0].date)} (${w[0].summary})`
+      : `${formatKoreanDate(w[0].date)} ~ ${formatKoreanDate(w.at(-1).date)}`,
+    summary: w[0].summary,
+    icon: w[0].icon || "sun",
+    pop: Math.max(...w.map((x) => Number(x.pop) || 0)),
+    tempMin: Math.min(...w.map((x) => x.tempMin ?? 0)),
+    tempMax: Math.max(...w.map((x) => x.tempMax ?? 0)),
+  }));
+
+  return {
+    region: wData?.region || "영양읍",
+    checkedRange: { start, end },
+    hasBadWeather,
+    warning,
+    days,
+    goodAlternatives,
+  };
+}
+
 function cleanChoices(input) {
   const question = typeof input?.question === "string" ? input.question.trim().slice(0, 300) : "";
   const choices = (Array.isArray(input?.choices) ? input.choices : [])
     .filter((choice) => typeof choice === "string" && choice.trim())
     .map((choice) => choice.trim().slice(0, 40))
     .slice(0, 5);
-  return question && choices.length >= 2 ? { question, choices } : null;
+  if (!question || choices.length < 2) return null;
+  const missingField = typeof input?.missingField === "string" && input.missingField.trim()
+    ? input.missingField.trim().slice(0, 40)
+    : null;
+  const allowCustom = input?.allowCustom !== false;
+  const skippable = Boolean(input?.skippable);
+  return { question, choices, missingField, allowCustom, skippable };
 }
 
 function cleanPhotoSummary(input) {
@@ -749,7 +1023,7 @@ async function runTurn(
   const texts = [];
   const finish = (reply, extra = {}) => {
     const result = { mode: "agent", reply, listingIds: out.listingIds, ...extra };
-    for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates"]) {
+    for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget"]) {
       if (out[key]) result[key] = out[key];
     }
     if (sources.length) result.sources = sources.slice(0, 6);
@@ -792,31 +1066,48 @@ async function runTurn(
         output = checkAvailabilityTool(block.input, await loadCatalog(), today);
       } else if (block.name === "calculate_cost") {
         output = calculateCostTool(block.input, await loadCatalog(), today);
-      } else if (block.name === "get_weather") {
-        const start = String(block.input?.start || "");
+      } else if (block.name === "get_weather" || block.name === "suggest_work_dates") {
+        const isSuggest = block.name === "suggest_work_dates";
+        const startRaw = String(block.input?.start || "");
+        const start = DATE.test(startRaw) ? startRaw : (isSuggest ? today : "");
         if (!DATE.test(start)) {
           output = { error: "날짜(YYYY-MM-DD)가 필요합니다." };
         } else if (!deps?.getWeather) {
           output = { error: "날씨 조회 기능이 연결되지 않았습니다." };
         } else {
           try {
-            const end = DATE.test(block.input?.end || "") && block.input.end >= start ? block.input.end : start;
+            let end = DATE.test(block.input?.end || "") && block.input.end >= start ? block.input.end : start;
+            if (isSuggest && Number.isSafeInteger(block.input?.days) && block.input.days > 1) {
+              const span = Math.min(7, block.input.days);
+              end = new Date(Date.parse(`${start}T00:00:00Z`) + (span - 1) * 86_400_000).toISOString().slice(0, 10);
+            }
             const wRegion = REGIONS.includes(block.input?.region) ? block.input.region : (effectiveRegion || "영양읍");
-            const wData = await deps.getWeather({ region: wRegion, date: start, endDate: end });
-            const days = (wData.rangeForecast || [wData.weather]).slice(0, 14).map((d) => ({
-              date: d.date,
-              dateText: formatKoreanDate(d.date),
-              summary: d.summary,
-              rainChance: d.pop,
-              temp: `${d.tempMin}~${d.tempMax}도`,
-              rainy: d.icon === "rain" || d.icon === "snow",
-            }));
-            const fallback = (wData.rangeForecast || [wData.weather]).some((d) => d.source !== "kma");
-            output = { region: wData.region, days, source: fallback ? "예보 범위 밖이거나 예시 안내입니다. 참고만 하도록 말하세요." : "기상청 단기예보" };
+            const listingId = typeof block.input?.listingId === "string" ? block.input.listingId.trim() : "";
+            let booked = [];
+            if (listingId) {
+              const matchedListing = (await loadCatalog()).find((l) => l.id === listingId && l.status !== "removed");
+              booked = matchedListing?.booked || [];
+            }
+            const wData = await deps.getWeather({ region: wRegion, date: start, endDate: end, days: 7 });
+            const evaluated = evaluateWeatherAndAlternatives({ wData, start, end, today, booked });
+            out.weatherInfo = evaluated;
+            const checkedRaw = (Array.isArray(wData.rangeForecast) && wData.rangeForecast.length ? wData.rangeForecast : [wData.weather]).filter(Boolean);
+            const fallback = checkedRaw.some((d) => d.source !== "kma");
+            output = {
+              region: evaluated.region,
+              checkedRange: evaluated.checkedRange,
+              days: evaluated.days,
+              badWeatherWarning: evaluated.hasBadWeather,
+              ...(evaluated.hasBadWeather ? { warningReason: evaluated.warning } : {}),
+              goodAlternatives: evaluated.goodAlternatives,
+              source: fallback ? "예보 범위 밖이거나 예시 안내입니다. 참고만 하도록 말하세요." : "기상청 단기예보",
+            };
           } catch (error) {
             output = mapToolError(error, "날씨를 확인하지 못했습니다.");
           }
         }
+      } else if (block.name === "check_farm_compatibility") {
+        output = checkFarmCompatibilityTool(block.input, await loadCatalog(), uiCtx);
       } else if (block.name === "propose_rental_request") {
         output = proposeRentalTool(block.input, await loadCatalog(), today);
         if (output.ok) pendingAction = output.proposal;
@@ -1087,6 +1378,42 @@ async function runTurn(
             output = mapToolError(error, "매물을 수정하지 못했습니다.");
           }
         }
+      } else if (block.name === "toggle_favorite") {
+        const item = (await loadCatalog()).find((l) => l.id === block.input?.listingId && l.status !== "removed");
+        if (!item) {
+          output = { ok: false, error: "매물을 찾을 수 없습니다." };
+        } else {
+          const currentlyFav = Boolean(uiCtx.favoriteIds?.includes(item.id));
+          const desiredFav = typeof block.input?.favorite === "boolean" ? block.input.favorite : !currentlyFav;
+          if (user && deps?.toggleFavorite) {
+            try {
+              await deps.beforeWrite?.("toggle_favorite");
+              const favRes = await deps.toggleFavorite(user, {
+                listingId: item.id,
+                favorite: typeof block.input?.favorite === "boolean" ? block.input.favorite : undefined,
+              });
+              const isFavorite = typeof favRes?.isFavorite === "boolean" ? favRes.isFavorite : desiredFav;
+              out.favoriteAction = { listingId: item.id, favorite: isFavorite, title: item.title, synced: true };
+              output = { ok: true, listingId: item.id, title: item.title, favorite: isFavorite, synced: true };
+            } catch (error) {
+              output = mapToolError(error, "찜 상태를 바꾸지 못했습니다.");
+            }
+          } else {
+            out.favoriteAction = { listingId: item.id, favorite: desiredFav, title: item.title, synced: false };
+            output = { ok: true, listingId: item.id, title: item.title, favorite: desiredFav, synced: false, note: "화면에서 찜 상태를 반영합니다." };
+          }
+        }
+      } else if (block.name === "open_listing_chat") {
+        const item = (await loadCatalog()).find((l) => l.id === block.input?.listingId && l.status !== "removed");
+        if (!item) {
+          output = { ok: false, error: "매물을 찾을 수 없습니다." };
+        } else if (user && item.ownerId === user.id) {
+          output = { ok: false, error: "본인이 등록한 매물에는 1:1 채팅을 열 수 없습니다." };
+        } else {
+          const prefill = typeof block.input?.prefillMessage === "string" ? block.input.prefillMessage.trim().slice(0, 200) : "";
+          out.chatTarget = { listingId: item.id, title: item.title, prefill };
+          output = { ok: true, listingId: item.id, title: item.title, prefill, note: "판매자·소유자와의 1:1 채팅 창을 열도록 화면에 전달했습니다." };
+        }
       } else if (block.name === "get_insurance_info") {
         output = asksInsurance(text, history)
           ? getInsuranceInfo(block.input || {})
@@ -1105,7 +1432,16 @@ async function runTurn(
       return finish(texts.at(-1) || defaultAsk, { listingIds: [], pendingAction });
     }
     if (choices) {
-      return finish([texts.at(-1), choices.question].filter(Boolean).join("\n\n"), { choices: choices.choices });
+      return finish([texts.at(-1), choices.question].filter(Boolean).join("\n\n"), {
+        choices: choices.choices,
+        planQuestion: {
+          question: choices.question,
+          options: choices.choices,
+          missingField: choices.missingField,
+          allowCustom: choices.allowCustom,
+          skippable: choices.skippable,
+        },
+      });
     }
     for (const item of messages) {
       if (!Array.isArray(item.content)) continue;

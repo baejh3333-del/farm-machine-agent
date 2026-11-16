@@ -1,7 +1,8 @@
-import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
-import { $, addDays, areaLabel, escapeHtml, money, today, toast } from "../core/utils.js";
+import { CROPS, CROP_BY_ID, MACHINE_TYPES, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
+import { activeFavorites } from "../core/store.js";
+import { $, addDays, areaLabel, money, today, toast } from "../core/utils.js";
 import { listingDraftToFormValues } from "./photo.js";
-import { askAgent, executeAgentAction } from "./recommend-agent.js";
+import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
 
 const MACHINE_LABELS = {
   cultivator: "관리기",
@@ -58,16 +59,34 @@ function wantsDatePicker(reply, result) {
   return /(?:언제|날짜|기간|며칠|시작일|반납일).*?(?:빌리|대여|필요|원하|알려|골라|말씀|정해|[?？])/.test(String(reply || ""));
 }
 
+const PLAN_FIELD_LABELS = {
+  region: "작업 지역",
+  crop: "작물",
+  cropId: "작물",
+  machineType: "필요 기종",
+  operation: "작업 종류",
+  date: "작업 일정",
+  areaPyeong: "작업 면적",
+  transaction: "거래 유형",
+};
+
 export function createAiPanel({
   state,
   runtime,
+  persist = () => {},
+  allListings = () => [],
   listingById,
   loadCatalog = () => Promise.resolve(),
   openDetail,
+  renderListings = () => {},
   refreshAuthenticatedData,
   savePendingIntentAndRedirectLogin,
   setView = () => {},
   openNewListing,
+  toggleFavorite,
+  isFavorite,
+  openChat,
+  getOwnedMachines = () => ({ owned: [], selectedId: "" }),
 }) {
   let recommendationPending = false;
   let agentHistory = [];
@@ -75,119 +94,284 @@ export function createAiPanel({
   let photoIsNew = false;
   let lastPhotoDataUrl = null;
   let savedDraft = null;
+  let quickOwnedNote = "";
+  let setupExpanded = false;
+  let pickerOpen = false;
   const aiDefaultPlaceholder = $("aiInput").placeholder;
 
-  const qbState = { mode: "rent", cropId: "", machineType: "", datePreset: "none" };
-  const QB_SUBMIT_LABELS = {
-    rent: "⚡ 선택한 조건으로 바로 찾기",
-    sale: "🛒 구매 매물 바로 찾기",
-    sell: "🏷️ 내 기계 등록 상담하기",
-    repair: "🔧 고장·점검 방법 물어보기",
-  };
+  function checkIsFavorite(id) {
+    if (typeof isFavorite === "function") return Boolean(isFavorite(id));
+    return activeFavorites().includes(id);
+  }
 
-  function syncQuickBuilderUi() {
+  function syncAiFavoriteButtons(id, favState) {
+    if (!id) return;
+    document.querySelectorAll("[data-ai-favorite]").forEach((btn) => {
+      if (btn.dataset.aiFavorite !== id) return;
+      btn.setAttribute("aria-pressed", String(favState));
+      btn.classList.toggle("is-favorited", favState);
+      btn.textContent = favState ? "❤️ 찜됨" : "🤍 찜";
+    });
+  }
+
+  async function handleToggleFavorite(id) {
+    if (typeof toggleFavorite !== "function") {
+      toast("찜하기 기능을 사용할 수 없어요.");
+      return;
+    }
+    await toggleFavorite(id);
+    syncAiFavoriteButtons(id, checkIsFavorite(id));
+  }
+
+  function handleOpenChat(target) {
+    if (typeof openChat === "function") {
+      openChat(target);
+      return;
+    }
+    setView("requests");
+  }
+
+  function getGarageInfo() {
+    const garage = typeof getOwnedMachines === "function" ? getOwnedMachines() : null;
+    const owned = Array.isArray(garage?.owned) ? garage.owned : [];
+    const selectedId = garage?.selectedId || "";
+    const selectedOwned = owned.find((m) => m.id === selectedId);
+    const selectedOwnedModelId = selectedOwned?.modelId || selectedId || "";
+    return { owned, selectedId, selectedOwnedModelId };
+  }
+
+  function formatSetupSummary() {
+    const region = state.region || "영양읍";
+    const area = Number(state.filters?.areaPyeong) > 0 ? `${Number(state.filters.areaPyeong)}평` : "면적 미정";
+    const { owned } = getGarageInfo();
+    const ownedLabel = quickOwnedNote
+      ? quickOwnedNote
+      : owned.length
+        ? `${owned[0].name || "보유 기계"}${owned.length > 1 ? ` 외 ${owned.length - 1}대` : ""}`
+        : "보유 기계 없음";
+    return `내 초기 설정: ${region} · ${area} · ${ownedLabel}`;
+  }
+
+  function appendInputToken(text) {
+    const input = $("aiInput");
+    if (!input) return;
+    const current = input.value.trim();
+    input.value = current ? `${current} ${text}` : text;
+    input.focus();
+  }
+
+  function setPickerOpen(nextOpen) {
+    pickerOpen = Boolean(nextOpen);
+    const drawer = $("aiPickerDrawer");
+    if (drawer) drawer.hidden = !pickerOpen;
+    document.querySelectorAll("[data-ai-picker-toggle]").forEach((btn) => {
+      btn.setAttribute("aria-expanded", String(pickerOpen));
+    });
+  }
+
+  function ensurePickerDrawer() {
+    if ($("aiPickerDrawer")) return $("aiPickerDrawer");
+    const panel = $("aiPanel");
+    const anchor = $("aiPhotoPreview") || $("aiForm");
+    if (!panel || !anchor) return null;
+
+    const drawer = document.createElement("div");
+    drawer.id = "aiPickerDrawer";
+    drawer.className = "ai-picker-drawer";
+    drawer.hidden = true;
+
+    const header = document.createElement("div");
+    header.className = "ai-picker-header";
+    const title = document.createElement("span");
+    title.textContent = "작물·기종 선택 (누르면 입력창에 들어가요)";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "ai-picker-close";
+    closeBtn.textContent = "닫기 ✕";
+    closeBtn.addEventListener("click", () => setPickerOpen(false));
+    header.append(title, closeBtn);
+    drawer.append(header);
+
+    const cropSec = document.createElement("div");
+    cropSec.className = "ai-picker-section";
+    const cropLabel = document.createElement("div");
+    cropLabel.className = "ai-picker-label";
+    cropLabel.textContent = "작물";
+    const cropChips = document.createElement("div");
+    cropChips.className = "ai-picker-chips";
+    for (const crop of CROPS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ai-picker-chip";
+      btn.textContent = crop.name;
+      btn.addEventListener("click", () => {
+        appendInputToken($("aiInput").value.trim() ? crop.name : `${crop.name}밭에 쓸 기계 찾고 있어요`);
+        setPickerOpen(false);
+      });
+      cropChips.append(btn);
+    }
+    cropSec.append(cropLabel, cropChips);
+
+    const machineSec = document.createElement("div");
+    machineSec.className = "ai-picker-section";
+    const machineLabel = document.createElement("div");
+    machineLabel.className = "ai-picker-label";
+    machineLabel.textContent = "농기계 기종";
+    const machineChips = document.createElement("div");
+    machineChips.className = "ai-picker-chips";
+    for (const machine of MACHINE_TYPES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ai-picker-chip";
+      btn.textContent = machine.label;
+      btn.addEventListener("click", () => {
+        appendInputToken($("aiInput").value.trim() ? machine.label : `${machine.label} 찾고 있어요`);
+        setPickerOpen(false);
+      });
+      machineChips.append(btn);
+    }
+    machineSec.append(machineLabel, machineChips);
+
+    drawer.append(cropSec, machineSec);
+    panel.insertBefore(drawer, anchor);
+
+    const form = $("aiForm");
+    if (form && !form.querySelector("[data-ai-picker-toggle]")) {
+      const inlineBtn = document.createElement("button");
+      inlineBtn.type = "button";
+      inlineBtn.className = "ai-picker-inline-btn";
+      inlineBtn.dataset.aiPickerToggle = "inline";
+      inlineBtn.setAttribute("aria-expanded", "false");
+      inlineBtn.setAttribute("aria-controls", "aiPickerDrawer");
+      inlineBtn.textContent = "작물·기종";
+      inlineBtn.addEventListener("click", () => setPickerOpen(!pickerOpen));
+      const input = $("aiInput");
+      if (input) form.insertBefore(inlineBtn, input);
+      else form.append(inlineBtn);
+    }
+
+    return drawer;
+  }
+
+  function renderStarterBar() {
     const root = $("aiStarters");
     if (!root) return;
-    root.querySelectorAll("[data-qb-mode]").forEach((btn) => {
-      const active = btn.dataset.qbMode === qbState.mode;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-pressed", String(active));
+    ensurePickerDrawer();
+    root.replaceChildren();
+
+    const card = document.createElement("div");
+    card.className = "ai-starter-card";
+
+    const setupBar = document.createElement("div");
+    setupBar.className = "ai-setup-bar";
+    const summary = document.createElement("span");
+    summary.className = "ai-setup-summary";
+    summary.textContent = formatSetupSummary();
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "ai-setup-toggle";
+    toggleBtn.setAttribute("aria-expanded", String(setupExpanded));
+    toggleBtn.textContent = setupExpanded ? "접기" : "설정 변경";
+    setupBar.append(summary, toggleBtn);
+
+    const form = document.createElement("div");
+    form.className = "ai-setup-form";
+    form.hidden = !setupExpanded;
+
+    const fields = document.createElement("div");
+    fields.className = "ai-setup-fields";
+
+    const regionField = document.createElement("label");
+    regionField.className = "ai-setup-field";
+    regionField.append(document.createTextNode("동네"));
+    const regionSelect = document.createElement("select");
+    regionSelect.setAttribute("aria-label", "작업 동네");
+    const regionNames = Object.keys(REGION_COORDS || { 영양읍: 1, 청기면: 1, 입암면: 1, 수비면: 1 });
+    for (const r of regionNames) {
+      const opt = document.createElement("option");
+      opt.value = r;
+      opt.textContent = r;
+      if ((state.region || "영양읍") === r) opt.selected = true;
+      regionSelect.append(opt);
+    }
+    regionField.append(regionSelect);
+
+    const areaField = document.createElement("label");
+    areaField.className = "ai-setup-field";
+    areaField.append(document.createTextNode("면적(평)"));
+    const areaInput = document.createElement("input");
+    areaInput.type = "number";
+    areaInput.min = "0";
+    areaInput.step = "50";
+    areaInput.placeholder = "예: 300";
+    areaInput.value = state.filters?.areaPyeong ? String(state.filters.areaPyeong) : "";
+    areaInput.setAttribute("aria-label", "작업 면적(평)");
+    areaField.append(areaInput);
+
+    const ownedField = document.createElement("label");
+    ownedField.className = "ai-setup-field is-full";
+    ownedField.append(document.createTextNode("보유 농기계 메모"));
+    const ownedInput = document.createElement("input");
+    ownedInput.type = "text";
+    ownedInput.maxLength = 60;
+    ownedInput.placeholder = "예: 대동 관리기 보유";
+    ownedInput.value = quickOwnedNote;
+    ownedInput.setAttribute("aria-label", "보유 농기계 메모");
+    ownedField.append(ownedInput);
+
+    fields.append(regionField, areaField, ownedField);
+
+    const formActions = document.createElement("div");
+    formActions.className = "ai-setup-form-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "button button-primary";
+    saveBtn.textContent = "적용";
+    saveBtn.addEventListener("click", () => {
+      state.region = regionSelect.value || "영양읍";
+      const parsedArea = Number(areaInput.value);
+      state.filters.areaPyeong = Number.isFinite(parsedArea) && parsedArea > 0 ? String(Math.round(parsedArea)) : "";
+      quickOwnedNote = ownedInput.value.trim();
+      setupExpanded = false;
+      form.hidden = true;
+      toggleBtn.setAttribute("aria-expanded", "false");
+      toggleBtn.textContent = "설정 변경";
+      summary.textContent = formatSetupSummary();
+      persist();
+      renderListings();
+      refreshContextBar();
+      toast("초기 조건을 반영했어요.");
     });
-    root.querySelectorAll("[data-qb-crop]").forEach((btn) => {
-      const selected = btn.dataset.qbCrop === qbState.cropId;
-      btn.classList.toggle("is-selected", selected);
-      btn.setAttribute("aria-pressed", String(selected));
+    formActions.append(saveBtn);
+    form.append(fields, formActions);
+
+    toggleBtn.addEventListener("click", () => {
+      setupExpanded = !setupExpanded;
+      form.hidden = !setupExpanded;
+      toggleBtn.setAttribute("aria-expanded", String(setupExpanded));
+      toggleBtn.textContent = setupExpanded ? "접기" : "설정 변경";
     });
-    root.querySelectorAll("[data-qb-machine]").forEach((btn) => {
-      const selected = btn.dataset.qbMachine === qbState.machineType;
-      btn.classList.toggle("is-selected", selected);
-      btn.setAttribute("aria-pressed", String(selected));
-    });
-    root.querySelectorAll("[data-qb-date]").forEach((btn) => {
-      const selected = btn.dataset.qbDate === qbState.datePreset;
-      btn.classList.toggle("is-selected", selected);
-      btn.setAttribute("aria-pressed", String(selected));
-    });
-    const dateRow = $("aiQbDateRow");
-    if (dateRow) dateRow.hidden = qbState.mode !== "rent";
-    const submitBtn = $("aiQbSubmit");
-    if (submitBtn) submitBtn.textContent = QB_SUBMIT_LABELS[qbState.mode] || QB_SUBMIT_LABELS.rent;
+
+    const guide = document.createElement("div");
+    guide.className = "ai-starter-guide";
+    const guideText = document.createElement("p");
+    guideText.className = "ai-starter-guide-text";
+    guideText.textContent = "농사일이나 기종을 한 줄로 말하면 필요한 조건만 차례로 여쭤볼게요.";
+    const pickerBtn = document.createElement("button");
+    pickerBtn.type = "button";
+    pickerBtn.className = "ai-picker-trigger";
+    pickerBtn.dataset.aiPickerToggle = "starter";
+    pickerBtn.setAttribute("aria-expanded", String(pickerOpen));
+    pickerBtn.setAttribute("aria-controls", "aiPickerDrawer");
+    pickerBtn.textContent = "작물·기종 보기";
+    pickerBtn.addEventListener("click", () => setPickerOpen(!pickerOpen));
+    guide.append(guideText, pickerBtn);
+
+    card.append(setupBar, form, guide);
+    root.append(card);
   }
 
-  function resolveQbDates() {
-    const baseToday = today();
-    if (qbState.datePreset === "tomorrow") {
-      const d = addDays(baseToday, 1);
-      return { start: d, end: d };
-    }
-    if (qbState.datePreset === "twoDays") {
-      return { start: addDays(baseToday, 2), end: addDays(baseToday, 3) };
-    }
-    if (qbState.datePreset === "weekend") {
-      return weekendWindow(baseToday);
-    }
-    return null;
-  }
-
-  function buildQuickPrompt() {
-    const cropName = qbState.cropId ? `${CROP_BY_ID[qbState.cropId]?.name || ""}밭` : "";
-    const machineName = qbState.machineType ? MACHINE_LABELS[qbState.machineType] : "";
-    const target = [cropName, machineName].filter(Boolean).join("에 쓸 ") || "농기계";
-    const region = state.region || "영양읍";
-    if (qbState.mode === "sale") {
-      return `${region} 근처에서 ${target}를 구매하고 싶어요. 맞는 매물을 바로 보여주세요.`;
-    }
-    if (qbState.mode === "sell") {
-      return `제 ${machineName || "농기계"}를 팔거나 빌려주고 싶어요. 시세 확인과 등록 초안을 도와주세요.`;
-    }
-    if (qbState.mode === "repair") {
-      return `${machineName || "농기계"} 시동·작동 점검 및 수리 방법을 알려주세요.`;
-    }
-    const dates = resolveQbDates();
-    const periodText = dates ? `${dates.start}부터 ${dates.end}까지 ` : "";
-    return `${region} 근처에서 ${target}를 ${periodText}빌리고 싶어요. 맞는 매물을 바로 보여주세요.`;
-  }
-
-  $("aiStarters")?.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const modeBtn = target.closest("[data-qb-mode]");
-    if (modeBtn) {
-      qbState.mode = modeBtn.dataset.qbMode || "rent";
-      syncQuickBuilderUi();
-      return;
-    }
-    const cropBtn = target.closest("[data-qb-crop]");
-    if (cropBtn) {
-      qbState.cropId = qbState.cropId === cropBtn.dataset.qbCrop ? "" : cropBtn.dataset.qbCrop;
-      syncQuickBuilderUi();
-      return;
-    }
-    const machineBtn = target.closest("[data-qb-machine]");
-    if (machineBtn) {
-      qbState.machineType = qbState.machineType === machineBtn.dataset.qbMachine ? "" : machineBtn.dataset.qbMachine;
-      syncQuickBuilderUi();
-      return;
-    }
-    const dateBtn = target.closest("[data-qb-date]");
-    if (dateBtn) {
-      qbState.datePreset = dateBtn.dataset.qbDate || "none";
-      syncQuickBuilderUi();
-      return;
-    }
-    if (target.closest("#aiQbSubmit")) {
-      if (qbState.mode === "rent" || qbState.mode === "sale") {
-        const dates = qbState.mode === "rent" ? resolveQbDates() : null;
-        if (qbState.cropId && !state.filters.cropIds?.length) state.filters.cropIds = [qbState.cropId];
-        if (dates && !state.filters.date) {
-          state.filters.date = dates.start;
-          state.filters.dateEnd = dates.end;
-        }
-        refreshContextBar();
-      }
-      submitPrompt(buildQuickPrompt());
-    }
-  });
+  renderStarterBar();
 
   function showPhotoPreview() {
     const preview = $("aiPhotoPreview");
@@ -263,6 +447,8 @@ export function createAiPanel({
         || ""
       : "";
     const viewingListingId = detailListingId || runtime.selectedMapListingId || "";
+    const { owned, selectedOwnedModelId } = getGarageInfo();
+    const favIds = activeFavorites();
     return {
       region: state.region || "영양읍",
       transaction: state.transaction === "sale" ? "sale" : "rent",
@@ -272,6 +458,10 @@ export function createAiPanel({
       ...(Number(filters.areaPyeong) > 0 ? { areaPyeong: Number(filters.areaPyeong) } : {}),
       ...(Number.isSafeInteger(Number(filters.maxPrice)) && Number(filters.maxPrice) > 0 ? { maxPrice: Number(filters.maxPrice) } : {}),
       ...(viewingListingId ? { viewingListingId } : {}),
+      ...(owned.length ? { ownedMachines: owned.slice(0, 10) } : {}),
+      ...(selectedOwnedModelId ? { selectedOwnedModelId } : {}),
+      ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
+      ...(quickOwnedNote ? { ownedMachineNote: quickOwnedNote } : {}),
     };
   }
 
@@ -433,12 +623,73 @@ export function createAiPanel({
     applyBtn.type = "button";
     applyBtn.className = "button button-primary";
     applyBtn.textContent = buttonLabel;
-    applyBtn.addEventListener("click", () => {
+    applyBtn.addEventListener("click", async () => {
       const s = startInput.value;
       const e = endInput.value || s;
       if (!s || e < s) return toast("올바른 시작일과 반납일을 골라 주세요.");
-      wrap.remove();
-      onApply(s, e);
+
+      applyBtn.disabled = true;
+      applyBtn.textContent = "날씨 확인 중…";
+      const weatherData = await fetchWeatherForecast({
+        region: state.region || "영양읍",
+        date: s,
+        endDate: e,
+        days: 7,
+      });
+      if (!wrap.isConnected) return;
+      applyBtn.disabled = false;
+      applyBtn.textContent = buttonLabel;
+
+      const forecastDays = Array.isArray(weatherData?.forecastDays) ? weatherData.forecastDays : [];
+      const badDays = forecastDays.filter((d) => d.date >= s && d.date <= e && d.suitability && d.suitability !== "good");
+      if (!badDays.length && s === baseToday && weatherData?.weather?.suitability && weatherData.weather.suitability !== "good") {
+        badDays.push({ date: baseToday, suitability: weatherData.weather.suitability, summary: weatherData.weather.summary });
+      }
+
+      if (!badDays.length) {
+        wrap.remove();
+        onApply(s, e);
+        return;
+      }
+
+      wrap.querySelector(".ai-weather-caution")?.remove();
+      const caution = document.createElement("div");
+      caution.className = "ai-weather-caution";
+      const msg = document.createElement("div");
+      const badSummary = badDays
+        .map((d) => `${formatShortDate(d.date)}(${d.summary || (d.suitability === "wind" ? "강풍" : "기상 주의")})`)
+        .join(", ");
+      msg.textContent = `⚠️ 선택한 날짜에 기상 주의 예보가 있어요: ${badSummary}`;
+      caution.append(msg);
+
+      const cautionActions = document.createElement("div");
+      cautionActions.className = "ai-weather-caution-actions";
+      const proceedBtn = document.createElement("button");
+      proceedBtn.type = "button";
+      proceedBtn.className = "ai-weather-proceed-btn";
+      proceedBtn.textContent = "그냥 이 날짜로 진행";
+      proceedBtn.addEventListener("click", () => {
+        wrap.remove();
+        onApply(s, e);
+      });
+      cautionActions.append(proceedBtn);
+
+      const goodDays = forecastDays.filter((d) => d.suitability === "good" && d.date >= baseToday).slice(0, 3);
+      for (const gd of goodDays) {
+        const altBtn = document.createElement("button");
+        altBtn.type = "button";
+        altBtn.className = "ai-weather-alt-btn";
+        altBtn.textContent = `☀️ ${formatShortDate(gd.date)} 선택`;
+        altBtn.addEventListener("click", () => {
+          wrap.remove();
+          onApply(gd.date, gd.date);
+        });
+        cautionActions.append(altBtn);
+      }
+
+      caution.append(cautionActions);
+      wrap.append(caution);
+      scrollAiToEnd();
     });
 
     row.append(startInput, sep, endInput, applyBtn);
@@ -512,11 +763,13 @@ export function createAiPanel({
 
         const info = document.createElement("div");
         info.className = "ai-rec-info";
-        info.innerHTML = `
-          <strong>${escapeHtml(item.title)}</strong>
-          <small>${escapeHtml(item.region)} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}</small>
-          <small>${escapeHtml(areaLabel(item.areaMin, item.areaMax))} · ${escapeHtml(item.pickup || "인수 방법 문의")}</small>
-        `;
+        const infoTitle = document.createElement("strong");
+        infoTitle.textContent = item.title || "";
+        const infoMeta = document.createElement("small");
+        infoMeta.textContent = `${item.region || ""} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}`;
+        const infoSub = document.createElement("small");
+        infoSub.textContent = `${areaLabel(item.areaMin, item.areaMax)} · ${item.pickup || "인수 방법 문의"}`;
+        info.append(infoTitle, infoMeta, infoSub);
 
         const actions = document.createElement("div");
         actions.className = "ai-rec-card-actions";
@@ -526,6 +779,25 @@ export function createAiPanel({
         detailBtn.textContent = "상세 보기";
         detailBtn.addEventListener("click", () => openDetail(item.id));
         actions.append(detailBtn);
+
+        if (!item.owner) {
+          const chatBtn = document.createElement("button");
+          chatBtn.type = "button";
+          chatBtn.className = "button button-secondary";
+          chatBtn.textContent = "💬 채팅";
+          chatBtn.addEventListener("click", () => handleOpenChat({ listingId: item.id }));
+          actions.append(chatBtn);
+        }
+
+        const fav = checkIsFavorite(item.id);
+        const favBtn = document.createElement("button");
+        favBtn.type = "button";
+        favBtn.className = `button button-secondary ai-rec-fav-btn${fav ? " is-favorited" : ""}`;
+        favBtn.dataset.aiFavorite = item.id;
+        favBtn.setAttribute("aria-pressed", String(fav));
+        favBtn.textContent = fav ? "❤️ 찜됨" : "🤍 찜";
+        favBtn.addEventListener("click", () => handleToggleFavorite(item.id));
+        actions.append(favBtn);
 
         if (!item.owner && item.status === "open" && item.condition !== "repair") {
           const quickBtn = document.createElement("button");
@@ -833,6 +1105,146 @@ export function createAiPanel({
     bubble.append(line);
   }
 
+  function renderPlanQuestionCard(bubble, planQuestion) {
+    if (!planQuestion || !planQuestion.question) return;
+    const card = document.createElement("div");
+    card.className = "ai-plan-card";
+
+    const step = document.createElement("div");
+    step.className = "ai-plan-step";
+    const fieldLabel = PLAN_FIELD_LABELS[planQuestion.missingField] || "맞춤 조건 확인";
+    step.textContent = `추가 확인 · ${fieldLabel}`;
+    card.append(step);
+
+    const questionEl = document.createElement("div");
+    questionEl.className = "ai-plan-question";
+    questionEl.textContent = planQuestion.question;
+    card.append(questionEl);
+
+    const options = Array.isArray(planQuestion.options) ? planQuestion.options.slice(0, 6) : [];
+    if (options.length) {
+      const optsWrap = document.createElement("div");
+      optsWrap.className = "ai-plan-options";
+      for (const opt of options) {
+        const label = typeof opt === "string" ? opt : opt?.label || opt?.value || "";
+        const value = typeof opt === "string" ? opt : opt?.value || opt?.label || "";
+        if (!label) continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ai-plan-option-btn";
+        btn.textContent = label;
+        btn.addEventListener("click", () => {
+          if (recommendationPending || !card.isConnected) return;
+          submitPrompt(value);
+        });
+        optsWrap.append(btn);
+      }
+      card.append(optsWrap);
+    }
+
+    const allowCustom = planQuestion.allowCustom !== false;
+    const skippable = Boolean(planQuestion.skippable);
+    if (allowCustom || skippable) {
+      const footer = document.createElement("div");
+      footer.className = "ai-plan-footer";
+      if (allowCustom) {
+        const customBtn = document.createElement("button");
+        customBtn.type = "button";
+        customBtn.className = "ai-plan-sub-btn";
+        customBtn.textContent = "직접 입력";
+        customBtn.addEventListener("click", () => {
+          const input = $("aiInput");
+          if (!input) return;
+          input.placeholder = `${fieldLabel}을(를) 직접 입력해 주세요`;
+          input.focus();
+        });
+        footer.append(customBtn);
+      }
+      if (skippable) {
+        const skipBtn = document.createElement("button");
+        skipBtn.type = "button";
+        skipBtn.className = "ai-plan-sub-btn";
+        skipBtn.textContent = "건너뛰기";
+        skipBtn.addEventListener("click", () => {
+          if (recommendationPending || !card.isConnected) return;
+          submitPrompt("이 조건은 건너뛰고 진행해 주세요.");
+        });
+        footer.append(skipBtn);
+      }
+      card.append(footer);
+    }
+
+    bubble.append(card);
+    scrollAiToEnd();
+  }
+
+  function renderWeatherInfoBar(bubble, weatherInfo) {
+    if (!weatherInfo) return;
+    const bar = document.createElement("div");
+    bar.className = `ai-weather-bar${weatherInfo.hasBadWeather ? " is-warning" : ""}`;
+
+    const head = document.createElement("div");
+    head.className = "ai-weather-head";
+    const badge = document.createElement("span");
+    badge.className = "ai-weather-badge";
+    badge.textContent = weatherInfo.hasBadWeather ? "🌧️ 기상 주의" : "☀️ 작업 적합";
+    const title = document.createElement("span");
+    title.textContent = [weatherInfo.region, weatherInfo.checkedRange].filter(Boolean).join(" · ") || "예보 확인";
+    head.append(badge, title);
+    bar.append(head);
+
+    if (weatherInfo.warning) {
+      const msg = document.createElement("p");
+      msg.className = "ai-weather-msg";
+      msg.textContent = weatherInfo.warning;
+      bar.append(msg);
+    }
+
+    const alts = Array.isArray(weatherInfo.goodAlternatives) ? weatherInfo.goodAlternatives.slice(0, 4) : [];
+    if (alts.length) {
+      const altsWrap = document.createElement("div");
+      altsWrap.className = "ai-weather-alts";
+      for (const alt of alts) {
+        if (!alt?.start) continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ai-weather-alt-btn";
+        const dateText = alt.end && alt.end !== alt.start
+          ? `${formatShortDate(alt.start)}~${formatShortDate(alt.end)}`
+          : formatShortDate(alt.start);
+        btn.textContent = alt.label || `☀️ ${dateText} (${alt.summary || "맑음"}) 선택`;
+        btn.addEventListener("click", () => {
+          if (recommendationPending) return;
+          state.filters.date = alt.start;
+          state.filters.dateEnd = alt.end || alt.start;
+          persist();
+          refreshContextBar();
+          const period = alt.end && alt.end !== alt.start ? `${alt.start}부터 ${alt.end}까지` : alt.start;
+          submitPrompt(`${period} 날짜로 진행해 주세요.`);
+        });
+        altsWrap.append(btn);
+      }
+      bar.append(altsWrap);
+    }
+
+    bubble.append(bar);
+  }
+
+  function renderChatTargetCta(bubble, chatTarget) {
+    if (!chatTarget?.listingId) return;
+    const wrap = document.createElement("div");
+    wrap.className = "ai-chat-cta-wrap";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ai-chat-cta-btn";
+    btn.textContent = `💬 ${chatTarget.title || "매물"} 소유자와 1:1 채팅 열기`;
+    btn.addEventListener("click", () => {
+      handleOpenChat({ listingId: chatTarget.listingId, draftBody: chatTarget.prefill || "" });
+    });
+    wrap.append(btn);
+    bubble.append(wrap);
+  }
+
   function renderAgentResult(message, result, { photo = false } = {}) {
     const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
     const summary = photoSummaryText(result.photoSummary);
@@ -843,10 +1255,21 @@ export function createAiPanel({
     if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
       savedDraft = { listingId: result.listingDraft.listingId, photoKey: result.listingDraft.photoKey, photoUrl: result.listingDraft.photoUrl };
     }
+    if (result.favoriteAction?.listingId) {
+      const nextFav = Boolean(result.favoriteAction.favorite);
+      if (result.favoriteAction.synced === false && typeof toggleFavorite === "function") {
+        toggleFavorite(result.favoriteAction.listingId, { favorite: nextFav }).catch(() => {});
+      } else {
+        syncAiFavoriteButtons(result.favoriteAction.listingId, nextFav);
+        refreshAuthenticatedData?.({ includeRequests: false, includeConversations: false }).catch(() => {});
+      }
+    }
     const listingIds = result.reservation || result.createdListing || result.updatedListing
       ? []
       : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
+    if (result.weatherInfo) renderWeatherInfoBar(bubble, result.weatherInfo);
+    if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
     if (result.reservation) renderReservationBox(bubble, result.reservation);
     const listed = result.createdListing || result.updatedListing;
     if (listed) renderCreatedListingButton(bubble, listed);
@@ -854,8 +1277,12 @@ export function createAiPanel({
     if (result.listingDraft) appendListingDraft(bubble, result.listingDraft);
     if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
 
-    const choices = inferFollowUpChoices(reply, result);
-    if (choices.length) appendChoices(bubble, choices);
+    if (result.planQuestion) {
+      renderPlanQuestionCard(bubble, result.planQuestion);
+    } else {
+      const choices = inferFollowUpChoices(reply, result);
+      if (choices.length) appendChoices(bubble, choices);
+    }
     if (wantsDatePicker(reply, result)) {
       appendDateQuickPicker(bubble, {
         defaultStart: state.filters?.date || "",
@@ -922,7 +1349,8 @@ export function createAiPanel({
     $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     $("aiStarters").hidden = true;
-    $("aiMessages").querySelectorAll(".ai-follow-up, .ai-date-picker").forEach((el) => el.remove());
+    setPickerOpen(false);
+    $("aiMessages").querySelectorAll(".ai-follow-up, .ai-date-picker, .ai-plan-card").forEach((el) => el.remove());
     appendAiMessage(message, "user", [], sendingPhoto);
     let pending;
 
@@ -977,6 +1405,7 @@ export function createAiPanel({
     $("aiPanel").hidden = false;
     document.body.classList.add("ai-open");
     $("aiLauncher").setAttribute("aria-expanded", "true");
+    if (!$("aiStarters")?.hidden) renderStarterBar();
     refreshContextBar();
     syncAiViewport();
     $("aiClose").focus({ preventScroll: true });
@@ -994,18 +1423,16 @@ export function createAiPanel({
     agentHistory = [];
     savedDraft = null;
     lastPhotoDataUrl = null;
-    qbState.mode = "rent";
-    qbState.cropId = "";
-    qbState.machineType = "";
-    qbState.datePreset = "none";
-    syncQuickBuilderUi();
+    setupExpanded = false;
+    setPickerOpen(false);
+    renderStarterBar();
     clearPhoto();
     $("aiMessages").replaceChildren();
     $("aiStarters").hidden = false;
     $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     refreshContextBar();
-    appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 위 조건이나 예시 버튼을 눌러 바로 시작해 보세요.", "assistant");
+    appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 한 줄로 말씀하시면 필요한 조건만 차례로 여쭤볼게요.", "assistant");
     $("aiInput").focus();
   }
 

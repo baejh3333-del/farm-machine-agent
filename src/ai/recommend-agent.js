@@ -39,3 +39,18 @@ export async function executeAgentAction(pendingAction, requestId) {
     json: { action: "execute", pendingAction, requestId },
   });
 }
+
+// 날짜 선택 시 기상 예보를 확인한다. 오프라인·오류 시 fail-open으로 null을 반환한다.
+export async function fetchWeatherForecast({ region = "영양읍", date, endDate, days = 7 } = {}) {
+  try {
+    const params = new URLSearchParams({
+      region: region || "영양읍",
+      ...(date ? { date } : {}),
+      ...(endDate ? { endDate } : {}),
+      days: String(days),
+    });
+    return await apiFetch(`/api/weather?${params.toString()}`, { timeoutMs: 3500 });
+  } catch {
+    return null;
+  }
+}

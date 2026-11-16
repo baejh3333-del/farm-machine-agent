@@ -72,6 +72,16 @@ after(async () => {
   }
 });
 
+async function openMyPageAndClick(page, selector) {
+  const menu = page.locator("#myPageMenu");
+  if (await menu.isHidden()) {
+    await page.locator("#myPageButton").click();
+    await menu.waitFor({ state: "visible" });
+  }
+  await menu.locator(selector).click();
+  await menu.waitFor({ state: "hidden" });
+}
+
 async function signupOnLoginView(page, { username, name, password = "Password123!" }) {
   const switchBtn = page.locator("#switchAccount");
   if ((await switchBtn.textContent())?.trim() === "회원가입") {
@@ -141,7 +151,19 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
 
     // Favorite before login (guest storage)
     await matchingCard.locator("[data-favorite]").click();
+    await pageB.locator("#myPageNotifDot").waitFor({ state: "visible" });
     assert.equal(await pageB.locator("#favNavBadge").textContent(), "1");
+
+    // Verify Toss-style MyPage dropdown opens, closes on Escape, and #headerAiOpen opens AI panel
+    await pageB.locator("#myPageButton").click();
+    await pageB.locator("#myPageMenu").waitFor({ state: "visible" });
+    await pageB.keyboard.press("Escape");
+    await pageB.locator("#myPageMenu").waitFor({ state: "hidden" });
+
+    await pageB.locator("#headerAiOpen").click();
+    await pageB.locator("#aiPanel").waitFor({ state: "visible" });
+    await pageB.locator("#aiClose").click();
+    await pageB.locator("#aiPanel").waitFor({ state: "hidden" });
 
     // AI panel calls /api/agent without rule-based fallback; when no LLM key is configured, it reports unavailable
     await pageB.locator("#aiLauncher").click();
@@ -153,7 +175,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageB.locator("#aiClose").click();
 
     // Add guest machine in garage
-    await pageB.locator('header [data-view="garage"]').click();
+    await openMyPageAndClick(pageB, '[data-view="garage"]');
     await pageB.locator("#garageView").waitFor({ state: "visible" });
     await pageB.locator("#ownedModel").selectOption("asia-amc900");
     await pageB.locator("#ownedName").fill("게스트관리기");
@@ -178,7 +200,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageB.locator("#formBackdrop").waitFor({ state: "hidden" });
 
     // Navigate to ownerView in B to opt-in guest favorites/garage import
-    await pageB.locator('header [data-view="owner"]').click();
+    await openMyPageAndClick(pageB, '[data-view="owner"]');
     await pageB.locator("#guestImportBanner").waitFor({ state: "visible" });
     await pageB.locator("#importGuestConfirm").click();
     await pageB.locator("#guestImportBanner").waitFor({ state: "hidden" });
@@ -197,9 +219,11 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
 
     // 3. User A sees approvable badge count 1, approves reservation, replies in chat, and reloads to confirm persistence
     await pageA.reload({ waitUntil: "networkidle" });
+    await pageA.locator("#myPageNotifDot").waitFor({ state: "visible" });
+    await pageA.locator("#myPageButton").click();
     await pageA.locator("#ownerBadge").waitFor({ state: "visible" });
     assert.equal(await pageA.locator("#ownerBadge").textContent(), "1");
-    await pageA.locator('header [data-view="owner"]').click();
+    await openMyPageAndClick(pageA, '[data-view="owner"]');
     await pageA.locator('#ownerRequests [data-req-approve]').waitFor({ state: "visible" });
     await pageA.locator('#ownerRequests [data-req-approve]').click();
     await pageA.locator('#ownerRequests:has-text("예약 확정")').waitFor({ state: "visible" });
@@ -214,7 +238,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageA.locator("#closeForm").click();
 
     await pageA.reload({ waitUntil: "networkidle" });
-    await pageA.locator('header [data-view="owner"]').click();
+    await openMyPageAndClick(pageA, '[data-view="owner"]');
     await pageA.locator(`#ownerListings:has-text("${startDate} ~ ${endDate}")`).waitFor({ state: "visible" });
 
     // 4. Write-freeze 503 UI error test on Context A edit modal (keeps modal open, no false success)
@@ -230,7 +254,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await setWritesFrozen({ env: "test", frozen: false });
 
     // 5. Context B sees approved request + A's reply, then cancels the future reservation
-    await pageB.locator('header [data-view="requests"]').click();
+    await openMyPageAndClick(pageB, '[data-view="requests"]');
     await pageB.locator('#buyerRequestList:has-text("예약 확정")').waitFor({ state: "visible" });
     await pageB.locator('#buyerRequestList [data-open-chat-listing]').click();
     await pageB.locator('#chatLog:has-text("네 토요일 오전 9시에 준비해 둘게요!")').waitFor({ state: "visible" });
@@ -240,7 +264,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageB.locator('#buyerRequestList:has-text("취소됨")').waitFor({ state: "visible" });
 
     // 6. Account switch isolation in Context B -> logout B, signup User C -> zero data leakage
-    await pageB.locator('header [data-view="owner"]').click();
+    await openMyPageAndClick(pageB, '[data-view="owner"]');
     await pageB.locator("#accountLogoutButton").click();
     await pageB.locator("#favNavBadge").waitFor({ state: "hidden" });
 
@@ -250,9 +274,9 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     assert.equal(await pageB.locator("#favNavBadge").isHidden(), true);
     assert.equal(await pageB.locator("#ownerBadge").isHidden(), true);
 
-    await pageB.locator('header [data-view="garage"]').click();
+    await openMyPageAndClick(pageB, '[data-view="garage"]');
     await pageB.locator('#ownedCount:has-text("0대")').waitFor({ state: "visible" });
-    await pageB.locator('header [data-view="requests"]').click();
+    await openMyPageAndClick(pageB, '[data-view="requests"]');
     await pageB.locator('#buyerRequestList:has-text("아직 보낸 대여 요청이 없어요")').waitFor({ state: "visible" });
   } finally {
     await contextA.close();

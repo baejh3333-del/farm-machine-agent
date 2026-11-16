@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
   <link rel="stylesheet" href="/src/styles.css?v=20261117" />
   <link rel="stylesheet" href="/src/garage.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261117" />
   <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
@@ -33,25 +35,62 @@
           <span class="nav-icon" aria-hidden="true"></span>
           <span class="nav-label">작업 가이드</span>
         </button>
-        <button type="button" class="nav-item" aria-label="찜 목록" data-action="favorites" aria-haspopup="dialog">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">찜 목록</span>
-          <span class="nav-badge" id="favNavBadge" hidden>0</span>
+        <button type="button" class="nav-item nav-ai-trigger" id="headerAiOpen" aria-label="AI 농농이 열기">
+          <span class="nav-ai-dot" aria-hidden="true"></span>
+          <span class="nav-label">AI 농농이</span>
         </button>
-        <button type="button" class="nav-item" aria-label="대여 요청" data-view="requests">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">대여 요청</span>
-        </button>
-        <button type="button" class="nav-item" aria-label="내 기계 관리" data-view="owner">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">내 기계 관리</span>
-          <span id="ownerBadge" class="nav-badge" hidden>0</span>
-        </button>
-        <button type="button" class="nav-item" aria-label="모아농 브랜드 소개" data-view="about">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">모아농?</span>
-        </button>
-        <button type="button" class="nav-item" data-view="garage" aria-label="내 농기계·호환"><span class="nav-label">내 농기계·호환</span></button>
+        <div class="mypage-dropdown">
+          <button type="button" class="nav-item mypage-trigger" id="myPageButton" aria-expanded="false" aria-controls="myPageMenu" aria-haspopup="true">
+            <span class="nav-label">마이페이지</span>
+            <span class="mypage-dot" id="myPageNotifDot" hidden aria-hidden="true"></span>
+            <span class="mypage-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="mypage-menu" id="myPageMenu" role="region" aria-label="마이페이지 메뉴" hidden>
+            <div class="mypage-menu-grid">
+              <div class="mypage-group">
+                <div class="mypage-group-title">관심 · 대여 관리</div>
+                <button type="button" class="mypage-menu-item" aria-label="찜 목록" data-action="favorites" aria-haspopup="dialog">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">찜 목록</span>
+                    <span class="nav-badge" id="favNavBadge" hidden>0</span>
+                  </span>
+                  <span class="mypage-item-desc">저장한 농기계 모아보기</span>
+                </button>
+                <button type="button" class="mypage-menu-item" aria-label="대여 요청" data-view="requests">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">대여 요청</span>
+                  </span>
+                  <span class="mypage-item-desc">보낸 요청 · 예약 현황</span>
+                </button>
+              </div>
+              <div class="mypage-group">
+                <div class="mypage-group-title">내 농기계 · 매물</div>
+                <button type="button" class="mypage-menu-item" aria-label="내 기계 관리" data-view="owner">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">내 기계 관리</span>
+                    <span id="ownerBadge" class="nav-badge" hidden>0</span>
+                  </span>
+                  <span class="mypage-item-desc">매물 등록 및 대여 승인</span>
+                </button>
+                <button type="button" class="mypage-menu-item" aria-label="내 농기계·호환" data-view="garage">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">내 농기계·호환</span>
+                  </span>
+                  <span class="mypage-item-desc">보유 기종 · 작업기 호환</span>
+                </button>
+              </div>
+              <div class="mypage-group">
+                <div class="mypage-group-title">서비스 안내</div>
+                <button type="button" class="mypage-menu-item" aria-label="모아농 브랜드 소개" data-view="about">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">모아농?</span>
+                  </span>
+                  <span class="mypage-item-desc">초보 농부를 위한 모아농 소개</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </nav>
 
       <div class="topbar-left">
@@ -517,42 +556,7 @@
         </div>
       </div>
 
-      <div class="ai-quick-builder" id="aiStarters" role="region" aria-label="원탭 빠른 조건 선택">
-        <div class="ai-qb-tabs" role="group" aria-label="원하는 상담 종류">
-          <button type="button" class="ai-qb-tab is-active" data-qb-mode="rent" aria-pressed="true">🤝 빌리기</button>
-          <button type="button" class="ai-qb-tab" data-qb-mode="sale" aria-pressed="false">🛒 사기</button>
-          <button type="button" class="ai-qb-tab" data-qb-mode="sell" aria-pressed="false">🏷️ 내 기계 팔기</button>
-          <button type="button" class="ai-qb-tab" data-qb-mode="repair" aria-pressed="false">🔧 고장·수리</button>
-        </div>
-        <div class="ai-qb-section" id="aiQbFilterBody">
-          <div class="ai-qb-label">작물 또는 기종 (눌러서 고르기)</div>
-          <div class="ai-qb-chips" data-qb-group="target">
-            <button type="button" class="ai-qb-chip" data-qb-crop="pepper" aria-pressed="false">고추</button>
-            <button type="button" class="ai-qb-chip" data-qb-crop="rice" aria-pressed="false">벼</button>
-            <button type="button" class="ai-qb-chip" data-qb-crop="cabbage" aria-pressed="false">배추</button>
-            <button type="button" class="ai-qb-chip" data-qb-crop="potato" aria-pressed="false">감자</button>
-            <button type="button" class="ai-qb-chip" data-qb-machine="cultivator" aria-pressed="false">관리기</button>
-            <button type="button" class="ai-qb-chip" data-qb-machine="tractor" aria-pressed="false">트랙터</button>
-            <button type="button" class="ai-qb-chip" data-qb-machine="ridgeMulcher" aria-pressed="false">휴립·멀칭기</button>
-            <button type="button" class="ai-qb-chip" data-qb-machine="ricePlanter" aria-pressed="false">이앙기</button>
-          </div>
-          <div class="ai-qb-date-row" id="aiQbDateRow">
-            <div class="ai-qb-label">대여 기간</div>
-            <div class="ai-qb-chips" data-qb-group="date">
-              <button type="button" class="ai-qb-chip is-selected" data-qb-date="none" aria-pressed="true">날짜 미정</button>
-              <button type="button" class="ai-qb-chip" data-qb-date="tomorrow" aria-pressed="false">내일 하루</button>
-              <button type="button" class="ai-qb-chip" data-qb-date="twoDays" aria-pressed="false">모레부터 2일</button>
-              <button type="button" class="ai-qb-chip" data-qb-date="weekend" aria-pressed="false">이번 주말</button>
-            </div>
-          </div>
-          <button type="button" class="button button-primary ai-qb-go" id="aiQbSubmit">⚡ 선택한 조건으로 바로 찾기</button>
-        </div>
-        <div class="prompt-suggestions ai-qb-examples" role="group" aria-label="작업 예시 바로 묻기">
-          <button type="button" data-prompt="고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.">고추밭 두둑 만들기</button>
-          <button type="button" data-prompt="배추밭에 비닐 씌우는 기계를 빌리고 싶어요.">배추밭 비닐 씌우기</button>
-          <button type="button" data-prompt="벼를 수확할 기계를 사고 싶어요.">벼 수확기 구매</button>
-        </div>
-      </div>
+      <div class="ai-quick-builder" id="aiStarters" role="region" aria-label="농농이 초기 조건 설정"></div>
     </div>
 
     <div class="ai-photo-preview" id="aiPhotoPreview" hidden>

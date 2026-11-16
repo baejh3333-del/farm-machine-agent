@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  checkFarmCompatibilityTool,
+  cleanUiContext,
   proposeRentalTool,
   runAgentTurn,
   sanitizeHistory,
@@ -714,4 +716,192 @@ test("[통합 오케스트레이터] 모델이 첫 턴 검색 없이 되물어�
   const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
   assert.equal(result.mode, "agent");
   assert.ok(result.listingIds.length > 0 && result.listingIds.length <= 3);
+});
+
+test("cleanUiContext는 ownedMachines·selectedOwnedModelId·favoriteIds를 검증·정제한다", () => {
+  const cleaned = cleanUiContext({
+    ownedMachines: [
+      { modelId: "asia-amc900", name: "내 아세아 관리기" },
+      { modelId: "unknown-model", name: "유령 기계" },
+      { modelId: "daedong-dk550", name: "" },
+    ],
+    selectedOwnedModelId: "asia-amc900",
+    favoriteIds: ["l-1", "l-1", " l-2 ", "", 123],
+  });
+  assert.deepEqual(cleaned.ownedMachines, [
+    { modelId: "asia-amc900", name: "내 아세아 관리기" },
+    { modelId: "daedong-dk550", name: "대동 DK550HSRQ5" },
+  ]);
+  assert.equal(cleaned.selectedOwnedModelId, "asia-amc900");
+  assert.deepEqual(cleaned.favoriteIds, ["l-1", "l-2"]);
+
+  const invalidSelected = cleanUiContext({ selectedOwnedModelId: "not-in-spec" });
+  assert.equal(invalidSelected.selectedOwnedModelId, null);
+});
+
+test("check_farm_compatibility는 농장 평수(1평≈3.3㎡)와 보유 농기계 호환성을 검사한다", async (t) => {
+  const implementListing = {
+    ...rentable,
+    id: "impl-fm120n",
+    title: "아세아텍 FM-120N 휴립멀칭기",
+    machineType: "ridgeMulcher",
+    modelId: "asia-fm120n",
+    areaMin: 300,
+    areaMax: 1500,
+    included: "작업기 단품",
+  };
+  const standaloneListing = {
+    ...rentable,
+    id: "stand-ph1r",
+    title: "얀마 PH1,R 정식기",
+    machineType: "transplanter",
+    modelId: "yanmar-ph1r",
+    areaMin: 300,
+    areaMax: 1500,
+  };
+
+  const fitCompat = checkFarmCompatibilityTool(
+    { listingId: implementListing.id, areaPyeong: 200 },
+    [implementListing],
+    { selectedOwnedModelId: "asia-amc900" },
+  );
+  assert.equal(fitCompat.areaM2, 660);
+  assert.equal(fitCompat.areaFit, "fit");
+  assert.equal(fitCompat.compatibility.status, "compatible");
+
+  const mismatch = checkFarmCompatibilityTool(
+    { listingId: implementListing.id, areaPyeong: 600, ownedModelId: "daedong-dk550" },
+    [implementListing],
+  );
+  assert.equal(mismatch.areaFit, "too_large");
+  assert.equal(mismatch.compatibility.status, "incompatible");
+
+  const standalone = checkFarmCompatibilityTool(
+    { listingId: standaloneListing.id, areaPyeong: 100 },
+    [standaloneListing],
+  );
+  assert.equal(standalone.compatibility.status, "standalone");
+
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "fc1", name: "check_farm_compatibility", input: { listingId: implementListing.id } }] },
+    { content: [{ type: "text", text: "200평 농장과 보유하신 AMC-900 관리기에 잘 맞아요." }] },
+  ]);
+  const res = await runAgentTurn(
+    "우리 농장에 맞고 내 관리기와 호환되나요?",
+    { uiContext: { areaPyeong: 200, selectedOwnedModelId: "asia-amc900", ownedMachines: [{ modelId: "asia-amc900", name: "아세아 900" }], viewingListingId: implementListing.id } },
+    { listings: [implementListing], call, today: TODAY },
+  );
+  assert.match(calls[0].system, /아세아 900\(asia-amc900\)/);
+  const toolOut = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(toolOut.compatibility.status, "compatible");
+  assert.equal(res.reply, "200평 농장과 보유하신 AMC-900 관리기에 잘 맞아요.");
+});
+
+test("offer_choices는 하위 호환 choices와 Plan Mode용 planQuestion을 함께 반환한다", async (t) => {
+  withKey(t, "test");
+  const { call } = scripted([{
+    content: [{
+      type: "tool_use",
+      id: "oc1",
+      name: "offer_choices",
+      input: {
+        question: "어떤 작업을 하실 예정인가요?",
+        choices: ["두둑 만들기", "비닐 멀칭", "로터리"],
+        missingField: "operation",
+        allowCustom: true,
+        skippable: true,
+      },
+    }],
+  }]);
+  const result = await runAgentTurn("기계 추천해줘", {}, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.choices, ["두둑 만들기", "비닐 멀칭", "로터리"]);
+  assert.deepEqual(result.planQuestion, {
+    question: "어떤 작업을 하실 예정인가요?",
+    options: ["두둑 만들기", "비닐 멀칭", "로터리"],
+    missingField: "operation",
+    allowCustom: true,
+    skippable: true,
+  });
+});
+
+test("get_weather는 나쁜 날씨를 감지하면 badWeatherWarning과 예약 충돌이 없는 goodAlternatives·weatherInfo를 반환한다", async (t) => {
+  withKey(t, "test");
+  const bookedListing = {
+    ...rentable,
+    id: "weather-booked-1",
+    booked: [{ start: "2026-11-18", end: "2026-11-18" }],
+  };
+  const forecastDays = [
+    { date: "2026-11-16", summary: "비 예상", icon: "rain", suitability: "caution", pop: 80, tempMin: 3, tempMax: 9, advice: "비 예보가 있습니다.", source: "kma" },
+    { date: "2026-11-17", summary: "비 예상", icon: "rain", suitability: "caution", pop: 70, tempMin: 2, tempMax: 10, advice: "비 예보가 있습니다.", source: "kma" },
+    { date: "2026-11-18", summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 1, tempMax: 12, advice: "작업 적합", source: "kma" },
+    { date: "2026-11-19", summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 2, tempMax: 13, advice: "작업 적합", source: "kma" },
+    { date: "2026-11-20", summary: "구름 조금", icon: "cloud", suitability: "good", pop: 20, tempMin: 3, tempMax: 14, advice: "작업 적합", source: "kma" },
+  ];
+  const deps = {
+    getWeather: async ({ region }) => ({
+      region,
+      weather: forecastDays[1],
+      rangeForecast: [forecastDays[1]],
+      forecastDays,
+    }),
+  };
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "w1", name: "get_weather", input: { region: "영양읍", start: "2026-11-17", listingId: bookedListing.id } }] },
+    { content: [{ type: "text", text: "17일은 비 예보가 있어 19일이나 20일을 추천드려요." }] },
+  ]);
+  const res = await runAgentTurn("17일 날씨 어때요?", {}, { listings: [bookedListing], call, today: TODAY, deps });
+  const toolOut = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(toolOut.badWeatherWarning, true);
+  assert.match(toolOut.warningReason, /비 예상/);
+  assert.deepEqual(toolOut.goodAlternatives.map((a) => a.start), ["2026-11-19", "2026-11-20"]);
+  assert.equal(res.weatherInfo.hasBadWeather, true);
+  assert.deepEqual(res.weatherInfo.goodAlternatives.map((a) => a.start), ["2026-11-19", "2026-11-20"]);
+});
+
+test("toggle_favorite와 open_listing_chat은 favoriteAction과 chatTarget을 반환하고 본인 매물 채팅은 거절한다", async (t) => {
+  withKey(t, "test");
+  const favCalls = [];
+  const deps = {
+    beforeWrite: async () => {},
+    toggleFavorite: async (u, payload) => {
+      favCalls.push({ userId: u.id, ...payload });
+      return { isFavorite: true };
+    },
+  };
+
+  // 1) 로그인 사용자 찜하기
+  const favFlow = scripted([
+    { content: [{ type: "tool_use", id: "f1", name: "toggle_favorite", input: { listingId: rentable.id, favorite: true } }] },
+    { content: [{ type: "text", text: "찜 목록에 추가했어요." }] },
+  ]);
+  const favRes = await runAgentTurn("이거 찜해줘", { user: USER }, { listings: LISTINGS, call: favFlow.call, today: TODAY, deps });
+  assert.equal(favCalls.length, 1);
+  assert.deepEqual(favRes.favoriteAction, { listingId: rentable.id, favorite: true, title: rentable.title, synced: true });
+
+  // 2) 비로그인 사용자 찜하기 (게스트 동기화용)
+  const guestFavFlow = scripted([
+    { content: [{ type: "tool_use", id: "f2", name: "toggle_favorite", input: { listingId: rentable.id } }] },
+    { content: [{ type: "text", text: "화면에 찜으로 표시했어요." }] },
+  ]);
+  const guestFavRes = await runAgentTurn("찜해줘", {}, { listings: LISTINGS, call: guestFavFlow.call, today: TODAY });
+  assert.deepEqual(guestFavRes.favoriteAction, { listingId: rentable.id, favorite: true, title: rentable.title, synced: false });
+
+  // 3) 1:1 채팅 열기 (타인 매물 성공, 본인 매물 거절)
+  const ownListing = { ...rentable, id: "own-listing-1", ownerId: USER.id };
+  const chatFlow = scripted([
+    { content: [{ type: "tool_use", id: "ch1", name: "open_listing_chat", input: { listingId: rentable.id, prefillMessage: "내일 대여 가능한가요?" } }] },
+    { content: [{ type: "text", text: "소유자와의 1:1 채팅을 열었어요." }] },
+  ]);
+  const chatRes = await runAgentTurn("판매자한테 먼저 물어볼래요", { user: USER }, { listings: [rentable, ownListing], call: chatFlow.call, today: TODAY });
+  assert.deepEqual(chatRes.chatTarget, { listingId: rentable.id, title: rentable.title, prefill: "내일 대여 가능한가요?" });
+
+  const ownChatFlow = scripted([
+    { content: [{ type: "tool_use", id: "ch2", name: "open_listing_chat", input: { listingId: ownListing.id } }] },
+    { content: [{ type: "text", text: "본인 매물에는 채팅을 열 수 없어요." }] },
+  ]);
+  const ownChatRes = await runAgentTurn("내 매물에 채팅 열어줘", { user: USER }, { listings: [ownListing], call: ownChatFlow.call, today: TODAY });
+  assert.equal(ownChatFlow.calls[1].messages.at(-1).content[0].is_error, true);
+  assert.equal(ownChatRes.chatTarget, undefined);
 });

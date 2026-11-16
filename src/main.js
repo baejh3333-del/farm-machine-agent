@@ -39,6 +39,23 @@ const appDeps = {
   renderListings: (...args) => catalogViews.renderListings(...args),
 };
 
+function getOwnedMachinesSnapshot() {
+  if (isLoggedIn()) {
+    return {
+      owned: Array.isArray(runtime.ownedMachines) ? runtime.ownedMachines : [],
+      selectedId: typeof runtime.selectedOwnedMachineId === "string" ? runtime.selectedOwnedMachineId : "",
+    };
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem("moa-owned-machines-v1") || "{}");
+    const owned = Array.isArray(saved?.owned) ? saved.owned : [];
+    const selectedId = typeof saved?.selectedId === "string" ? saved.selectedId : owned[0]?.id || "";
+    return { owned, selectedId };
+  } catch {
+    return { owned: [], selectedId: "" };
+  }
+}
+
 const catalogViews = createCatalogViews(appDeps);
 const txViews = createTransactionViews(appDeps);
 const aiPanel = createAiPanel({
@@ -54,6 +71,10 @@ const aiPanel = createAiPanel({
   savePendingIntentAndRedirectLogin: (...args) => savePendingIntentAndRedirectLogin(...args),
   setView: (...args) => setView(...args),
   openNewListing: (...args) => txViews.openNewListing(...args),
+  toggleFavorite: (...args) => toggleFavorite(...args),
+  isFavorite: (id) => activeFavorites().includes(id),
+  openChat: (target) => txViews.chatForm(target),
+  getOwnedMachines: () => getOwnedMachinesSnapshot(),
 });
 
 async function loadCatalog({ quiet = false } = {}) {
@@ -76,6 +97,8 @@ async function loadCatalog({ quiet = false } = {}) {
 async function refreshAuthenticatedData({ includeRequests = true, includeConversations = true } = {}) {
   if (!isLoggedIn()) {
     resetAccountRuntimeState();
+    runtime.ownedMachines = [];
+    runtime.selectedOwnedMachineId = "";
     runtime.garage?.resetToGuest();
     updateBadges();
     renderAll();
@@ -92,7 +115,9 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     if (epoch !== runtime.authEpoch) return;
 
     runtime.serverFavorites = Array.isArray(meData?.favorites) ? meData.favorites : [];
-    runtime.garage?.setExternalOwned(meData?.ownedMachines || [], meData?.selectedOwnedMachineId || "");
+    runtime.ownedMachines = Array.isArray(meData?.ownedMachines) ? meData.ownedMachines : [];
+    runtime.selectedOwnedMachineId = typeof meData?.selectedOwnedMachineId === "string" ? meData.selectedOwnedMachineId : "";
+    runtime.garage?.setExternalOwned(runtime.ownedMachines, runtime.selectedOwnedMachineId);
 
     if (reqData) {
       runtime.incomingRequests = Array.isArray(reqData.incoming) ? reqData.incoming : [];
@@ -131,6 +156,11 @@ function syncFavoriteButtons(id, isFav) {
     const label = button.querySelector(".favorite-label");
     if (label) label.textContent = isFav ? "찜한 기계" : "찜하기";
   });
+  document.querySelectorAll(`.ai-rec-fav-btn[data-ai-favorite="${escapedId}"]`).forEach((button) => {
+    button.setAttribute("aria-pressed", String(isFav));
+    button.classList.toggle("is-favorited", isFav);
+    button.textContent = isFav ? "❤️ 찜됨" : "🤍 찜";
+  });
 }
 
 async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
@@ -147,7 +177,7 @@ async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
   }
 
   const escapedId = CSS.escape(id);
-  const buttons = [...document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"], [data-fav-remove="${escapedId}"]`)];
+  const buttons = [...document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"], [data-fav-remove="${escapedId}"], .ai-rec-fav-btn[data-ai-favorite="${escapedId}"]`)];
   buttons.forEach((btn) => { btn.disabled = true; });
   try {
     const res = await apiFetch("/api/me", {
@@ -203,9 +233,15 @@ function updateBadges() {
       ownerBadge.textContent = String(runtime.approvableRequestCount);
     }
   }
+  const myPageDot = $("myPageNotifDot");
+  if (myPageDot) {
+    const hasPending = favCount > 0 || (isLoggedIn() && runtime.approvableRequestCount > 0);
+    myPageDot.hidden = !hasPending;
+  }
 }
 
 const viewIds = { garage: "garageView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
+const MY_PAGE_VIEWS = new Set(["requests", "owner", "ownerLoginRequired", "garage", "about"]);
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
 const MAIN_PAGE_VIEWS = ["home", "browse"];
@@ -217,6 +253,10 @@ function markNav(view) {
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
+  }
+  const myPageBtn = $("myPageButton");
+  if (myPageBtn) {
+    myPageBtn.classList.toggle("active", MY_PAGE_VIEWS.has(view));
   }
 }
 
@@ -640,6 +680,69 @@ function bindEvents() {
   $("buyerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
 
 
+  const myPageDropdown = document.querySelector(".mypage-dropdown");
+  const myPageBtn = $("myPageButton");
+  const myPageMenu = $("myPageMenu");
+  let myPageHoverTimer = null;
+  let myPageClosedByClick = false;
+  let myPageOpenedByHoverAt = 0;
+  const setMyPageOpen = (open, { returnFocus = false } = {}) => {
+    if (!myPageMenu || !myPageBtn) return;
+    myPageMenu.hidden = !open;
+    myPageBtn.setAttribute("aria-expanded", String(open));
+    myPageDropdown?.classList.toggle("is-open", open);
+    if (!open) {
+      myPageOpenedByHoverAt = 0;
+      if (returnFocus) myPageBtn.focus({ preventScroll: true });
+    }
+  };
+  if (myPageBtn && myPageMenu) {
+    myPageBtn.addEventListener("click", () => {
+      if (!myPageMenu.hidden && Date.now() - myPageOpenedByHoverAt < 350) {
+        myPageOpenedByHoverAt = 0;
+        myPageClosedByClick = false;
+        return;
+      }
+      const nextOpen = myPageMenu.hidden;
+      myPageOpenedByHoverAt = 0;
+      myPageClosedByClick = !nextOpen;
+      setMyPageOpen(nextOpen);
+    });
+    if (myPageDropdown && window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) {
+      myPageDropdown.addEventListener("pointerenter", () => {
+        clearTimeout(myPageHoverTimer);
+        if (!myPageClosedByClick && myPageMenu.hidden) {
+          myPageOpenedByHoverAt = Date.now();
+          setMyPageOpen(true);
+        }
+      });
+      myPageDropdown.addEventListener("pointerleave", () => {
+        myPageClosedByClick = false;
+        clearTimeout(myPageHoverTimer);
+        myPageHoverTimer = setTimeout(() => setMyPageOpen(false), 140);
+      });
+    }
+    myPageMenu.addEventListener("click", (event) => {
+      if (event.target.closest("[data-view], [data-action]")) {
+        setMyPageOpen(false);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (myPageMenu.hidden) return;
+      if (event.target instanceof Element && event.target.closest(".mypage-dropdown")) return;
+      setMyPageOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !event.isComposing && !myPageMenu.hidden) {
+        setMyPageOpen(false, { returnFocus: true });
+      }
+    });
+  }
+
+  $("headerAiOpen")?.addEventListener("click", () => {
+    setMyPageOpen(false);
+    aiPanel.openAiPanel();
+  });
   $("aiLauncher").addEventListener("click", aiPanel.openAiPanel);
   $("aiExpand").addEventListener("click", aiPanel.toggleAiPanelSize);
   window.visualViewport?.addEventListener("resize", aiPanel.syncAiViewport);
@@ -658,7 +761,7 @@ function bindEvents() {
     if ($("aiPanel").hidden) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest("#aiPanel, #aiLauncher, .dialog-backdrop, #toast")) return;
+    if (target.closest("#aiPanel, #aiLauncher, #headerAiOpen, .dialog-backdrop, #toast")) return;
     closeAiPanel({ returnFocus: false });
   });
   document.addEventListener("keydown", (event) => {
@@ -968,14 +1071,26 @@ runtime.garage = createGarage({
   isAuthenticated: isLoggedIn,
   async onAddMachine(item) {
     const res = await apiFetch("/api/me", { method: "POST", json: { action: "addOwned", ...item } });
+    if (res?.userData) {
+      runtime.ownedMachines = Array.isArray(res.userData.ownedMachines) ? res.userData.ownedMachines : [];
+      runtime.selectedOwnedMachineId = typeof res.userData.selectedOwnedMachineId === "string" ? res.userData.selectedOwnedMachineId : "";
+    }
     return res.userData;
   },
   async onSelectMachine(id) {
     const res = await apiFetch("/api/me", { method: "POST", json: { action: "selectOwned", id } });
+    if (res?.userData) {
+      runtime.ownedMachines = Array.isArray(res.userData.ownedMachines) ? res.userData.ownedMachines : [];
+      runtime.selectedOwnedMachineId = typeof res.userData.selectedOwnedMachineId === "string" ? res.userData.selectedOwnedMachineId : "";
+    }
     return res.userData;
   },
   async onRemoveMachine(id) {
     const res = await apiFetch("/api/me", { method: "POST", json: { action: "removeOwned", id } });
+    if (res?.userData) {
+      runtime.ownedMachines = Array.isArray(res.userData.ownedMachines) ? res.userData.ownedMachines : [];
+      runtime.selectedOwnedMachineId = typeof res.userData.selectedOwnedMachineId === "string" ? res.userData.selectedOwnedMachineId : "";
+    }
     return res.userData;
   },
   openRental(id, start, end) {

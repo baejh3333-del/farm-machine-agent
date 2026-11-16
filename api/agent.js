@@ -21,6 +21,7 @@ import {
 } from "../server/nongnong-agent.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
 import { createRentalRequest } from "../server/rentals.js";
+import { toggleFavorite } from "../server/user-data.js";
 import { getWeatherAndMapConfig } from "../server/weather.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -31,6 +32,7 @@ const CHAT_WRITE_RATE_KIND = {
   create_purchase_request: "message",
   create_listing: "listing",
   update_listing: "listing",
+  toggle_favorite: "message",
 };
 
 const EXECUTE_ACTIONS = {
@@ -45,6 +47,23 @@ const EXECUTE_ACTIONS = {
   create_listing: {
     rateKind: "listing",
     run: (user, pending, requestId) => executeListingAction(user, pending, { requestId }),
+  },
+  toggle_favorite: {
+    rateKind: "message",
+    run: async (user, pending) => {
+      const res = await toggleFavorite(user.id, pending?.listingId, {
+        favorite: typeof pending?.favorite === "boolean" ? pending.favorite : undefined,
+      });
+      return {
+        outcome: "completed",
+        favoriteAction: {
+          listingId: pending?.listingId,
+          favorite: res.isFavorite,
+        },
+        userData: res.userData,
+        message: res.isFavorite ? "매물을 찜 목록에 저장했어요." : "찜 목록에서 뺐어요.",
+      };
+    },
   },
 };
 
@@ -81,6 +100,7 @@ export default handle(["POST"], async (request) => {
       sendPurchaseMessage: (u, payload) => sendMessage(u, payload),
       createListing: (u, payload) => createListing(u, payload),
       updateListing: (u, payload) => updateListing(u, payload),
+      toggleFavorite: (u, { listingId, favorite }) => toggleFavorite(u.id, listingId, { favorite }),
       fetchOwnListings: () => (user ? fetchListings({ viewerId: user.id, ownerOnly: true }) : []),
       beforeWrite: async (toolName) => {
         await assertWritesAllowed();

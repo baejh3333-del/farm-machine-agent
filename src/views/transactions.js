@@ -1,4 +1,4 @@
-import { CROPS, OPERATIONS, MACHINE_TYPES, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID } from "../data/farm-machines.js";
+import { CROPS, OPERATIONS, MACHINE_TYPES, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
 import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, getSpecificationDefaults } from "../data/machine-specifications.js";
 import { available } from "../data/recommendation.js";
 import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictureIcon, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
@@ -152,6 +152,50 @@ function rentalForm(id, draftValues = null) {
   });
 }
 
+const AI_POLICY_CHIPS = [
+  { id: "pickupTime", label: "인수 시간 조율" },
+  { id: "compatibility", label: "작업기·호환성 안내" },
+  { id: "availability", label: "빈 날짜 확인" },
+  { id: "noNegotiation", label: "가격 흥정 거절" },
+];
+
+const ESCALATION_REASON_LABEL = {
+  price_negotiation: "가격 할인·흥정 요청",
+  warranty: "보증·수리 책임 확인",
+  personal_info: "연락처·상세 주소 요청",
+  low_confidence: "확신 부족 / 추가 확인 필요",
+  out_of_scope: "위임 범위 외 문의",
+  condition_check: "실물 상태 확인 필요",
+};
+
+function formatPausedReason(reason) {
+  if (!reason) return "";
+  if (reason === "max_turns_reached") {
+    return "연속 AI 응답 상한에 도달해 대리 응대를 잠시 멈췄어요. 직접 답장하시면 대화가 이어집니다.";
+  }
+  if (reason === "both_ai_handoff") {
+    return "양측 농농이가 핵심 조건을 정리하고 바통을 넘겼어요. 확인 후 직접 답장하거나 대여를 진행해 주세요.";
+  }
+  if (reason.startsWith("escalated:")) {
+    const code = reason.slice("escalated:".length).trim();
+    const label = ESCALATION_REASON_LABEL[code] || code || "추가 확인 필요";
+    return `농농이가 확인이 필요해 답변을 멈췄어요 (사유: ${label}). 직접 답장하시면 대화가 이어집니다.`;
+  }
+  return `농농이 대리 응대가 일시정지되었어요 (${reason}). 직접 답장하시면 대화가 이어집니다.`;
+}
+
+function renderConvAiBadges(conv, role) {
+  if (!conv) return "";
+  const mode = role === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
+  const badges = [];
+  if (conv.aiPausedReason) {
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⚠️ 확인 필요</span>`);
+  } else if (mode && mode !== "off") {
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-active">🤖 대리 중</span>`);
+  }
+  return badges.join("");
+}
+
 function chatForm(target) {
   const opts = typeof target === "string" ? { listingId: target } : (target || {});
   const listingId = opts.listingId || null;
@@ -165,6 +209,8 @@ function chatForm(target) {
       listingId,
       conversationId,
       draftBody,
+      ...(opts.aiMode ? { aiMode: opts.aiMode } : {}),
+      ...(opts.aiPolicy ? { aiPolicy: opts.aiPolicy } : {}),
     });
     return;
   }
@@ -173,10 +219,32 @@ function chatForm(target) {
     <span class="step-pill">1:1 농기계 채팅 문의</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
     <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
+    <section id="chatAiControlBar" class="chat-ai-bar" aria-label="농농이 대리 응대 설정">
+      <div class="chat-ai-bar-head">
+        <span class="chat-ai-title">🤖 농농이 대리 응대</span>
+        <div class="chat-ai-modes" role="group" aria-label="대리 응대 모드">
+          <button type="button" class="chat-ai-mode-btn active" data-ai-mode="off" aria-pressed="true">끄기</button>
+          <button type="button" class="chat-ai-mode-btn" data-ai-mode="copilot" aria-pressed="false">초안 확인</button>
+          <button type="button" class="chat-ai-mode-btn" data-ai-mode="autonomous" aria-pressed="false">자동 응대</button>
+        </div>
+        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="false">상세 지침 ▾</button>
+      </div>
+      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel" hidden>
+        <div class="chat-ai-chips" role="group" aria-label="위임 조건 빠른 설정">
+          ${AI_POLICY_CHIPS.map((c) => `<button type="button" class="chat-ai-chip" data-policy-chip="${escapeHtml(c.id)}" aria-pressed="false">${escapeHtml(c.label)}</button>`).join("")}
+        </div>
+        <div class="chat-ai-instruction-row">
+          <input id="chatAiInstructions" type="text" maxlength="200" placeholder="예: 토요일 오전 9시~12시 직접 인수만 가능, 운반 불가" aria-label="대리 응대 상세 지침">
+          <button type="button" id="chatAiSavePolicy" class="button button-primary button-sm">저장</button>
+        </div>
+      </div>
+    </section>
     <div style="margin-bottom:8px">
       <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
     </div>
     <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
+    <div id="chatPausedBanner" class="chat-paused-banner" role="status" hidden></div>
+    <div id="chatDraftBar" class="chat-draft-bar" hidden></div>
     <form id="chatForm" class="chat-send">
       <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
       <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
@@ -187,8 +255,26 @@ function chatForm(target) {
   const bySeq = new Map();
   let hasMoreOlder = false;
   let busy = false;
+  let aiBusy = false;
   let draftMessageId = crypto.randomUUID();
   let lastSubmittedBody = null;
+  let currentConv = null;
+  let currentAiMode = opts.aiMode || "off";
+  let pendingInitialAi = opts.aiMode && opts.aiMode !== "off" ? { mode: opts.aiMode, policy: opts.aiPolicy || null } : null;
+  const activeChips = new Set(Array.isArray(opts.aiPolicy?.chips) ? opts.aiPolicy.chips : []);
+  let instructionsDirty = false;
+
+  if (opts.aiPolicy && typeof opts.aiPolicy === "object") {
+    if (opts.aiPolicy.allowNegotiation === false) activeChips.add("noNegotiation");
+    if (Array.isArray(opts.aiPolicy.autoReplyOn)) {
+      if (opts.aiPolicy.autoReplyOn.includes("schedule")) activeChips.add("pickupTime");
+      if (opts.aiPolicy.autoReplyOn.includes("compatibility") || opts.aiPolicy.autoReplyOn.includes("spec")) activeChips.add("compatibility");
+      if (opts.aiPolicy.autoReplyOn.includes("availability") || opts.aiPolicy.autoReplyOn.includes("weather")) activeChips.add("availability");
+    }
+    if (typeof opts.aiPolicy.instructions === "string" && $("chatAiInstructions")) {
+      $("chatAiInstructions").value = opts.aiPolicy.instructions;
+    }
+  }
 
   const sortedMessages = () => [...bySeq.values()].sort((a, b) => a.seq - b.seq);
   const maxSeq = () => {
@@ -200,6 +286,157 @@ function chatForm(target) {
     return list.length ? list[0].seq : null;
   };
 
+  function syncAiControlUi() {
+    const bar = $("chatAiControlBar");
+    if (!bar) return;
+    bar.querySelectorAll(".chat-ai-mode-btn").forEach((btn) => {
+      const isSelected = btn.dataset.aiMode === currentAiMode;
+      btn.classList.toggle("active", isSelected);
+      btn.setAttribute("aria-pressed", String(isSelected));
+      btn.disabled = aiBusy;
+    });
+    bar.querySelectorAll(".chat-ai-chip").forEach((chip) => {
+      const active = activeChips.has(chip.dataset.policyChip);
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-pressed", String(active));
+    });
+    if ($("chatAiSavePolicy")) $("chatAiSavePolicy").disabled = aiBusy;
+  }
+
+  function hydratePolicyFromConv(conv) {
+    if (!conv) return;
+    const isBuyer = conv.buyerId === runtime.accountUser?.id;
+    const mode = isBuyer ? conv.buyerAiMode : conv.ownerAiMode;
+    const policy = isBuyer ? conv.buyerAiPolicy : conv.ownerAiPolicy;
+    if (mode) currentAiMode = mode;
+    if (policy && typeof policy === "object" && !instructionsDirty) {
+      activeChips.clear();
+      if (Array.isArray(policy.chips)) {
+        for (const c of policy.chips) activeChips.add(c);
+      } else {
+        if (policy.allowNegotiation === false) activeChips.add("noNegotiation");
+        if (Array.isArray(policy.autoReplyOn)) {
+          if (policy.autoReplyOn.includes("schedule")) activeChips.add("pickupTime");
+          if (policy.autoReplyOn.includes("compatibility") || policy.autoReplyOn.includes("spec")) activeChips.add("compatibility");
+          if (policy.autoReplyOn.includes("availability") || policy.autoReplyOn.includes("weather")) activeChips.add("availability");
+        }
+      }
+      if ($("chatAiInstructions") && document.activeElement !== $("chatAiInstructions")) {
+        $("chatAiInstructions").value = typeof policy.instructions === "string" ? policy.instructions : "";
+      }
+    }
+    syncAiControlUi();
+  }
+
+  function collectPolicy() {
+    const autoReplyOn = [];
+    if (activeChips.has("pickupTime")) autoReplyOn.push("schedule");
+    if (activeChips.has("compatibility")) autoReplyOn.push("compatibility", "spec");
+    if (activeChips.has("availability")) autoReplyOn.push("availability", "weather");
+    return {
+      instructions: $("chatAiInstructions")?.value.trim() || "",
+      allowNegotiation: !activeChips.has("noNegotiation"),
+      autoReplyOn,
+      chips: [...activeChips],
+    };
+  }
+
+  function renderPausedBanner(conv) {
+    const banner = $("chatPausedBanner");
+    if (!banner) return;
+    const reason = conv?.aiPausedReason;
+    if (!reason) {
+      banner.hidden = true;
+      banner.innerHTML = "";
+      return;
+    }
+    banner.hidden = false;
+    banner.innerHTML = `
+      <span class="chat-paused-text">⚠️ ${escapeHtml(formatPausedReason(reason))}</span>
+      <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 자동 응대 켜기</button>
+    `;
+    $("chatResumeAiBtn")?.addEventListener("click", () => {
+      saveAiPolicy("autonomous", collectPolicy(), { resume: true });
+    });
+  }
+
+  function renderDraftBar(conv) {
+    const bar = $("chatDraftBar");
+    if (!bar) return;
+    const draft = conv?.aiDraftJson;
+    if (!draft || !draft.body || draft.targetUserId !== runtime.accountUser?.id) {
+      bar.hidden = true;
+      bar.innerHTML = "";
+      return;
+    }
+    bar.hidden = false;
+    bar.innerHTML = `
+      <div class="chat-draft-head">
+        <strong>🤖 농농이 추천 답장 초안</strong>
+        <div class="chat-draft-actions">
+          <button type="button" id="chatDraftSend" class="button button-primary button-sm">이대로 보내기</button>
+          <button type="button" id="chatDraftEdit" class="button button-secondary button-sm">입력창에 불러오기</button>
+          <button type="button" id="chatDraftRegen" class="button button-secondary button-sm">초안 다시 생성</button>
+          <button type="button" id="chatDraftDismiss" class="button button-secondary button-sm">무시</button>
+        </div>
+      </div>
+      <p class="chat-draft-body">${escapeHtml(draft.body)}</p>
+    `;
+    $("chatDraftSend")?.addEventListener("click", () => sendMessageBody(draft.body));
+    $("chatDraftEdit")?.addEventListener("click", () => {
+      if ($("chatMessage")) {
+        $("chatMessage").value = draft.body;
+        $("chatMessage").focus();
+      }
+    });
+    $("chatDraftRegen")?.addEventListener("click", async () => {
+      if (!conversationId || aiBusy) return;
+      aiBusy = true;
+      if ($("chatDraftRegen")) $("chatDraftRegen").disabled = true;
+      try {
+        const res = await apiFetch("/api/conversations", {
+          method: "POST",
+          json: { action: "generate_ai_draft", conversationId },
+        });
+        if (epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
+        if (res?.conversation) applyConvMetadata(res.conversation);
+        toast("새 답장 초안을 생성했습니다.");
+      } catch (error) {
+        if (error?.name !== "AbortError" && error?.code !== "AUTH_CHANGED") {
+          toast(error?.message || "초안을 다시 생성하지 못했습니다.");
+        }
+      } finally {
+        aiBusy = false;
+        if ($("chatDraftRegen")) $("chatDraftRegen").disabled = false;
+      }
+    });
+    $("chatDraftDismiss")?.addEventListener("click", async () => {
+      if (!conversationId || aiBusy) return;
+      aiBusy = true;
+      if ($("chatDraftDismiss")) $("chatDraftDismiss").disabled = true;
+      try {
+        const res = await apiFetch("/api/conversations", {
+          method: "POST",
+          json: { action: "dismiss_ai_draft", conversationId },
+        });
+        if (epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
+        if (res?.conversation) {
+          applyConvMetadata(res.conversation);
+        } else if (currentConv) {
+          currentConv = { ...currentConv, aiDraftJson: null };
+          renderDraftBar(currentConv);
+        }
+      } catch (error) {
+        if (error?.name !== "AbortError" && error?.code !== "AUTH_CHANGED") {
+          toast(error?.message || "초안을 닫지 못했습니다.");
+        }
+      } finally {
+        aiBusy = false;
+        if ($("chatDraftDismiss")) $("chatDraftDismiss").disabled = false;
+      }
+    });
+  }
+
   function renderChat({ keepScroll = false } = {}) {
     if (!$("chatLog")) return;
     const log = $("chatLog");
@@ -207,9 +444,16 @@ function chatForm(target) {
     const list = sortedMessages();
     log.innerHTML = list.length
       ? list.map((msg) => {
+          if (msg.senderKind === "system") {
+            return `<div class="chat-line-system" role="note">
+              <div>${escapeHtml(msg.body)}</div>
+            </div>`;
+          }
           const mine = msg.senderId === runtime.accountUser?.id;
-          return `<div class="chat-line ${mine ? "mine" : ""}">
-            <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}</b>
+          const isAiProxy = msg.senderKind === "ai_proxy";
+          const aiBadge = isAiProxy ? `<span class="chat-ai-badge">🤖 AI 대신 답변</span>` : "";
+          return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}">
+            <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}${aiBadge}</b>
             <div>${escapeHtml(msg.body)}</div>
           </div>`;
         }).join("")
@@ -224,11 +468,100 @@ function chatForm(target) {
 
   function applyConvMetadata(conv) {
     if (!conv) return;
+    currentConv = conv;
     conversationId = conv.id;
     const isBuyer = conv.buyerId === runtime.accountUser?.id;
     const peerLabel = isBuyer ? `소유 농가 ${conv.ownerName}` : `문의 농가 ${conv.buyerName}`;
     if ($("formTitle")) $("formTitle").textContent = `${conv.listingTitle || item?.title || "농기계"} · 1:1 대화`;
     if ($("chatSubtitle")) $("chatSubtitle").textContent = `${peerLabel}님과의 대화`;
+    hydratePolicyFromConv(conv);
+    renderPausedBanner(conv);
+    renderDraftBar(conv);
+  }
+
+  async function saveAiPolicy(mode, policy, { quiet = false, resume = false } = {}) {
+    if (aiBusy) return;
+    if (!conversationId && !listingId) return;
+    aiBusy = true;
+    const prevMode = currentAiMode;
+    currentAiMode = mode;
+    syncAiControlUi();
+    try {
+      const res = await apiFetch("/api/conversations", {
+        method: "POST",
+        json: {
+          action: "update_ai_policy",
+          ...(conversationId ? { conversationId } : {}),
+          ...(listingId ? { listingId } : {}),
+          mode,
+          policy,
+          ...(resume ? { resume: true } : {}),
+        },
+      });
+      if (epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
+      instructionsDirty = false;
+      if (res?.conversation) {
+        applyConvMetadata(res.conversation);
+        startPolling();
+      }
+      deps.refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
+      if (!quiet) {
+        const modeLabel = mode === "autonomous" ? "자동 응대" : mode === "copilot" ? "초안 확인" : "끄기";
+        toast(`농농이 대리 응대를 '${modeLabel}'(으)로 저장했습니다.`);
+      }
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+      currentAiMode = prevMode;
+      syncAiControlUi();
+      toast(error?.message || "대리 응대 설정을 저장하지 못했습니다.");
+    } finally {
+      aiBusy = false;
+      syncAiControlUi();
+    }
+  }
+
+  async function sendMessageBody(text, { fromForm = false } = {}) {
+    if (busy || !text) return;
+    const msgId = fromForm ? draftMessageId : crypto.randomUUID();
+    if (fromForm) lastSubmittedBody = text;
+    busy = true;
+    if ($("chatSendButton")) $("chatSendButton").disabled = true;
+    try {
+      const res = await apiFetch("/api/conversations", {
+        method: "POST",
+        json: {
+          action: "send",
+          id: msgId,
+          conversationId,
+          listingId: listingId || undefined,
+          body: text,
+        },
+      });
+      if (epoch !== runtime.authEpoch) return;
+      if (res.conversation) applyConvMetadata(res.conversation);
+      if (res.message) bySeq.set(res.message.seq, res.message);
+      if (fromForm && $("chatMessage")) {
+        $("chatMessage").value = "";
+        draftMessageId = crypto.randomUUID();
+        lastSubmittedBody = null;
+      }
+      renderChat();
+      startPolling();
+      deps.refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
+      if (error?.status === 401) {
+        deps.savePendingIntentAndRedirectLogin(
+          { type: "chat", listingId, conversationId, draftBody: text },
+          "세션이 만료되었습니다. 로그인 후 메시지를 이어서 보낼 수 있어요."
+        );
+        return;
+      }
+      toast(error?.message || "메시지를 보내지 못했습니다.");
+    } finally {
+      busy = false;
+      if ($("chatSendButton")) $("chatSendButton").disabled = false;
+    }
   }
 
   async function loadInitialMessages() {
@@ -243,6 +576,15 @@ function chatForm(target) {
       hasMoreOlder = Boolean(data.hasMoreOlder);
       renderChat();
       startPolling();
+      if (pendingInitialAi) {
+        const init = pendingInitialAi;
+        pendingInitialAi = null;
+        const isBuyer = currentConv ? currentConv.buyerId === runtime.accountUser?.id : true;
+        const existingMode = currentConv ? (isBuyer ? currentConv.buyerAiMode : currentConv.ownerAiMode) : "off";
+        if (!existingMode || existingMode === "off") {
+          await saveAiPolicy(init.mode, init.policy || collectPolicy(), { quiet: true });
+        }
+      }
     } catch (error) {
       if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
       if ($("chatLog")) {
@@ -256,6 +598,7 @@ function chatForm(target) {
     try {
       const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(conversationId)}&after_seq=${maxSeq()}&limit=50`);
       if (epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
+      if (data.conversation) applyConvMetadata(data.conversation);
       const incoming = data.messages || [];
       if (incoming.length) {
         for (const m of incoming) bySeq.set(m.seq, m);
@@ -272,6 +615,44 @@ function chatForm(target) {
     runtime.chatPollTimer = setInterval(pollNewMessages, 2500);
   }
 
+  syncAiControlUi();
+
+  $("chatAiPolicyToggle")?.addEventListener("click", () => {
+    const panel = $("chatAiPolicyPanel");
+    if (!panel) return;
+    const nextHidden = !panel.hidden;
+    panel.hidden = nextHidden;
+    $("chatAiPolicyToggle").setAttribute("aria-expanded", String(!nextHidden));
+    $("chatAiPolicyToggle").textContent = nextHidden ? "상세 지침 ▾" : "상세 지침 ▴";
+  });
+
+  $("chatAiControlBar")?.querySelectorAll(".chat-ai-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.aiMode;
+      if (!mode || mode === currentAiMode) return;
+      saveAiPolicy(mode, collectPolicy());
+    });
+  });
+
+  $("chatAiControlBar")?.querySelectorAll(".chat-ai-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const id = chip.dataset.policyChip;
+      if (!id) return;
+      if (activeChips.has(id)) activeChips.delete(id);
+      else activeChips.add(id);
+      instructionsDirty = true;
+      syncAiControlUi();
+    });
+  });
+
+  $("chatAiInstructions")?.addEventListener("input", () => {
+    instructionsDirty = true;
+  });
+
+  $("chatAiSavePolicy")?.addEventListener("click", () => {
+    saveAiPolicy(currentAiMode, collectPolicy());
+  });
+
   $("chatLoadOlder").addEventListener("click", async () => {
     const oldest = minSeq();
     if (!conversationId || !oldest || oldest <= 1) return;
@@ -279,6 +660,7 @@ function chatForm(target) {
     try {
       const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(conversationId)}&before_seq=${oldest}&limit=50`);
       if (epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
+      if (data.conversation) applyConvMetadata(data.conversation);
       for (const m of data.messages || []) bySeq.set(m.seq, m);
       hasMoreOlder = Boolean(data.hasMoreOlder);
       renderChat({ keepScroll: true });
@@ -299,46 +681,9 @@ function chatForm(target) {
 
   $("chatForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (busy) return;
     const text = $("chatMessage").value.trim();
     if (!text) return;
-    lastSubmittedBody = text;
-    busy = true;
-    $("chatSendButton").disabled = true;
-    try {
-      const res = await apiFetch("/api/conversations", {
-        method: "POST",
-        json: {
-          action: "send",
-          id: draftMessageId,
-          conversationId,
-          listingId: listingId || undefined,
-          body: text,
-        },
-      });
-      if (epoch !== runtime.authEpoch) return;
-      if (res.conversation) applyConvMetadata(res.conversation);
-      if (res.message) bySeq.set(res.message.seq, res.message);
-      $("chatMessage").value = "";
-      draftMessageId = crypto.randomUUID();
-      lastSubmittedBody = null;
-      renderChat();
-      startPolling();
-      deps.refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
-    } catch (error) {
-      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
-      if (error?.status === 401) {
-        deps.savePendingIntentAndRedirectLogin(
-          { type: "chat", listingId, conversationId, draftBody: text },
-          "세션이 만료되었습니다. 로그인 후 메시지를 이어서 보낼 수 있어요."
-        );
-        return;
-      }
-      toast(error?.message || "메시지를 보내지 못했습니다.");
-    } finally {
-      busy = false;
-      if ($("chatSendButton")) $("chatSendButton").disabled = false;
-    }
+    await sendMessageBody(text, { fromForm: true });
   });
 
   loadInitialMessages();
@@ -417,7 +762,10 @@ function renderBuyerRequests() {
       ? buyerConvs.map((c) => `
         <div class="request-row">
           <div class="owner-row-info">
-            <span class="step-pill">판매자: ${escapeHtml(c.ownerName)}</span>
+            <div class="owner-row-badges">
+              <span class="step-pill">판매자: ${escapeHtml(c.ownerName)}</span>
+              ${renderConvAiBadges(c, "buyer")}
+            </div>
             <strong>${escapeHtml(c.listingTitle)}</strong>
             <small>${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
           </div>
@@ -533,7 +881,10 @@ function renderOwner() {
       ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div>` + ownerConvs.map((c) => `
         <div class="request-row">
           <div class="owner-row-info">
-            <span class="step-pill">문의자: ${escapeHtml(c.buyerName)}</span>
+            <div class="owner-row-badges">
+              <span class="step-pill">문의자: ${escapeHtml(c.buyerName)}</span>
+              ${renderConvAiBadges(c, "owner")}
+            </div>
             <strong>${escapeHtml(c.listingTitle)}</strong>
             <small>${c.lastMessage ? `"${escapeHtml(c.lastMessage.body)}"` : "새 대화"}</small>
           </div>
@@ -580,6 +931,10 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   const initialIncluded = val("included", "");
   const initialPickup = val("pickup", "");
   const initialDescription = val("description", "");
+  const regionKeys = Object.keys(REGION_COORDS);
+  const regionOptions = initialRegion && !regionKeys.includes(initialRegion)
+    ? [initialRegion, ...regionKeys]
+    : regionKeys;
 
   openForm(`
     <span class="step-pill">${isEdit ? "매물 수정" : "농기계 등록"}</span>
@@ -624,7 +979,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
         <label>요금/가격(원)<input id="editPrice" type="number" min="0" step="1000" required value="${escapeHtml(initialPrice)}" placeholder="예: 50000"></label>
         <label>보관/거래 지역
           <select id="editRegion">
-            ${["영양읍", "청기면", "입암면", "수비면"].map((r) => `<option value="${escapeHtml(r)}" ${initialRegion === r ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}
+            ${regionOptions.map((r) => `<option value="${escapeHtml(r)}" ${initialRegion === r ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}
           </select>
         </label>
       </div>

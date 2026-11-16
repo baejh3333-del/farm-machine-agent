@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="/src/garage.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261117" />
   <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
@@ -94,17 +96,24 @@
       </nav>
 
       <div class="topbar-left">
-          <div class="region-pill">
-            <span class="region-pin" aria-hidden="true"></span>
-            <label for="regionSelect" class="region-label">내 동네</label>
-            <select id="regionSelect" aria-label="내 동네 선택">
-              <option value="영양읍">영양읍</option>
-              <option value="청기면">청기면</option>
-              <option value="입암면">입암면</option>
-              <option value="수비면">수비면</option>
-            </select>
-            <span class="region-arrow" aria-hidden="true">▾</span>
-          </div>
+          <button
+            type="button"
+            class="region-picker-trigger"
+            id="regionPickerBtn"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            aria-controls="regionPickerDialog"
+            aria-label="내 동네 지역 선택"
+          >
+            <span id="regionPickerLabel">📍 경상북도 영양군 · 영양읍</span>
+            <span class="region-picker-caret" aria-hidden="true">▾</span>
+          </button>
+          <select id="regionSelect" aria-hidden="true" tabindex="-1" hidden>
+            <option value="영양읍">영양읍</option>
+            <option value="청기면">청기면</option>
+            <option value="입암면">입암면</option>
+            <option value="수비면">수비면</option>
+          </select>
           <button type="button" class="login-button" id="loginButton">로그인</button>
       </div>
     </header>
@@ -726,6 +735,24 @@
     <section class="form-dialog" role="dialog" aria-modal="true" aria-labelledby="formTitle">
       <button type="button" class="icon-button detail-close" id="closeForm" aria-label="창 닫기">✕</button>
       <div id="formContent"></div>
+    </section>
+  </div>
+
+  <!-- 전국 지역 선택 모달 -->
+  <div class="dialog-backdrop" id="regionPickerDialog" hidden>
+    <section class="region-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="regionPickerTitle">
+      <div class="region-picker-head">
+        <h2 id="regionPickerTitle">내 동네 · 지역 선택</h2>
+        <button type="button" class="region-picker-close" id="closeRegionPicker" aria-label="지역 선택 닫기">✕</button>
+      </div>
+      <div class="region-picker-gps-bar">
+        <button type="button" class="region-gps-btn" id="regionGpsBtn">📍 내 위치로 자동 설정 (GPS)</button>
+        <span class="region-gps-hint" id="regionGpsHint">현재 위치 기준 가까운 농기계와 날씨를 확인해요</span>
+      </div>
+      <div class="region-picker-body">
+        <div class="region-step-col region-step-provinces" id="regionProvinceList" aria-label="1단계 시·도 선택"></div>
+        <div class="region-step-col region-step-cities" id="regionCityArea" aria-label="2단계 시·군·구 선택"></div>
+      </div>
     </section>
   </div>
 

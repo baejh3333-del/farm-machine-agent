@@ -14,7 +14,8 @@ export async function askRecommendation(message, context) {
 }
 
 // 농농 통합 에이전트(/api/agent). 서버에 AI 키가 없으면 { mode: "unavailable" }를 받는다.
-export async function askAgent(message, { history = [], region, uiContext, image, savedDraft } = {}) {
+// insuranceOffer: 예약 뒤 보험 추천 흐름의 진행 상태, insuranceAsked: 이 대화에서 이미 물었는지.
+export async function askAgent(message, { history = [], region, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false } = {}) {
   const result = await apiFetch("/api/agent", {
     method: "POST",
     timeoutMs: image ? 50000 : 30000,
@@ -26,6 +27,8 @@ export async function askAgent(message, { history = [], region, uiContext, image
       ...(uiContext ? { uiContext } : {}),
       ...(image ? { image } : {}),
       ...(savedDraft ? { savedDraft } : {}),
+      ...(insuranceOffer ? { insuranceOffer } : {}),
+      insuranceAsked,
     },
   });
   if (!result || typeof result.mode !== "string") throw new Error("농농이 응답 형식이 올바르지 않습니다.");
@@ -33,10 +36,10 @@ export async function askAgent(message, { history = [], region, uiContext, image
 }
 
 // 사용자가 원탭 또는 확인 카드로 승인한 작업(대여 요청·구매 신청·매물 등록)을 서버에 실행을 맡긴다.
-export async function executeAgentAction(pendingAction, requestId) {
+export async function executeAgentAction(pendingAction, requestId, { insuranceAsked = false } = {}) {
   return apiFetch("/api/agent", {
     method: "POST",
-    json: { action: "execute", pendingAction, requestId },
+    json: { action: "execute", pendingAction, requestId, insuranceAsked },
   });
 }
 

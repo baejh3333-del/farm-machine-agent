@@ -83,6 +83,8 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 수리는 get_repair_guide에 있는 단계만 안내한다. 안전 수칙 → 번호 붙인 점검 3~5단계 → "이럴 땐 멈추고 수리센터에 연락하세요" 순서로 짧게 말한다. 가이드에 없는 분해·정비·조정은 안내하지 않는다. 사용자가 해 봤는데 안 된다고 하거나 중단 조건에 해당하면 find_repair_centers로 연결한다. 전화번호와 사이트는 그 결과에 있는 것만 쓴다(화면에 카드로 보인다).
 - 판매·대여 등록을 원하면 estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 확정한다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 연식·사용시간·포함 작업기처럼 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
 - 보험은 사용자가 보험을 물었을 때만 get_insurance_info로 안내한다. 먼저 꺼내거나 가입을 권유하지 않고, 보험료를 확정해 말하지 않는다.
+- 대여·구매 예약을 마친 뒤 "보험을 추천해드릴까요?"는 화면이 한 번만 대신 묻는다. 예약 완료 답변에서 직접 보험을 묻거나 권하지 않는다.
+- 보험 가입이나 결제를 대신하지 않고, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
 - 웹 검색 도구가 있으면, 위 도구에 없는 사실을 확인할 때만 쓰고 "웹 검색 결과라 확인이 필요해요"라고 밝힌다.
 - 시니어도 읽기 쉽게: 한 문장은 짧게, 어려운 말은 쉬운 말로 풀어 쓴다.`;
 
@@ -397,10 +399,16 @@ export function sanitizeHistory(history, message) {
   return merged;
 }
 
+function cleanRegion(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().slice(0, 40);
+  return trimmed && /[가-힣]/.test(trimmed) ? trimmed : null;
+}
+
 /** 화면에서 보낸 필터·선택 매물 컨텍스트를 안전한 값만 골라 정제한다. */
 export function cleanUiContext(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const region = REGIONS.includes(raw.region) ? raw.region : null;
+  const region = cleanRegion(raw.region);
   const transaction = raw.transaction === "sale" ? "sale" : raw.transaction === "rent" ? "rent" : null;
   const cropIds = (Array.isArray(raw.cropIds) ? raw.cropIds : [])
     .filter((id) => typeof id === "string" && Object.hasOwn(CROP_BY_ID, id))
@@ -502,7 +510,7 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   }
   const start = DATE.test(input?.start || "") ? input.start : "";
   const end = start && DATE.test(input?.end || "") && input.end >= start ? input.end : start;
-  const effectiveRegion = REGIONS.includes(input?.region) ? input.region : region;
+  const effectiveRegion = cleanRegion(input?.region) || region;
   const scoped = Array.isArray(listings) ? listings.filter((item) => !userId || item.ownerId !== userId) : [];
   const context = {
     cropIds: cropId ? [cropId] : [],
@@ -843,11 +851,9 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog } = {}) {
   const brand = spec?.brand
     || (typeof input?.brand === "string" && input.brand.trim() ? input.brand.trim().slice(0, 40) : null)
     || "직접 등록";
-  const region = REGIONS.includes(input?.region)
-    ? input.region
-    : REGIONS.includes(uiCtx?.region)
-      ? uiCtx.region
-      : "영양읍";
+  const region = cleanRegion(input?.region)
+    || cleanRegion(uiCtx?.region)
+    || "영양읍";
   const cropIds = (Array.isArray(input?.cropIds) ? input.cropIds : [])
     .filter((id) => Object.hasOwn(CROP_BY_ID, id));
   const resolvedCrops = cropIds.length
@@ -993,7 +999,7 @@ async function runTurn(
 ) {
   const text = String(message || "").trim();
   const uiCtx = cleanUiContext(uiContext);
-  const effectiveRegion = REGIONS.includes(region) ? region : uiCtx.region;
+  const effectiveRegion = cleanRegion(region) || uiCtx.region;
   const messages = sanitizeHistory(history, text || "사진을 보고 도와주세요.");
   if (image?.base64) {
     const last = messages.at(-1);
@@ -1081,7 +1087,7 @@ async function runTurn(
               const span = Math.min(7, block.input.days);
               end = new Date(Date.parse(`${start}T00:00:00Z`) + (span - 1) * 86_400_000).toISOString().slice(0, 10);
             }
-            const wRegion = REGIONS.includes(block.input?.region) ? block.input.region : (effectiveRegion || "영양읍");
+            const wRegion = cleanRegion(block.input?.region) || effectiveRegion || "영양읍";
             const listingId = typeof block.input?.listingId === "string" ? block.input.listingId.trim() : "";
             let booked = [];
             if (listingId) {

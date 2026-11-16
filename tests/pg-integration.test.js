@@ -171,7 +171,14 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
   );
 
   const migRes = await runMigrations({ env: "test", pool });
-  assert.deepEqual(migRes.applied, ["0001_initial_schema.sql", "0002_rate_limits_and_rental_bounds.sql", "0003_agent_core.sql", "0004_catalog_reference.sql"]);
+  assert.deepEqual(migRes.applied, [
+    "0001_initial_schema.sql",
+    "0002_rate_limits_and_rental_bounds.sql",
+    "0003_agent_core.sql",
+    "0004_catalog_reference.sql",
+    "0005_delegated_chat.sql",
+    "0006_insurance_consults.sql",
+  ]);
 
   const info = await inspectDatabase({ pool });
   assert.equal(info.environment, "test");

@@ -1,6 +1,7 @@
-import { REGION_COORDS, MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
+import { MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
+import { getRegionCoords } from "../data/korea-regions.js";
 import { $, escapeHtml, money, today, addDays, toast } from "../core/utils.js";
-import { state, runtime, apiFetch } from "../core/store.js";
+import { state, runtime, apiFetch, persist } from "../core/store.js";
 
 const WEATHER_ICONS = {
   sun: "☀️",
@@ -50,14 +51,29 @@ function loadKakaoSdk(appKey) {
   return kakaoSdkPromise;
 }
 
+function validUserCoords() {
+  const c = state.userCoords || runtime.userCoords;
+  if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
+    return { lat: Number(c.lat), lng: Number(c.lng) };
+  }
+  return null;
+}
+
 export async function refreshWeatherAndMapConfig({ onUpdate } = {}) {
   const targetDate = state.filters.date || today();
-  const key = `${state.region}:${targetDate}`;
+  const gps = validUserCoords();
+  const key = gps
+    ? `${state.region}:${gps.lat.toFixed(3)},${gps.lng.toFixed(3)}:${targetDate}`
+    : `${state.region}:${targetDate}`;
   if (key === lastWeatherKey && runtime.weatherData) return runtime.weatherData;
   lastWeatherKey = key;
 
   try {
     const params = new URLSearchParams({ region: state.region, date: targetDate, days: "5" });
+    if (gps) {
+      params.set("lat", String(gps.lat));
+      params.set("lng", String(gps.lng));
+    }
     const data = await apiFetch(`/api/weather?${params.toString()}`, { timeoutMs: 5000 });
     if (data?.weather) runtime.weatherData = data.weather;
     if (Array.isArray(data?.forecastDays)) {
@@ -370,14 +386,15 @@ export async function renderBookingWeatherPanel(container, { region, start, end 
 }
 
 function activeOriginCoords() {
-  if (runtime.userCoords && Number.isFinite(runtime.userCoords.lat) && Number.isFinite(runtime.userCoords.lng)) {
-    return runtime.userCoords;
-  }
-  return REGION_COORDS[state.region] || REGION_COORDS["영양읍"];
+  const gps = validUserCoords();
+  if (gps) return gps;
+  return getRegionCoords(state.region);
 }
 
 export function activeDistanceOrigin() {
-  return runtime.userCoords || state.region;
+  const gps = validUserCoords();
+  if (gps) return gps;
+  return getRegionCoords(state.region);
 }
 
 function renderMapError(container, message, { onRetry, onSwitchToList } = {}) {
@@ -413,7 +430,7 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail, onRetry,
     new maps.Marker({
       map,
       position: originPos,
-      title: runtime.userCoords ? "내 GPS 위치" : `내 동네 (${state.region})`,
+      title: validUserCoords() ? "내 GPS 위치" : `내 동네 (${state.region})`,
     });
 
     const originArg = activeDistanceOrigin();
@@ -469,18 +486,19 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
     return;
   }
 
+  const hasGps = Boolean(validUserCoords());
   host.hidden = false;
   host.innerHTML = `
     <div class="map-toolbar">
       <div class="map-toolbar-info">
         <strong>매물 위치 지도</strong>
-        <span>${runtime.userCoords ? "현재 GPS 위치 기준 거리 표시 중" : `${escapeHtml(state.region)} 중심 기준 직선거리(km)`}</span>
+        <span>${hasGps ? "현재 GPS 위치 기준 거리 표시 중" : `${escapeHtml(state.region)} 중심 기준 직선거리(km)`}</span>
       </div>
       <div class="map-toolbar-actions">
         <button type="button" class="button button-secondary map-gps-btn" id="mapUseGpsBtn">
-          ${runtime.userCoords ? "GPS 위치 다시 잡기" : "현재 위치(GPS)로 거리 계산"}
+          ${hasGps ? "GPS 위치 다시 잡기" : "현재 위치(GPS)로 거리 계산"}
         </button>
-        ${runtime.userCoords ? `<button type="button" class="button-reset-inline" id="mapClearGpsBtn">동네 기준으로 복원</button>` : ""}
+        ${hasGps ? `<button type="button" class="button-reset-inline" id="mapClearGpsBtn">동네 기준으로 복원</button>` : ""}
       </div>
     </div>
     <div id="mapRenderArea" class="map-render-area"></div>
@@ -493,7 +511,15 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        runtime.userCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const coords = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          ...(Number.isFinite(pos.coords.accuracy) ? { accuracy: Math.round(pos.coords.accuracy) } : {}),
+          source: "gps",
+        };
+        state.userCoords = coords;
+        runtime.userCoords = coords;
+        persist();
         toast("현재 GPS 위치 기준으로 거리를 다시 계산했습니다.");
         onGpsUpdated?.();
       },
@@ -505,7 +531,9 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
   });
 
   $("mapClearGpsBtn")?.addEventListener("click", () => {
+    state.userCoords = null;
     runtime.userCoords = null;
+    persist();
     toast(`${state.region} 기준으로 거리를 복원했습니다.`);
     onGpsUpdated?.();
   });

@@ -1,3 +1,5 @@
+import { KOREA_REGIONS, getRegionCoords, latLngToKmaGrid } from "./korea-regions.js";
+
 // 검수된 작물-작업 연결을 UI와 추천 API가 함께 사용한다.
 // 기계 적합성은 예시이며 실제 작업기 호환·현장 상태는 게시자 확인이 필요하다.
 export const CROPS = [
@@ -117,7 +119,27 @@ export const REGION_COORDS = {
   청기면: { name: "청기면", lat: 36.7064, lng: 129.0695, nx: 87, ny: 109 },
   입암면: { name: "입암면", lat: 36.5992, lng: 129.0888, nx: 88, ny: 107 },
   수비면: { name: "수비면", lat: 36.7988, lng: 129.2116, nx: 89, ny: 111 },
+  석보면: { name: "석보면", lat: 36.5675, lng: 129.138, nx: 88, ny: 106 },
+  일월면: { name: "일월면", lat: 36.7438, lng: 129.1135, nx: 88, ny: 109 },
 };
+
+for (const prov of KOREA_REGIONS) {
+  for (const city of prov.cities) {
+    const fullName = `${prov.name} ${city.name}`;
+    if (!Object.hasOwn(REGION_COORDS, fullName)) {
+      const { nx, ny } = latLngToKmaGrid(city.lat, city.lng);
+      REGION_COORDS[fullName] = { name: fullName, lat: city.lat, lng: city.lng, nx, ny };
+    }
+    if (Array.isArray(city.subRegions)) {
+      for (const sub of city.subRegions) {
+        if (!Object.hasOwn(REGION_COORDS, sub.name)) {
+          const { nx, ny } = latLngToKmaGrid(sub.lat, sub.lng);
+          REGION_COORDS[sub.name] = { name: sub.name, lat: sub.lat, lng: sub.lng, nx, ny };
+        }
+      }
+    }
+  }
+}
 
 function stableHash(str) {
   let h = 2166136261;
@@ -132,7 +154,7 @@ function stableHash(str) {
 export function listingCoords(itemOrRegion, itemId = "") {
   const region = typeof itemOrRegion === "string" ? itemOrRegion : itemOrRegion?.region;
   const id = typeof itemOrRegion === "string" ? itemId : itemOrRegion?.id || itemId;
-  const base = REGION_COORDS[region] || REGION_COORDS["영양읍"];
+  const base = REGION_COORDS[region] || getRegionCoords(region) || REGION_COORDS["영양읍"];
   if (!id) return { lat: base.lat, lng: base.lng };
   const h1 = stableHash(`${id}:lat`);
   const h2 = stableHash(`${id}:lng`);
@@ -161,7 +183,7 @@ export function distanceKm(from, to, itemId) {
   const fromCoords =
     from && typeof from === "object" && Number.isFinite(from.lat) && Number.isFinite(from.lng)
       ? from
-      : REGION_COORDS[from] || REGION_COORDS["영양읍"];
+      : REGION_COORDS[from] || getRegionCoords(from) || REGION_COORDS["영양읍"];
   const fromKey =
     from && typeof from === "object" && Number.isFinite(from.lat)
       ? `${from.lat.toFixed(4)},${from.lng.toFixed(4)}`

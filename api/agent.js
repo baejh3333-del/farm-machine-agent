@@ -10,6 +10,7 @@ import {
   requireUser,
 } from "../server/http.js";
 import { validateAndReencodeImage } from "../server/images.js";
+import { createInsuranceConsult, handleInsuranceTurn, INSURANCE_ASK, insuranceOfferFor } from "../server/insurance-flow.js";
 import { fetchListings } from "../server/listings-db.js";
 import { createListing, updateListing } from "../server/listings-service.js";
 import {
@@ -34,6 +35,16 @@ const CHAT_WRITE_RATE_KIND = {
   update_listing: "listing",
   toggle_favorite: "message",
 };
+
+/** 대여·구매 예약을 마친 응답이면, 이 대화에서 아직 안 물었을 때만 "보험을 추천해드릴까요?"를 덧붙인다. */
+async function attachInsuranceAsk(result, { asked, loadListings }) {
+  if (asked || !result?.reservation) return result;
+  const listings = await loadListings().catch(() => []);
+  const listing = listings.find((item) => item.id === result.reservation.listingId) || null;
+  const offer = insuranceOfferFor(result.reservation, listing);
+  if (!offer) return result;
+  return { ...result, insuranceAsk: INSURANCE_ASK, insuranceOffer: offer };
+}
 
 const EXECUTE_ACTIONS = {
   rental_request: {
@@ -107,7 +118,24 @@ export default handle(["POST"], async (request) => {
         await enforceRateLimit(request, CHAT_WRITE_RATE_KIND[toolName] || "rental", { userId: user.id });
       },
     };
-    const result = await runAgentTurn(message, {
+    const insuranceAsked = body.insuranceAsked === true;
+    // 보험 추천 흐름 중이면(예약 뒤 "보험을 추천해드릴까요?"에 대한 답) 그 흐름을 먼저 처리한다.
+    if (!image && body.insuranceOffer) {
+      const insurance = await handleInsuranceTurn(message, body.insuranceOffer, {
+        user,
+        region: typeof body.region === "string" ? body.region : undefined,
+        deps: {
+          fetchListings: deps.fetchListings,
+          createConsult: async (u, payload) => {
+            await assertWritesAllowed();
+            await enforceRateLimit(request, "message", { userId: u.id });
+            return createInsuranceConsult(u, payload);
+          },
+        },
+      });
+      if (insurance) return { status: 200, body: insurance };
+    }
+    const turn = await runAgentTurn(message, {
       history: Array.isArray(body.history) ? body.history : [],
       region: typeof body.region === "string" ? body.region : undefined,
       uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
@@ -118,6 +146,7 @@ export default handle(["POST"], async (request) => {
       timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)),
       deps,
     });
+    const result = turn?.mode === "agent" ? await attachInsuranceAsk(turn, { asked: insuranceAsked, loadListings: deps.fetchListings }) : turn;
     if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
     if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
     return { status: 200, body: result };
@@ -135,7 +164,10 @@ export default handle(["POST"], async (request) => {
   }
   await enforceRateLimit(request, executor.rateKind, { userId: user.id });
   try {
-    const result = await executor.run(user, pending, requestId);
+    const executed = await executor.run(user, pending, requestId);
+    const result = executed?.outcome === "completed"
+      ? await attachInsuranceAsk(executed, { asked: body.insuranceAsked === true, loadListings: () => fetchListings({ viewerId: user.id }) })
+      : executed;
     return { status: 200, body: result };
   } catch (error) {
     if (!(error instanceof HttpError) || error.status === 401 || error.status >= 500) throw error;

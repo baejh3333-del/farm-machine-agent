@@ -316,12 +316,32 @@ function asksInsurance(message, history) {
  * 화면이 기존 규칙 기반 상담으로 이어 가게 한다.
  * image: { mediaType, base64, dataUrl } — 서버에서 재인코딩한 사진. 응답과 기록에는 넣지 않는다.
  */
-export async function runAgentTurn(
+export async function runAgentTurn(message, context = {}, options = {}) {
+  if (!llmEnabled()) return { mode: "unavailable" };
+  // 턴 전체(DB 조회와 모든 모델 호출 포함)의 제한 시간. 화면은 글 30초·사진 50초를 기다린다.
+  const timedOut = context.image ? { error: "PHOTO_UNAVAILABLE" } : null;
+  const controller = new AbortController();
+  let timer;
+  const expired = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      console.warn("agent_turn_timeout");
+      resolve(timedOut);
+    }, options.timeoutMs ?? (context.image ? 40000 : 25000));
+  });
+  try {
+    return await Promise.race([runTurn(message, context, options, controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runTurn(
   message,
   { history = [], region, image, user, savedDraft } = {},
-  { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices, now = Date.now } = {},
+  { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices } = {},
+  signal,
 ) {
-  if (!llmEnabled()) return { mode: "unavailable" };
   const text = String(message || "").trim();
   const messages = sanitizeHistory(history, text || "사진을 보고 도와주세요.");
   if (image?.base64) {
@@ -343,8 +363,6 @@ export async function runAgentTurn(
   };
   // 새 사진이 온 턴은 이전 초안을 쓰지 않는다(다른 기계 사진이 잘못 붙지 않게).
   let draft = image ? null : cleanSavedDraft(savedDraft);
-  // 턴 전체 제한 시간: 화면이 기다리는 시간(사진 45초, 글 30초)보다 짧게 잡는다.
-  const deadline = now() + (image ? 40000 : 25000);
   const texts = [];
   const finish = (reply, extra = {}) => {
     const result = { mode: "agent", reply, listingIds: out.listingIds, ...extra };
@@ -354,9 +372,9 @@ export async function runAgentTurn(
   };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const remaining = deadline - now();
-    if (remaining < 3000) break;
-    const data = await call({ system, messages, tools, maxTokens: 1200, timeoutMs: Math.min(image ? 25000 : 12000, remaining) });
+    if (signal.aborted) return null;
+    const data = await call({ system, messages, tools, maxTokens: 1200, timeoutMs: image ? 25000 : 12000, signal });
+    if (signal.aborted) return null;
     if (!data) return image ? { error: "PHOTO_UNAVAILABLE" } : null;
     addSources(data.sources);
     const reply = textOf(data);
@@ -374,6 +392,7 @@ export async function runAgentTurn(
     let choices = null;
     let pendingAction = null;
     for (const block of toolUses) {
+      if (signal.aborted) return null;
       let output;
       if (block.name === "search_listings") {
         output = searchListingsTool(block.input, await loadCatalog(), { region });

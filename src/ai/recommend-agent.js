@@ -17,7 +17,7 @@ export async function askRecommendation(message, context) {
 export async function askAgent(message, { history = [], region, image, savedDraft } = {}) {
   const result = await apiFetch("/api/agent", {
     method: "POST",
-    timeoutMs: image ? 45000 : 30000,
+    timeoutMs: image ? 50000 : 30000,
     json: { action: "chat", message, history, region, ...(image ? { image } : {}), ...(savedDraft ? { savedDraft } : {}) },
   });
   if (!result || typeof result.mode !== "string") throw new Error("농농이 응답 형식이 올바르지 않습니다.");

@@ -662,6 +662,27 @@ export function createAiPanel({
     button.firstElementChild.textContent = expanded ? "⤡" : "⤢";
   }
 
+  function resetAiPanel() {
+    if (recommendationPending) return;
+    conversation = undefined;
+    agentHistory = [];
+    savedDraft = null;
+    lastPhotoDataUrl = null;
+    setPendingPhoto(null);
+    $("aiMessages").replaceChildren();
+    $("aiStarters").hidden = false;
+    $("aiInput").value = "";
+    $("aiInput").placeholder = aiDefaultPlaceholder;
+    appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 아는 조건부터 말씀해 주세요.", "assistant");
+    $("aiInput").focus();
+  }
+
+  function submitPrompt(prompt) {
+    if (recommendationPending) return;
+    $("aiInput").value = prompt;
+    $("aiForm").requestSubmit();
+  }
+
   bindPhotoControls();
 
   return {
@@ -670,5 +691,7 @@ export function createAiPanel({
     syncAiViewport,
     openAiPanel,
     toggleAiPanelSize,
+    resetAiPanel,
+    submitPrompt,
   };
 }

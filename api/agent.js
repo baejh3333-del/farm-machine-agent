@@ -29,6 +29,7 @@ async function preparePhoto(dataUrl) {
 }
 
 export default handle(["POST"], async (request) => {
+  const started = Date.now();
   const body = await readJson(request, { maxBytes: MAX_UPLOAD_JSON_BYTES });
   const action = body.action === "execute" ? "execute" : "chat";
 
@@ -46,7 +47,7 @@ export default handle(["POST"], async (request) => {
       image,
       user,
       savedDraft: cleanSavedDraft(body.savedDraft),
-    });
+    }, { timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)) });
     if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
     if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
     return { status: 200, body: result };

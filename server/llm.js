@@ -17,6 +17,7 @@ export function llmProvider() {
   const chosen = env("AI_PROVIDER").toLowerCase();
   if (chosen === "zai") return env("ZAI_API_KEY") ? "zai" : null;
   if (chosen === "anthropic") return env("ANTHROPIC_API_KEY") ? "anthropic" : null;
+  if (chosen) return null;
   if (env("ZAI_API_KEY")) return "zai";
   if (env("ANTHROPIC_API_KEY")) return "anthropic";
   return null;
@@ -130,7 +131,7 @@ export function fromOpenAiResponse(data, forcedTool) {
   return sources.length ? { content, sources } : { content };
 }
 
-async function callZai({ system, messages, tools, toolChoice, maxTokens, timeoutMs }) {
+async function callZai({ system, messages, tools, toolChoice, maxTokens, signal }) {
   // Z.ai는 tool_choice로 auto만 지원하므로, 구조화 결과가 필요하면 JSON 모드로 받아 도구 호출처럼 돌려준다.
   const forced = toolChoice?.type === "tool" ? tools?.find((tool) => tool.name === toolChoice.name) : null;
   const systemText = forced
@@ -139,7 +140,7 @@ async function callZai({ system, messages, tools, toolChoice, maxTokens, timeout
   const base = (env("ZAI_BASE_URL") || DEFAULT_ZAI_BASE_URL).replace(/\/+$/, "");
   const response = await fetch(`${base}/chat/completions`, {
     method: "POST",
-    signal: AbortSignal.timeout(timeoutMs),
+    signal,
     headers: { authorization: `Bearer ${env("ZAI_API_KEY")}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: llmModel("zai", { vision: hasImage(messages) }),
@@ -152,16 +153,15 @@ async function callZai({ system, messages, tools, toolChoice, maxTokens, timeout
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    console.warn("Z.ai request failed", { status: response.status, code: data?.error?.code });
-    return null;
+    throw providerError(response.status, data?.error?.code);
   }
   return fromOpenAiResponse(await response.json(), forced?.name);
 }
 
-async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, timeoutMs }) {
+async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, signal }) {
   const response = await fetch(ANTHROPIC_URL, {
     method: "POST",
-    signal: AbortSignal.timeout(timeoutMs),
+    signal,
     headers: {
       "x-api-key": env("ANTHROPIC_API_KEY"),
       "anthropic-version": ANTHROPIC_VERSION,
@@ -178,8 +178,7 @@ async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, t
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    console.warn("Anthropic request failed", { status: response.status, type: data?.error?.type });
-    return null;
+    throw providerError(response.status, data?.error?.type);
   }
   const data = await response.json();
   if (!Array.isArray(data?.content)) return null;
@@ -193,15 +192,52 @@ async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, t
  * 모델을 한 번 호출한다. 결과는 공급자와 관계없이 { content: [text | tool_use 블록] } 형식이다.
  * 실패하면 예외 대신 null을 돌려 호출부가 규칙 기반 안내로 대체하게 한다.
  */
-export async function callLLM({ system, messages, tools, toolChoice, maxTokens = 800, timeoutMs = 9000 }) {
+function providerError(status, code) {
+  const error = new Error("LLM provider request failed");
+  error.status = status;
+  // Only known codes are logged; upstream text may contain input or credentials.
+  const value = String(code ?? "");
+  error.providerCode = /^(?:\d{4}|authentication_error|permission_error|not_found_error|invalid_request_error|rate_limit_error|overloaded_error|api_error)$/.test(value) ? value : undefined;
+  return error;
+}
+
+export function classifyLlmError(error) {
+  const code = error?.providerCode;
+  if (error?.name === "TimeoutError" || error?.name === "AbortError") return "timeout";
+  if (code === "1113") return "quota_exhausted";
+  if (error?.status === 401) return "authentication";
+  if (error?.status === 403) return "permission";
+  if (code === "1211" || error?.status === 404) return "model_or_endpoint";
+  if (error?.status === 429) return "rate_limit";
+  if (error?.status >= 500) return "provider_unavailable";
+  if (error?.status >= 400) return "invalid_request";
+  if (error?.name === "SyntaxError" || error?.name === "InvalidLlmResponse") return "invalid_response";
+  return "network_or_configuration";
+}
+
+export async function callLLM({ system, messages, tools, toolChoice, maxTokens = 800, timeoutMs = 9000, signal, onError }) {
   const provider = llmProvider();
-  if (!provider) return null;
+  if (!provider) {
+    onError?.({ category: env("AI_PROVIDER") && !["zai", "anthropic"].includes(env("AI_PROVIDER").toLowerCase()) ? "invalid_provider" : "missing_key" });
+    return null;
+  }
+  const started = Date.now();
   try {
     const call = provider === "zai" ? callZai : callAnthropic;
-    const result = await call({ system, messages, tools, toolChoice, maxTokens, timeoutMs });
-    return Array.isArray(result?.content) ? result : null;
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const result = await call({ system, messages, tools, toolChoice, maxTokens, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+    if (!Array.isArray(result?.content) || !result.content.some((block) =>
+      (block.type === "text" && typeof block.text === "string" && block.text.trim()) ||
+      (block.type === "tool_use" && typeof block.name === "string" && block.name.trim()))) {
+      const error = new Error("Empty or invalid LLM response");
+      error.name = "InvalidLlmResponse";
+      throw error;
+    }
+    return result;
   } catch (error) {
-    console.warn("AI response unavailable", { provider, error: error?.name });
+    const diagnostic = { provider, category: classifyLlmError(error), status: error?.status, code: error?.providerCode, elapsedMs: Date.now() - started };
+    console.warn("llm_request_failed", diagnostic);
+    onError?.(diagnostic);
     return null;
   }
 }

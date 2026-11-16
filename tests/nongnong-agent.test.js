@@ -480,20 +480,18 @@ test("[리뷰] 사진은 첫 호출에만 보내고 다음 라운드에는 인�
   assert.match(JSON.stringify(calls[1].messages), /사진 인식/);
 });
 
-test("[리뷰] 턴 전체 제한 시간을 넘기면 더 호출하지 않고 끝내며, 호출마다 남은 시간만 준다", async (t) => {
+test("[리뷰] 사진 턴이 전체 제한 시간을 넘기면 진행 중인 요청을 취소하고 PHOTO_UNAVAILABLE로 끝낸다", async (t) => {
   photoEnv(t);
-  let clock = 0;
-  const timeouts = [];
-  const call = async (request) => {
-    timeouts.push(request.timeoutMs);
-    clock += 30000;
-    return { content: [{ type: "tool_use", id: `g${timeouts.length}`, name: "get_crop_guidance", input: { cropId: "potato" } }] };
+  let receivedSignal;
+  let saves = 0;
+  const call = async ({ signal }) => {
+    receivedSignal = signal;
+    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
   };
-  const result = await runAgentTurn("감자", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY, now: () => clock });
-  assert.ok(timeouts.length <= 2, `호출 ${timeouts.length}회`);
-  assert.ok(timeouts.every((ms) => ms <= 40000));
-  assert.ok(timeouts[1] === undefined || timeouts[1] <= 10000);
-  assert.equal(result.mode, "agent");
+  const result = await runAgentTurn("팔래요", { image: PHOTO, user: USER }, { listings: LISTINGS, call, today: TODAY, timeoutMs: 20, saveDraft: async () => { saves += 1; } });
+  assert.deepEqual(result, { error: "PHOTO_UNAVAILABLE" });
+  assert.equal(receivedSignal.aborted, true);
+  assert.equal(saves, 0);
 });
 
 test("[리뷰] 다음 라운드로 넘기는 글 블록에서 citations 같은 부가 필드를 뺀다", async (t) => {
@@ -508,4 +506,65 @@ test("[리뷰] 다음 라운드로 넘기는 글 블록에서 citations 같은 �
   await runAgentTurn("벼", {}, { listings: LISTINGS, call, today: TODAY });
   const assistant = calls[1].messages.find((m) => m.role === "assistant" && Array.isArray(m.content));
   assert.deepEqual(assistant.content[0], { type: "text", text: "찾아볼게요" });
+});
+
+test("공급자 오류를 비밀값 없이 분류하고 잔액 부족을 재시도하지 않는다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "secret-key" });
+  const cases = [[401, "1000", "authentication"], [429, "1113", "quota_exhausted"], [429, "1302", "rate_limit"], [400, "1211", "model_or_endpoint"], [503, "1200", "provider_unavailable"]];
+  const logs = [];
+  t.mock.method(console, "warn", (...args) => logs.push(args));
+  for (const [status, code, category] of cases) {
+    let calls = 0;
+    t.mock.method(globalThis, "fetch", async () => {
+      calls++;
+      return Response.json({ error: { code, message: "secret-key private prompt" } }, { status });
+    });
+    let diagnostic;
+    const result = await callLLM({ messages: [], onError: (value) => { diagnostic = value; } });
+    assert.equal(result, null);
+    assert.equal(diagnostic.category, category);
+    assert.equal(diagnostic.code, code);
+    assert.equal(calls, 1);
+  }
+  assert.doesNotMatch(JSON.stringify(logs), /secret-key|private prompt/);
+});
+
+test("빈 LLM 응답은 성공으로 보고하지 않는다", async (t) => {
+  withKey(t, "test");
+  t.mock.method(globalThis, "fetch", async () => Response.json({ content: [] }));
+  let diagnostic;
+  assert.equal(await callLLM({ messages: [], onError: (value) => { diagnostic = value; } }), null);
+  assert.equal(diagnostic.category, "invalid_response");
+});
+
+test("잘못 지정한 공급자는 다른 공급자를 호출하지 않는다", async (t) => {
+  withEnv(t, { AI_PROVIDER: "typo", ZAI_API_KEY: "test" });
+  const fetchMock = t.mock.method(globalThis, "fetch", () => { throw new Error("must not call"); });
+  let diagnostic;
+  assert.equal(await callLLM({ messages: [], onError: (value) => { diagnostic = value; } }), null);
+  assert.equal(diagnostic.category, "invalid_provider");
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test("전체 상담 제한시간이 지나면 진행 중인 모델 요청을 취소한다", async (t) => {
+  withKey(t, "test");
+  let receivedSignal;
+  t.mock.method(globalThis, "fetch", async (_url, { signal }) => {
+    receivedSignal = signal;
+    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+  });
+  assert.equal(await runAgentTurn("고추", {}, { timeoutMs: 20 }), null);
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test("시간 초과 뒤 늦은 모델 응답으로 후속 도구 호출을 시작하지 않는다", async (t) => {
+  withKey(t, "test");
+  let release;
+  let calls = 0;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const result = await runAgentTurn("고추", {}, { timeoutMs: 20, call: async () => { calls++; return pending; } });
+  assert.equal(result, null);
+  release({ content: [{ type: "tool_use", id: "late", name: "search_listings", input: { cropId: "pepper", operations: ["ridge"] } }] });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1);
 });

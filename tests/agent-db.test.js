@@ -1,55 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { createPglitePool, setPool } from "../server/db.js";
-import { initEnvironment, runMigrations } from "../server/migrator.js";
+import { setupAgentDb } from "./helpers/agent-db.js";
 
-let tempDir;
 let pool;
-let prevEnv = {};
-
-async function insertUser(p, id, name) {
-  await p.query(
-    `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-     VALUES ($1, $2, $3, false, now(), now())
-     ON CONFLICT (id) DO NOTHING`,
-    [id, name, `${id}@users.moa-farm.example.com`]
-  );
-}
+let cleanup;
 
 before(async () => {
-  prevEnv = {
-    APP_ENV: process.env.APP_ENV,
-    OBJECT_STORAGE_DIR: process.env.OBJECT_STORAGE_DIR,
-    DATABASE_URL: process.env.DATABASE_URL,
-  };
-  delete process.env.DATABASE_URL;
-  process.env.APP_ENV = "test";
-  tempDir = await mkdtemp(join(tmpdir(), "moa-agent-db-"));
-  process.env.OBJECT_STORAGE_DIR = join(tempDir, "objects");
-
-  pool = createPglitePool("memory://");
-  setPool(pool);
-  await initEnvironment({ env: "test", pool });
-  await runMigrations({ env: "test", pool });
-
-  await insertUser(pool, "u-a", "농가 A");
-  await insertUser(pool, "u-b", "농가 B");
-  await insertUser(pool, "u-c", "농가 C");
+  ({ pool, cleanup } = await setupAgentDb());
 });
 
 after(async () => {
-  await pool.end();
-  setPool(undefined);
-  await rm(tempDir, { recursive: true, force: true });
-  for (const [k, v] of Object.entries(prevEnv)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
+  await cleanup();
 });
 
 test("0003: 테이블·컬럼·제약이 존재한다", async () => {

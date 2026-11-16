@@ -524,9 +524,29 @@
     </div>
 
     <form id="aiForm" class="ai-form">
+      <button type="button" class="button button-secondary ai-mic-btn" id="aiMicButton" aria-label="말로 질문하기" aria-pressed="false" aria-describedby="aiVoiceStatus"><span class="ai-mic-icon" aria-hidden="true">🎤</span><span class="ai-mic-label">말하기</span></button>
       <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" required />
       <button type="submit" class="button button-primary ai-send-btn" aria-label="질문 보내기">전송</button>
     </form>
+    <div class="ai-voice-bar">
+      <p class="ai-voice-status" id="aiVoiceStatus" role="status" aria-live="polite"></p>
+      <div class="ai-voice-settings" id="aiVoiceSettings" hidden>
+        <label>답변 읽어 주기
+          <select id="aiVoiceAutoplay">
+            <option value="voice">말로 물었을 때</option>
+            <option value="always">항상</option>
+            <option value="off">끄기</option>
+          </select>
+        </label>
+        <label>말 빠르기
+          <select id="aiVoiceRate">
+            <option value="0.8">천천히</option>
+            <option value="0.9">조금 천천히</option>
+            <option value="1">보통</option>
+          </select>
+        </label>
+      </div>
+    </div>
     <p class="ai-footnote">추천은 등록된 매물 기준이며, 작업기 호환성과 기계 상태는 거래 전 꼭 확인하세요.</p>
   </aside>
 

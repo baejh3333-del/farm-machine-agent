@@ -3,6 +3,7 @@ import { recommendationGuide, selectMatchingListings } from "../data/recommendat
 import { $, areaLabel, escapeHtml, money, toast } from "../core/utils.js";
 import { conversationTurn, unrelatedTurn } from "./conversation.js";
 import { askAgent, askRecommendation, executeAgentAction } from "./recommend-agent.js";
+import { createVoiceControls } from "./voice-panel.js";
 
 export function createAiPanel({
   state,
@@ -22,6 +23,10 @@ export function createAiPanel({
   let agentHistory = [];
   let agentAvailable = null;
   const MAX_AGENT_HISTORY = 12;
+  // 음성: 이번 질문이 마이크에서 왔는지, 이번 차례에 자동으로 읽을 답변
+  const voice = createVoiceControls({ isBusy: () => recommendationPending });
+  let currentInputMode = "text";
+  let turnReply = null;
   const aiDefaultPlaceholder = $("aiInput").placeholder;
   const aiInputExamples = {
     crop: "예: 감자",
@@ -72,6 +77,10 @@ export function createAiPanel({
       bubble.append(results);
     }
     $("aiMessages").append(bubble);
+    if (role === "assistant" && text && !text.endsWith("…")) {
+      voice.attachSpeech(bubble, text);
+      turnReply = { bubble, text };
+    }
     scrollAiToEnd();
     return bubble;
   }
@@ -160,6 +169,8 @@ export function createAiPanel({
     actions.append(approve, cancel);
     card.append(notice, actions);
     bubble.append(card);
+    const spokenSummary = voice.decorateConfirmation(card, action, currentInputMode);
+    if (turnReply?.bubble === bubble) turnReply = { bubble, text: `${turnReply.text} ${spokenSummary}` };
     scrollAiToEnd();
 
     const setBusy = (busy) => {
@@ -227,6 +238,10 @@ export function createAiPanel({
     const message = $("aiInput").value.trim();
     if (!message || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
+    if (voice.isRecording()) voice.cancel();
+    voice.stopSpeaking();
+    currentInputMode = voice.consumeInputMode();
+    turnReply = null;
 
     recommendationPending = true;
     const submit = $("aiForm").querySelector('[type="submit"]');
@@ -244,7 +259,7 @@ export function createAiPanel({
       if (agentAvailable !== false && !resetRequested) {
         pending = appendAiMessage("농농이가 생각하고 있어요…", "assistant");
         if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
-        const agentResult = await askAgent(message, { history: agentHistory, region: state.region }).catch((error) => {
+        const agentResult = await askAgent(message, { history: agentHistory, region: state.region, inputMode: currentInputMode }).catch((error) => {
           console.warn("농농이 에이전트 응답 실패, 규칙 기반 상담으로 전환", error?.status || error?.name);
           return null;
         });
@@ -428,6 +443,8 @@ export function createAiPanel({
       pending?.remove();
       recommendationPending = false;
       submit.disabled = false;
+      // 설정에 따라 이번 답변을 소리로 읽는다(기본: 말로 물었을 때만).
+      if (turnReply) voice.autoSpeak(turnReply.bubble, turnReply.text, currentInputMode);
     }
   }
 
@@ -457,6 +474,8 @@ export function createAiPanel({
 
   function resetAiPanel() {
     if (recommendationPending) return;
+    voice.stopSpeaking();
+    voice.cancel();
     conversation = undefined;
     agentHistory = [];
     $("aiMessages").replaceChildren();

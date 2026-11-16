@@ -3950,3 +3950,24 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-confirm-actions { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; }
 .ai-confirm-actions .button { min-height: 38px; padding: 0 14px; font-size: 0.8125rem; }
 .ai-confirm[data-state="cancelled"], .ai-confirm[data-state="failed"] { opacity: 0.7; border-color: var(--text-muted); background: transparent; }
+
+/* 농농이 음성 대화 (2026-11): 큰 마이크 버튼, 상태 글, 답변 듣기 버튼 */
+.ai-mic-btn { flex: none; min-width: 64px; min-height: 48px; padding: 0 12px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.1; }
+.ai-mic-icon { font-size: 1.25rem; }
+.ai-mic-label { font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+.ai-mic-btn[data-state="recording"] { background: #b42318; border-color: #b42318; color: #fff; animation: ai-mic-pulse 1.4s ease-in-out infinite; }
+.ai-mic-btn[data-state="processing"] { opacity: 0.8; }
+.ai-mic-btn:focus-visible, .ai-speech-btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+@keyframes ai-mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, 0.45); } 50% { box-shadow: 0 0 0 8px rgba(180, 35, 24, 0); } }
+@media (prefers-reduced-motion: reduce) { .ai-mic-btn[data-state="recording"] { animation: none; } }
+.ai-voice-bar { padding: 0 16px 6px; background: #fff; display: grid; gap: 6px; }
+.ai-voice-status { margin: 0; min-height: 1.2em; font-size: 0.875rem; line-height: 1.5; color: var(--text); }
+.ai-voice-status:empty { display: none; }
+.ai-voice-settings { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8125rem; color: var(--text-muted); }
+.ai-voice-settings label { display: inline-flex; align-items: center; gap: 6px; }
+.ai-voice-settings select { min-height: 36px; font-size: 0.875rem; border-radius: 8px; border: 1px solid var(--line-strong); padding: 0 6px; }
+.ai-speech { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-speech-btn { min-height: 44px; padding: 0 14px; font-size: 0.875rem; }
+.ai-speech .ai-speech-stop { display: none; }
+.ai-speech.is-speaking .ai-speech-stop { display: inline-flex; }
+.ai-voice-warning { font-weight: 700; color: #8a3b00; }

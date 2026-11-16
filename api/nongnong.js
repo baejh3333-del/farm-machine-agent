@@ -24,8 +24,11 @@ export default handle(["POST"], async (request) => {
   }
   const photo = body.photo == null || body.photo === "" ? null : validPhoto(body.photo);
   if (body.photo && !photo) fail(400, "INVALID_PHOTO", "사진은 JPG·PNG·WEBP 한 장만, 1MB 정도까지 올릴 수 있어요.");
-  // AI 키가 없으면 화면이 기존 조건 검색 상담으로 넘어가도록 알린다.
-  if (!process.env.OPENAI_API_KEY) return { status: 200, body: { mode: "unavailable" } };
+  // OpenAI 키가 없거나 다른 공급자(AI_PROVIDER)가 지정된 경우 기존 에이전트/규칙 기반 상담으로 넘긴다.
+  const provider = process.env.AI_PROVIDER?.trim().toLowerCase();
+  if (!process.env.OPENAI_API_KEY?.trim() || (provider && provider !== "openai")) {
+    return { status: 200, body: { mode: "unavailable" } };
+  }
 
   await enforceRateLimit(request, "recommend");
   const user = await currentUser(request).catch(() => null);

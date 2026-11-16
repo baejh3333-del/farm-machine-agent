@@ -564,7 +564,8 @@ function buildInstructions({ user, today, listingPhoto }) {
 }
 
 export async function defaultCallModel(body) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const baseUrl = (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const response = await fetch(`${baseUrl}/responses`, {
     method: "POST",
     signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
     headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "content-type": "application/json" },
@@ -600,7 +601,7 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
   const history = sanitizeHistory(messages);
   const last = history.at(-1);
   if (!last || last.role !== "user") throw new Error("마지막 메시지는 사용자 메시지여야 합니다.");
-  const resolvedModel = model || process.env.OPENAI_MODEL?.trim() || "gpt-6-luna";
+  const resolvedModel = model || process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
   const listingPhoto = validPhoto(photo);
   const tools = createToolRunner({ user, today, lastUserMessage: last.content, deps, listingPhoto });
   const input = history.map(({ role, content }) => ({ role, content }));

@@ -1,7 +1,62 @@
-import { $, areaLabel, escapeHtml, money, toast } from "../core/utils.js";
-import { askNongnong } from "./nongnong-client.js";
+import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
+import { $, addDays, areaLabel, escapeHtml, money, today, toast } from "../core/utils.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction } from "./recommend-agent.js";
+
+const MACHINE_LABELS = {
+  cultivator: "관리기",
+  tractor: "트랙터",
+  ridgeMulcher: "휴립·멀칭기",
+  transplanter: "정식기",
+  ricePlanter: "이앙기",
+  sprayer: "방제기",
+  potatoPlanter: "감자 파종기",
+  combine: "콤바인",
+  potatoHarvester: "감자 굴취기",
+  carrier: "운반차",
+};
+const CONFIDENCE_LABELS = { high: "높음", medium: "보통", low: "낮음" };
+const MAX_AGENT_HISTORY = 12;
+const AGENT_RESET_RE = /^(?:새 상담(?: 시작)?|처음부터 다시(?: 할래요?)?|대화 초기화)[.!?\s]*$/;
+
+function formatShortDate(ymd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || "")) return "";
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+
+function formatReservationDate(ymd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || "")) return "";
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${"일월화수목금토"[d.getUTCDay()]})`;
+}
+
+function weekendWindow(baseYmd) {
+  const d = new Date(`${baseYmd}T12:00:00+09:00`);
+  const day = d.getUTCDay();
+  const daysToSat = (6 - day + 7) % 7 || 7;
+  const start = addDays(baseYmd, daysToSat);
+  return { start, end: addDays(start, 1) };
+}
+
+function inferFollowUpChoices(reply, result) {
+  if (Array.isArray(result.choices) && result.choices.length) return result.choices.slice(0, 5);
+  if (result.pendingAction || result.reservation || result.createdListing || result.updatedListing || result.listingDraft) return [];
+  const text = String(reply || "");
+  if (/(?:예약|신청|진행|등록|올릴|보낼|살|빌릴).*?까요[?？]?/.test(text)) {
+    return ["네, 바로 진행해 주세요", "조건을 바꿀래요"];
+  }
+  if (/어떤\s*작물/.test(text)) return ["고추", "벼", "배추", "감자"];
+  if (/빌리.*?(?:사|구|팔)/.test(text) || /대여.*?(?:구매|판매)/.test(text)) {
+    return ["빌리고 싶어요", "사고 싶어요", "팔고 싶어요"];
+  }
+  return [];
+}
+
+function wantsDatePicker(reply, result) {
+  if (result.pendingAction || result.reservation || result.createdListing || result.updatedListing) return false;
+  return /(?:언제|날짜|기간|며칠|시작일|반납일).*?(?:빌리|대여|필요|원하|알려|골라|말씀|정해|[?？])/.test(String(reply || ""));
+}
 
 export function createAiPanel({
   state,
@@ -15,18 +70,12 @@ export function createAiPanel({
   openNewListing,
 }) {
   let recommendationPending = false;
-  // 농농 대화형 에이전트(/api/nongnong): null=아직 모름, true=사용 중, false=미사용(/api/agent 폴백)
-  let nongnongMode = null;
-  let nongnongHistory = [];
-  const NONGNONG_HISTORY_LIMIT = 16;
-  const agentReset = /^(?:새 상담(?: 시작)?|처음부터 다시(?: 할래요?)?|대화 초기화)[.!?\s]*$/;
-  // 사진: 등록할 때 함께 올라가도록 대화가 끝날 때까지 들고 있고, 처음 보낼 때만 AI가 다시 본다.
+  let agentHistory = [];
   let agentPhoto = null;
   let photoIsNew = false;
   let lastPhotoDataUrl = null;
   let savedDraft = null;
-  const MACHINE_LABELS = { cultivator: "관리기", tractor: "트랙터", ridgeMulcher: "휴립·멀칭기", transplanter: "정식기", ricePlanter: "이앙기", sprayer: "방제기", potatoPlanter: "감자 파종기", combine: "콤바인", potatoHarvester: "감자 굴취기", carrier: "운반차" };
-  const CONFIDENCE_LABELS = { high: "높음", medium: "보통", low: "낮음" };
+  const aiDefaultPlaceholder = $("aiInput").placeholder;
 
   function showPhotoPreview() {
     const preview = $("aiPhotoPreview");
@@ -67,9 +116,7 @@ export function createAiPanel({
     }
   }
 
-  $("aiPhotoButton")?.addEventListener("click", () => {
-    $("aiPhotoInput")?.click();
-  });
+  $("aiPhotoButton")?.addEventListener("click", () => $("aiPhotoInput")?.click());
   $("aiPhotoInput")?.addEventListener("change", async () => {
     const file = $("aiPhotoInput").files?.[0];
     if (!file) return;
@@ -86,17 +133,240 @@ export function createAiPanel({
   });
   $("aiPhotoRemove")?.addEventListener("click", clearPhoto);
 
-  // 농농이 AI 에이전트(/api/agent) 대화 기록.
-  let agentHistory = [];
-  const MAX_AGENT_HISTORY = 12;
-  const aiDefaultPlaceholder = $("aiInput").placeholder;
-
   function scrollAiToEnd() {
     const scroll = $("aiScroll");
     scroll.scrollTop = scroll.scrollHeight;
   }
 
-  function appendAiMessage(text, role, listingIds = [], photo = null) {
+  function rememberAgentTurn(...entries) {
+    agentHistory = [...agentHistory, ...entries.filter((entry) => entry.content)].slice(-MAX_AGENT_HISTORY);
+  }
+
+  function collectUiContext() {
+    const filters = state.filters || {};
+    const detailBackdrop = $("detailBackdrop");
+    const detailListingId = detailBackdrop && !detailBackdrop.hidden
+      ? document.querySelector("#detailContent [data-detail-fav]")?.dataset.detailFav
+        || document.querySelector("#detailContent [data-detail-manage]")?.dataset.detailManage
+        || ""
+      : "";
+    const viewingListingId = detailListingId || runtime.selectedMapListingId || "";
+    return {
+      region: state.region || "영양읍",
+      transaction: state.transaction === "sale" ? "sale" : "rent",
+      cropIds: Array.isArray(filters.cropIds) ? filters.cropIds.slice(0, 4) : [],
+      operations: Array.isArray(filters.operations) ? filters.operations.slice(0, 6) : [],
+      ...(filters.date ? { date: filters.date, dateEnd: filters.dateEnd || filters.date } : {}),
+      ...(Number(filters.areaPyeong) > 0 ? { areaPyeong: Number(filters.areaPyeong) } : {}),
+      ...(Number.isSafeInteger(Number(filters.maxPrice)) && Number(filters.maxPrice) > 0 ? { maxPrice: Number(filters.maxPrice) } : {}),
+      ...(viewingListingId ? { viewingListingId } : {}),
+    };
+  }
+
+  function renderReservationBox(bubble, done) {
+    if (!done) return;
+    const box = document.createElement("div");
+    box.className = "ai-rec-overview ai-reservation";
+    const rows = [
+      ["번호", done.number],
+      ["기계", done.title],
+      ["지역", done.region],
+      done.kind === "rental" ? ["기간", `${formatReservationDate(done.start)} ~ ${formatReservationDate(done.end)}`] : null,
+      Number.isFinite(done.totalPrice) ? [done.kind === "rental" ? "내야 하는 돈" : "판매가", money(done.totalPrice)] : null,
+      ["상태", done.kind === "rental" ? "소유 농가 승인 대기 · 결제 전" : "판매자 확인 대기"],
+    ].filter((row) => row && row[1]);
+    for (const [label, value] of rows) {
+      const row = document.createElement("div");
+      row.className = "ai-rec-row";
+      const labelNode = document.createElement("strong");
+      labelNode.textContent = `${label}:`;
+      row.append(labelNode, document.createTextNode(` ${value}`));
+      box.append(row);
+    }
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "ai-rec-card-btn";
+    go.textContent = done.kind === "rental" ? "대여 요청 메뉴에서 확인하기 ›" : "거래 채팅에서 확인하기 ›";
+    go.addEventListener("click", () => setView("requests"));
+    box.append(go);
+    bubble.append(box);
+    refreshAuthenticatedData?.({
+      includeRequests: done.kind === "rental",
+      includeConversations: done.kind === "purchase",
+    }).catch(() => {});
+  }
+
+  function renderCreatedListingButton(bubble, listed) {
+    if (!listed) return;
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "ai-rec-card-btn";
+    go.textContent = `${listed.number ? `등록 번호 ${listed.number} · ` : ""}내 기계 관리에서 보기 ›`;
+    go.addEventListener("click", () => setView("owner"));
+    bubble.append(go);
+    loadCatalog({ quiet: true }).catch(() => {});
+  }
+
+  async function executeOneTapAction({ pendingAction, requestId = crypto.randomUUID(), triggerButton, onBusy, onDone, onError }) {
+    onBusy?.();
+    if (triggerButton) triggerButton.disabled = true;
+    try {
+      const result = await executeAgentAction(pendingAction, requestId);
+      if (result?.outcome === "completed") {
+        const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
+        if (result.reservation) renderReservationBox(bubble, result.reservation);
+        if (result.createdListing) {
+          savedDraft = null;
+          clearPhoto();
+          renderCreatedListingButton(bubble, result.createdListing);
+        }
+        rememberAgentTurn({ role: "assistant", content: result.message });
+        await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+        onDone?.("completed", result);
+      } else if (result?.outcome === "partial") {
+        appendAiMessage(`⚠️ ${result.message}`, "assistant");
+        rememberAgentTurn({ role: "assistant", content: result.message });
+        await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+        onDone?.("partial", result);
+      } else {
+        const msg = `❌ 처리하지 못했어요. ${result?.message || ""}`.trim();
+        appendAiMessage(msg, "assistant");
+        onDone?.("failed", result);
+      }
+      scrollAiToEnd();
+    } catch (error) {
+      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") {
+        if (triggerButton) triggerButton.disabled = false;
+        onError?.("aborted", error);
+        return;
+      }
+      if (error?.status === 401) {
+        const loginMsg = pendingAction.type === "create_listing"
+          ? "🔒 매물 등록은 로그인한 뒤 할 수 있어요. 로그인하면 입력한 초안으로 이어서 등록해요."
+          : "🔒 예약·신청은 로그인한 뒤 보낼 수 있어요. 로그인하면 바로 이어서 진행해요.";
+        appendAiMessage(loginMsg, "assistant");
+        onDone?.("login", null);
+        if (pendingAction.type === "rental_request") {
+          savePendingIntentAndRedirectLogin?.(
+            { type: "rental", listingId: pendingAction.listingId, draftValues: { start: pendingAction.start, end: pendingAction.end, note: pendingAction.note || "", requestId } },
+            "로그인 후 대여 요청을 이어서 보낼 수 있어요.",
+          );
+        } else if (pendingAction.type === "purchase_request") {
+          savePendingIntentAndRedirectLogin?.(
+            { type: "chat", listingId: pendingAction.listingId, draftBody: "구매 신청을 희망합니다." },
+            "로그인 후 구매 신청을 이어서 보낼 수 있어요.",
+          );
+        } else if (pendingAction.type === "create_listing") {
+          const formDraft = { ...pendingAction, type: pendingAction.listingType || "rent" };
+          savePendingIntentAndRedirectLogin?.(
+            { type: "newListing", draftValues: listingDraftToFormValues(formDraft, lastPhotoDataUrl) },
+            "로그인 후 매물 등록을 이어서 완료할 수 있어요.",
+          );
+        }
+        return;
+      }
+      if (triggerButton) triggerButton.disabled = false;
+      if (onError) onError("failed", error, requestId);
+      else appendAiMessage(error?.message || "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.", "assistant");
+    }
+  }
+
+  function appendDateQuickPicker(bubble, { defaultStart = "", defaultEnd = "", buttonLabel = "이 기간 적용", onApply }) {
+    const baseToday = today();
+    const startVal = defaultStart && defaultStart >= baseToday ? defaultStart : addDays(baseToday, 1);
+    const endVal = defaultEnd && defaultEnd >= startVal ? defaultEnd : startVal;
+    const wknd = weekendWindow(baseToday);
+
+    const wrap = document.createElement("div");
+    wrap.className = "ai-date-picker";
+
+    const presets = document.createElement("div");
+    presets.className = "ai-date-presets";
+    for (const [label, s, e] of [
+      ["내일 하루", addDays(baseToday, 1), addDays(baseToday, 1)],
+      ["모레부터 2일", addDays(baseToday, 2), addDays(baseToday, 3)],
+      ["이번 주말(토~일)", wknd.start, wknd.end],
+    ]) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ai-date-preset-btn";
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        wrap.remove();
+        onApply(s, e);
+      });
+      presets.append(btn);
+    }
+
+    const row = document.createElement("div");
+    row.className = "ai-date-inputs";
+    const startInput = document.createElement("input");
+    startInput.type = "date";
+    startInput.min = baseToday;
+    startInput.value = startVal;
+    startInput.setAttribute("aria-label", "대여 시작일");
+    const sep = document.createElement("span");
+    sep.textContent = "~";
+    const endInput = document.createElement("input");
+    endInput.type = "date";
+    endInput.min = startVal;
+    endInput.value = endVal;
+    endInput.setAttribute("aria-label", "반납일");
+    startInput.addEventListener("change", () => {
+      endInput.min = startInput.value || baseToday;
+      if (!endInput.value || endInput.value < startInput.value) endInput.value = startInput.value;
+    });
+
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.className = "button button-primary";
+    applyBtn.textContent = buttonLabel;
+    applyBtn.addEventListener("click", () => {
+      const s = startInput.value;
+      const e = endInput.value || s;
+      if (!s || e < s) return toast("올바른 시작일과 반납일을 골라 주세요.");
+      wrap.remove();
+      onApply(s, e);
+    });
+
+    row.append(startInput, sep, endInput, applyBtn);
+    wrap.append(presets, row);
+    bubble.append(wrap);
+    scrollAiToEnd();
+  }
+
+  function startOneTapListingAction(item, activeDates = null, targetBubble = null, triggerButton = null) {
+    if (item.type === "sale") {
+      rememberAgentTurn({ role: "user", content: `'${item.title}' 바로 구매 신청` });
+      return executeOneTapAction({
+        pendingAction: { type: "purchase_request", listingId: item.id, title: item.title, region: item.region, price: item.price },
+        triggerButton,
+        onDone: (outcome) => { if (triggerButton && outcome !== "completed") triggerButton.disabled = false; },
+      });
+    }
+    const start = activeDates?.start || state.filters?.date || "";
+    const end = activeDates?.end || state.filters?.dateEnd || start;
+    if (start) {
+      rememberAgentTurn({ role: "user", content: `'${item.title}' ${start}~${end} 바로 예약` });
+      return executeOneTapAction({
+        pendingAction: { type: "rental_request", listingId: item.id, title: item.title, region: item.region, start, end, note: "농농 채팅 원탭 예약" },
+        triggerButton,
+        onDone: (outcome) => { if (triggerButton && outcome !== "completed") triggerButton.disabled = false; },
+      });
+    }
+    const promptBubble = targetBubble || appendAiMessage(`'${item.title}'을(를) 언제 빌리실까요? 날짜를 고르시면 바로 예약해 드려요.`, "assistant");
+    appendDateQuickPicker(promptBubble, {
+      buttonLabel: "이 날짜로 바로 예약",
+      onApply: (pickedStart, pickedEnd) => {
+        rememberAgentTurn({ role: "user", content: `'${item.title}' ${pickedStart}~${pickedEnd} 바로 예약` });
+        executeOneTapAction({
+          pendingAction: { type: "rental_request", listingId: item.id, title: item.title, region: item.region, start: pickedStart, end: pickedEnd, note: "농농 채팅 원탭 예약" },
+        });
+      },
+    });
+  }
+
+  function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
     const textNode = document.createElement("div");
@@ -115,35 +385,59 @@ export function createAiPanel({
       results.className = "ai-result";
       const titleEl = document.createElement("div");
       titleEl.className = "ai-result-title";
-      titleEl.textContent = " 농농이가 찾은 맞춤 매물";
+      titleEl.textContent = "농농이가 찾은 맞춤 매물";
       results.append(titleEl);
+
+      const effectiveStart = searchDates?.start || state.filters?.date || "";
+      const effectiveEnd = searchDates?.end || state.filters?.dateEnd || effectiveStart;
+      const activeDates = effectiveStart ? { start: effectiveStart, end: effectiveEnd } : null;
 
       listingIds.forEach((id) => {
         const item = listingById(id);
         if (!item) return;
-        const cardBtn = document.createElement("button");
-        cardBtn.type = "button";
-        cardBtn.className = "ai-rec-card-btn";
-        cardBtn.innerHTML = `
-          <span class="ai-rec-info">
-            <strong>${escapeHtml(item.title)}</strong>
-            <small>${escapeHtml(item.region)} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}</small>
-            <small>${escapeHtml(areaLabel(item.areaMin, item.areaMax))} · ${escapeHtml(item.pickup || "인수 방법 문의")}</small>
-          </span>
-          <span class="ai-rec-cta">상세 보기 ›</span>
+        const card = document.createElement("div");
+        card.className = "ai-rec-card";
+
+        const info = document.createElement("div");
+        info.className = "ai-rec-info";
+        info.innerHTML = `
+          <strong>${escapeHtml(item.title)}</strong>
+          <small>${escapeHtml(item.region)} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}</small>
+          <small>${escapeHtml(areaLabel(item.areaMin, item.areaMax))} · ${escapeHtml(item.pickup || "인수 방법 문의")}</small>
         `;
-        cardBtn.addEventListener("click", () => openDetail(item.id));
-        results.append(cardBtn);
+
+        const actions = document.createElement("div");
+        actions.className = "ai-rec-card-actions";
+        const detailBtn = document.createElement("button");
+        detailBtn.type = "button";
+        detailBtn.className = "button button-secondary";
+        detailBtn.textContent = "상세 보기";
+        detailBtn.addEventListener("click", () => openDetail(item.id));
+        actions.append(detailBtn);
+
+        if (!item.owner && item.status === "open" && item.condition !== "repair") {
+          const quickBtn = document.createElement("button");
+          quickBtn.type = "button";
+          quickBtn.className = "button button-primary";
+          if (item.type === "rent") {
+            quickBtn.textContent = activeDates
+              ? `⚡ 바로 예약 (${formatShortDate(activeDates.start)}~${formatShortDate(activeDates.end)})`
+              : "📅 날짜 골라 바로 예약";
+          } else {
+            quickBtn.textContent = "⚡ 바로 구매 신청";
+          }
+          quickBtn.addEventListener("click", () => startOneTapListingAction(item, activeDates, null, quickBtn));
+          actions.append(quickBtn);
+        }
+
+        card.append(info, actions);
+        results.append(card);
       });
       bubble.append(results);
     }
     $("aiMessages").append(bubble);
     scrollAiToEnd();
     return bubble;
-  }
-
-  function rememberAgentTurn(...entries) {
-    agentHistory = [...agentHistory, ...entries.filter((entry) => entry.content)].slice(-MAX_AGENT_HISTORY);
   }
 
   function appendChoices(bubble, choiceList) {
@@ -164,22 +458,29 @@ export function createAiPanel({
     scrollAiToEnd();
   }
 
-  // 흐름도의 "실행 내용을 보여주고 확인 → 사용자 승인 → 서비스 API 호출 → 실제 상태 확인 → 결과 안내" 단계
   function appendConfirmation(bubble, action) {
     const requestId = crypto.randomUUID();
+    const isPurchase = action.type === "purchase_request";
     const card = document.createElement("div");
     card.className = "ai-confirm";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
-    title.textContent = "대여 요청 확인";
+    title.textContent = isPurchase ? "구매 신청 확인" : "대여 요청 확인";
     card.append(title);
-    const rows = [
-      ["매물", action.title],
-      ["지역", action.region],
-      ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
-      ["대여료", `${money(action.dailyPrice)}/일 × ${action.days}일 = ${money(action.totalPrice)}`],
-      ["메모", action.note],
-    ];
+    const rows = isPurchase
+      ? [
+          ["매물", action.title],
+          ["지역", action.region],
+          ["판매가", money(action.price)],
+          ["메모", action.note],
+        ]
+      : [
+          ["매물", action.title],
+          ["지역", action.region],
+          ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
+          ["대여료", `${money(action.dailyPrice)}/일 × ${action.days}일 = ${money(action.totalPrice)}`],
+          ["메모", action.note],
+        ];
     for (const [label, value] of rows) {
       if (!value) continue;
       const row = document.createElement("div");
@@ -191,7 +492,9 @@ export function createAiPanel({
     }
     const notice = document.createElement("div");
     notice.className = "ai-rec-notice";
-    notice.textContent = "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+    notice.textContent = isPurchase
+      ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
+      : "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
     const actions = document.createElement("div");
     actions.className = "ai-confirm-actions";
     const approve = document.createElement("button");
@@ -211,106 +514,42 @@ export function createAiPanel({
       approve.disabled = busy;
       cancel.disabled = busy;
     };
-    const finish = (text, state) => {
-      card.dataset.state = state;
-      actions.remove();
-      appendAiMessage(text, "assistant");
-      rememberAgentTurn({ role: "assistant", content: text });
-    };
 
     cancel.addEventListener("click", () => {
-      rememberAgentTurn({ role: "user", content: "대여 요청은 보내지 않을게요." });
-      finish("알겠어요. 대여 요청은 보내지 않았어요. 다른 날짜나 매물이 필요하면 말씀해 주세요.", "cancelled");
+      card.dataset.state = "cancelled";
+      actions.remove();
+      rememberAgentTurn({ role: "user", content: "요청은 보내지 않을게요." });
+      const msg = "알겠어요. 요청은 보내지 않았어요. 다른 날짜나 매물이 필요하면 말씀해 주세요.";
+      appendAiMessage(msg, "assistant");
+      rememberAgentTurn({ role: "assistant", content: msg });
     });
 
-    approve.addEventListener("click", async () => {
-      setBusy(true);
-      approve.textContent = "요청을 보내는 중…";
-      rememberAgentTurn({ role: "user", content: "승인합니다. 대여 요청을 보내 주세요." });
-      try {
-        const result = await executeAgentAction(action, requestId);
-        if (result?.outcome === "completed") finish(`✅ ${result.message}`, "completed");
-        else if (result?.outcome === "partial") finish(`⚠️ ${result.message}`, "partial");
-        else finish(`❌ 대여 요청을 보내지 못했어요. ${result?.message || ""}`.trim(), "failed");
-        if (result?.outcome === "completed" || result?.outcome === "partial") {
-          await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
-        }
-      } catch (error) {
-        if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") {
+    approve.addEventListener("click", () => {
+      rememberAgentTurn({ role: "user", content: "승인합니다. 요청을 보내 주세요." });
+      executeOneTapAction({
+        pendingAction: action,
+        requestId,
+        triggerButton: approve,
+        onBusy: () => {
+          setBusy(true);
+          approve.textContent = "요청을 보내는 중…";
+        },
+        onDone: (outcome) => {
+          card.dataset.state = outcome;
+          actions.remove();
+        },
+        onError: (kind) => {
+          if (kind === "aborted") {
+            setBusy(false);
+            approve.textContent = "승인하고 요청 보내기";
+            return;
+          }
           setBusy(false);
-          approve.textContent = "승인하고 요청 보내기";
-          return;
-        }
-        if (error?.status === 401) {
-          finish("🔒 대여 요청은 로그인한 뒤 보낼 수 있어요. 로그인하면 신청서에서 이어서 보낼 수 있어요.", "login");
-          savePendingIntentAndRedirectLogin?.(
-            { type: "rental", listingId: action.listingId, draftValues: { start: action.start, end: action.end, note: action.note || "", requestId } },
-            "로그인 후 대여 요청을 이어서 보낼 수 있어요.",
-          );
-          return;
-        }
-        // 결과를 받지 못하면 같은 요청 ID로 다시 시도할 수 있게 둔다(중복 요청은 서버가 막는다).
-        setBusy(false);
-        approve.textContent = "다시 시도";
-        appendAiMessage("요청 결과를 확인하지 못했어요. ‘다시 시도’를 누르거나 거래 화면에서 요청이 보내졌는지 확인해 주세요.", "assistant");
-      }
+          approve.textContent = "다시 시도";
+          appendAiMessage("요청 결과를 확인하지 못했어요. ‘다시 시도’를 누르거나 거래 화면에서 요청이 보내졌는지 확인해 주세요.", "assistant");
+        },
+      });
     });
-  }
-
-  function formatReservationDate(ymd) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || "")) return "";
-    const d = new Date(`${ymd}T00:00:00Z`);
-    return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${"일월화수목금토"[d.getUTCDay()]})`;
-  }
-
-  function renderNongnongReply(result) {
-    const listingIds = result.reservation || result.createdListing || result.updatedListing
-      ? []
-      : (result.listingIds || []).filter((id) => listingById(id));
-    const bubble = appendAiMessage(result.reply, "assistant", listingIds);
-    const done = result.reservation;
-    if (done) {
-      const box = document.createElement("div");
-      box.className = "ai-rec-overview ai-reservation";
-      const rows = [
-        ["예약 번호", done.number],
-        ["기계", done.title],
-        ["지역", done.region],
-        done.kind === "rental" ? ["기간", `${formatReservationDate(done.start)} ~ ${formatReservationDate(done.end)}`] : null,
-        Number.isFinite(done.totalPrice) ? [done.kind === "rental" ? "내야 하는 돈" : "판매가", money(done.totalPrice)] : null,
-        ["상태", done.kind === "rental" ? "소유 농가 승인 대기 · 결제 전" : "판매자 확인 대기"],
-      ].filter((row) => row && row[1]);
-      for (const [label, value] of rows) {
-        const row = document.createElement("div");
-        row.className = "ai-rec-row";
-        const labelNode = document.createElement("strong");
-        labelNode.textContent = `${label}:`;
-        row.append(labelNode, document.createTextNode(` ${value}`));
-        box.append(row);
-      }
-      const go = document.createElement("button");
-      go.type = "button";
-      go.className = "ai-rec-card-btn";
-      go.textContent = "대여 요청 메뉴에서 확인하기 ›";
-      go.addEventListener("click", () => setView("requests"));
-      box.append(go);
-      bubble.append(box);
-      refreshAuthenticatedData?.({
-        includeRequests: done.kind === "rental",
-        includeConversations: done.kind === "purchase",
-      }).catch(() => {});
-    }
-    const listed = result.createdListing || result.updatedListing;
-    if (listed) {
-      const go = document.createElement("button");
-      go.type = "button";
-      go.className = "ai-rec-card-btn";
-      go.textContent = `${listed.number ? `등록 번호 ${listed.number} · ` : ""}내 기계 관리에서 보기 ›`;
-      go.addEventListener("click", () => setView("owner"));
-      bubble.append(go);
-      loadCatalog({ quiet: true }).catch(() => {});
-    }
-    scrollAiToEnd();
   }
 
   function photoSummaryText(summary) {
@@ -371,6 +610,7 @@ export function createAiPanel({
   }
 
   function appendListingDraft(bubble, draft) {
+    const requestId = crypto.randomUUID();
     const card = document.createElement("div");
     card.className = "ai-confirm ai-draft";
     const title = document.createElement("strong");
@@ -396,13 +636,61 @@ export function createAiPanel({
     desc.textContent = draft.description;
     const notice = document.createElement("div");
     notice.className = "ai-rec-notice";
-    notice.textContent = "💡 플랫폼 등록 매물 기준 참고가예요. [확인 필요] 부분은 직접 채워 주세요.";
+    notice.textContent = "💡 플랫폼 등록 매물 기준 참고가예요. [확인 필요] 부분은 등록 화면에서 고칠 수 있어요.";
     const actions = document.createElement("div");
     actions.className = "ai-confirm-actions";
+
+    const quickRegister = document.createElement("button");
+    quickRegister.type = "button";
+    quickRegister.className = "button button-primary";
+    quickRegister.textContent = "⚡ 채팅에서 바로 등록";
+    quickRegister.addEventListener("click", () => {
+      if (!(Number.isFinite(draft.price) && draft.price > 0)) {
+        toast("가격이 정해지지 않았어요. 상세 화면에서 가격을 입력해 주세요.");
+        if (savedDraft?.listingId === draft.listingId) savedDraft = null;
+        openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl));
+        return;
+      }
+      rememberAgentTurn({ role: "user", content: "초안 내용대로 매물을 바로 등록해 주세요." });
+      executeOneTapAction({
+        pendingAction: {
+          ...draft,
+          listingType: draft.type === "sale" ? "sale" : "rent",
+          type: "create_listing",
+          ...(!draft.photoKey && lastPhotoDataUrl ? { photoDataUrl: lastPhotoDataUrl } : {}),
+        },
+        requestId,
+        triggerButton: quickRegister,
+        onBusy: () => { quickRegister.textContent = "등록하는 중…"; },
+        onDone: (outcome) => {
+          card.dataset.state = outcome;
+          if (outcome === "completed") quickRegister.remove();
+          else {
+            quickRegister.disabled = false;
+            quickRegister.textContent = "⚡ 채팅에서 바로 등록";
+          }
+        },
+        onError: () => {
+          quickRegister.disabled = false;
+          quickRegister.textContent = "다시 시도";
+          toast("매물을 등록하지 못했어요. 다시 시도해 주세요.");
+        },
+      });
+    });
+
+    const register = document.createElement("button");
+    register.type = "button";
+    register.className = "button button-secondary";
+    register.textContent = "📝 상세 수정 후 등록";
+    register.addEventListener("click", () => {
+      if (savedDraft?.listingId === draft.listingId) savedDraft = null;
+      openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl));
+    });
+
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = "button button-secondary";
-    copy.textContent = "📋 소개글 복사";
+    copy.textContent = "📋 복사";
     copy.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(`${draft.title}\n\n${draft.description}`);
@@ -411,16 +699,8 @@ export function createAiPanel({
         toast("복사하지 못했어요. 글을 길게 눌러 복사해 주세요.");
       }
     });
-    const register = document.createElement("button");
-    register.type = "button";
-    register.className = "button button-primary";
-    register.textContent = "📝 이 내용으로 매물 등록하기";
-    register.addEventListener("click", () => {
-      // 등록 화면으로 넘긴 초안은 다시 쓰지 않는다(같은 매물 ID로 두 번 등록하면 409).
-      if (savedDraft?.listingId === draft.listingId) savedDraft = null;
-      openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl));
-    });
-    actions.append(copy, register);
+
+    actions.append(quickRegister, register, copy);
     card.append(name, price, desc, notice, actions);
     bubble.append(card);
   }
@@ -451,15 +731,69 @@ export function createAiPanel({
     if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
       savedDraft = { listingId: result.listingDraft.listingId, photoKey: result.listingDraft.photoKey, photoUrl: result.listingDraft.photoUrl };
     }
-    const listingIds = (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
-    const bubble = appendAiMessage(reply, "assistant", listingIds);
+    const listingIds = result.reservation || result.createdListing || result.updatedListing
+      ? []
+      : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
+    const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
+    if (result.reservation) renderReservationBox(bubble, result.reservation);
+    const listed = result.createdListing || result.updatedListing;
+    if (listed) renderCreatedListingButton(bubble, listed);
     if (Array.isArray(result.repairCenters) && result.repairCenters.length) appendRepairCenters(bubble, result.repairCenters);
     if (result.listingDraft) appendListingDraft(bubble, result.listingDraft);
     if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
+
+    const choices = inferFollowUpChoices(reply, result);
+    if (choices.length) appendChoices(bubble, choices);
+    if (wantsDatePicker(reply, result)) {
+      appendDateQuickPicker(bubble, {
+        defaultStart: state.filters?.date || "",
+        defaultEnd: state.filters?.dateEnd || "",
+        onApply: (pickedStart, pickedEnd) => {
+          $("aiInput").value = `${pickedStart}부터 ${pickedEnd}까지로 해주세요.`;
+          $("aiForm").requestSubmit();
+        },
+      });
+    }
+    if (result.pendingAction?.type === "rental_request" || result.pendingAction?.type === "purchase_request") {
+      appendConfirmation(bubble, result.pendingAction);
+    }
+    $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
-    if (Array.isArray(result.choices) && result.choices.length) appendChoices(bubble, result.choices.slice(0, 5));
-    if (result.pendingAction?.type === "rental_request") appendConfirmation(bubble, result.pendingAction);
-    $("aiModeLabel").textContent = "AI 상담 · 등록 매물 기반";
+  }
+
+  function refreshContextBar() {
+    const bar = $("aiContextBar");
+    if (!bar) return;
+    const ui = collectUiContext();
+    const badges = [];
+    if (ui.region) badges.push(`📍 ${ui.region}`);
+    if (ui.cropIds.length) badges.push(`🌱 ${ui.cropIds.map((id) => CROP_BY_ID[id]?.name).filter(Boolean).join(", ")}`);
+    if (ui.operations.length) badges.push(`⚙️ ${ui.operations.map((id) => OPERATION_BY_ID[id]?.label).filter(Boolean).slice(0, 2).join(", ")}`);
+    if (ui.date) badges.push(`📅 ${formatShortDate(ui.date)}~${formatShortDate(ui.dateEnd || ui.date)}`);
+    const viewingItem = ui.viewingListingId ? listingById(ui.viewingListingId) : null;
+
+    bar.replaceChildren();
+    if (!badges.length && !viewingItem) {
+      bar.hidden = true;
+      return;
+    }
+    bar.hidden = false;
+    for (const text of badges) {
+      const span = document.createElement("span");
+      span.className = "ai-context-badge";
+      span.textContent = text;
+      bar.append(span);
+    }
+    if (viewingItem && !viewingItem.owner && viewingItem.status === "open" && viewingItem.condition !== "repair") {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ai-context-action";
+      btn.textContent = viewingItem.type === "rent"
+        ? `⚡ ${viewingItem.title.slice(0, 12)}… 바로 예약`
+        : `⚡ ${viewingItem.title.slice(0, 12)}… 바로 구매`;
+      btn.addEventListener("click", () => startOneTapListingAction(viewingItem, null, null, btn));
+      bar.append(btn);
+    }
   }
 
   async function sendAiQuestion(event) {
@@ -476,55 +810,22 @@ export function createAiPanel({
     $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     $("aiStarters").hidden = true;
-    $("aiMessages").querySelectorAll(".ai-follow-up").forEach((choices) => choices.remove());
+    $("aiMessages").querySelectorAll(".ai-follow-up, .ai-date-picker").forEach((el) => el.remove());
     appendAiMessage(message, "user", [], sendingPhoto);
     let pending;
 
     try {
-      const resetRequested = !sendingPhoto && agentReset.test(message);
-      if (resetRequested) {
-        nongnongHistory = [];
-        agentHistory = [];
-        savedDraft = null;
-        lastPhotoDataUrl = null;
-        clearPhoto();
-        if (nongnongMode === true) {
-          appendAiMessage("새로 시작할게요. 빌리기, 사기, 팔기 중 무엇을 도와드릴까요?", "assistant");
-          return;
-        }
-      }
-      if (nongnongMode !== false && !resetRequested) {
-        pending = appendAiMessage("농농이가 확인하고 있어요…", "assistant");
-        if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
-        const outgoing = [...nongnongHistory, { role: "user", content: sendingPhoto ? `${message} [사진 첨부]` : message }].slice(-NONGNONG_HISTORY_LIMIT);
-        const outcome = await askNongnong(outgoing, { photo: agentPhoto, photoIsNew: Boolean(sendingPhoto) }).catch((error) => ({ mode: "error", error }));
-        pending.remove();
-        pending = undefined;
-        if (outcome.mode === "agent") {
-          nongnongMode = true;
-          nongnongHistory = [...outgoing, { role: "assistant", content: outcome.reply }].slice(-NONGNONG_HISTORY_LIMIT);
-          if (sendingPhoto) {
-            photoIsNew = false;
-            showPhotoPreview();
-          }
-          if (outcome.createdListing) clearPhoto();
-          renderNongnongReply(outcome);
-          $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
-          return;
-        }
-        if (outcome.mode === "unavailable" || (nongnongMode === null && outcome.error?.status === 404)) {
-          nongnongMode = false;
-        } else {
-          appendAiMessage(outcome.error?.message || "농농이가 잠시 답할 수 없어요. 잠시 후 다시 말씀해 주세요.", "assistant");
-          $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
-          return;
-        }
+      if (!sendingPhoto && AGENT_RESET_RE.test(message)) {
+        performReset();
+        return;
       }
       pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
       if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
+      const uiContext = collectUiContext();
       const agentResult = await askAgent(message, {
         history: agentHistory,
-        region: state.region,
+        region: uiContext.region,
+        uiContext,
         image: sendingPhoto || undefined,
         savedDraft,
       });
@@ -535,6 +836,7 @@ export function createAiPanel({
           photoIsNew = false;
           showPhotoPreview();
         }
+        if (agentResult.createdListing) clearPhoto();
         renderAgentResult(message, agentResult, { photo: Boolean(sendingPhoto) });
         return;
       }
@@ -550,6 +852,7 @@ export function createAiPanel({
       submit.disabled = false;
     }
   }
+
   function syncAiViewport() {
     const panel = $("aiPanel");
     const viewport = window.visualViewport;
@@ -562,6 +865,7 @@ export function createAiPanel({
     $("aiPanel").hidden = false;
     document.body.classList.add("ai-open");
     $("aiLauncher").setAttribute("aria-expanded", "true");
+    refreshContextBar();
     syncAiViewport();
     $("aiClose").focus({ preventScroll: true });
   }
@@ -574,9 +878,7 @@ export function createAiPanel({
     button.firstElementChild.textContent = expanded ? "⤡" : "⤢";
   }
 
-  function resetAiPanel() {
-    if (recommendationPending) return;
-    nongnongHistory = [];
+  function performReset() {
     agentHistory = [];
     savedDraft = null;
     lastPhotoDataUrl = null;
@@ -585,8 +887,14 @@ export function createAiPanel({
     $("aiStarters").hidden = false;
     $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
-    appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 아는 조건부터 말씀해 주세요.", "assistant");
+    refreshContextBar();
+    appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 위 조건이나 예시 버튼을 눌러 바로 시작해 보세요.", "assistant");
     $("aiInput").focus();
+  }
+
+  function resetAiPanel() {
+    if (recommendationPending) return;
+    performReset();
   }
 
   function submitPrompt(prompt) {
@@ -603,5 +911,6 @@ export function createAiPanel({
     toggleAiPanelSize,
     resetAiPanel,
     submitPrompt,
+    refreshContextBar,
   };
 }

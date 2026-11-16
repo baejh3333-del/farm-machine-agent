@@ -1034,3 +1034,62 @@ test("[PGlite 로컬 엔진] 9. 초안 사진 저장과 draftPhotoKey 등록", a
   );
   await assert.rejects(() => saveDraftPhoto(null, dataUrl), (err) => err.status === 401);
 });
+
+test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매물 등록 실행", async () => {
+  const today = kstToday();
+  const createdSale = await createListing(userA.user, {
+    id: randomUUID(),
+    type: "sale",
+    title: "원탭 구매 테스트 트랙터",
+    brand: "대동",
+    machineType: "tractor",
+    cropIds: ["pepper"],
+    operations: ["till"],
+    price: 5200000,
+    region: "영양읍",
+    areaMin: 300,
+    areaMax: 2000,
+    condition: "good",
+    inspectedAt: today,
+  }, { pool });
+  assert.equal(createdSale.status, 201);
+  const targetSaleId = createdSale.listing.id;
+
+  const buyReqId = randomUUID();
+  const buyRes = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: {
+      action: "execute",
+      requestId: buyReqId,
+      pendingAction: { type: "purchase_request", listingId: targetSaleId },
+    },
+  });
+  assert.equal(buyRes.status, 200, JSON.stringify(buyRes.body));
+  assert.equal(buyRes.body.outcome, "completed");
+  assert.equal(buyRes.body.reservation.kind, "purchase");
+  assert.equal(buyRes.body.reservation.listingId, targetSaleId);
+
+  const listReqId = randomUUID();
+  const listRes = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: {
+      action: "execute",
+      requestId: listReqId,
+      pendingAction: {
+        type: "create_listing",
+        listingType: "sale",
+        machineType: "cultivator",
+        title: "원탭 등록 관리기",
+        price: 1550000,
+        region: "청기면",
+        description: "연식: 2021년식",
+      },
+    },
+  });
+  assert.equal(listRes.status, 200, JSON.stringify(listRes.body));
+  assert.equal(listRes.body.outcome, "completed");
+  assert.equal(listRes.body.createdListing.title, "원탭 등록 관리기");
+  assert.equal(listRes.body.listing.type, "sale");
+});

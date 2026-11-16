@@ -609,3 +609,99 @@ test("OpenAI로 사진 상담을 하면 같은 모델에 image_url을 보내고 
   assert.equal(body.messages.find((m) => m.role === "user").content[1].type, "image_url");
   assert.deepEqual(body.tools.map((tool) => tool.type), ["function"]);
 });
+
+test("[통합 오케스트레이터] 로그인 + 긍정 발화 시 create_rental_request가 즉시 대여 예약을 실행한다", async (t) => {
+  withKey(t, "test");
+  const createdCalls = [];
+  const deps = {
+    beforeWrite: async () => {},
+    createRentalRequest: async (u, payload) => {
+      createdCalls.push({ user: u.id, ...payload });
+      return { request: { id: payload.id, days: 2, totalPrice: rentable.price * 2 } };
+    },
+  };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
+    { content: [{ type: "text", text: "예약을 접수했어요!" }] },
+  ]);
+  const result = await runAgentTurn("네 예약해 주세요", { user: USER }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(createdCalls.length, 1);
+  assert.equal(createdCalls[0].listingId, rentable.id);
+  assert.equal(result.reservation.kind, "rental");
+  assert.match(result.reservation.number, /^R-[0-9A-F]{8}$/);
+  assert.equal(result.pendingAction, undefined);
+});
+
+test("[통합 오케스트레이터] 긍정하지 않은 발화에서는 create_rental_request도 DB 쓰기 없이 확인 카드로 전환된다", async (t) => {
+  withKey(t, "test");
+  let wrote = false;
+  const deps = { createRentalRequest: async () => { wrote = true; return {}; } };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
+  ]);
+  const result = await runAgentTurn("이거 상태 괜찮나요?", { user: USER }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(wrote, false);
+  assert.equal(result.reservation, undefined);
+  assert.equal(result.pendingAction.type, "rental_request");
+  assert.equal(result.pendingAction.listingId, rentable.id);
+});
+
+test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능 확인, 비용 계산, 날씨 및 uiContext가 통합 동작한다", async (t) => {
+  withKey(t, "test");
+  const actions = { purchase: [], listing: [], weather: [] };
+  const deps = {
+    beforeWrite: async () => {},
+    getWeather: async (opts) => {
+      actions.weather.push(opts);
+      return { region: opts.region, rangeForecast: [{ date: opts.date, summary: "맑음", pop: 10, tempMin: 2, tempMax: 12, icon: "sun", source: "kma" }] };
+    },
+    sendPurchaseMessage: async (u, payload) => {
+      actions.purchase.push(payload);
+      return { conversation: { id: "conv-99" } };
+    },
+    createListing: async (u, payload) => {
+      actions.listing.push(payload);
+      return { listing: { id: payload.id, title: payload.title } };
+    },
+  };
+
+  // 1) check_availability + calculate_cost + get_weather + uiContext 프롬프트 주입
+  const checkFlow = scripted([
+    { content: [
+      { type: "tool_use", id: "c1", name: "check_availability", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } },
+      { type: "tool_use", id: "c2", name: "calculate_cost", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } },
+      { type: "tool_use", id: "c3", name: "get_weather", input: { region: "영양읍", start: "2026-11-20" } },
+    ] },
+    { content: [{ type: "text", text: "비어 있고 날씨도 맑아요." }] },
+  ]);
+  const r1 = await runAgentTurn(
+    "이 날짜 괜찮나요?",
+    { user: USER, uiContext: { region: "영양읍", cropIds: ["pepper"], date: "2026-11-20", dateEnd: "2026-11-21", viewingListingId: rentable.id } },
+    { listings: LISTINGS, call: checkFlow.call, today: TODAY, deps },
+  );
+  assert.match(checkFlow.calls[0].system, new RegExp(rentable.id));
+  assert.match(checkFlow.calls[0].system, /고추/);
+  assert.equal(actions.weather.length, 1);
+  assert.equal(r1.reply, "비어 있고 날씨도 맑아요.");
+
+  // 2) create_purchase_request
+  const buyFlow = scripted([
+    { content: [{ type: "tool_use", id: "b1", name: "create_purchase_request", input: { listingId: forSale.id } }] },
+    { content: [{ type: "text", text: "구매 신청을 보냈어요." }] },
+  ]);
+  const r2 = await runAgentTurn("그걸로 살게요 진행해 주세요", { user: USER }, { listings: LISTINGS, call: buyFlow.call, today: TODAY, deps });
+  assert.equal(actions.purchase.length, 1);
+  assert.equal(r2.reservation.kind, "purchase");
+  assert.equal(r2.reservation.conversationId, "conv-99");
+
+  // 3) create_listing
+  const sellFlow = scripted([
+    { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "cultivator", title: "아세아 관리기 빌려드려요", price: 45000 } }] },
+    { content: [{ type: "text", text: "매물을 등록했어요!" }] },
+  ]);
+  const r3 = await runAgentTurn("이대로 올려 주세요", { user: USER, uiContext: { region: "청기면", cropIds: ["pepper"] } }, { listings: LISTINGS, call: sellFlow.call, today: TODAY, deps });
+  assert.equal(actions.listing.length, 1);
+  assert.equal(actions.listing[0].region, "청기면");
+  assert.equal(r3.createdListing.title, "아세아 관리기 빌려드려요");
+  assert.match(r3.createdListing.number, /^L-[0-9A-F]{8}$/);
+});

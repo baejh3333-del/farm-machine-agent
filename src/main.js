@@ -273,6 +273,7 @@ function renderAll() {
   catalogViews.renderListings();
   txViews.renderBuyerRequests();
   updateBadges();
+  aiPanel.refreshContextBar?.();
 }
 
 function bindEvents() {

@@ -50,6 +50,8 @@ const aiPanel = createAiPanel({
   loadCatalog: (...args) => loadCatalog(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
   renderListings: (...args) => catalogViews.renderListings(...args),
+  refreshAuthenticatedData: (...args) => refreshAuthenticatedData(...args),
+  savePendingIntentAndRedirectLogin: (...args) => savePendingIntentAndRedirectLogin(...args),
 });
 
 async function loadCatalog({ quiet = false } = {}) {

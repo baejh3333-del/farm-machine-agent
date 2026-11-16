@@ -8,6 +8,7 @@ import { after, before, test } from "node:test";
 import sharp from "sharp";
 
 import accountHandler from "../api/account.js";
+import agentHandler from "../api/agent.js";
 import conversationsHandler from "../api/conversations.js";
 import listingsHandler from "../api/listings.js";
 import meHandler from "../api/me.js";
@@ -118,6 +119,7 @@ before(async () => {
     ["/api/account", accountHandler],
     ["/api/listings", listingsHandler],
     ["/api/recommend", recommendHandler],
+    ["/api/agent", agentHandler],
     ["/api/me", meHandler],
     ["/api/requests", requestsHandler],
     ["/api/conversations", conversationsHandler],
@@ -878,4 +880,87 @@ test("[PGlite 로컬 엔진] 7. 대여 기간 상한·BIGINT 합계, 오류 분�
       else process.env[k] = v;
     }
   }
+});
+
+test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청만 로그인 사용자로 실행하고 실제 상태로 결과를 분류", async () => {
+  const today = kstToday();
+  const start = shiftDate(today, 10);
+  const end = shiftDate(today, 12);
+  const listingId = randomUUID();
+  const created = await createListing(userA.user, {
+    id: listingId,
+    type: "rent",
+    modelId: "asia-amc900",
+    title: "농농이 승인 테스트 관리기",
+    region: "청기면",
+    cropIds: ["pepper"],
+    operations: ["ridge"],
+    price: 40000,
+    areaMin: 200,
+    areaMax: 1000,
+    condition: "good",
+    inspectedAt: today,
+  }, { pool });
+  assert.equal(created.status, 201);
+  const pendingAction = { type: "rental_request", listingId, start, end, note: "농농이로 요청" };
+
+  // AI 키가 없으면 대화는 규칙 기반 상담으로 넘긴다
+  const prevKeys = { ZAI_API_KEY: process.env.ZAI_API_KEY, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY };
+  delete process.env.ZAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try {
+    const chat = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "고추 두둑 빌릴래요" } });
+    assert.equal(chat.status, 200);
+    assert.equal(chat.body.mode, "unavailable");
+  } finally {
+    for (const [k, v] of Object.entries(prevKeys)) if (v !== undefined) process.env[k] = v;
+  }
+
+  // 로그인하지 않으면 실행하지 않는다
+  const anonymous = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    json: { action: "execute", pendingAction, requestId: randomUUID() },
+  });
+  assert.equal(anonymous.status, 401);
+
+  // 잘못된 요청 형식은 거절한다
+  const badAction = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: { action: "execute", pendingAction: { ...pendingAction, type: "delete_listing" }, requestId: randomUUID() },
+  });
+  assert.equal(badAction.status, 400);
+
+  // 승인된 요청은 실행 후 저장 상태를 다시 확인해 completed로 안내한다
+  const requestId = randomUUID();
+  const done = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: { action: "execute", pendingAction, requestId },
+  });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.outcome, "completed");
+  assert.equal(done.body.request.id, requestId);
+  assert.equal(done.body.request.status, "pending");
+  const { outgoing } = await listRequestsForUser(userB.user.id, { pool });
+  assert.ok(outgoing.some((item) => item.id === requestId && item.listingId === listingId));
+
+  // 같은 요청 ID로 다시 눌러도 중복 생성하지 않는다
+  const retry = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: { action: "execute", pendingAction, requestId },
+  });
+  assert.equal(retry.body.outcome, "completed");
+  assert.equal(retry.body.idempotent, true);
+
+  // 서비스 규칙에 막히면 failed와 이유를 안내한다(본인 매물)
+  const selfRental = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userA.cookie,
+    json: { action: "execute", pendingAction, requestId: randomUUID() },
+  });
+  assert.equal(selfRental.status, 200);
+  assert.equal(selfRental.body.outcome, "failed");
+  assert.equal(selfRental.body.code, "SELF_RENTAL_FORBIDDEN");
 });

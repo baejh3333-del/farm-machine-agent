@@ -3943,3 +3943,10 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* 농농이 Claude 에이전트: 상태를 바꾸는 작업의 승인 카드 */
+.ai-confirm { margin-top: 12px; padding: 12px 14px; display: grid; gap: 6px; border: 1px solid var(--primary); border-radius: 12px; background: var(--primary-light); }
+.ai-confirm-title { font-size: 0.875rem; }
+.ai-confirm-actions { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-confirm-actions .button { min-height: 38px; padding: 0 14px; font-size: 0.8125rem; }
+.ai-confirm[data-state="cancelled"], .ai-confirm[data-state="failed"] { opacity: 0.7; border-color: var(--text-muted); background: transparent; }

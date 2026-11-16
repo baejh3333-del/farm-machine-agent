@@ -50,6 +50,7 @@ const aiPanel = createAiPanel({
   loadCatalog: (...args) => loadCatalog(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
   renderListings: (...args) => catalogViews.renderListings(...args),
+  setView: (...args) => setView(...args),
 });
 
 async function loadCatalog({ quiet = false } = {}) {

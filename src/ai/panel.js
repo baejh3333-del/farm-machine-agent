@@ -2,6 +2,7 @@ import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
 import { recommendationGuide, selectMatchingListings } from "../data/recommendation.js";
 import { $, areaLabel, escapeHtml, money, toast } from "../core/utils.js";
 import { conversationTurn, unrelatedTurn } from "./conversation.js";
+import { askNongnong } from "./nongnong-client.js";
 import { askRecommendation } from "./recommend-agent.js";
 
 export function createAiPanel({
@@ -13,9 +14,15 @@ export function createAiPanel({
   loadCatalog,
   openDetail,
   renderListings,
+  setView = () => {},
 }) {
   let conversation;
   let recommendationPending = false;
+  // 농농 대화형 에이전트: null=아직 모름, true=사용 중, false=AI 키 없음(기존 조건 검색 상담 사용)
+  let agentMode = null;
+  let agentHistory = [];
+  const AGENT_HISTORY_LIMIT = 16;
+  const agentReset = /^(?:새 상담(?: 시작)?|처음부터 다시(?: 할래요?)?|대화 초기화)[.!?\s]*$/;
   const aiDefaultPlaceholder = $("aiInput").placeholder;
   const aiInputExamples = {
     crop: "예: 감자",
@@ -70,6 +77,55 @@ export function createAiPanel({
     return bubble;
   }
 
+  function formatReservationDate(ymd) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || "")) return "";
+    const d = new Date(`${ymd}T00:00:00Z`);
+    return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일(${"일월화수목금토"[d.getUTCDay()]})`;
+  }
+
+  function renderAgentReply(result) {
+    const listingIds = result.reservation || result.createdListing ? [] : (result.listingIds || []).filter((id) => listingById(id));
+    const bubble = appendAiMessage(result.reply, "assistant", listingIds);
+    const done = result.reservation;
+    if (done) {
+      const box = document.createElement("div");
+      box.className = "ai-rec-overview ai-reservation";
+      const rows = [
+        ["예약 번호", done.number],
+        ["기계", done.title],
+        ["지역", done.region],
+        done.kind === "rental" ? ["기간", `${formatReservationDate(done.start)} ~ ${formatReservationDate(done.end)}`] : null,
+        Number.isFinite(done.totalPrice) ? [done.kind === "rental" ? "내야 하는 돈" : "판매가", money(done.totalPrice)] : null,
+        ["상태", done.kind === "rental" ? "소유 농가 승인 대기 · 결제 전" : "판매자 확인 대기"],
+      ].filter((row) => row && row[1]);
+      for (const [label, value] of rows) {
+        const row = document.createElement("div");
+        row.className = "ai-rec-row";
+        const labelNode = document.createElement("strong");
+        labelNode.textContent = `${label}:`;
+        row.append(labelNode, document.createTextNode(` ${value}`));
+        box.append(row);
+      }
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "ai-rec-card-btn";
+      go.textContent = "대여 요청 메뉴에서 확인하기 ›";
+      go.addEventListener("click", () => setView("requests"));
+      box.append(go);
+      bubble.append(box);
+    }
+    if (result.createdListing) {
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "ai-rec-card-btn";
+      go.textContent = "내 기계 관리에서 사진 올리기 ›";
+      go.addEventListener("click", () => setView("owner"));
+      bubble.append(go);
+      loadCatalog({ quiet: true }).catch(() => {});
+    }
+    scrollAiToEnd();
+  }
+
   function askFollowUp(question, reply = question.reply) {
     $("aiInput").placeholder = aiInputExamples[question.field] || aiDefaultPlaceholder;
     const bubble = appendAiMessage(reply, "assistant");
@@ -107,6 +163,33 @@ export function createAiPanel({
     let pending;
 
     try {
+      if (agentMode !== false) {
+        if (agentReset.test(message)) {
+          agentHistory = [];
+          conversation = undefined;
+          appendAiMessage("새로 시작할게요. 빌리기, 사기, 팔기 중 무엇을 도와드릴까요?", "assistant");
+          return;
+        }
+        pending = appendAiMessage("농농이가 확인하고 있어요…", "assistant");
+        const outgoing = [...agentHistory, { role: "user", content: message }].slice(-AGENT_HISTORY_LIMIT);
+        const outcome = await askNongnong(outgoing).catch((error) => ({ mode: "error", error }));
+        pending.remove();
+        pending = undefined;
+        if (outcome.mode === "agent") {
+          agentMode = true;
+          agentHistory = [...outgoing, { role: "assistant", content: outcome.reply }].slice(-AGENT_HISTORY_LIMIT);
+          renderAgentReply(outcome);
+          $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
+          return;
+        }
+        if (outcome.mode === "unavailable" || (agentMode === null && outcome.error?.status === 404)) {
+          agentMode = false;
+        } else {
+          appendAiMessage(outcome.error?.message || "농농이가 잠시 답할 수 없어요. 잠시 후 다시 말씀해 주세요.", "assistant");
+          return;
+        }
+      }
+
       const filters = {
         transaction: state.transaction,
         region: state.region,

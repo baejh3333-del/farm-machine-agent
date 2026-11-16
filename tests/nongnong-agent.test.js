@@ -15,7 +15,7 @@ const TODAY = "2026-11-16";
 const rentable = LISTINGS.find((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair" && !item.booked.length);
 const forSale = LISTINGS.find((item) => item.type === "sale");
 
-const AI_ENV = ["AI_PROVIDER", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+const AI_ENV = ["AI_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
 
 function withEnv(t, values) {
   const previous = Object.fromEntries(AI_ENV.map((name) => [name, process.env[name]]));
@@ -174,14 +174,18 @@ test("도구 호출이 끝나지 않아도 최대 횟수에서 멈춘다", async
   assert.ok(result.reply);
 });
 
-test("공급자는 AI_PROVIDER를 따르고, 없으면 Z.ai 키를 먼저 쓴다", (t) => {
-  withEnv(t, { ZAI_API_KEY: "z", ANTHROPIC_API_KEY: "a" });
+test("공급자는 AI_PROVIDER를 따르고, 없으면 OpenAI → Z.ai → Anthropic 순으로 고른다", (t) => {
+  withEnv(t, { OPENAI_API_KEY: "o", ZAI_API_KEY: "z", ANTHROPIC_API_KEY: "a" });
+  assert.equal(llmProvider(), "openai");
+  process.env.AI_PROVIDER = "zai";
   assert.equal(llmProvider(), "zai");
   process.env.AI_PROVIDER = "anthropic";
   assert.equal(llmProvider(), "anthropic");
-  process.env.AI_PROVIDER = "zai";
-  delete process.env.ZAI_API_KEY;
+  process.env.AI_PROVIDER = "openai";
+  delete process.env.OPENAI_API_KEY;
   assert.equal(llmProvider(), null, "지정한 공급자의 키가 없으면 다른 공급자로 몰래 바꾸지 않는다");
+  delete process.env.AI_PROVIDER;
+  assert.equal(llmProvider(), "zai");
 });
 
 test("Anthropic 형식 대화를 Z.ai(OpenAI 호환) 형식으로 바꾼다", () => {
@@ -235,6 +239,30 @@ test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는
   assert.equal(requests[1].body.tools, undefined);
   assert.match(requests[1].body.messages[0].content, /JSON 스키마/);
   assert.deepEqual(json, { intent: "help" });
+});
+
+test("OpenAI 호출은 기본 엔드포인트·max_completion_tokens를 쓰고 insufficient_quota를 분류한다", async (t) => {
+  withEnv(t, { AI_PROVIDER: "openai", OPENAI_API_KEY: "okey", ZAI_API_KEY: "zkey" });
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    requests.push({ url, request, body: JSON.parse(request.body) });
+    if (requests.length === 1) return Response.json({ choices: [{ message: { content: "답변" } }] });
+    return Response.json({ error: { code: "insufficient_quota" } }, { status: 429 });
+  });
+
+  const ok = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], maxTokens: 120 });
+  assert.equal(requests[0].url, "https://api.openai.com/v1/chat/completions");
+  assert.equal(requests[0].request.headers.authorization, "Bearer okey");
+  assert.equal(requests[0].body.model, "gpt-4o-mini");
+  assert.equal(requests[0].body.max_completion_tokens, 120);
+  assert.equal(requests[0].body.thinking, undefined);
+  assert.deepEqual(ok.content, [{ type: "text", text: "답변" }]);
+
+  let diag;
+  const fail = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], onError: (d) => { diag = d; } });
+  assert.equal(fail, null);
+  assert.equal(diag.provider, "openai");
+  assert.equal(diag.category, "quota_exhausted");
 });
 
 test("Z.ai로 에이전트를 돌려도 검색 → 답변 흐름이 같다", async (t) => {

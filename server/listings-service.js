@@ -4,7 +4,7 @@ import { getPool, kstToday, withTransaction } from "./db.js";
 import { fail, HttpError } from "./http.js";
 import { validateAndReencodeImage } from "./images.js";
 import { fetchListingById } from "./listings-db.js";
-import { deletePhotoObject, newListingPhotoKey, putPhotoObject } from "./storage.js";
+import { deletePhotoObject, getPhotoObject, isValidPhotoKey, newListingPhotoKey, putPhotoObject } from "./storage.js";
 import { formatIsoDate, normalizeText, requireUuid } from "./validate.js";
 
 const LISTING_TYPES = new Set(["rent", "sale"]);
@@ -167,8 +167,20 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
     return { status: 200, idempotent: true, listing };
   }
 
+  // 농농이가 저장한 초안 사진: 이 매물 ID로 저장된 키만 받아 새로 올리지 않고 그대로 쓴다.
+  const draftPhotoKey = typeof payload?.draftPhotoKey === "string" && payload.draftPhotoKey.trim()
+    ? payload.draftPhotoKey.trim()
+    : null;
+  let draftKey = null;
+  if (draftPhotoKey) {
+    if (!isValidPhotoKey(draftPhotoKey) || !draftPhotoKey.startsWith(`listings/${id}/`) || !(await getPhotoObject(draftPhotoKey))) {
+      fail(400, "INVALID_DRAFT_PHOTO", "사진을 다시 올려 주세요.");
+    }
+    draftKey = draftPhotoKey;
+  }
+
   let uploadedKey = null;
-  if (photoDataUrl) {
+  if (photoDataUrl && !draftKey) {
     const encoded = await validateAndReencodeImage(photoDataUrl);
     uploadedKey = newListingPhotoKey(id);
     await putPhotoObject(uploadedKey, encoded.buffer, encoded.contentType);
@@ -217,7 +229,7 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
           fields.pickup,
           fields.description,
           fields.summary,
-          uploadedKey,
+          uploadedKey || draftKey,
         ]
       );
 

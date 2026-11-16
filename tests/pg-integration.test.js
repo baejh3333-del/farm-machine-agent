@@ -16,6 +16,7 @@ import photosHandler from "../api/photos.js";
 import recommendHandler from "../api/recommend.js";
 import requestsHandler from "../api/requests.js";
 import { resetAuthCache } from "../server/account-auth.js";
+import { saveDraftPhoto } from "../server/listing-drafts.js";
 import { recommend } from "../server/agent.js";
 import { getConversationMessages, sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
@@ -39,7 +40,7 @@ import {
   rejectRentalRequest,
 } from "../server/rentals.js";
 import { checkRateLimit, enforceRateLimit } from "../server/rate-limit.js";
-import { listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
+import { getPhotoObject, listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
 import { addOwnedMachine } from "../server/user-data.js";
 
 function shiftDate(isoDate, deltaDays) {
@@ -963,4 +964,39 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
   assert.equal(selfRental.status, 200);
   assert.equal(selfRental.body.outcome, "failed");
   assert.equal(selfRental.body.code, "SELF_RENTAL_FORBIDDEN");
+});
+
+test("[PGlite 로컬 엔진] 9. 초안 사진 저장과 draftPhotoKey 등록", async () => {
+  const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg().toBuffer();
+  const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+
+  const draft = await saveDraftPhoto(userB.user, dataUrl);
+  assert.match(draft.listingId, /^[0-9a-f-]{36}$/);
+  assert.ok(draft.photoKey.startsWith(`listings/${draft.listingId}/`));
+  assert.equal(draft.photoUrl, `/api/photos?key=${encodeURIComponent(draft.photoKey)}`);
+  assert.ok(await getPhotoObject(draft.photoKey), "초안 사진이 저장소에 있어야 한다");
+
+  const today = kstToday();
+  const fields = {
+    type: "sale", modelId: "asia-amc900", title: "농농이 초안 관리기", region: "청기면",
+    cropIds: ["pepper"], operations: ["ridge"], price: 1200000, areaMin: 200, areaMax: 1000,
+    condition: "good", inspectedAt: today, description: "농농이가 쓴 소개글",
+  };
+
+  const created = await createListing(userB.user, { id: draft.listingId, ...fields, draftPhotoKey: draft.photoKey }, { pool });
+  assert.equal(created.status, 201);
+  assert.equal(created.listing.photoKey, draft.photoKey);
+  const objects = (await listPhotoObjects()).filter((obj) => obj.key.startsWith(`listings/${draft.listingId}/`));
+  assert.equal(objects.length, 1, "새로 업로드하지 않고 초안 키를 그대로 쓴다");
+
+  await assert.rejects(
+    () => createListing(userB.user, { id: randomUUID(), ...fields, draftPhotoKey: draft.photoKey }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
+  const otherId = randomUUID();
+  await assert.rejects(
+    () => createListing(userB.user, { id: otherId, ...fields, draftPhotoKey: `listings/${otherId}/${randomUUID()}.webp` }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
+  await assert.rejects(() => saveDraftPhoto(null, dataUrl), (err) => err.status === 401);
 });

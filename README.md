@@ -64,6 +64,7 @@ Vercel에서는 같은 이름의 서버 환경 변수를 설정한 뒤 다시 �
 - 횟수는 `rate_limits` 테이블에 저장해 모든 인스턴스가 공유하며, IP는 `BETTER_AUTH_SECRET`으로 HMAC 처리해 원래 값을 남기지 않습니다.
 - 트랜잭션에는 문장 10초·잠금 대기 5초·유휴 15초 타임아웃을 적용합니다(`DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `DB_QUERY_TIMEOUT_MS`).
 - 대여 요청은 최대 365일까지 가능합니다.
+- 농농이 사진 상담에서 판매·대여용으로 올린 사진은 매물 등록 전에 초안으로 저장됩니다. 등록하지 않은 초안 사진은 `npm run db:reconcile-photos -- --env <환경> --min-age-minutes 1440`처럼 **하루(1440분) 이상** 지난 것만 정리하세요. 더 짧게 잡으면 사용자가 등록 화면을 작성하는 중에 사진이 지워질 수 있습니다.
 - 이 변경은 `0002_rate_limits_and_rental_bounds.sql` 마이그레이션이 필요합니다. 배포 전에 `npm run db:migrate -- --env <환경>`을 실행하세요.
 
 ## 파일

@@ -227,9 +227,18 @@ export async function runAgentTurn(message, context = {}, options = {}) {
   }
 }
 
-async function runTurn(message, { history = [], region }, { listings, pool, today = kstToday(), call = callLLM }, signal) {
+// 마이크로 말한 질문에만 더하는 지시. 음성 인식 결과는 틀릴 수 있고, 답변은 소리로도 읽힌다.
+const VOICE_GUIDE = `## 음성으로 들어온 질문
+- 이 질문은 음성 인식으로 받아 적은 글이다. 사용자가 확인했지만 잘못 들린 낱말이 남아 있을 수 있다.
+- 경상도·전라도·충청도 등 사투리를 존중한다. 사투리를 고치라고 하거나 흉내 내지 말고, 뜻을 알아듣고 표준어 존댓말로 답한다.
+- 날짜, 기간, 가격, 면적, 작업, 지역, 농기계 이름이 모호하거나 문장이 어색하면 추측하지 말고 한 번에 한두 가지만 쉬운 말로 되묻는다. 고를 수 있으면 offer_choices로 선택지를 준다.
+- 숫자, 날짜, 금액, 농기계 이름은 답하거나 도구를 쓰기 전에 "~로 들었어요. 맞으세요?"처럼 되읽어 확인한다.
+- 대여 요청을 제안하기 전에는 매물, 시작일, 반납일, 금액을 한 번 되읽어 확인받는다. 실행은 화면의 승인 버튼으로만 된다.
+- 답변은 소리로도 읽힌다. 짧은 문장 2~4개로 쓰고, 표·기호·이모지·괄호 설명은 쓰지 않는다. 날짜는 "11월 20일", 금액은 "4만 5천 원"처럼 읽기 쉽게 쓴다.`;
+
+async function runTurn(message, { history = [], region, inputMode }, { listings, pool, today = kstToday(), call = callLLM }, signal) {
   const messages = sanitizeHistory(history, message);
-  const system = `${SYSTEM_PROMPT}\n\n오늘 날짜(한국 시간): ${today}${typeof region === "string" && region ? `\n사용자가 고른 지역: ${region.slice(0, 20)}` : ""}`;
+  const system = `${SYSTEM_PROMPT}${inputMode === "voice" ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof region === "string" && region ? `\n사용자가 고른 지역: ${region.slice(0, 20)}` : ""}`;
   let catalog = Array.isArray(listings) ? listings : null;
   const loadCatalog = async () => (catalog ??= await fetchListings({ pool }));
 

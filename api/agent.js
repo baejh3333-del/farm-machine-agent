@@ -16,6 +16,7 @@ export default handle(["POST"], async (request) => {
     const result = await runAgentTurn(message, {
       history: Array.isArray(body.history) ? body.history : [],
       region: typeof body.region === "string" ? body.region : undefined,
+      inputMode: body.inputMode === "voice" ? "voice" : "text",
     }, { timeoutMs: Math.max(1, 25000 - (Date.now() - started)) });
     if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
     return { status: 200, body: result };

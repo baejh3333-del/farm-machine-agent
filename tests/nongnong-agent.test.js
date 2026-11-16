@@ -353,3 +353,15 @@ test("시간 초과 뒤 늦은 모델 응답으로 후속 도구 호출을 시�
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(calls, 1);
 });
+
+test("음성으로 들어온 질문이면 되묻기·되읽기 지시를 더하고, 글 입력에는 더하지 않는다", async (t) => {
+  withKey(t, "test");
+  const voice = scripted([{ content: [{ type: "text", text: "고추밭 두둑 작업 말씀이시지요?" }] }]);
+  await runAgentTurn("고추밭 두둑 맹글 기계 빌리고 싶어예", { inputMode: "voice" }, { listings: LISTINGS, call: voice.call, today: TODAY });
+  assert.match(voice.calls[0].system, /음성 인식/);
+  assert.match(voice.calls[0].system, /사투리/);
+  assert.match(voice.calls[0].system, /되읽/);
+  const typed = scripted([{ content: [{ type: "text", text: "네" }] }]);
+  await runAgentTurn("고추 두둑", {}, { listings: LISTINGS, call: typed.call, today: TODAY });
+  assert.doesNotMatch(typed.calls[0].system, /음성 인식/);
+});

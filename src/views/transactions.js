@@ -1,5 +1,7 @@
 import { CROPS, OPERATIONS, MACHINE_TYPES, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID } from "../data/farm-machines.js";
-import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
+import { MACHINE_SPECIFICATIONS, SPEC_BY_ID } from "../data/machine-specifications.js";
+import { available } from "../data/recommendation.js";
+import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictureIcon, toast, showDialog, hideDialog, getListingPhotoSrc, hasListingPhoto } from "../core/utils.js";
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
 

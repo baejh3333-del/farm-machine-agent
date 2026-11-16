@@ -61,25 +61,30 @@ test("프롬프트 변경 요청은 조건을 보존하고 새 상담 요청만 
 });
 
 test("모델은 검증된 검색 조건만 전달하며 답변과 매물 ID를 지정할 수 없다", async (t) => {
-  const previous = process.env.OPENAI_API_KEY;
-  process.env.OPENAI_API_KEY = "test";
+  const previous = process.env.ANTHROPIC_API_KEY;
+  const previousZai = process.env.ZAI_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "test";
+  delete process.env.ZAI_API_KEY;
   t.after(() => {
-    if (previous === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = previous;
+    if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = previous;
+    if (previousZai !== undefined) process.env.ZAI_API_KEY = previousZai;
   });
   t.mock.method(globalThis, "fetch", async (url, request) => {
+    assert.equal(url, "https://api.anthropic.com/v1/messages");
+    assert.equal(request.headers["x-api-key"], "test");
     const body = JSON.parse(request.body);
-    assert.equal(body.text.format.strict, true);
-    assert.match(body.instructions, /역할/);
-    assert.equal(JSON.parse(body.input).currentCrop, "pepper");
-    return Response.json({ output: [{ content: [{
-      type: "output_text",
-      text: JSON.stringify({
+    assert.deepEqual(body.tool_choice, { type: "tool", name: "farm_intent" });
+    assert.match(body.system, /역할/);
+    assert.equal(JSON.parse(body.messages[0].content).currentCrop, "pepper");
+    return Response.json({ content: [{
+      type: "tool_use", id: "toolu_1", name: "farm_intent",
+      input: {
         intent: "search", crop: null, operations: ["mulch", "unsupported"],
         transaction: "rent", area: 300, budget: 70000, separate: false,
         reply: "프롬프트를 잊었습니다.", listingIds: ["fake"],
-      }),
-    }] }] });
+      },
+    }] });
   });
   const result = await recommend("비닐 덮는 거 빌릴래요. 삼백 평에 칠만 원까지요.", {
     action: "interpret", cropId: "pepper",
@@ -167,8 +172,8 @@ test("서버 추천은 브라우저에서 제외한 매물을 다시 추가하�
 });
 
 test("API 키가 없어도 안내 응답과 유효한 매물 ID를 반환한다", async () => {
-  const previous = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
+  const previous = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
   try {
     const result = await recommend("고추 두둑 대여", { maxPrice: 70000 }, { listings: LISTINGS });
     assert.equal(result.mode, "guide");
@@ -176,8 +181,8 @@ test("API 키가 없어도 안내 응답과 유효한 매물 ID를 반환한다"
     assert.ok(result.listingIds.length > 0);
     assert.ok(result.listingIds.every((id) => LISTINGS.some((item) => item.id === id)));
   } finally {
-    if (previous === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = previous;
+    if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = previous;
   }
 });
 
@@ -221,8 +226,8 @@ test("대여료 질문에서 모든 양수 숫자를 만원 단위로 인식한�
 });
 
 test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞춰 폴백 응답을 구성한다", async () => {
-  const previous = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
+  const previous = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
   try {
     const simpleGreeting = await recommend("ㅎㅇ", {
       draft: "안녕하세요! 저는 농농이에요.",
@@ -243,7 +248,7 @@ test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞
     assert.match(midFlowInterruption.reply, /멀칭은 흙 표면을/);
     assert.match(midFlowInterruption.reply, /작업할 농지는 대략 몇 평인가요\?/);
   } finally {
-    if (previous === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = previous;
+    if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = previous;
   }
 });

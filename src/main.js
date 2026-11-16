@@ -1,6 +1,6 @@
 import { createGarage } from "./garage.js";
 import { accountRequest, getSocialProviders, signInWithSocial } from "./account.js";
-import { CROPS, MACHINE_BY_ID } from "./data/farm-machines.js";
+import { CROPS, CROP_OPERATIONS, MACHINE_BY_ID, OPERATION_BY_ID } from "./data/farm-machines.js";
 import { initFontScale } from "./core/a11y.js";
 import {
   $, escapeHtml, today, addDays, areaLabel, syncServerTime, toast, showDialog, hideDialog,
@@ -9,7 +9,7 @@ import {
 import {
   state, runtime, blankFilters, persist, apiFetch, allListings, listingById,
   isLoggedIn, activeFavorites, stopChatPolling, bumpAuthEpoch,
-  resetAccountRuntimeState, saveGuestFavorites,
+  resetAccountRuntimeState, saveGuestFavorites, readGuestFavorites, clearGuestFavorites,
 } from "./core/store.js";
 import {
   initBannerCarousel, initRevealOnScroll, trackHeaderHeight, initScrollMotion,
@@ -50,6 +50,8 @@ const aiPanel = createAiPanel({
   loadCatalog: (...args) => loadCatalog(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
   renderListings: (...args) => catalogViews.renderListings(...args),
+  refreshAuthenticatedData: (...args) => refreshAuthenticatedData(...args),
+  savePendingIntentAndRedirectLogin: (...args) => savePendingIntentAndRedirectLogin(...args),
 });
 
 async function loadCatalog({ quiet = false } = {}) {
@@ -134,7 +136,7 @@ async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
   const nextFav = typeof favorite === "boolean" ? favorite : !currentList.includes(id);
 
   if (!isLoggedIn()) {
-    saveGuestFavorites(nextFav ? [...guestFavorites, id] : runtime.guestFavorites.filter((v) => v !== id));
+    saveGuestFavorites(nextFav ? [...runtime.guestFavorites, id] : runtime.guestFavorites.filter((v) => v !== id));
     syncFavoriteButtons(id, nextFav);
     updateBadges();
     toast(nextFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
@@ -661,23 +663,10 @@ function bindEvents() {
   }, true);
   const aiInput = $("aiInput");
   $("aiForm").addEventListener("submit", aiPanel.sendAiQuestion);
-  $("aiReset").addEventListener("click", () => {
-    if (recommendationPending) return;
-    conversation = undefined;
-    $("aiMessages").replaceChildren();
-    $("aiStarters").hidden = false;
-    aiInput.value = "";
-    aiInput.placeholder = aiDefaultPlaceholder;
-    aiPanel.appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 아는 조건부터 말씀해 주세요.", "assistant");
-    $("aiInput").focus();
-  });
+  $("aiReset").addEventListener("click", aiPanel.resetAiPanel);
 
   document.querySelectorAll("[data-prompt]").forEach((button) =>
-    button.addEventListener("click", () => {
-      if (recommendationPending) return;
-      aiInput.value = button.dataset.prompt;
-      $("aiForm").requestSubmit();
-    })
+    button.addEventListener("click", () => aiPanel.submitPrompt(button.dataset.prompt))
   );
 
   document.querySelector('[data-action="favorites"]').addEventListener("click", catalogViews.openFavoritesModal);

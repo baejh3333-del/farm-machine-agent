@@ -62,7 +62,7 @@ async function withMigrationLock(pool, fn) {
   });
 }
 
-export async function inspectDatabase({ pool = getPool() } = {}) {
+export async function inspectDatabase({ pool = getPool(), migrationsDir = DEFAULT_MIGRATIONS_DIR } = {}) {
   const target = describeDatabaseTarget(pool);
   const tablesRes = await pool.query(
     `SELECT table_name FROM information_schema.tables
@@ -86,7 +86,7 @@ export async function inspectDatabase({ pool = getPool() } = {}) {
   }
 
   const counts = {};
-  for (const name of ["user", "session", "listings", "favorites", "owned_machines", "rental_requests", "conversations", "messages"]) {
+  for (const name of ["user", "session", "listings", "favorites", "owned_machines", "rental_requests", "conversations", "messages", "agent_sessions", "agent_messages", "agent_actions", "purchase_orders", "agent_tool_calls", "farm_profiles"]) {
     if (tables.includes(name)) {
       const res = await pool.query(`SELECT count(*)::int AS count FROM "${name}"`);
       counts[name] = res.rows[0].count;
@@ -104,12 +104,30 @@ export async function inspectDatabase({ pool = getPool() } = {}) {
 
   const extRes = await pool.query(`SELECT extname FROM pg_extension WHERE extname = 'btree_gist'`);
 
+  const files = readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort();
+  const applied = new Map(appliedMigrations.map((row) => [row.version, row.checksum]));
+  const pendingMigrations = files.filter((file) => !applied.has(file));
+  const checksumMismatches = files.filter((file) => applied.has(file) &&
+    applied.get(file) !== migrationChecksum(readFileSync(`${migrationsDir}/${file}`, "utf8")));
+  const unknownMigrations = appliedMigrations.map((row) => row.version).filter((file) => !files.includes(file));
+  const constraints = await pool.query(
+    `SELECT c.relname AS table_name, con.conname AS constraint_name
+     FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = current_schema() AND NOT con.convalidated
+     ORDER BY c.relname, con.conname`
+  );
+
   return {
     target,
     tables,
     environment: meta.environment ?? null,
     writesFrozen: meta.writes_frozen === "true",
     appliedMigrations,
+    pendingMigrations,
+    checksumMismatches,
+    unknownMigrations,
+    unvalidatedConstraints: constraints.rows,
     counts,
     userIdType,
     btreeGistInstalled: extRes.rows.length > 0,

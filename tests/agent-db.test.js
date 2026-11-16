@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 
 import { setupAgentDb } from "./helpers/agent-db.js";
+import { inspectDatabase } from "../server/migrator.js";
 
 let pool;
 let cleanup;
@@ -13,6 +14,24 @@ before(async () => {
 
 after(async () => {
   await cleanup();
+});
+
+test("DB 점검은 미검증 제약과 마이그레이션 불일치를 읽기만 한다", async () => {
+  const initial = await inspectDatabase({ pool });
+  assert.deepEqual(initial.pendingMigrations, []);
+  assert.deepEqual(initial.checksumMismatches, []);
+  assert.ok(initial.unvalidatedConstraints.some((row) => row.constraint_name === "rental_requests_days_range_check"));
+  await pool.query("BEGIN");
+  try {
+    await pool.query("UPDATE schema_migrations SET checksum = 'bad' WHERE version = '0001_initial_schema.sql'");
+    await pool.query("DELETE FROM schema_migrations WHERE version = '0003_agent_core.sql'");
+    const info = await inspectDatabase({ pool });
+    assert.deepEqual(info.pendingMigrations, ["0003_agent_core.sql"]);
+    assert.deepEqual(info.checksumMismatches, ["0001_initial_schema.sql"]);
+    assert.deepEqual((await inspectDatabase({ pool })).pendingMigrations, info.pendingMigrations);
+  } finally {
+    await pool.query("ROLLBACK");
+  }
 });
 
 test("0003: 테이블·컬럼·제약이 존재한다", async () => {

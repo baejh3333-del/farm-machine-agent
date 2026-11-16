@@ -138,14 +138,13 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await matchingCard.locator("[data-favorite]").click();
     assert.equal(await pageB.locator("#favNavBadge").textContent(), "1");
 
-    // AI recommendation as guest works against live catalog
+    // AI panel calls /api/agent without rule-based fallback; when no LLM key is configured, it reports unavailable
     await pageB.locator("#aiLauncher").click();
     await pageB.locator("#aiPanel").waitFor({ state: "visible" });
     await pageB.locator("#aiInput").fill("고추 두둑 대여 300평 7만원 이하");
     await pageB.locator('#aiForm button[type="submit"]').click();
-    await pageB.locator('#aiMessages .ai-follow-up button:has-text("바로 추천")').waitFor({ state: "visible", timeout: 10000 });
-    await pageB.locator('#aiMessages .ai-follow-up button:has-text("바로 추천")').click();
-    await pageB.locator("#aiMessages .ai-result").first().waitFor({ state: "visible", timeout: 10000 });
+    await pageB.locator('#aiMessages .chat-bubble.assistant:has-text("AI 상담을 호출할 수 없습니다.")').waitFor({ state: "visible", timeout: 10000 });
+    assert.equal(await pageB.locator("#aiModeLabel").textContent(), "AI 상담 · 연결 불가");
     await pageB.locator("#aiClose").click();
 
     // Add guest machine in garage

@@ -226,3 +226,49 @@ test("새로 올린 사진만 모델에 보여준다", async () => {
   await runNongnong({ messages, user, today: TODAY, deps, model: "m", callModel, photo: TINY_JPEG, photoIsNew: false });
   assert.equal(typeof seen[1].input[0].content, "string");
 });
+
+test("통합: 사진과 함께 보낸 '네', '빌릴게요·살게요'도 긍정으로 본다", () => {
+  for (const yes of ["네 [사진 첨부]", "빌릴게요", "살게요", "그거 살게요", "구매할게요", "등록할게요"]) assert.equal(isAffirmative(yes), true, yes);
+  for (const no of ["안 빌릴게요", "다른 거 살게요?", "말고 살게요"]) assert.equal(isAffirmative(no), false, no);
+});
+
+test("통합: 사진 인식·수리 안내·수리센터를 /api/nongnong 대화에서 쓴다", async () => {
+  const { deps } = makeDeps({ fetchOffices: async () => ({ configured: false }) });
+  const tools = createToolRunner({ user, today: TODAY, lastUserMessage: "시동이 안 걸려요", deps });
+  const noted = await tools.run("note_photo", JSON.stringify({ machineType: "tractor", modelId: "", confidence: "medium", observations: ["앞바퀴 마모", "x".repeat(200)] }));
+  assert.equal(noted.saved, true);
+  assert.equal(tools.state.photoSummary.machineType, "tractor");
+  assert.equal(tools.state.photoSummary.observations[1].length, 80);
+  const guide = await tools.run("get_repair_guide", JSON.stringify({ machineType: "tractor", symptom: "noStart" }));
+  assert.ok(guide.guides.length > 0);
+  const centers = await tools.run("find_repair_centers", JSON.stringify({ region: "영양읍" }));
+  assert.ok(centers.centers.length > 0 && tools.state.repairCenters.length === centers.centers.length);
+  assert.ok(tools.state.sources.length > 0);
+});
+
+test("통합: 보험은 사용자가 물었을 때만 안내한다", async () => {
+  const { deps } = makeDeps();
+  const silent = createToolRunner({ user, today: TODAY, lastUserMessage: "트랙터 빌릴래요", deps });
+  assert.ok((await silent.run("get_insurance_info", JSON.stringify({ role: "renter" }))).error);
+  const asked = createToolRunner({ user, today: TODAY, lastUserMessage: "농기계 보험도 있어요", deps });
+  assert.ok((await asked.run("get_insurance_info", JSON.stringify({ role: "renter" }))).products.length > 0);
+});
+
+test("통합: 사진 인식 결과와 수리센터가 응답에 함께 실린다", async () => {
+  const { deps } = makeDeps({ fetchOffices: async () => ({ configured: false }) });
+  const script = [
+    { output: [
+      { type: "function_call", call_id: "c1", name: "note_photo", arguments: JSON.stringify({ machineType: "cultivator", modelId: "", confidence: "high", observations: ["녹"] }) },
+      { type: "function_call", call_id: "c2", name: "find_repair_centers", arguments: JSON.stringify({ region: "영양읍" }) },
+    ] },
+    { output: [{ type: "message", content: [{ type: "output_text", text: "사진으로 보면 관리기 같아요 (추정). 가까운 수리센터예요." }] }] },
+  ];
+  const result = await runNongnong({
+    messages: [{ role: "user", content: "고장 났어요 [사진 첨부]" }],
+    user, today: TODAY, deps, model: "test-model",
+    callModel: async () => script.shift(),
+  });
+  assert.equal(result.photoSummary.machineType, "cultivator");
+  assert.ok(result.repairCenters.length > 0);
+  assert.equal(result.reservation, null);
+});

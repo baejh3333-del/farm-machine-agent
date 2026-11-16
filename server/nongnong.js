@@ -3,7 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { rentalDays } from "../src/data/compatibility.js";
 import { CROPS, CROP_BY_ID, MACHINE_BY_ID, MACHINE_TYPES, OPERATIONS, OPERATION_BY_ID, REGION_COORDS } from "../src/data/farm-machines.js";
+import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { NONGNONG_INSTRUCTIONS } from "./nongnong-prompt.js";
+import { findRepairCenters, getInsuranceInfo, getRepairGuide, lookupMachineSpec } from "./photo-tools.js";
 
 export const MAX_HISTORY = 16;
 export const MAX_MESSAGE_CHARS = 600;
@@ -21,12 +23,14 @@ const AFFIRMATIVE = [
   /(?:그걸로|그거로|이걸로|이거로|그것으로|이것으로)\s*(?:해|할게|예약|올려|진행|부탁)/,
   /(?:예약|신청|진행|등록|올려)\s*(?:해\s*)?(?:줘|주세요|줄래|주실래요|드려요|부탁|해요|할게요|합니다|하자|할래요)/,
   /(?:그거|그걸|이거|이걸)\s*(?:할게요|할게|할래요|살게요|빌릴게요)/,
+  /^(?:(?:그거|그걸|이거|이걸|그걸로|이걸로)\s*)?(?:빌릴게요|빌릴게|살게요|살게|구매할게요|구매할게|구입할게요|등록할게요|올릴게요|빌려\s*주세요|사\s*주세요)$/,
   /^\d+\s*번(?:\s*(?:으로|로))?\s*(?:해\s*(?:줘|주세요)|할게요|예약|좋아요|진행)?/,
 ];
 const NEGATIVE_OR_UNSURE = /(?:아니|안\s*돼|안돼|싫|별로|비싸|다른\s*(?:거|것)|글쎄|생각해\s*볼|모르겠|잠깐|잠시만|말고|취소)/;
 
 export function isAffirmative(text) {
-  const raw = String(text || "").trim();
+  // 화면이 사진과 함께 보낸 말 끝에 붙이는 표시는 판단에서 뺀다.
+  const raw = String(text || "").replace(/\s*\[사진 첨부\]\s*$/, "").trim();
   if (!raw) return false;
   if (/[?？]\s*$/.test(raw)) return false;
   const normalized = raw.replace(/[.!~…,\s]+$/g, "").replace(/^[\s,]+/, "").trim();
@@ -235,6 +239,67 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function",
+    name: "note_photo",
+    description: "사진에서 본 것을 기록한다. 사진이 오면 가장 먼저 부른다.",
+    parameters: {
+      type: "object",
+      properties: {
+        machineType: str("기종 ID. 모르면 빈 문자열", { enum: ["", ...MACHINE_TYPES.map(({ id }) => id)] }),
+        modelId: str("카탈로그 모델 ID. 확실하지 않으면 빈 문자열"),
+        confidence: str("확신도", { enum: ["high", "medium", "low"] }),
+        observations: { type: "array", items: { type: "string" }, description: "보이는 상태(녹, 파손, 누유, 타이어 마모 등) 최대 5개" },
+      },
+      required: ["machineType", "confidence", "observations"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "lookup_machine_spec",
+    description: "카탈로그 모델 ID 또는 기종으로 제원과 확인이 필요한 항목을 조회한다.",
+    parameters: {
+      type: "object",
+      properties: { modelId: str("카탈로그 모델 ID"), machineType: str("기종 ID", { enum: MACHINE_TYPES.map(({ id }) => id) }) },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_repair_guide",
+    description: "기종과 증상으로 초보도 안전하게 해 볼 수 있는 자가점검 단계와 멈춰야 할 조건을 조회한다.",
+    parameters: {
+      type: "object",
+      properties: {
+        machineType: str("기종 ID", { enum: MACHINE_TYPES.map(({ id }) => id) }),
+        symptom: str("증상", { enum: ["noStart", "lowPowerSmoke", "noiseVibration", "leak", "implementNotWorking", "afterStorage"] }),
+      },
+      required: ["machineType"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "find_repair_centers",
+    description: "근처 수리·상담 창구(지역 기관, 제조사 A/S)를 조회한다. 결과는 화면에 전화·사이트 버튼 카드로 보인다.",
+    parameters: {
+      type: "object",
+      properties: { region: str("지역", { enum: REGIONS }), brand: str("제조사") },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_insurance_info",
+    description: "사용자가 보험을 물었을 때만 쓴다. 역할(owner: 빌려주거나 파는 사람, renter: 빌리는 사람)에 맞는 보험 개요와 가입처를 조회한다.",
+    parameters: {
+      type: "object",
+      properties: { role: str("역할", { enum: ["owner", "renter"] }), machineType: str("기종 ID", { enum: MACHINE_TYPES.map(({ id }) => id) }) },
+      required: ["role"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 const WRITE_TOOLS = new Set(["create_rental_request", "create_purchase_request", "create_listing", "update_listing"]);
@@ -283,9 +348,14 @@ function requireDates(args, today) {
   return { start, end, days };
 }
 
-export function createToolRunner({ user, today, lastUserMessage, deps, listingPhoto = null }) {
+export function createToolRunner({ user, today, lastUserMessage, recentUserText = "", deps, listingPhoto = null }) {
   let listingsCache = null;
-  const state = { shownListingIds: [], reservation: null, createdListing: null, updatedListing: null };
+  const state = { shownListingIds: [], reservation: null, createdListing: null, updatedListing: null, photoSummary: null, repairCenters: null, sources: [] };
+  const addSources = (items) => {
+    for (const item of items || []) {
+      if (item?.url && !state.sources.some((source) => source.url === item.url)) state.sources.push({ title: item.title, url: item.url });
+    }
+  };
 
   async function listings() {
     listingsCache ??= await deps.fetchListings();
@@ -453,6 +523,52 @@ export function createToolRunner({ user, today, lastUserMessage, deps, listingPh
       };
     },
 
+    // ── 사진·수리·보험 상담 (PR #27 기능) ──
+    async note_photo(args) {
+      state.photoSummary = {
+        machineType: Object.hasOwn(MACHINE_BY_ID, args.machineType) ? args.machineType : null,
+        modelId: Object.hasOwn(SPEC_BY_ID, args.modelId) ? args.modelId : null,
+        confidence: ["high", "medium", "low"].includes(args.confidence) ? args.confidence : "low",
+        observations: (Array.isArray(args.observations) ? args.observations : [])
+          .filter((item) => typeof item === "string" && item.trim())
+          .map((item) => item.trim().slice(0, 80))
+          .slice(0, 5),
+      };
+      const spec = state.photoSummary.modelId ? lookupMachineSpec({ modelId: state.photoSummary.modelId }) : {};
+      addSources(spec.model?.sources);
+      return { saved: true, summary: state.photoSummary, ...spec };
+    },
+
+    async lookup_machine_spec(args) {
+      const result = lookupMachineSpec({ modelId: args.modelId || undefined, machineType: args.machineType || undefined });
+      addSources(result.model?.sources);
+      return result;
+    },
+
+    async get_repair_guide(args) {
+      const result = getRepairGuide({ machineType: args.machineType, symptom: args.symptom, text: lastUserMessage });
+      addSources(result.guides?.map((guide) => guide.source));
+      return result;
+    },
+
+    async find_repair_centers(args) {
+      const result = await findRepairCenters(
+        { region: REGIONS.includes(args.region) ? args.region : undefined, brand: args.brand || undefined },
+        deps.fetchOffices ? { fetchOffices: deps.fetchOffices } : {},
+      );
+      state.repairCenters = result.centers;
+      return result;
+    },
+
+    async get_insurance_info(args) {
+      if (!/보험/.test(`${lastUserMessage}\n${recentUserText}`)) {
+        return { error: "보험은 사용자가 물었을 때만 안내합니다. 보험 이야기를 먼저 꺼내지 마세요." };
+      }
+      const result = getInsuranceInfo({ role: args.role, machineType: args.machineType });
+      addSources(result.products?.map((product) => product.source));
+      return result;
+    },
+
     async create_listing(args) {
       const id = randomUUID();
       const description = composeListingDescription({ year: args.year, deposit: args.type === "rent" ? args.deposit : 0, description: args.description });
@@ -603,7 +719,15 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
   if (!last || last.role !== "user") throw new Error("마지막 메시지는 사용자 메시지여야 합니다.");
   const resolvedModel = model || process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
   const listingPhoto = validPhoto(photo);
-  const tools = createToolRunner({ user, today, lastUserMessage: last.content, deps, listingPhoto });
+  const recentUserText = history.filter((m) => m.role === "user").slice(-3, -1).map((m) => m.content).join("\n");
+  const tools = createToolRunner({ user, today, lastUserMessage: last.content, recentUserText, deps, listingPhoto });
+  const extras = () => {
+    const out = {};
+    if (tools.state.photoSummary) out.photoSummary = tools.state.photoSummary;
+    if (tools.state.repairCenters?.length) out.repairCenters = tools.state.repairCenters;
+    if (tools.state.sources.length) out.sources = tools.state.sources.slice(0, 6);
+    return out;
+  };
   const input = history.map(({ role, content }) => ({ role, content }));
   if (listingPhoto && photoIsNew) {
     // 이번 메시지와 함께 올린 사진만 모델에 보여준다. 이전 사진 분석 결과는 대화 기록에 남아 있다.
@@ -630,7 +754,7 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     const calls = (response.output || []).filter((item) => item.type === "function_call");
     if (!calls.length) {
       const reply = outputText(response) || "잠시 문제가 생겼어요. 다시 한 번 말씀해 주세요.";
-      return { mode: "agent", reply, listingIds: tools.state.shownListingIds, reservation: tools.state.reservation, createdListing: tools.state.createdListing, updatedListing: tools.state.updatedListing };
+      return { mode: "agent", reply, listingIds: tools.state.shownListingIds, reservation: tools.state.reservation, createdListing: tools.state.createdListing, updatedListing: tools.state.updatedListing, ...extras() };
     }
     input.push(...response.output);
     for (const call of calls) {
@@ -647,5 +771,6 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     reservation: tools.state.reservation,
     createdListing: tools.state.createdListing,
     updatedListing: tools.state.updatedListing,
+    ...extras(),
   };
 }

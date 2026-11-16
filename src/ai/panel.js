@@ -310,6 +310,9 @@ export function createAiPanel({
       bubble.append(go);
       loadCatalog({ quiet: true }).catch(() => {});
     }
+    // 사진·수리 상담 결과(수리센터 카드, 출처)도 같은 대화 안에 보여 준다.
+    if (Array.isArray(result.repairCenters) && result.repairCenters.length) appendRepairCenters(bubble, result.repairCenters);
+    if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
     scrollAiToEnd();
   }
 
@@ -502,7 +505,9 @@ export function createAiPanel({
         pending = undefined;
         if (outcome.mode === "agent") {
           nongnongMode = true;
-          nongnongHistory = [...outgoing, { role: "assistant", content: outcome.reply }].slice(-NONGNONG_HISTORY_LIMIT);
+          // 사진 인식 결과는 다음 차례에도 이어지도록 대화 기록에 함께 남긴다.
+          const seen = photoSummaryText(outcome.photoSummary);
+          nongnongHistory = [...outgoing, { role: "assistant", content: [outcome.reply, seen].filter(Boolean).join("\n") }].slice(-NONGNONG_HISTORY_LIMIT);
           if (sendingPhoto) {
             photoIsNew = false;
             showPhotoPreview();

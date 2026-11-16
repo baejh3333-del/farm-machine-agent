@@ -7,7 +7,8 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-haiku-5-5";
 export const DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
-export const DEFAULT_ZAI_MODEL = "glm-5.1";
+export const DEFAULT_ZAI_MODEL = "glm-5.3";
+export const DEFAULT_ZAI_VISION_MODEL = "glm-5.3-flash";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 
@@ -36,7 +37,9 @@ export function llmEnabled() {
   return llmProvider() !== null;
 }
 
-export function llmModel(provider = llmProvider()) {
+export function llmModel(provider = llmProvider(), { vision = false } = {}) {
+  // Z.ai는 사진이 있는 호출에만 이미지 입력을 지원하는 비전 모델을 쓴다. OpenAI·Claude 기본 모델은 같은 모델로 사진을 처리한다.
+  if (provider === "zai" && vision) return env("ZAI_VISION_MODEL") || DEFAULT_ZAI_VISION_MODEL;
   const [key, fallback] = MODEL_CONFIG[provider] || MODEL_CONFIG.anthropic;
   return env(key) || fallback;
 }
@@ -64,18 +67,43 @@ export function toOpenAiMessages(system, messages) {
       out.push({ role: "assistant", content: text || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) });
       continue;
     }
-    const text = [];
+    const parts = [];
     for (const block of blocks) {
       if (block.type === "tool_result") out.push({ role: "tool", tool_call_id: block.tool_use_id, content: stringify(block.content) });
-      else if (block.type === "text") text.push(block.text);
+      else if (block.type === "text") parts.push({ type: "text", text: block.text });
+      else if (block.type === "image" && block.source?.type === "base64") {
+        parts.push({ type: "image_url", image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` } });
+      }
     }
-    if (text.length) out.push({ role: "user", content: text.join("\n") });
+    if (parts.some((part) => part.type === "image_url")) out.push({ role: "user", content: parts });
+    else if (parts.length) out.push({ role: "user", content: parts.map((part) => part.text).join("\n") });
   }
   return out;
 }
 
+export function hasImage(messages) {
+  return messages.some((message) => Array.isArray(message.content) && message.content.some((block) => block.type === "image"));
+}
+
+// { type: "web_search" }는 공급자 내장 웹 검색을 뜻하는 표시다. 공급자마다 형식으로 바꿔 보낸다.
+const isWebSearch = (tool) => tool?.type === "web_search";
+
 export function toOpenAiTools(tools = []) {
-  return tools.map(({ name, description, input_schema: parameters }) => ({ type: "function", function: { name, description, parameters } }));
+  return tools.map((tool) => (isWebSearch(tool)
+    ? { type: "web_search", web_search: { enable: true, search_engine: "search_pro", search_result: true, count: 5 } }
+    : { type: "function", function: { name: tool.name, description: tool.description, parameters: tool.input_schema } }));
+}
+
+function toAnthropicTools(tools = []) {
+  return tools.map((tool) => (isWebSearch(tool) ? { type: "web_search_20250305", name: "web_search", max_uses: 3 } : tool));
+}
+
+function cleanSources(items) {
+  const seen = new Set();
+  return items
+    .filter((item) => typeof item?.url === "string" && /^https?:\/\//.test(item.url) && !seen.has(item.url) && seen.add(item.url))
+    .slice(0, 5)
+    .map((item) => ({ title: String(item.title || item.url).slice(0, 120), url: item.url }));
 }
 
 function parseJson(text) {
@@ -98,6 +126,7 @@ export function fromOpenAiResponse(data, forcedTool) {
     const input = parseJson(text);
     return input ? { content: [{ type: "tool_use", id: "forced_0", name: forcedTool, input }] } : null;
   }
+  const sources = cleanSources((Array.isArray(data.web_search) ? data.web_search : []).map((item) => ({ title: item?.title, url: item?.link })));
   const content = [];
   if (text.trim()) content.push({ type: "text", text });
   (message.tool_calls || []).forEach((call, index) => {
@@ -109,7 +138,7 @@ export function fromOpenAiResponse(data, forcedTool) {
       input: parseJson(call.function?.arguments) ?? {},
     });
   });
-  return { content };
+  return sources.length ? { content, sources } : { content };
 }
 
 async function callOpenAiCompatible(provider, { system, messages, tools, toolChoice, maxTokens, signal }) {
@@ -121,16 +150,18 @@ async function callOpenAiCompatible(provider, { system, messages, tools, toolCho
   const isZai = provider === "zai";
   const base = (isZai ? (env("ZAI_BASE_URL") || DEFAULT_ZAI_BASE_URL) : (env("OPENAI_BASE_URL") || DEFAULT_OPENAI_BASE_URL)).replace(/\/+$/, "");
   const apiKey = isZai ? env("ZAI_API_KEY") : env("OPENAI_API_KEY");
+  // 내장 웹 검색 표시는 Z.ai 형식으로만 바꿀 수 있어 OpenAI 호출에서는 뺀다.
+  const callTools = (tools || []).filter((tool) => isZai || tool?.type !== "web_search");
   const response = await fetch(`${base}/chat/completions`, {
     method: "POST",
     signal,
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: llmModel(provider),
+      model: llmModel(provider, { vision: hasImage(messages) }),
       ...(isZai ? { max_tokens: maxTokens, thinking: { type: "disabled" } } : { max_completion_tokens: maxTokens }),
       messages: toOpenAiMessages(systemText, messages),
       ...(forced ? { response_format: { type: "json_object" } } : {}),
-      ...(!forced && tools?.length ? { tools: toOpenAiTools(tools), tool_choice: "auto" } : {}),
+      ...(!forced && callTools.length ? { tools: toOpenAiTools(callTools), tool_choice: "auto" } : {}),
     }),
   });
   if (!response.ok) {
@@ -154,7 +185,7 @@ async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, s
       max_tokens: maxTokens,
       system,
       messages,
-      ...(tools?.length ? { tools } : {}),
+      ...(tools?.length ? { tools: toAnthropicTools(tools) } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }),
   });
@@ -163,7 +194,11 @@ async function callAnthropic({ system, messages, tools, toolChoice, maxTokens, s
     throw providerError(response.status, data?.error?.type);
   }
   const data = await response.json();
-  return Array.isArray(data?.content) ? data : null;
+  if (!Array.isArray(data?.content)) return null;
+  const sources = cleanSources(data.content
+    .filter((block) => block.type === "web_search_tool_result" && Array.isArray(block.content))
+    .flatMap((block) => block.content.map((item) => ({ title: item?.title, url: item?.url }))));
+  return sources.length ? { ...data, sources } : data;
 }
 
 /**
@@ -219,6 +254,7 @@ export async function callLLM({ system, messages, tools, toolChoice, maxTokens =
     return null;
   }
 }
+
 
 /**
  * 지정한 JSON 스키마로 구조화된 결과를 받는다.

@@ -16,6 +16,7 @@ import photosHandler from "../api/photos.js";
 import recommendHandler from "../api/recommend.js";
 import requestsHandler from "../api/requests.js";
 import { resetAuthCache } from "../server/account-auth.js";
+import { saveDraftPhoto } from "../server/listing-drafts.js";
 import { recommend } from "../server/agent.js";
 import { getConversationMessages, sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
@@ -39,7 +40,7 @@ import {
   rejectRentalRequest,
 } from "../server/rentals.js";
 import { checkRateLimit, enforceRateLimit } from "../server/rate-limit.js";
-import { listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
+import { getPhotoObject, listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
 import { addOwnedMachine } from "../server/user-data.js";
 
 function shiftDate(isoDate, deltaDays) {
@@ -912,6 +913,40 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
     const chat = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "고추 두둑 빌릴래요" } });
     assert.equal(chat.status, 200);
     assert.equal(chat.body.mode, "unavailable");
+
+    // 사진만 보내도(질문 없음) 400이 아니다
+    const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 10, g: 120, b: 60 } } }).png().toBuffer();
+    const photoOnly = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "", image: `data:image/png;base64,${png.toString("base64")}` } });
+    assert.equal(photoOnly.status, 200, JSON.stringify(photoOnly.body));
+    assert.equal(photoOnly.body.mode, "unavailable");
+
+    // HEIC 등 지원하지 않는 사진은 친절한 400
+    const heic = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "이거 뭐예요", image: "data:image/heic;base64,AAAAGGZ0eXBoZWlj" } });
+    assert.equal(heic.status, 400);
+    assert.equal(heic.body.code, "INVALID_PHOTO");
+    assert.match(heic.body.error, /JPG·PNG·WebP/);
+
+    // 사진도 질문도 없으면 400
+    const empty = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "" } });
+    assert.equal(empty.status, 400);
+
+    // [리뷰] 사진 디코딩보다 호출 제한을 먼저 검사한다(디코딩 비용을 횟수에 넣음)
+    const prevLimit = { ENABLE_RATE_LIMIT: process.env.ENABLE_RATE_LIMIT, RECOMMEND_LIMIT_PER_MINUTE: process.env.RECOMMEND_LIMIT_PER_MINUTE };
+    process.env.ENABLE_RATE_LIMIT = "1";
+    process.env.RECOMMEND_LIMIT_PER_MINUTE = "1";
+    try {
+      const statuses = [];
+      for (let i = 0; i < 4; i += 1) {
+        const res = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "x", image: "data:image/heic;base64,AAAAGGZ0eXBoZWlj" } });
+        statuses.push(res.status);
+      }
+      assert.ok(statuses.includes(429), `호출 제한이 사진 검사보다 먼저여야 함: ${statuses}`);
+    } finally {
+      for (const [k, v] of Object.entries(prevLimit)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   } finally {
     for (const [k, v] of Object.entries(prevKeys)) if (v !== undefined) process.env[k] = v;
   }
@@ -963,4 +998,39 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
   assert.equal(selfRental.status, 200);
   assert.equal(selfRental.body.outcome, "failed");
   assert.equal(selfRental.body.code, "SELF_RENTAL_FORBIDDEN");
+});
+
+test("[PGlite 로컬 엔진] 9. 초안 사진 저장과 draftPhotoKey 등록", async () => {
+  const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg().toBuffer();
+  const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+
+  const draft = await saveDraftPhoto(userB.user, dataUrl);
+  assert.match(draft.listingId, /^[0-9a-f-]{36}$/);
+  assert.ok(draft.photoKey.startsWith(`listings/${draft.listingId}/`));
+  assert.equal(draft.photoUrl, `/api/photos?key=${encodeURIComponent(draft.photoKey)}`);
+  assert.ok(await getPhotoObject(draft.photoKey), "초안 사진이 저장소에 있어야 한다");
+
+  const today = kstToday();
+  const fields = {
+    type: "sale", modelId: "asia-amc900", title: "농농이 초안 관리기", region: "청기면",
+    cropIds: ["pepper"], operations: ["ridge"], price: 1200000, areaMin: 200, areaMax: 1000,
+    condition: "good", inspectedAt: today, description: "농농이가 쓴 소개글",
+  };
+
+  const created = await createListing(userB.user, { id: draft.listingId, ...fields, draftPhotoKey: draft.photoKey }, { pool });
+  assert.equal(created.status, 201);
+  assert.equal(created.listing.photoKey, draft.photoKey);
+  const objects = (await listPhotoObjects()).filter((obj) => obj.key.startsWith(`listings/${draft.listingId}/`));
+  assert.equal(objects.length, 1, "새로 업로드하지 않고 초안 키를 그대로 쓴다");
+
+  await assert.rejects(
+    () => createListing(userB.user, { id: randomUUID(), ...fields, draftPhotoKey: draft.photoKey }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
+  const otherId = randomUUID();
+  await assert.rejects(
+    () => createListing(userB.user, { id: otherId, ...fields, draftPhotoKey: `listings/${otherId}/${randomUUID()}.webp` }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
+  await assert.rejects(() => saveDraftPhoto(null, dataUrl), (err) => err.status === 401);
 });

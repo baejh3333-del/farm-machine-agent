@@ -278,7 +278,6 @@ function chatForm(target) {
         <span class="chat-ai-title">🤖 농농이 대리 응대</span>
         <div class="chat-ai-modes" role="group" aria-label="대리 응대 모드">
           <button type="button" class="chat-ai-mode-btn active" data-ai-mode="off" aria-pressed="true">끄기</button>
-          <button type="button" class="chat-ai-mode-btn" data-ai-mode="copilot" aria-pressed="false">초안 확인</button>
           <button type="button" class="chat-ai-mode-btn" data-ai-mode="autonomous" aria-pressed="false">자동 응대</button>
         </div>
         <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${requestedFullDelegation ? "true" : "false"}">${requestedFullDelegation ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
@@ -814,7 +813,7 @@ function chatForm(target) {
       if (!quiet) {
         const modeLabel = mode === "autonomous"
           ? (policy?.fullDelegation ? "거래 전담(자동 진행)" : "자동 응대")
-          : mode === "copilot" ? "초안 확인" : "끄기";
+          : "끄기";
         toast(`농농이 대리 응대를 '${modeLabel}'(으)로 저장했습니다.`);
       }
     } catch (error) {

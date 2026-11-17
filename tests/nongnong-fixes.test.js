@@ -7,6 +7,8 @@ import { runConfirmedAction } from "../api/agent.js";
 import { isAffirmative } from "../server/nongnong.js";
 import { buildMockListings } from "../server/listing-seed.js";
 import { buildGptLiveInstructions } from "../server/gpt-live.js";
+import { FARM_PROMPT } from "../server/voice.js";
+import { normalizeDialect, pickBestTranscript } from "../src/data/speech-glossary.js";
 import { isUnclearUtterance, joinSpokenText, tidySpokenText } from "../src/ai/spoken-text.js";
 
 const LISTINGS = buildMockListings();
@@ -299,4 +301,53 @@ test("문제6: 화면 기본 지역은 강제 조건이 아니고, 사용자가 
   assert.equal(applyKnownFactsToSearch({ transaction: "rent" }, { ...known, text: "입암면으로 찾아줘" }).region, "입암면");
   const screenOnly = collectKnownFacts({ history: [], text: "고구마 수확기 찾아줘", uiCtx: { region: "영양읍" } });
   assert.equal(applyKnownFactsToSearch({ transaction: "rent" }, { ...screenOnly, text: "고구마 수확기 찾아줘" }).region, undefined);
+});
+
+// ───────── 문제 8 ─────────
+
+test("문제8: 사투리 낱말을 표준어로 풀어 작물·작업·기계 조건을 알아듣는다", () => {
+  assert.equal(normalizeDialect("나락 베는 기계 멫 평이나 되노, 꼬치밭 비니루 씌우는 거 해 주이소"), "벼 베는 기계 몇 평이나 되노, 고추밭 비닐 씌우는 거 해 주세요");
+  assert.equal(normalizeDialect("솔직히 배차 심을라꼬"), "솔직히 배추 심을라꼬");
+  const known = collectKnownFacts({ history: [], text: "꼬치밭 비니루 씌울 트랙타 빌릴라꼬예" });
+  assert.deepEqual(known.facts.cropIds, ["pepper"]);
+  assert.ok(known.facts.operations.includes("mulch"));
+  assert.equal(known.facts.machineType, "tractor");
+  assert.equal(known.facts.transaction, "rent");
+});
+
+test("문제8: 사투리 대답·요청(경상·전라·충청)을 승인으로 알아듣는다", () => {
+  for (const yes of ["하모", "하모요", "그려", "그려유", "그라제", "맞심더", "야", "해 주이소", "구매해 주이소", "예약해 주소", "네 살게예", "빌릴게유"]) {
+    assert.equal(isAffirmative(yes), true, yes);
+  }
+});
+
+test("문제8: 서버 음성 인식 힌트에 농기계·지역·작물·사투리 예시가 들어간다", () => {
+  for (const term of ["굴취기", "휴립피복기", "영양읍", "청기면", "입암면", "고구마", "DRGH-1400", "두루기계통상", "하모", "해 주이소"]) {
+    assert.ok(FARM_PROMPT.includes(term), term);
+  }
+  assert.match(FARM_PROMPT, /사투리를 표준어로 고치지 마세요/);
+});
+
+test("문제8: 실시간 음성 지시문에 사투리 풀이와 인식 힌트 단어를 넣는다", () => {
+  const text = buildGptLiveInstructions({ region: "영양읍" });
+  assert.match(text, /Dialect & vocabulary policy:/);
+  assert.match(text, /나락=벼/);
+  assert.match(text, /하모=네/);
+  assert.match(text, /청기면/);
+  assert.match(text, /굴취기/);
+});
+
+test("문제8: 음성 턴 프롬프트에 사투리 풀이와 [사용자 말 표준어 풀이]를 넣는다", async (t) => {
+  withKey(t);
+  const { call, calls } = scripted([textReply("고추밭 비닐 씌우는 기계를 찾아볼게요.")]);
+  await runAgentTurn("꼬치밭 비니루 씌우는 기계 빌리고 싶어예", { inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY });
+  assert.match(calls[0].system, /사투리 풀이 예: .*정구지=부추/);
+  assert.match(calls[0].system, /\[사용자 말 표준어 풀이\(참고\)\]\n고추밭 비닐 씌우는 기계 빌리고 싶어요/);
+});
+
+test("문제8: 브라우저 인식 후보 중 농기계·작물·지역 단어가 맞는 후보를 고른다", () => {
+  assert.equal(pickBestTranscript(["고구마 수학기 있나", "고구마 수확기 있나"]), "고구마 수확기 있나");
+  assert.equal(pickBestTranscript([{ transcript: "청기 면에 관리 기" }, { transcript: "청기면에 관리기" }]), "청기면에 관리기");
+  assert.equal(pickBestTranscript(["안녕하세요", "안녕 하세요"]), "안녕하세요");
+  assert.equal(pickBestTranscript([]), "");
 });

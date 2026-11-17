@@ -14,6 +14,7 @@ import {
   REGION_COORDS,
 } from "../src/data/farm-machines.js";
 import { selectMatchingListings } from "../src/data/recommendation.js";
+import { DIALECT_TO_STANDARD, normalizeDialect } from "../src/data/speech-glossary.js";
 import { checkModelCompatibility, SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { loadFarmProfile } from "./agent-session-store.js";
 import { sendMessage as sendChatMessage } from "./chat.js";
@@ -1027,7 +1028,8 @@ const FALLBACK_MACHINE_PATTERNS = [
   ["carrier", /운반차/],
 ];
 
-function inferFallbackSearchInput(text, uiCtx) {
+function inferFallbackSearchInput(rawText, uiCtx) {
+  const text = normalizeDialect(rawText);
   if (!text || /(?:팔고|팔래|내놓|등록|빌려주|고장|수리|안\s*걸려|소음|누유|보험|뭐예요|무슨\s*기계)/.test(text)) return null;
   const cropId = CROPS.find(({ name }) => text.includes(name))?.id || uiCtx.cropIds?.[0] || null;
   const matchedOps = FALLBACK_OP_PATTERNS.filter(([, re]) => re.test(text)).map(([id]) => id);
@@ -1040,9 +1042,9 @@ function inferFallbackSearchInput(text, uiCtx) {
     || (/(?:찾아|추천|보여|빌리|사고|구매|구입)/.test(text) && (cropId || operations.length)),
   );
   if (!hasExplicitSearch) return null;
-  const transaction = /(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|구매|구입)/.test(text)
+  const transaction = /(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|살(?:라|래|게|께)|구매|구입)/.test(text)
     ? "sale"
-    : /(?:빌리|빌려|대여|임대)/.test(text)
+    : /(?:빌리|빌려|빌릴|대여|임대)/.test(text)
       ? "rent"
       : (uiCtx.transaction || "rent");
   return {
@@ -1149,7 +1151,8 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
   if (uiCtx.maxPrice) slots.maxPrice = uiCtx.maxPrice;
   if (uiCtx.transaction) slots.transaction = uiCtx.transaction;
 
-  const rawText = String(text || "");
+  // 사투리 낱말(나락·꼬치·배차·트랙타 등)은 표준어로 풀어서 조건을 찾는다.
+  const rawText = normalizeDialect(String(text || ""));
   if (rawText) {
     const matchedRegion = REGIONS.find((r) => rawText.includes(r));
     if (matchedRegion) slots.region = matchedRegion;
@@ -1171,9 +1174,9 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
     const matchedMachine = FALLBACK_MACHINE_PATTERNS.find(([, re]) => re.test(rawText))?.[0];
     if (matchedMachine) slots.machineType = matchedMachine;
 
-    if (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|구매|구입)/.test(rawText)) {
+    if (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|살(?:라|래|게|께)|구매|구입)/.test(rawText)) {
       slots.transaction = "sale";
-    } else if (/(?:빌리|빌려|대여|임대)/.test(rawText)) {
+    } else if (/(?:빌리|빌려|빌릴|대여|임대)/.test(rawText)) {
       slots.transaction = "rent";
     }
   }
@@ -1234,9 +1237,9 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
   return slots;
 }
 
-const TRANSACTION_IN_TEXT = (text) => (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|구매|구입)/.test(text)
+const TRANSACTION_IN_TEXT = (text) => (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|살(?:라|래|게|께)|구매|구입)/.test(text)
   ? "sale"
-  : /(?:빌리|빌려|대여|임대)/.test(text) ? "rent" : null);
+  : /(?:빌리|빌려|빌릴|대여|임대)/.test(text) ? "rent" : null);
 const FRESH_CARDS_REQUEST = /다시|다른|더\s*보|또\s*있|추천|찾아|보여|목록|카드|뭐\s*있|어떤\s*(?:거|게|것)|있어\?|있나|알아봐/;
 
 /** 모델이 빠뜨리거나 잘못 넣은 검색 조건을 대화에서 이미 받은 정보로 채운다(조건에 안 맞는 매물 추천 방지). */
@@ -1399,6 +1402,8 @@ export async function runAgentTurn(message, context = {}, options = {}) {
 const VOICE_GUIDE = `## 음성으로 들어온 질문
 - 이 질문은 음성 인식으로 받아 적은 글이다. 사용자가 확인했지만 잘못 들린 낱말이 남아 있을 수 있다.
 - 경상도·전라도·충청도 등 사투리를 존중한다. 사투리를 고치라고 하거나 흉내 내지 말고, 뜻을 알아듣고 표준어 존댓말로 답한다.
+- 사투리 풀이 예: ${DIALECT_TO_STANDARD.map(([d, s]) => `${d}=${s}`).join(", ")}. 일부 지역에서 '감자'가 고구마를 뜻하기도 하니 작물이 애매하면 한 번만 묻는다.
+- [사용자 말 표준어 풀이]가 있으면 그 뜻으로 이해한다.
 - 날짜, 기간, 가격, 면적, 작업, 지역, 농기계 이름이 모호하거나 문장이 어색하면 추측하지 말고 한 번에 한두 가지만 쉬운 말로 되묻는다. 고를 수 있으면 offer_choices로 선택지를 준다.
 - 숫자·날짜·금액·농기계 이름이 애매하게 들렸을 때만 "~로 들었어요. 맞으세요?"처럼 한 번 되읽어 확인한다. 분명한 말은 되묻지 않는다.
 - 대여 예약·구매 신청·매물 등록·수정은 말로 "구매해줘", "응 해줘", "네"라고 하면 글로 쓴 것과 똑같이 바로 도구를 호출해 처리한다. 화면 버튼을 누르라고 하지 않는다. 확인이 필요하면 한 번만 짧게 묻는다.
@@ -1441,8 +1446,10 @@ async function runTurn(
   if ((uiCtx.viewingListingId || uiCtx.shownListingIds?.length) && !catalog) await loadCatalog();
 
   const knownFacts = summarizeKnownFacts({ history, text, sessionSlots, uiCtx });
+  const standardText = normalizeDialect(text);
+  const dialectHint = standardText !== text ? `\n\n[사용자 말 표준어 풀이(참고)]\n${standardText.slice(0, 300)}` : "";
   const known = collectKnownFacts({ history, text, sessionSlots, uiCtx });
-  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}`;
+  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}${dialectHint}`;
   const selectedTools = selectToolsForTurn({
     text,
     hasImage: Boolean(image?.base64),

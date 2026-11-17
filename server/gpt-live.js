@@ -1,6 +1,7 @@
 // gpt-live-1 공식 WebRTC 세션 생성기(POST /v1/live/sessions).
 // API 키와 시스템 프롬프트는 서버에만 두고, 브라우저는 SDP Offer만 보내 Answer를 받는다.
 import { DEFAULT_OPENAI_LIVE_MODEL, resolveOpenAiLiveVoice, VoiceError } from "./voice.js";
+import { BRAND_TERMS, CROP_TERMS, DIALECT_TO_STANDARD, MACHINE_TERMS, REGION_TERMS } from "../src/data/speech-glossary.js";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -74,6 +75,12 @@ export function buildGptLiveInstructions({ region = "영양읍", uiContext = nul
     `너는 농기계 대여·구매·거래 플랫폼 모아농의 따뜻하고 믿음직한 한국어 음성 도우미 '농농이'다. 기본 안내 기준 지역은 ${safeRegion}이다.`,
     ...(uiSummary ? [`현재 사용자 화면에 선택된 조건: ${uiSummary}`] : []),
     "고령 농업인과 바쁜 현장 사용자를 배려해 경상도·전라도·충청도 사투리를 자연스럽게 알아듣고, 쉽고 또렷한 한국어 존댓말로 한 번에 1~2문장씩 짧게 답한다.",
+    "",
+    "Dialect & vocabulary policy:",
+    "- 경상도·전라도·충청도 사투리와 어르신 말투를 그대로 알아듣는다. 사투리를 고치라고 하거나 흉내 내지 않고, 표준어 존댓말로 답한다.",
+    `- 사투리 풀이: ${DIALECT_TO_STANDARD.map(([d, s]) => `${d}=${s}`).join(", ")}.`,
+    `- 이 단어들로 들릴 가능성이 높다. 비슷하게 들리면 이 단어로 알아듣는다. 농기계: ${MACHINE_TERMS.join(", ")}. 작물: ${CROP_TERMS.join(", ")}. 지역: ${REGION_TERMS.join(", ")}. 브랜드·기종: ${BRAND_TERMS.join(", ")}.`,
+    "- 그래도 지역·작물·기계·금액이 애매하면 추측하지 말고 그 한 가지만 짧게 다시 묻는다.",
     "",
     "Transaction policy:",
     "- 사용자가 구매·대여 예약·판매글 등록을 분명히 요청하면 확인 없이 바로 <|SpawnThinking|>로 실행을 맡긴다. 요청이 애매할 때만 한 번 확인하고, '네'라고 하면 바로 실행한다. 같은 확인을 두 번 하지 않는다.",

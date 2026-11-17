@@ -1,5 +1,6 @@
 ﻿// 농농이 음성 도우미: 녹음 → 16kHz 모노 WAV, 브라우저 음성 인식(대체 수단), 답변 읽어 주기, 음성 설정.
 // 브라우저 기능이 없거나 실패해도 글 상담이 그대로 되도록, 모든 함수는 실패를 오류 코드로 알려 준다.
+import { pickBestTranscript } from "../data/speech-glossary.js";
 
 export const TARGET_SAMPLE_RATE = 16000;
 export const MAX_RECORD_SECONDS = 30;
@@ -277,7 +278,7 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
   recognition.lang = "ko-KR";
   recognition.continuous = true;
   recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
+  recognition.maxAlternatives = 3; // 후보 중 농기계·작물·지역 단어가 맞는 것을 고른다(사투리·고유명사 대비)
   let finalText = "";
   let failure = null;
   let stopping = false;
@@ -287,7 +288,8 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
   recognition.onresult = (event) => {
     let interim = "";
     for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const transcript = event.results[i][0]?.transcript || "";
+      const result = event.results[i];
+      const transcript = pickBestTranscript(Array.from({ length: result.length || 1 }, (_, k) => result[k]).filter(Boolean)) || "";
       if (event.results[i].isFinal) finalText += transcript;
       else interim += transcript;
     }

@@ -171,7 +171,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageB.locator("#aiInput").fill("고추 두둑 대여 300평 7만원 이하");
     await pageB.locator('#aiForm button[type="submit"]').click();
     await pageB.locator('#aiMessages .chat-bubble.assistant:has-text("AI 상담을 호출할 수 없습니다.")').waitFor({ state: "visible", timeout: 10000 });
-    assert.equal(await pageB.locator("#aiModeLabel").textContent(), "AI 상담 · 연결 불가");
+    assert.equal(await pageB.locator("#aiModeLabel").count(), 0);
     await pageB.locator("#aiClose").click();
 
     // Add guest machine in garage

@@ -440,15 +440,32 @@ export function createAiPanel({
     if (form && !form.querySelector("[data-ai-picker-toggle]")) {
       const inlineBtn = document.createElement("button");
       inlineBtn.type = "button";
-      inlineBtn.className = "ai-picker-inline-btn";
       inlineBtn.dataset.aiPickerToggle = "inline";
       inlineBtn.setAttribute("aria-expanded", "false");
       inlineBtn.setAttribute("aria-controls", "aiPickerDrawer");
-      inlineBtn.textContent = "작물·기종";
-      inlineBtn.addEventListener("click", () => setPickerOpen(!pickerOpen));
-      const input = $("aiInput");
-      if (input) form.insertBefore(inlineBtn, input);
-      else form.append(inlineBtn);
+      inlineBtn.addEventListener("click", () => {
+        setPlusMenuOpen(false);
+        setPickerOpen(!pickerOpen);
+      });
+      const plusMenu = $("aiPlusMenu");
+      if (plusMenu) {
+        // + 메뉴 안에 사진·카메라와 같은 모양으로 넣는다.
+        inlineBtn.className = "ai-plus-item";
+        const icon = document.createElement("span");
+        icon.className = "ai-plus-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = "🌱";
+        const label = document.createElement("span");
+        label.textContent = "작물·기종";
+        inlineBtn.append(icon, label);
+        plusMenu.append(inlineBtn);
+      } else {
+        inlineBtn.className = "ai-picker-inline-btn";
+        inlineBtn.textContent = "작물·기종";
+        const input = $("aiInput");
+        if (input) form.insertBefore(inlineBtn, input);
+        else form.append(inlineBtn);
+      }
     }
 
     return drawer;
@@ -610,12 +627,46 @@ export function createAiPanel({
     }
   }
 
-  $("aiPhotoButton")?.addEventListener("click", () => $("aiPhotoInput")?.click());
+  // + 버튼: 사진·카메라·작물·기종 기능을 한곳에 모아 필요할 때만 연다.
+  function setPlusMenuOpen(nextOpen) {
+    const menu = $("aiPlusMenu");
+    const button = $("aiPlusButton");
+    if (!menu || !button) return;
+    const open = Boolean(nextOpen);
+    menu.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+    button.classList.toggle("is-open", open);
+  }
+  $("aiPlusButton")?.addEventListener("click", () => {
+    const willOpen = $("aiPlusMenu")?.hidden !== false;
+    if (willOpen) setPickerOpen(false);
+    setPlusMenuOpen(willOpen);
+    if (willOpen) $("aiPlusMenu")?.querySelector("button")?.focus();
+  });
+  document.addEventListener("click", (event) => {
+    const menu = $("aiPlusMenu");
+    if (!menu || menu.hidden) return;
+    if (menu.contains(event.target) || $("aiPlusButton")?.contains(event.target)) return;
+    setPlusMenuOpen(false);
+  });
+  // Esc는 + 메뉴만 닫고, 채팅창 전체가 닫히지 않게 먼저 가로챈다.
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.isComposing || $("aiPlusMenu")?.hidden !== false) return;
+    event.stopPropagation();
+    setPlusMenuOpen(false);
+    $("aiPlusButton")?.focus();
+  }, true);
+
+  $("aiPhotoButton")?.addEventListener("click", () => {
+    setPlusMenuOpen(false);
+    $("aiPhotoInput")?.click();
+  });
   $("aiPhotoInput")?.addEventListener("change", () => handlePhotoFileInput($("aiPhotoInput")));
   $("aiCameraButton")?.addEventListener("click", () => {
+    setPlusMenuOpen(false);
     openCameraCapture({
       fallbackInput: $("aiCameraInput"),
-      triggerButton: $("aiCameraButton"),
+      triggerButton: $("aiPlusButton") || $("aiCameraButton"),
       onCapture: applySelectedPhotoDataUrl,
     });
   });

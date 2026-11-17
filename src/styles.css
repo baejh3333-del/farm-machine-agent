@@ -4232,3 +4232,59 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding-top: 4px;
   border-top: 1px dashed #d7e8dc;
 }
+
+/* 농농 입력창 + 버튼: 사진·카메라·작물·기종을 메뉴로 모은다 */
+.ai-form { position: relative; align-items: center; }
+.ai-plus-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.ai-plus-btn:hover { background: var(--primary-light); }
+.ai-plus-btn.is-open { transform: rotate(45deg); background: var(--primary-light); border-color: var(--primary); }
+.ai-plus-btn:focus-visible, .ai-plus-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ai-plus-menu {
+  position: absolute;
+  left: 12px;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(3, 76px);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+.ai-plus-menu[hidden] { display: none; }
+.ai-plus-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ai-plus-item:hover { background: var(--primary-light); border-color: var(--primary); }
+.ai-plus-icon { font-size: 1.25rem; line-height: 1; }

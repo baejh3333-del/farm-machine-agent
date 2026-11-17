@@ -71,11 +71,21 @@ export async function fetchWeatherForecast({ region = "영양읍", date, endDate
   }
 }
 
+// 실시간 음성 세션에 넘길 대화 맥락: 역할·글이 온전한 최근 턴만 { role, content }로 보낸다.
+export function liveSessionHistory(history, limit = 12) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((entry) => (entry?.role === "user" || entry?.role === "assistant")
+      && typeof entry.content === "string" && entry.content.trim())
+    .slice(-limit)
+    .map(({ role, content }) => ({ role, content: content.trim() }));
+}
+
 // gpt-live-1 WebRTC 세션을 만든다. 브라우저 SDP offer를 서버가 OpenAI에 중계하고 answer SDP를 돌려준다.
 export async function createLiveVoiceSession({ sdp, region, history = [] }) {
   return apiFetch("/api/voice", {
     method: "POST",
     timeoutMs: 20000,
-    json: { action: "live_session", sdp, region, history },
+    json: { action: "live_session", sdp, region, history: liveSessionHistory(history) },
   });
 }

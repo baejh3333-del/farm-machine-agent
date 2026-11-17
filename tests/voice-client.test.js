@@ -212,7 +212,8 @@ test("읽기 준비: 사용자가 누를 때 한 번만 빈 소리로 길을 터
 
 
 // ---- createGptLiveController ----
-const { createGptLiveController } = await import("../src/ai/gpt-live.js");
+const { createGptLiveController, describeLiveStartError } = await import("../src/ai/gpt-live.js");
+const { liveSessionHistory } = await import("../src/ai/recommend-agent.js");
 
 function makeAudio() {
   return { autoplay: false, srcObject: null, paused: false, pause() { this.paused = true; } };
@@ -469,4 +470,165 @@ test("gpt-live 피어 연결이 failed가 되면 정리한다", async () => {
   FakePC.last.handlers.connectionstatechange();
   assert.equal(live.state, "idle");
   assert.equal(track.stopped, true);
+});
+
+function httpError(status, code, message = "서버 오류") {
+  return Object.assign(new Error(message), { status, code });
+}
+
+function namedError(name, message = name) {
+  return Object.assign(new Error(message), { name });
+}
+
+test("gpt-live 시작 실패 분류: 서버·WebRTC 문제만 일반 음성 입력으로 넘긴다", () => {
+  for (const error of [
+    httpError(502, "LIVE_SESSION_FAILED"),
+    httpError(503, "LIVE_UNAVAILABLE"),
+    httpError(400, "INVALID_SDP"),
+    httpError(504, "LIVE_TIMEOUT"),
+    new Error("gpt-live 세션 응답에 SDP가 없습니다."),
+    namedError("InvalidAccessError"),
+  ]) {
+    const failure = describeLiveStartError(error);
+    assert.equal(failure.fallback, true, `${error.status || error.name} should fall back`);
+    assert.equal(failure.reason, "unavailable");
+    assert.match(failure.message, /실시간 음성/);
+  }
+  const timeout = describeLiveStartError(namedError("AbortError", "signal is aborted without reason"));
+  assert.deepEqual([timeout.reason, timeout.fallback], ["timeout", true]);
+  assert.doesNotMatch(timeout.message, /signal/);
+
+  const denied = describeLiveStartError(namedError("NotAllowedError", "Permission denied"));
+  assert.deepEqual([denied.reason, denied.fallback], ["microphone", false]);
+  assert.match(denied.message, /마이크 권한/);
+  assert.equal(describeLiveStartError(namedError("NotFoundError")).reason, "microphone");
+
+  const limited = describeLiveStartError(httpError(429, "RATE_LIMITED", "요청이 너무 많아요."));
+  assert.deepEqual([limited.reason, limited.fallback, limited.message], ["rate_limited", false, "요청이 너무 많아요."]);
+  assert.equal(describeLiveStartError(httpError(401, "UNAUTHORIZED")).fallback, false);
+});
+
+test("gpt-live 세션 생성이 502면 오류를 한 번만 알리고 마이크·연결을 정리한다", async () => {
+  const errors = [];
+  const failure = httpError(502, "LIVE_SESSION_FAILED", "실시간 음성 대화를 시작하지 못했어요.");
+  const { live, track, FakePC, calls } = makeLive({
+    createSession: async () => { throw failure; },
+    onError: (error, info) => errors.push({ error, info }),
+  });
+  await assert.rejects(live.start(), failure);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].error, failure);
+  assert.deepEqual(errors[0].info, { fatal: true, source: "start" });
+  assert.equal(track.stopped, true);
+  assert.equal(FakePC.last.closed, true);
+  assert.equal(live.state, "idle");
+  assert.deepEqual(calls.states, ["connecting", "idle"]);
+  await live.stop();
+  assert.equal(errors.length, 1);
+});
+
+test("gpt-live 마이크 권한 거부는 세션 요청 없이 정리한다", async () => {
+  const errors = [];
+  const { live, FakePC, calls } = makeLive({
+    getUserMedia: async () => { throw namedError("NotAllowedError", "Permission denied"); },
+    onError: (error, info) => errors.push({ error, info }),
+  });
+  await assert.rejects(live.start(), { name: "NotAllowedError" });
+  assert.equal(calls.session.length, 0);
+  assert.equal(FakePC.last.closed, true);
+  assert.deepEqual(errors.map((e) => e.info), [{ fatal: true, source: "start" }]);
+  assert.equal(live.state, "idle");
+});
+
+test("gpt-live 위임 처리 실패는 대화를 끊지 않고 음성으로 사과한다", async () => {
+  const errors = [];
+  const { live, sent, emit } = makeLive({
+    onClientDelegation: async () => { throw httpError(500, "AGENT_FAILED", "농농이 응답 실패"); },
+    onError: (error, info) => errors.push({ error, info }),
+  });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "트랙터" });
+  emit({ type: "session.delegation.created", delegation: { id: "d-fail", target: "client" } });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(errors.map((e) => e.info), [{ fatal: false, source: "delegation" }]);
+  const apology = sent.filter((m) => m.type === "session.commentary.append" && m.delegation_id === "d-fail");
+  assert.equal(apology.length, 1);
+  assert.match(apology[0].content, /죄송합니다/);
+  assert.equal(live.ready, true);
+  assert.equal(live.state, "listening");
+});
+
+test("gpt-live 서버 error 이벤트는 치명적이지 않은 오류로 알리고 세션을 유지한다", async () => {
+  const errors = [];
+  const { live, emit, track } = makeLive({ onError: (error, info) => errors.push({ error, info }) });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "error", error: { message: "invalid event" } });
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].error.message, "invalid event");
+  assert.deepEqual(errors[0].info, { fatal: false, source: "event" });
+  assert.equal(live.ready, true);
+  assert.equal(track.stopped, false);
+});
+
+test("gpt-live 예기치 않은 연결 종료는 치명적 오류로 알린다", async () => {
+  const errors = [];
+  const { live, listeners } = makeLive({ onError: (error, info) => errors.push(info) });
+  await live.start();
+  listeners.close();
+  assert.deepEqual(errors, [{ fatal: true, source: "connection" }]);
+});
+
+test("gpt-live 자동 재생이 막히면 알리고 다음 터치 때 다시 재생하며 stop 때 리스너를 지운다", async () => {
+  const errors = [];
+  const gesture = new EventTarget();
+  let plays = 0;
+  const audio = {
+    autoplay: false,
+    srcObject: null,
+    pause() {},
+    play() {
+      plays += 1;
+      return plays === 1 ? Promise.reject(namedError("NotAllowedError")) : Promise.resolve();
+    },
+  };
+  const { live, FakePC } = makeLive({ audioElement: audio, gestureTarget: gesture, onError: (error, info) => errors.push({ error, info }) });
+  await live.start();
+  FakePC.last.handlers.track({ streams: [{ id: "remote" }] });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(errors.map((e) => e.info), [{ fatal: false, source: "audio" }]);
+  assert.match(errors[0].error.message, /화면을 한 번 눌러/);
+  gesture.dispatchEvent(new Event("pointerdown"));
+  assert.equal(plays, 2);
+  gesture.dispatchEvent(new Event("pointerdown"));
+  assert.equal(plays, 2, "retry listener runs only once");
+
+  // 두 번째 세션: 막힌 채로 stop하면 리스너가 남지 않는다.
+  plays = 0;
+  await live.stop();
+  await live.start();
+  FakePC.last.handlers.track({ streams: [{ id: "remote-2" }] });
+  await new Promise((r) => setTimeout(r, 0));
+  await live.stop();
+  gesture.dispatchEvent(new Event("keydown"));
+  assert.equal(plays, 1);
+});
+
+test("실시간 음성 세션 history는 역할·글이 온전한 최근 턴만 보낸다", () => {
+  const many = Array.from({ length: 15 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `턴 ${i}` }));
+  assert.equal(liveSessionHistory(many).length, 12);
+  assert.equal(liveSessionHistory(many)[0].content, "턴 3");
+  assert.deepEqual(liveSessionHistory([
+    { role: "user", content: "  트랙터 찾아줘  ", extra: "drop" },
+    { role: "assistant", content: "" },
+    { role: "system", content: "무시" },
+    { role: "assistant", content: { text: "객체" } },
+    null,
+    { role: "assistant", content: "찾았어요" },
+  ]), [
+    { role: "user", content: "트랙터 찾아줘" },
+    { role: "assistant", content: "찾았어요" },
+  ]);
+  assert.deepEqual(liveSessionHistory(undefined), []);
 });

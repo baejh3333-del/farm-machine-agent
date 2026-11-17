@@ -3,7 +3,12 @@ import { EventEmitter } from "node:events";
 import { test } from "node:test";
 
 import agentOrVoice from "../api/agent.js";
-import { buildGptLiveInstructions, createGptLiveSession } from "../server/gpt-live.js";
+import {
+  buildGptLiveInstructions,
+  createGptLiveSession,
+  sanitizeUpstreamMessage,
+  seedInputFromHistory,
+} from "../server/gpt-live.js";
 import { MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS, parseWav, transcribe, voiceCapabilities, voiceProvider } from "../server/voice.js";
 import voiceApi from "../server/voice-api.js";
 
@@ -256,6 +261,216 @@ test("createGptLiveSession은 SDP를 검증하고 OpenAI /live/sessions와 WebRT
     session: { id: "live_sess_123" },
     transport: { type: "webrtc", sdp: "v=0\r\nanswer\r\n" },
   });
+});
+
+const OFFER_SDP = "v=0\r\no=- 4611 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:abcd\r\n";
+
+test("createGptLiveSession 요청 본문은 공식 POST /v1/live/sessions 스키마와 정확히 일치하고 SDP 끝 CRLF를 지킨다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "live-key" });
+  let body;
+  await createGptLiveSession({
+    sdp: `  ${OFFER_SDP}  `,
+    history: [{ role: "assistant", text: "네, 말씀하세요." }],
+    fetchImpl: async (_url, req) => {
+      body = JSON.parse(req.body);
+      return Response.json({ session: { id: "live_1" }, transport: { type: "webrtc", sdp: "v=0\r\n" } }, { status: 201 });
+    },
+  });
+
+  assert.deepEqual(Object.keys(body).sort(), ["session", "transport"]);
+  assert.deepEqual(Object.keys(body.session).sort(), ["audio", "delegation", "input", "instructions", "model"]);
+  assert.deepEqual(body.session.audio, { output: { voice: "noeul" } });
+  assert.deepEqual(body.session.delegation, { type: "client" });
+  assert.deepEqual(body.transport, { type: "webrtc", sdp: OFFER_SDP }, "앞뒤 공백만 정리하고 마지막 CRLF는 남긴다");
+  for (const item of body.session.input) {
+    assert.equal(item.type, "message");
+    assert.equal(item.content.length, 1, "초기 대화 항목은 텍스트 파트 하나만 허용된다");
+    assert.equal(item.content[0].type, item.role === "assistant" ? "output_text" : "input_text");
+  }
+
+  // 마지막 CRLF가 빠진 오퍼(이전 sdp.trim() 결과와 같은 형태)는 CRLF를 붙여 보낸다.
+  await createGptLiveSession({
+    sdp: OFFER_SDP.trimEnd(),
+    fetchImpl: async (_url, req) => {
+      body = JSON.parse(req.body);
+      return Response.json({ session: { id: "live_2" }, transport: { type: "webrtc", sdp: "v=0\r\n" } }, { status: 201 });
+    },
+  });
+  assert.equal(body.transport.sdp, OFFER_SDP);
+});
+
+test("seedInputFromHistory는 최근 대화부터 글자 예산 안에서 원래 순서대로 채운다", () => {
+  const history = Array.from({ length: 20 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", text: `${i}번 `.padEnd(400, "가") }));
+  const items = seedInputFromHistory(history);
+  const total = items.reduce((sum, item) => sum + item.content[0].text.length, 0);
+  assert.ok(items.length <= 12);
+  assert.ok(total <= 2400, `history chars ${total}`);
+  assert.match(items.at(-1).content[0].text, /^19번/, "가장 최근 대화가 마지막에 온다");
+  assert.equal(items.at(-1).role, "assistant");
+  assert.equal(items.at(-1).content[0].type, "output_text");
+  assert.deepEqual(seedInputFromHistory("nope"), []);
+});
+
+test("sanitizeUpstreamMessage는 키·Bearer·SDP·사용자 발화를 지우고 설정값은 남긴다", () => {
+  const msg = sanitizeUpstreamMessage(
+    "Invalid value 'noeul' for session.audio.output.voice; key sk-proj-abcdefghijkl Bearer my-live-key said '고추밭 관리기 빌려줘' sdp v=0\r\no=- 1 2 IN IP4",
+    ["my-live-key"],
+  );
+  assert.match(msg, /'noeul'/);
+  assert.match(msg, /session\.audio\.output\.voice/);
+  assert.doesNotMatch(msg, /sk-proj|my-live-key|고추밭|o=-|IN IP4/);
+  assert.equal(sanitizeUpstreamMessage("Invalid SDP offer: missing a=fingerprint"), "Invalid SDP offer: missing a=fingerprint");
+  assert.equal(
+    sanitizeUpstreamMessage("Bad offer m=audio 9 UDP/TLS/RTP/SAVPF 111 a=ice-ufrag:abcd a=fingerprint:sha-256 AB:CD"),
+    "Bad offer [redacted-sdp]",
+  );
+  assert.ok(sanitizeUpstreamMessage("x".repeat(1000)).length <= 300);
+  assert.equal(sanitizeUpstreamMessage(undefined), undefined);
+});
+
+test("업스트림 400은 status/type/code/param/message를 구조화해 남기되 키·SDP·발화는 남기지 않는다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "super-secret-live-key" });
+  const logs = [];
+  t.mock.method(console, "warn", (...args) => logs.push(args));
+  let calls = 0;
+  await assert.rejects(
+    () => createGptLiveSession({
+      sdp: OFFER_SDP,
+      history: [{ role: "user", text: "우리 집 주소는 영양읍 비밀길 1번지" }],
+      fetchImpl: async () => {
+        calls += 1;
+        return Response.json({
+          error: {
+            type: "invalid_request_error",
+            code: "invalid_value",
+            param: "transport.sdp",
+            message: `Invalid SDP offer super-secret-live-key '우리 집 주소는 영양읍 비밀길 1번지' ${OFFER_SDP}`,
+          },
+        }, { status: 400, headers: { "x-request-id": "req_abc123" } });
+      },
+    }),
+    (err) => err.code === "LIVE_SESSION_FAILED" && err.status === 502,
+  );
+  assert.equal(calls, 1, "필수 값(SDP) 오류는 다시 시도하지 않는다");
+  const [event, details] = logs.find(([name]) => name === "gpt_live_session_failed");
+  assert.equal(event, "gpt_live_session_failed");
+  assert.equal(details.status, 400);
+  assert.equal(details.type, "invalid_request_error");
+  assert.equal(details.code, "invalid_value");
+  assert.equal(details.param, "transport.sdp");
+  assert.equal(details.requestId, "req_abc123");
+  assert.equal(details.model, "gpt-live-1");
+  assert.match(details.message, /^Invalid SDP offer/);
+  assert.equal(details.retryWithout, undefined);
+  assert.doesNotMatch(JSON.stringify(logs), /super-secret-live-key|비밀길|ice-ufrag|o=- 4611/);
+});
+
+test("JSON이 아닌 오류 본문도 안전하게 처리한다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "live-key" });
+  const logs = [];
+  t.mock.method(console, "warn", (...args) => logs.push(args));
+  await assert.rejects(
+    () => createGptLiveSession({ sdp: OFFER_SDP, fetchImpl: async () => new Response("<html>bad gateway</html>", { status: 400 }) }),
+    (err) => err.code === "LIVE_SESSION_FAILED",
+  );
+  const details = logs.find(([name]) => name === "gpt_live_session_failed")[1];
+  assert.equal(details.status, 400);
+  assert.equal(details.code, undefined);
+  assert.equal(details.message, undefined);
+});
+
+test("400이 voice를 가리키면 voice 없이(기본 marin) 한 번 다시 시도한다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "live-key" });
+  const logs = [];
+  t.mock.method(console, "warn", (...args) => logs.push(args));
+  const bodies = [];
+  const result = await createGptLiveSession({
+    sdp: OFFER_SDP,
+    fetchImpl: async (_url, req) => {
+      bodies.push(JSON.parse(req.body));
+      if (bodies.length === 1) {
+        return Response.json({
+          error: { type: "invalid_request_error", code: "invalid_value", param: "session.audio.output.voice", message: "Invalid voice 'noeul'." },
+        }, { status: 400 });
+      }
+      return Response.json({ session: { id: "live_fallback" }, transport: { type: "webrtc", sdp: "v=0\r\nanswer\r\n" } }, { status: 201 });
+    },
+  });
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0].session.audio.output.voice, "noeul");
+  assert.equal(bodies[1].session.audio, undefined);
+  assert.deepEqual(bodies[1].session.input, bodies[0].session.input, "다른 설정은 그대로 둔다");
+  assert.equal(bodies[1].transport.sdp, bodies[0].transport.sdp, "같은 SDP 오퍼를 다시 쓴다");
+  assert.equal(result.session.id, "live_fallback");
+  const failed = logs.find(([name]) => name === "gpt_live_session_failed")[1];
+  assert.equal(failed.retryWithout, "voice");
+  assert.ok(logs.some(([name, d]) => name === "gpt_live_session_fallback_succeeded" && d.dropped === "voice"));
+});
+
+test("400이 session.input을 가리키면 이전 대화를 빼고, 그래도 실패하면 input 전체를 뺀다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "live-key" });
+  t.mock.method(console, "warn", () => {});
+  const bodies = [];
+  const result = await createGptLiveSession({
+    sdp: OFFER_SDP,
+    history: [{ role: "user", text: "트랙터" }, { role: "assistant", text: "네" }],
+    fetchImpl: async (_url, req) => {
+      bodies.push(JSON.parse(req.body));
+      if (bodies.length < 3) {
+        return Response.json({
+          error: { type: "invalid_request_error", code: "invalid_value", param: `session.input[${bodies.length === 1 ? 2 : 0}]`, message: "Invalid input." },
+        }, { status: 400 });
+      }
+      return Response.json({ session: { id: "live_ok" }, transport: { type: "webrtc", sdp: "v=0\r\n" } }, { status: 201 });
+    },
+  });
+  assert.equal(bodies.length, 3);
+  assert.equal(bodies[0].session.input.length, 3);
+  assert.equal(bodies[1].session.input.length, 1);
+  assert.equal(bodies[1].session.input[0].role, "developer");
+  assert.equal(bodies[2].session.input, undefined);
+  assert.equal(bodies[2].session.audio.output.voice, "noeul");
+  assert.equal(result.session.id, "live_ok");
+});
+
+test("400이 delegation을 가리키면 delegation 없이(=client 기본값) 다시 시도하고, 같은 오류가 반복되면 멈춘다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "live-key" });
+  t.mock.method(console, "warn", () => {});
+  const bodies = [];
+  await assert.rejects(
+    () => createGptLiveSession({
+      sdp: OFFER_SDP,
+      fetchImpl: async (_url, req) => {
+        bodies.push(JSON.parse(req.body));
+        return Response.json({
+          error: { type: "invalid_request_error", code: "unknown_parameter", param: "session.delegation", message: "Unknown parameter." },
+        }, { status: 400 });
+      },
+    }),
+    (err) => err.code === "LIVE_SESSION_FAILED" && err.status === 502,
+  );
+  assert.equal(bodies.length, 2, "같은 필드는 한 번만 빼고 다시 시도한다");
+  assert.deepEqual(bodies[0].session.delegation, { type: "client" });
+  assert.equal(bodies[1].session.delegation, undefined);
+});
+
+test("401/429/500 같은 400이 아닌 오류는 다시 시도하지 않는다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "live-key" });
+  t.mock.method(console, "warn", () => {});
+  for (const status of [401, 429, 500]) {
+    let calls = 0;
+    await assert.rejects(
+      () => createGptLiveSession({
+        sdp: OFFER_SDP,
+        fetchImpl: async () => {
+          calls += 1;
+          return Response.json({ error: { type: "x", code: "y", param: "session.audio.output.voice", message: "voice" } }, { status });
+        },
+      }),
+      (err) => err.code === "LIVE_SESSION_FAILED",
+    );
+    assert.equal(calls, 1, `status ${status}`);
+  }
 });
 
 test("createGptLiveSession은 키가 없으면 LIVE_UNAVAILABLE(503), 업스트림 오류 시 키를 노출하지 않는다", async (t) => {

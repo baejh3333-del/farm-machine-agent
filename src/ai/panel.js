@@ -2138,13 +2138,45 @@ export function createAiPanel({
       liveAvailable: Boolean(serverCap.liveAvailable && webrtcSupported),
     };
     voiceCapability = cap;
+    syncVoiceButtons(cap);
+    return cap;
+  }
+
+  function syncVoiceButtons(cap) {
     const liveBtn = $("aiLiveVoiceButton");
     const micBtn = $("aiMicButton");
-    if (liveBtn && micBtn) {
-      liveBtn.hidden = !cap.liveAvailable;
-      micBtn.hidden = Boolean(cap.liveAvailable);
-    }
-    return cap;
+    if (!liveBtn || !micBtn) return;
+    const liveHadFocus = document.activeElement === liveBtn;
+    liveBtn.hidden = !cap?.liveAvailable;
+    micBtn.hidden = Boolean(cap?.liveAvailable);
+    if (liveHadFocus && liveBtn.hidden) micBtn.focus?.();
+  }
+
+  // 실시간 음성이 서버·WebRTC 문제로 열리지 않으면 이 화면에서는 일반 음성 입력(마이크 버튼)으로 바꾼다.
+  // 그대로 두면 실패하는 실시간 버튼만 남아 음성 입력을 아예 쓸 수 없게 된다.
+  function downgradeLiveVoice() {
+    voiceCapability = { ...(voiceCapability || {}), liveAvailable: false };
+    syncVoiceButtons(voiceCapability);
+    const cap = voiceCapability;
+    return Boolean(cap.recognize || (cap.serverStt && cap.record));
+  }
+
+  function liveStartFailureMessage(error, describe) {
+    const failure = typeof describe === "function"
+      ? describe(error)
+      : { fallback: true, message: "지금은 실시간 음성 대화를 쓸 수 없어요." };
+    if (!failure.fallback) return failure.message || "실시간 음성 대화를 시작하지 못했어요.";
+    const canFallbackVoice = downgradeLiveVoice();
+    return canFallbackVoice
+      ? `${failure.message} 일반 음성 입력으로 바꿨어요. 마이크 버튼을 눌러 말씀해 주세요.`
+      : `${failure.message} 질문을 글로 적어 주세요.`;
+  }
+
+  function finalizeLiveTranscriptBubbles() {
+    liveUserBubble?.classList.remove("is-live-transcript");
+    liveAssistantBubble?.classList.remove("is-live-transcript");
+    liveUserBubble = null;
+    liveAssistantBubble = null;
   }
 
   function syncLiveMuteButton(muted) {
@@ -2282,8 +2314,7 @@ export function createAiPanel({
     liveVoiceStarting = false;
     const controller = liveController;
     liveController = null;
-    liveUserBubble = null;
-    liveAssistantBubble = null;
+    finalizeLiveTranscriptBubbles();
     syncLiveMuteButton(false);
     syncLiveVoiceBar("idle");
     if (controller) {
@@ -2316,9 +2347,11 @@ export function createAiPanel({
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
       if (typeof liveMod?.createGptLiveController !== "function") {
         liveVoiceStarting = false;
+        downgradeLiveVoice();
         await toggleFallbackVoice();
         return;
       }
+      let connected = false;
       const uiContext = collectUiContext();
       syncLiveMuteButton(false);
       syncLiveVoiceBar("connecting");
@@ -2330,17 +2363,11 @@ export function createAiPanel({
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           const resolvedState = nextState === "listening" && controller.muted ? "muted" : (nextState || "listening");
           syncLiveVoiceBar(resolvedState);
-          if (nextState === "listening") {
-            if (liveUserBubble) {
-              liveUserBubble.classList.remove("is-live-transcript");
-              liveUserBubble = null;
-            }
-            if (liveAssistantBubble) {
-              liveAssistantBubble.classList.remove("is-live-transcript");
-              liveAssistantBubble = null;
-            }
-          }
+          if (nextState === "listening") finalizeLiveTranscriptBubbles();
           if (nextState === "closed" || nextState === "idle") {
+            // 서버가 먼저 세션을 닫아도 다음 대화가 이전 말풍선에 이어 붙지 않게 정리한다.
+            finalizeLiveTranscriptBubbles();
+            syncLiveMuteButton(false);
             if (liveController === controller) liveController = null;
           }
         },
@@ -2353,14 +2380,23 @@ export function createAiPanel({
           appendOrUpdateTranscriptBubble("assistant", payload?.delta || "");
         },
         onClientDelegation: (payload) => handleClientDelegation(payload, gen, liveGen),
-        onError: (error) => {
+        onError: (error, info = {}) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
-          toast(error?.message || "실시간 음성 연결에 문제가 생겼어요.");
+          if (info.fatal === false) {
+            // 대화는 계속된다: 위임 실패는 음성으로도 사과하고, 서버 error 이벤트는 기록만 한다.
+            if (info.source === "event") console.warn("gpt_live_event_error", error?.message);
+            else toast(error?.message || "실시간 음성 대화 중 문제가 생겼어요.");
+            return;
+          }
+          toast(connected
+            ? (error?.message || "실시간 음성 연결이 끊어졌어요.")
+            : liveStartFailureMessage(error, liveMod.describeLiveStartError));
           stopLiveVoice({ silent: true });
         },
       });
       liveController = controller;
       await controller.start();
+      connected = true;
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) {
         await controller.stop().catch(() => {});
       }

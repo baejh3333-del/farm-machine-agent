@@ -43,7 +43,25 @@ export default handle(["GET", "POST"], async (request) => {
 
   if (action === "update_ai_policy") {
     const result = await updateConversationAiPolicy(user, body);
-    return { status: 200, body: result };
+    const conv = result.conversation;
+    const roleMode = result.role === "buyer" ? conv?.buyerAiMode : conv?.ownerAiMode;
+    let aiReplyScheduled = false;
+    if (
+      conv &&
+      roleMode === "autonomous" &&
+      !conv.aiPausedReason &&
+      conv.lastMessage &&
+      conv.lastMessage.senderId !== user.id &&
+      conv.lastMessage.senderKind !== "system"
+    ) {
+      await scheduleDelegatedReply({
+        conversationId: conv.id,
+        triggerSeq: conv.lastMessage.seq,
+        targetRole: result.role,
+      });
+      aiReplyScheduled = true;
+    }
+    return { status: 200, body: { ...result, aiReplyScheduled } };
   }
 
   if (action === "dismiss_ai_draft") {

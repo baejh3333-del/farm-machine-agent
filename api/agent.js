@@ -1,3 +1,9 @@
+import {
+  getOrCreateAgentSession,
+  loadFarmProfile,
+  recordAgentTurn,
+  upsertFarmProfile,
+} from "../server/agent-session-store.js";
 import { sendMessage } from "../server/chat.js";
 import {
   assertWritesAllowed,
@@ -15,6 +21,7 @@ import { fetchListings } from "../server/listings-db.js";
 import { createListing, updateListing } from "../server/listings-service.js";
 import {
   cleanSavedDraft,
+  executeDelegatedTransaction,
   executeListingAction,
   executePurchaseRequest,
   executeRentalRequest,
@@ -31,6 +38,7 @@ const PHOTO_MESSAGE = "JPG·PNG·WebP 사진을 1MB 이하로 올려 주세요."
 const CHAT_WRITE_RATE_KIND = {
   create_rental_request: "rental",
   create_purchase_request: "message",
+  delegate_transaction: "message",
   create_listing: "listing",
   update_listing: "listing",
   toggle_favorite: "message",
@@ -58,6 +66,10 @@ const EXECUTE_ACTIONS = {
   create_listing: {
     rateKind: "listing",
     run: (user, pending, requestId) => executeListingAction(user, pending, { requestId }),
+  },
+  delegate_transaction: {
+    rateKind: "message",
+    run: (user, pending, requestId) => executeDelegatedTransaction(user, pending, { requestId }),
   },
   toggle_favorite: {
     rateKind: "message",
@@ -104,15 +116,26 @@ export default handle(["POST"], async (request) => {
     await enforceRateLimit(request, "recommend");
     const image = hasImage ? await preparePhoto(body.image) : undefined;
     const user = await currentUser(request).catch(() => null);
+    const [farmProfile, session] = user?.id
+      ? await Promise.all([
+          loadFarmProfile(user.id).catch(() => null),
+          getOrCreateAgentSession(user.id, typeof body.sessionId === "string" ? body.sessionId : null).catch(() => null),
+        ])
+      : [null, null];
+    const activeSessionId = session?.id ?? null;
+    let turnMeta = null;
     const deps = {
       fetchListings: () => fetchListings({ viewerId: user?.id ?? null }),
       getWeather: (options) => getWeatherAndMapConfig(options),
       createRentalRequest: (u, payload) => createRentalRequest(u, payload),
       sendPurchaseMessage: (u, payload) => sendMessage(u, payload),
+      delegateTransaction: (u, payload, opts) => executeDelegatedTransaction(u, payload, opts),
       createListing: (u, payload) => createListing(u, payload),
       updateListing: (u, payload) => updateListing(u, payload),
       toggleFavorite: (u, { listingId, favorite }) => toggleFavorite(u.id, listingId, { favorite }),
       fetchOwnListings: () => (user ? fetchListings({ viewerId: user.id, ownerOnly: true }) : []),
+      loadFarmProfile: (userId) => loadFarmProfile(userId),
+      onTurnComplete: (meta) => { turnMeta = meta; },
       beforeWrite: async (toolName) => {
         await assertWritesAllowed();
         await enforceRateLimit(request, CHAT_WRITE_RATE_KIND[toolName] || "rental", { userId: user.id });
@@ -141,6 +164,9 @@ export default handle(["POST"], async (request) => {
       uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
       image,
       user,
+      farmProfile,
+      sessionId: activeSessionId,
+      sessionSlots: session?.slots,
       savedDraft: cleanSavedDraft(body.savedDraft),
     }, {
       timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)),
@@ -149,7 +175,48 @@ export default handle(["POST"], async (request) => {
     const result = turn?.mode === "agent" ? await attachInsuranceAsk(turn, { asked: insuranceAsked, loadListings: deps.fetchListings }) : turn;
     if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
     if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
-    return { status: 200, body: result };
+
+    if (user?.id && result?.mode === "agent") {
+      const slotsPatch = result.learnedSlots || {};
+      const persistPromises = [];
+      if (activeSessionId) {
+        persistPromises.push(
+          recordAgentTurn({
+            sessionId: activeSessionId,
+            userId: user.id,
+            userMessage: message || (hasImage ? "(사진 첨부)" : ""),
+            assistantReply: result.reply,
+            slotsPatch,
+            intent: turnMeta?.intent ?? null,
+            stage: turnMeta?.stage ?? null,
+            toolCalls: turnMeta?.toolCalls || [],
+          }),
+        );
+      }
+      if (slotsPatch.region || slotsPatch.cropIds?.length || slotsPatch.areaPyeong) {
+        persistPromises.push(
+          upsertFarmProfile(user.id, {
+            region: slotsPatch.region,
+            cropIds: slotsPatch.cropIds,
+            areaPyeong: slotsPatch.areaPyeong,
+          }),
+        );
+      }
+      if (persistPromises.length) {
+        const persistTask = Promise.allSettled(persistPromises);
+        const vf = process.env.VERCEL ? await import("@vercel/functions").catch(() => null) : null;
+        if (typeof vf?.waitUntil === "function") {
+          vf.waitUntil(persistTask);
+        } else {
+          await persistTask;
+        }
+      }
+    }
+
+    return {
+      status: 200,
+      body: activeSessionId && result?.mode === "agent" ? { ...result, sessionId: activeSessionId } : result,
+    };
   }
 
   // 사용자가 화면에서 승인한 작업만 실행한다. 로그인 사용자 권한으로 처리한다.

@@ -15,6 +15,7 @@ import {
 } from "../src/data/farm-machines.js";
 import { selectMatchingListings } from "../src/data/recommendation.js";
 import { checkModelCompatibility, SPEC_BY_ID } from "../src/data/machine-specifications.js";
+import { loadFarmProfile } from "./agent-session-store.js";
 import { sendMessage as sendChatMessage } from "./chat.js";
 import { getPool, kstToday } from "./db.js";
 import { HttpError } from "./http.js";
@@ -58,9 +59,10 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
    - 매물 검색, 작물 안내, 기상청 날씨, 시세 조회, 제원·수리 안내는 조건이 충분하면 즉시 도구를 호출한다.
    - 대여 날짜가 정해지거나 작업 날짜를 물으면 check_availability와 get_weather(또는 날짜 추천 시 suggest_work_dates)로 예약 가능 여부와 날씨를 확인한다. **비·눈·강풍 등 나쁜 날씨(badWeatherWarning)가 감지되면 반드시 날씨 경고를 먼저 알리고, goodAlternatives에 담긴 맑은 대안 날짜 선택지를 함께 제안한다.**
    - 추천할 때는 핵심 조건(기계명, 지역, 기간 또는 가격, 총 대여료)을 함께 보여 주고, 사용자가 "네/예약해줘"만 답해도 바로 실행할 수 있게 묻는다.
-5. **찜하기 & 1:1 채팅 문의 (당근마켓 스타일)**:
+5. **찜하기 & 1:1 채팅 문의 & 거래 전담 위임 (당근마켓 스타일)**:
    - 사용자가 매물을 찜하고 싶거나 즐겨찾기 추가/해제를 원하면 toggle_favorite 도구를 호출한다.
    - 찜하기·예약·구매 전에 판매자/소유자에게 먼저 물어보고 싶어 하거나 "채팅으로 물어볼래요", "판매자한테 연락할래요"라고 하면 open_listing_chat 도구를 호출해 1:1 채팅 창을 열어 준다(필요하면 prefillMessage에 짧은 첫 인사/질문을 담아 준다).
+   - 사용자가 특정 매물의 거래(문의·일정 조율·가격/조건 협의·예약 진행)를 농농이에게 전담·자동 위임해 달라고 하면 delegate_transaction 도구를 호출한다.
 6. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
    - 사용자가 "예약해줘", "네", "그걸로 해 주세요", "올려 주세요"처럼 분명히 긍정·실행 의사를 밝혔고 필수 조건(매물 ID, 시작일/반납일 등)이 모두 정해졌으면 create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다.
    - 아직 확정 전이거나 날짜/조건 확인용 카드를 먼저 띄워야 할 때는 propose_rental_request 또는 prepare_listing_draft를 호출한다.
@@ -219,6 +221,24 @@ const TOOLS = [
       properties: {
         listingId: { type: "string" },
         note: { type: "string", description: "판매자에게 남길 짧은 메모(선택)" },
+      },
+      required: ["listingId"],
+    },
+  },
+  {
+    name: "delegate_transaction",
+    description: "사용자가 특정 매물의 거래(문의·일정 조율·가격/조건 협의·예약 진행)를 농농이에게 전담(완전 자동 위임)시킬 때 호출한다. 상대방이 답장하면 농농이가 사용자의 의도·농장 환경·예산·일정에 맞춰 사용자가 없어도 거래를 자동 진행하며, 정보가 부족한 질문에는 답하지 않고 사용자 확인을 기다린다.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listingId: { type: "string", description: "전담 위임할 매물 ID" },
+        start: { type: ["string", "null"], description: "희망 시작일 YYYY-MM-DD" },
+        end: { type: ["string", "null"], description: "희망 반납일 YYYY-MM-DD" },
+        maxBudget: { type: ["integer", "null"], description: "최대 예산(원)" },
+        allowNegotiation: { type: ["boolean", "null"], description: "가격 협의 허용 여부" },
+        pickupPreference: { type: ["string", "null"], description: "인수·배송 희망 조건" },
+        initialMessage: { type: ["string", "null"], description: "상대방에게 보낼 첫 대리 문의 메시지" },
+        autoExecuteTransaction: { type: ["boolean", "null"], description: "조건 부합 시 대여/구매 예약까지 자동 접수 여부 (기본 true)" },
       },
       required: ["listingId"],
     },
@@ -472,6 +492,9 @@ function formatUiContextPrompt(uiCtx, catalog) {
   }
   if (uiCtx.favoriteIds?.length) {
     lines.push(`- 찜한 매물 ID(${uiCtx.favoriteIds.length}개): ${uiCtx.favoriteIds.slice(0, 10).join(", ")}${uiCtx.favoriteIds.length > 10 ? " 외" : ""}`);
+  }
+  if (uiCtx.farmNotes) {
+    lines.push(`- 농가 메모: ${String(uiCtx.farmNotes).slice(0, 200)}`);
   }
   if (uiCtx.viewingListingId && Array.isArray(catalog)) {
     const item = catalog.find((l) => l.id === uiCtx.viewingListingId && l.status !== "removed");
@@ -968,6 +991,171 @@ function inferFallbackSearchInput(text, uiCtx) {
   };
 }
 
+const CORE_TOOL_NAMES = new Set([
+  "search_listings",
+  "get_crop_guidance",
+  "check_availability",
+  "calculate_cost",
+  "get_weather",
+  "suggest_work_dates",
+  "check_farm_compatibility",
+  "propose_rental_request",
+  "create_rental_request",
+  "create_purchase_request",
+  "delegate_transaction",
+  "toggle_favorite",
+  "open_listing_chat",
+  "offer_choices",
+  "lookup_machine_spec",
+]);
+
+const EXTENDED_CONTEXT_PATTERN = /사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|연기|점검|정비|센터|a\/s|repair|broken|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
+
+/**
+ * 턴의 맥락(이미지, 발화, 대화 이력, 슬롯)에 따라 LLM에 전달할 도구 집합을 동적으로 고른다.
+ */
+export function selectToolsForTurn({ text = "", hasImage = false, uiCtx = {}, slots = {}, history = [] } = {}) {
+  if (process.env.AI_FULL_TOOLS === "1" || hasImage) {
+    return TOOLS;
+  }
+  const historyText = Array.isArray(history)
+    ? history
+        .slice(-4)
+        .map((item) => (typeof item?.content === "string" ? item.content : ""))
+        .join(" ")
+    : "";
+  const slotsText = slots && typeof slots === "object" ? JSON.stringify(slots) : "";
+  const hasSlotSignal = Boolean(
+    slots?.savedDraft
+    || slots?.photoSummary
+    || slots?.intent === "sell"
+    || uiCtx?.savedDraft
+  );
+  const combined = `${String(text || "")} ${historyText} ${slotsText}`;
+  if (hasSlotSignal || EXTENDED_CONTEXT_PATTERN.test(combined)) {
+    return TOOLS;
+  }
+  return TOOLS.filter((tool) => CORE_TOOL_NAMES.has(tool.name));
+}
+
+function mergeFarmProfileIntoUiCtx(uiCtx, farmProfile) {
+  if (!farmProfile || typeof farmProfile !== "object") return uiCtx;
+  const merged = { ...uiCtx };
+  if (!merged.region) {
+    const profileRegion = cleanRegion(farmProfile.region);
+    if (profileRegion) merged.region = profileRegion;
+  }
+  if ((!merged.cropIds || !merged.cropIds.length) && Array.isArray(farmProfile.cropIds)) {
+    const validCrops = farmProfile.cropIds
+      .filter((id) => typeof id === "string" && Object.hasOwn(CROP_BY_ID, id))
+      .slice(0, 4);
+    if (validCrops.length) merged.cropIds = validCrops;
+  }
+  if (!merged.areaPyeong && Number(farmProfile.areaPyeong) > 0 && Number(farmProfile.areaPyeong) <= 1_000_000) {
+    merged.areaPyeong = Number(farmProfile.areaPyeong);
+  }
+  if (typeof farmProfile.notes === "string" && farmProfile.notes.trim()) {
+    merged.farmNotes = farmProfile.notes.trim().slice(0, 200);
+  }
+  return merged;
+}
+
+function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
+  const slots = {};
+  if (uiCtx.region) slots.region = uiCtx.region;
+  if (uiCtx.cropIds?.length) slots.cropIds = [...uiCtx.cropIds];
+  if (uiCtx.areaPyeong) slots.areaPyeong = uiCtx.areaPyeong;
+  if (uiCtx.operations?.length) slots.operations = [...uiCtx.operations];
+  if (uiCtx.date) slots.start = uiCtx.date;
+  if (uiCtx.dateEnd) slots.end = uiCtx.dateEnd;
+  if (uiCtx.maxPrice) slots.maxPrice = uiCtx.maxPrice;
+  if (uiCtx.transaction) slots.transaction = uiCtx.transaction;
+
+  const rawText = String(text || "");
+  if (rawText) {
+    const matchedRegion = REGIONS.find((r) => rawText.includes(r));
+    if (matchedRegion) slots.region = matchedRegion;
+
+    const matchedCrops = CROPS.filter(({ name }) => rawText.includes(name)).map(({ id }) => id);
+    if (matchedCrops.length) slots.cropIds = [...new Set(matchedCrops)].slice(0, 4);
+
+    const areaMatch = rawText.match(/(\d+(?:,\d+)*)\s*평/);
+    if (areaMatch) {
+      const areaNum = Number(areaMatch[1].replace(/,/g, ""));
+      if (Number.isFinite(areaNum) && areaNum > 0 && areaNum <= 1_000_000) {
+        slots.areaPyeong = Math.trunc(areaNum);
+      }
+    }
+
+    const matchedOps = FALLBACK_OP_PATTERNS.filter(([, re]) => re.test(rawText)).map(([id]) => id);
+    if (matchedOps.length) slots.operations = [...new Set(matchedOps)].slice(0, 6);
+
+    const matchedMachine = FALLBACK_MACHINE_PATTERNS.find(([, re]) => re.test(rawText))?.[0];
+    if (matchedMachine) slots.machineType = matchedMachine;
+
+    if (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|구매|구입)/.test(rawText)) {
+      slots.transaction = "sale";
+    } else if (/(?:빌리|빌려|대여|임대)/.test(rawText)) {
+      slots.transaction = "rent";
+    }
+  }
+
+  for (const tc of toolCalls) {
+    const input = tc?.args;
+    if (!input || typeof input !== "object") continue;
+    const toolRegion = cleanRegion(input.region);
+    if (toolRegion) slots.region = toolRegion;
+
+    if (typeof input.cropId === "string" && Object.hasOwn(CROP_BY_ID, input.cropId)) {
+      slots.cropIds = [input.cropId];
+    } else if (Array.isArray(input.cropIds)) {
+      const validCrops = input.cropIds.filter((id) => typeof id === "string" && Object.hasOwn(CROP_BY_ID, id)).slice(0, 4);
+      if (validCrops.length) slots.cropIds = [...new Set(validCrops)];
+    }
+
+    const toolArea = Number(input.areaPyeong);
+    if (Number.isFinite(toolArea) && toolArea > 0 && toolArea <= 1_000_000) {
+      slots.areaPyeong = Math.trunc(toolArea);
+    }
+
+    if (Array.isArray(input.operations)) {
+      const validOps = input.operations.filter((id) => typeof id === "string" && Object.hasOwn(OPERATION_BY_ID, id)).slice(0, 6);
+      if (validOps.length) slots.operations = [...new Set(validOps)];
+    }
+
+    if (typeof input.machineType === "string" && Object.hasOwn(MACHINE_BY_ID, input.machineType)) {
+      slots.machineType = input.machineType;
+    }
+
+    if (typeof input.start === "string" && DATE.test(input.start)) {
+      slots.start = input.start;
+      slots.end = typeof input.end === "string" && DATE.test(input.end) && input.end >= input.start
+        ? input.end
+        : input.start;
+    } else if (typeof input.end === "string" && DATE.test(input.end)) {
+      slots.end = input.end;
+    }
+
+    const budget = Number(input.maxPrice ?? input.maxBudget);
+    if (Number.isSafeInteger(budget) && budget > 0) {
+      slots.maxPrice = budget;
+    }
+
+    if (input.transaction === "rent" || input.transaction === "sale") {
+      slots.transaction = input.transaction;
+    } else if (tc.tool === "propose_rental_request" || tc.tool === "create_rental_request") {
+      slots.transaction = "rent";
+    } else if (tc.tool === "create_purchase_request") {
+      slots.transaction = "sale";
+    } else if (input.type === "rent" || input.type === "sale") {
+      slots.transaction = input.type;
+    }
+  }
+
+  if (slots.start && !slots.end) slots.end = slots.start;
+  return slots;
+}
+
 /**
  * 한 번의 사용자 발화를 처리한다. AI 키(OPENAI_API_KEY / ZAI_API_KEY / ANTHROPIC_API_KEY)가 없으면
  * { mode: "unavailable" }를 돌려준다.
@@ -993,12 +1181,20 @@ export async function runAgentTurn(message, context = {}, options = {}) {
 
 async function runTurn(
   message,
-  { history = [], region, uiContext, image, user, savedDraft } = {},
+  { history = [], region, uiContext, image, user, savedDraft, farmProfile, sessionId, sessionSlots } = {},
   { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices, deps = null } = {},
   signal,
 ) {
   const text = String(message || "").trim();
-  const uiCtx = cleanUiContext(uiContext);
+  let resolvedFarmProfile = farmProfile && typeof farmProfile === "object" ? farmProfile : null;
+  if (!resolvedFarmProfile && user?.id) {
+    if (typeof deps?.loadFarmProfile === "function") {
+      resolvedFarmProfile = await deps.loadFarmProfile(user.id).catch(() => null);
+    } else if (pool) {
+      resolvedFarmProfile = await loadFarmProfile(user.id, { pool }).catch(() => null);
+    }
+  }
+  const uiCtx = mergeFarmProfileIntoUiCtx(cleanUiContext(uiContext), resolvedFarmProfile);
   const effectiveRegion = cleanRegion(region) || uiCtx.region;
   const messages = sanitizeHistory(history, text || "사진을 보고 도와주세요.");
   if (image?.base64) {
@@ -1016,10 +1212,18 @@ async function runTurn(
   if (uiCtx.viewingListingId && !catalog) await loadCatalog();
 
   const system = `${SYSTEM_PROMPT}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}`;
-  const tools = process.env.AI_WEB_SEARCH === "1" ? [...TOOLS, { type: "web_search" }] : TOOLS;
+  const selectedTools = selectToolsForTurn({
+    text,
+    hasImage: Boolean(image?.base64),
+    uiCtx,
+    slots: { ...(sessionSlots || {}), ...(savedDraft ? { savedDraft: true } : {}) },
+    history,
+  });
+  const tools = process.env.AI_WEB_SEARCH === "1" ? [...selectedTools, { type: "web_search" }] : selectedTools;
 
   const out = { listingIds: [] };
   const sources = [];
+  const toolCalls = [];
   const addSources = (items) => {
     for (const item of items || []) if (item?.url && !sources.some((source) => source.url === item.url)) sources.push({ title: item.title, url: item.url });
   };
@@ -1027,12 +1231,31 @@ async function runTurn(
   let writeDone = false;
   let searchedThisTurn = false;
   const texts = [];
-  const finish = (reply, extra = {}) => {
-    const result = { mode: "agent", reply, listingIds: out.listingIds, ...extra };
-    for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget"]) {
+  const finish = async (reply, extra = {}) => {
+    const learnedSlots = extractLearnedSlots({ text, uiCtx, toolCalls });
+    out.learnedSlots = learnedSlots;
+    const result = { mode: "agent", reply, listingIds: out.listingIds, learnedSlots, ...extra };
+    for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget", "delegatedTransaction"]) {
       if (out[key]) result[key] = out[key];
     }
     if (sources.length) result.sources = sources.slice(0, 6);
+    if (typeof deps?.onTurnComplete === "function") {
+      const intent = (result.createdListing || result.updatedListing || result.listingDraft)
+        ? "sell"
+        : (learnedSlots.transaction === "sale" || result.reservation?.kind === "purchase" || result.delegatedTransaction?.type === "sale")
+          ? "buy"
+          : (learnedSlots.transaction === "rent" || result.reservation?.kind === "rental" || result.delegatedTransaction?.type === "rent")
+            ? "rent"
+            : null;
+      const stage = (result.reservation || result.createdListing || result.delegatedTransaction)
+        ? "submitted"
+        : (result.pendingAction || result.listingDraft)
+          ? "confirming"
+          : "collecting";
+      await Promise.resolve(
+        deps.onTurnComplete({ result, learnedSlots, toolCalls, intent, stage, text, user, sessionId })
+      ).catch(() => {});
+    }
     return result;
   };
 
@@ -1059,6 +1282,7 @@ async function runTurn(
 
     for (const block of toolUses) {
       if (signal.aborted) return null;
+      const toolStarted = Date.now();
       let output;
 
       if (block.name === "search_listings") {
@@ -1420,6 +1644,65 @@ async function runTurn(
           out.chatTarget = { listingId: item.id, title: item.title, prefill };
           output = { ok: true, listingId: item.id, title: item.title, prefill, note: "판매자·소유자와의 1:1 채팅 창을 열도록 화면에 전달했습니다." };
         }
+      } else if (block.name === "delegate_transaction") {
+        const item = (await loadCatalog()).find((l) => l.id === block.input?.listingId && l.status !== "removed");
+        if (!item) {
+          output = { ok: false, error: "매물을 찾을 수 없습니다.", code: "LISTING_NOT_FOUND" };
+        } else if (user && item.ownerId === user.id) {
+          output = { ok: false, error: "본인이 등록한 매물에는 구매자 전담 거래를 시작할 수 없습니다.", code: "SELF_INQUIRY_FORBIDDEN" };
+        } else if (item.status !== "open") {
+          output = { ok: false, error: "지금은 거래를 진행할 수 없는 매물입니다.", code: "INVALID_LISTING_STATE" };
+        } else {
+          const startRaw = typeof block.input?.start === "string" && DATE.test(block.input.start) ? block.input.start : null;
+          const endRaw = startRaw && typeof block.input?.end === "string" && DATE.test(block.input.end) && block.input.end >= startRaw
+            ? block.input.end
+            : startRaw;
+          const maxBudget = Number.isFinite(Number(block.input?.maxBudget)) && Number(block.input.maxBudget) > 0
+            ? Math.trunc(Number(block.input.maxBudget))
+            : item.price;
+          const delegationPayload = {
+            type: "delegate_transaction",
+            listingId: item.id,
+            title: item.title,
+            region: uiCtx.region || item.region || null,
+            listingType: item.type,
+            price: item.price,
+            start: startRaw,
+            end: endRaw,
+            maxBudget,
+            allowNegotiation: Boolean(block.input?.allowNegotiation),
+            pickupPreference: typeof block.input?.pickupPreference === "string" ? block.input.pickupPreference.trim().slice(0, 100) : "",
+            initialMessage: typeof block.input?.initialMessage === "string" ? block.input.initialMessage.trim().slice(0, 500) : "",
+            autoExecuteTransaction: block.input?.autoExecuteTransaction !== false,
+            areaPyeong: uiCtx.areaPyeong || null,
+            cropIds: Array.isArray(uiCtx.cropIds) ? [...uiCtx.cropIds] : [],
+            operations: Array.isArray(uiCtx.operations) ? [...uiCtx.operations] : [],
+            ownedModelId: uiCtx.selectedOwnedModelId || uiCtx.ownedMachines?.[0]?.modelId || null,
+          };
+          if (user && isAffirmative(text) && deps?.delegateTransaction && !writeDone) {
+            try {
+              await deps.beforeWrite?.("delegate_transaction");
+              const requestId = randomUUID();
+              const executed = await deps.delegateTransaction(user, delegationPayload, { requestId });
+              if (executed?.outcome === "failed") {
+                output = { ok: false, error: executed.message, code: executed.code };
+              } else {
+                writeDone = true;
+                out.delegatedTransaction = executed.delegatedTransaction;
+                output = {
+                  ok: true,
+                  delegatedTransaction: executed.delegatedTransaction,
+                  message: executed.message,
+                };
+              }
+            } catch (error) {
+              output = mapToolError(error, "전담 거래를 시작하지 못했습니다.");
+            }
+          } else {
+            pendingAction = delegationPayload;
+            output = { ok: true, mode: "proposal_created", proposal: pendingAction };
+          }
+        }
       } else if (block.name === "get_insurance_info") {
         output = asksInsurance(text, history)
           ? getInsuranceInfo(block.input || {})
@@ -1428,17 +1711,27 @@ async function runTurn(
       } else {
         output = { error: "지원하지 않는 도구입니다." };
       }
+      toolCalls.push({
+        tool: block.name,
+        args: block.input,
+        result: output,
+        ok: !(output?.error || output?.ok === false),
+        errorCode: typeof output?.code === "string" ? output.code : null,
+        latencyMs: Math.max(0, Date.now() - toolStarted),
+      });
       results.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(output), ...(output.error || output.ok === false ? { is_error: true } : {}) });
     }
 
     if (pendingAction) {
       const defaultAsk = pendingAction.type === "purchase_request"
         ? "아래 내용으로 구매 신청을 보낼까요? 확인 후 승인해 주세요."
-        : "아래 내용으로 대여 요청을 보낼까요? 확인 후 승인해 주세요.";
-      return finish(texts.at(-1) || defaultAsk, { listingIds: [], pendingAction });
+        : pendingAction.type === "delegate_transaction"
+          ? "아래 조건으로 농농이 거래 전담을 시작할까요? 확인 후 승인해 주세요."
+          : "아래 내용으로 대여 요청을 보낼까요? 확인 후 승인해 주세요.";
+      return await finish(texts.at(-1) || defaultAsk, { listingIds: [], pendingAction });
     }
     if (choices) {
-      return finish([texts.at(-1), choices.question].filter(Boolean).join("\n\n"), {
+      return await finish([texts.at(-1), choices.question].filter(Boolean).join("\n\n"), {
         choices: choices.choices,
         planQuestion: {
           question: choices.question,
@@ -1468,6 +1761,7 @@ async function runTurn(
     && !out.updatedListing
     && !out.listingDraft
     && !out.repairCenters
+    && !out.delegatedTransaction
     && !/도와드릴 수 없|관계없는/.test(texts.at(-1))
   ) {
     const inferred = inferFallbackSearchInput(text, uiCtx);
@@ -1480,12 +1774,14 @@ async function runTurn(
     }
   }
 
-  const fallbackReply = out.reservation
-    ? `접수가 완료되었어요. 번호는 ${out.reservation.number}이에요.`
-    : out.createdListing
-      ? `매물 등록을 완료했어요. 등록 번호는 ${out.createdListing.number}이에요.`
-      : "요청을 처리하지 못했어요. 찾으시는 작업을 조금 더 자세히 말씀해 주세요.";
-  return finish(texts.at(-1) || fallbackReply);
+  const fallbackReply = out.delegatedTransaction
+    ? `'${out.delegatedTransaction.title}' 거래를 농농이 전담 모드로 시작했어요.`
+    : out.reservation
+      ? `접수가 완료되었어요. 번호는 ${out.reservation.number}이에요.`
+      : out.createdListing
+        ? `매물 등록을 완료했어요. 등록 번호는 ${out.createdListing.number}이에요.`
+        : "요청을 처리하지 못했어요. 찾으시는 작업을 조금 더 자세히 말씀해 주세요.";
+  return await finish(texts.at(-1) || fallbackReply);
 }
 
 /**
@@ -1612,5 +1908,112 @@ export async function executeListingAction(user, action, { requestId, pool = get
     listing,
     createdListing,
     message: `매물을 바로 등록했어요! 등록 번호는 ${createdListing.number}이에요.`,
+  };
+}
+
+/**
+ * 사용자가 승인한 거래 전담 위임(delegate_transaction)을 실행한다.
+ * 1:1 대화방을 생성/조회하고 구매자 autonomous 정책을 저장한 뒤 첫 대리 문의를 전송하고
+ * 소유자 AI 대리 응대가 켜져 있으면 즉시 후속 응답을 예약한다.
+ */
+export async function executeDelegatedTransaction(
+  user,
+  action,
+  { requestId, pool = getPool(), today = kstToday() } = {},
+) {
+  const listingId = typeof action?.listingId === "string" ? action.listingId.trim() : "";
+  const item = listingId ? await fetchListingById(listingId, { viewerId: user.id, pool }) : null;
+  if (!item) {
+    return { outcome: "failed", code: "LISTING_NOT_FOUND", message: "매물을 찾을 수 없습니다." };
+  }
+  if (item.ownerId === user.id) {
+    return {
+      outcome: "failed",
+      code: "SELF_INQUIRY_FORBIDDEN",
+      message: "본인이 등록한 매물에는 구매자 전담 거래를 시작할 수 없습니다.",
+    };
+  }
+  if (item.status !== "open") {
+    return {
+      outcome: "failed",
+      code: "INVALID_LISTING_STATE",
+      message: "지금은 거래를 진행할 수 없는 매물입니다.",
+    };
+  }
+
+  const targetStart = typeof action?.start === "string" && DATE.test(action.start) ? action.start : null;
+  const targetEnd = targetStart && typeof action?.end === "string" && DATE.test(action.end) && action.end >= targetStart
+    ? action.end
+    : targetStart;
+
+  const policy = {
+    fullDelegation: true,
+    autoExecuteTransaction: action?.autoExecuteTransaction !== false,
+    intent: item.type === "sale" ? "sale" : "rent",
+    targetStart,
+    targetEnd,
+    maxBudget: Number.isFinite(Number(action?.maxBudget)) && Number(action.maxBudget) > 0
+      ? Math.trunc(Number(action.maxBudget))
+      : item.price,
+    allowNegotiation: Boolean(action?.allowNegotiation),
+    areaPyeong: Number(action?.areaPyeong) > 0 ? Number(action.areaPyeong) : null,
+    cropIds: Array.isArray(action?.cropIds) ? action.cropIds.slice(0, 6) : [],
+    operations: Array.isArray(action?.operations) ? action.operations.slice(0, 6) : [],
+    ownedModelId: typeof action?.ownedModelId === "string" ? action.ownedModelId : null,
+    region: action?.region || item.region || null,
+    pickupPreference: typeof action?.pickupPreference === "string" ? action.pickupPreference.trim().slice(0, 100) : "",
+    maxConsecutiveAiTurns: 6,
+  };
+
+  const defaultBody = item.type === "sale"
+    ? `안녕하세요, '${item.title}' 구매를 희망해 농농이가 대신 문의드립니다. 거래 가능 여부와 인수 조건 확인 부탁드립니다.`
+    : targetStart
+      ? `안녕하세요, '${item.title}' ${targetStart}${targetEnd && targetEnd !== targetStart ? ` ~ ${targetEnd}` : ""} 일정 대여를 희망해 농농이가 대신 문의드립니다. 진행 가능할까요?`
+      : `안녕하세요, '${item.title}' 대여 가능 일정과 조건 확인을 위해 농농이가 대신 문의드립니다.`;
+  const rawInitial = typeof action?.initialMessage === "string" ? action.initialMessage.trim() : "";
+  const initialBody = (rawInitial || defaultBody).slice(0, 500);
+
+  const sent = await sendChatMessage(
+    user,
+    { id: requestId || randomUUID(), listingId: item.id, body: initialBody },
+    { pool, senderKind: "ai_proxy", aiConfidence: "high" },
+  );
+  const convId = sent.conversation.id;
+  const msgSeq = sent.message.seq;
+
+  await pool.query(
+    `UPDATE conversations
+     SET buyer_ai_mode = 'autonomous',
+         buyer_ai_policy = $2::jsonb,
+         ai_paused_reason = NULL,
+         updated_at = now()
+     WHERE id = $1`,
+    [convId, JSON.stringify(policy)],
+  );
+
+  if (!sent.idempotent) {
+    const { scheduleDelegatedReply } = await import("./delegated-chat.js");
+    await scheduleDelegatedReply({
+      conversationId: convId,
+      triggerSeq: msgSeq,
+      targetRole: "owner",
+      pool,
+    });
+  }
+
+  return {
+    outcome: "completed",
+    idempotent: Boolean(sent.idempotent),
+    delegatedTransaction: {
+      conversationId: convId,
+      listingId: item.id,
+      title: item.title,
+      region: item.region,
+      type: item.type,
+      mode: "autonomous",
+      fullDelegation: true,
+      policy,
+    },
+    message: `'${item.title}' 거래를 농농이 전담 모드로 시작했어요! 상대방이 답장하면 예산·일정·농장 조건에 맞춰 제가 대신 조율하고, 제가 모르는 내용은 임의로 답하지 않고 바로 알려드릴게요.`,
   };
 }

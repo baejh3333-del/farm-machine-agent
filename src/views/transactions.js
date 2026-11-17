@@ -161,15 +161,28 @@ const AI_POLICY_CHIPS = [
 
 const ESCALATION_REASON_LABEL = {
   price_negotiation: "가격 할인·흥정 요청",
+  budget_exceeded: "예산 상한 초과",
+  price_below_minimum: "최소 수락 금액 미달",
+  schedule_conflict: "일정 중복·예약 불가",
+  invalid_schedule: "일정 확인 필요",
+  listing_unavailable: "매물 상태 변경",
   warranty: "보증·수리 책임 확인",
+  warranty_claim: "보증·수리 책임 확인",
   personal_info: "연락처·상세 주소 요청",
+  privacy_info: "연락처·상세 주소 요청",
   low_confidence: "확신 부족 / 추가 확인 필요",
   out_of_scope: "위임 범위 외 문의",
+  policy_exceeded: "위임 정책 범위 초과",
   condition_check: "실물 상태 확인 필요",
+  unknown_condition: "매물 정보에 없는 문의",
+  full_delegation_disabled: "거래 전담 모드 비활성",
 };
 
 function formatPausedReason(reason) {
   if (!reason) return "";
+  if (reason === "transaction_completed") {
+    return "농농이가 조건에 맞춰 거래(예약/구매신청)를 자동 접수했어요!";
+  }
   if (reason === "max_turns_reached") {
     return "연속 AI 응답 상한에 도달해 대리 응대를 잠시 멈췄어요. 직접 답장하시면 대화가 이어집니다.";
   }
@@ -184,14 +197,30 @@ function formatPausedReason(reason) {
   return `농농이 대리 응대가 일시정지되었어요 (${reason}). 직접 답장하시면 대화가 이어집니다.`;
 }
 
+function isWaitingForUserConv(conv) {
+  if (!conv) return false;
+  const draft = conv.aiDraft || conv.aiDraftJson;
+  return Boolean(
+    (typeof conv.aiPausedReason === "string" && conv.aiPausedReason.startsWith("escalated:")) ||
+    conv.waitingForUser ||
+    draft?.waitingForUser
+  );
+}
+
 function renderConvAiBadges(conv, role) {
   if (!conv) return "";
   const mode = role === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
+  const policy = role === "buyer" ? conv.buyerAiPolicy : conv.ownerAiPolicy;
   const badges = [];
-  if (conv.aiPausedReason) {
+  if (conv.aiPausedReason === "transaction_completed") {
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-done">✅ 자동 접수 완료</span>`);
+  } else if (isWaitingForUserConv(conv)) {
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⏸️ 직접 답변 대기</span>`);
+  } else if (conv.aiPausedReason) {
     badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⚠️ 확인 필요</span>`);
   } else if (mode && mode !== "off") {
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-active">🤖 대리 중</span>`);
+    const label = policy?.fullDelegation ? "🤖 거래 전담 중" : "🤖 대리 중";
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-active">${label}</span>`);
   }
   return badges.join("");
 }
@@ -202,6 +231,22 @@ function chatForm(target) {
   let conversationId = opts.conversationId || null;
   const draftBody = typeof opts.draftBody === "string" ? opts.draftBody : "";
   const item = listingId ? listingById(listingId) : null;
+  const incomingPolicy = opts.policy && typeof opts.policy === "object"
+    ? opts.policy
+    : (opts.aiPolicy && typeof opts.aiPolicy === "object" ? opts.aiPolicy : null);
+  const requestedFullDelegation = Boolean(opts.fullDelegation ?? incomingPolicy?.fullDelegation);
+  const requestedAiMode = opts.aiMode || (requestedFullDelegation ? "autonomous" : "off");
+  const initialPolicyOverride = incomingPolicy || requestedFullDelegation
+    ? {
+        ...(incomingPolicy || {}),
+        ...(requestedFullDelegation
+          ? {
+              fullDelegation: true,
+              autoExecuteTransaction: incomingPolicy?.autoExecuteTransaction !== false,
+            }
+          : {}),
+      }
+    : null;
 
   if (!isLoggedIn()) {
     deps.savePendingIntentAndRedirectLogin({
@@ -209,11 +254,20 @@ function chatForm(target) {
       listingId,
       conversationId,
       draftBody,
-      ...(opts.aiMode ? { aiMode: opts.aiMode } : {}),
-      ...(opts.aiPolicy ? { aiPolicy: opts.aiPolicy } : {}),
+      ...(requestedAiMode !== "off" ? { aiMode: requestedAiMode } : {}),
+      ...(requestedFullDelegation ? { fullDelegation: true } : {}),
+      ...(initialPolicyOverride ? { policy: initialPolicyOverride } : {}),
     });
     return;
   }
+
+  const minToday = today();
+  const filterStart = state.filters?.date >= minToday ? state.filters.date : "";
+  const filterEnd = state.filters?.dateEnd >= filterStart ? state.filters.dateEnd : filterStart;
+  const filterBudget = Number(state.filters?.maxPrice) > 0
+    ? String(Math.trunc(Number(state.filters.maxPrice)))
+    : (item?.price != null && Number.isFinite(Number(item.price)) ? String(Math.trunc(Number(item.price))) : "");
+  const filterArea = Number(state.filters?.areaPyeong) > 0 ? String(Number(state.filters.areaPyeong)) : "";
 
   openForm(`
     <span class="step-pill">1:1 농기계 채팅 문의</span>
@@ -227,14 +281,46 @@ function chatForm(target) {
           <button type="button" class="chat-ai-mode-btn" data-ai-mode="copilot" aria-pressed="false">초안 확인</button>
           <button type="button" class="chat-ai-mode-btn" data-ai-mode="autonomous" aria-pressed="false">자동 응대</button>
         </div>
-        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="false">상세 지침 ▾</button>
+        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${requestedFullDelegation ? "true" : "false"}">${requestedFullDelegation ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
       </div>
-      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel" hidden>
+      <div class="delegated-full-panel">
+        <label class="chat-full-delegation-toggle" for="chatFullDelegationToggle">
+          <input type="checkbox" id="chatFullDelegationToggle">
+          <span>
+            <strong>🤖 거래 전담 (부재중 자동 진행)</strong>
+            <small>내가 없어도 조건에 맞으면 예약·거래까지 자동 진행해요</small>
+          </span>
+          <span id="chatFullDelegationBadge" class="delegated-full-badge">OFF</span>
+        </label>
+        <div id="chatDelegationSummary" class="chat-delegation-summary" hidden></div>
+      </div>
+      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel" ${requestedFullDelegation ? "" : "hidden"}>
+        <div class="delegated-policy-grid">
+          <label>희망 대여 시작일
+            <input id="chatPolicyTargetStart" type="date" min="${minToday}" value="${escapeHtml(filterStart)}">
+          </label>
+          <label>희망 반납일
+            <input id="chatPolicyTargetEnd" type="date" min="${escapeHtml(filterStart || minToday)}" value="${escapeHtml(filterEnd)}">
+          </label>
+          <label><span id="chatPolicyBudgetLabel">최대 예산 상한 (원)</span>
+            <input id="chatPolicyBudgetInput" type="number" min="0" step="1000" placeholder="예: 150000" value="${escapeHtml(filterBudget)}">
+          </label>
+          <label>내 작업 면적 (평)
+            <input id="chatPolicyAreaPyeong" type="number" min="1" step="1" placeholder="예: 500" value="${escapeHtml(filterArea)}">
+          </label>
+          <label class="delegated-policy-wide">인수/배달 조건 메모
+            <input id="chatPolicyPickupPreference" type="text" maxlength="120" placeholder="예: 직접 픽업 가능, 오전 9시 인수 희망">
+          </label>
+          <label class="chat-delegation-check delegated-policy-wide">
+            <input id="chatPolicyAllowNegotiation" type="checkbox">
+            <span>가격 협의 허용 (설정 예산/조건 범위 내에서 유연하게 조율)</span>
+          </label>
+        </div>
         <div class="chat-ai-chips" role="group" aria-label="위임 조건 빠른 설정">
           ${AI_POLICY_CHIPS.map((c) => `<button type="button" class="chat-ai-chip" data-policy-chip="${escapeHtml(c.id)}" aria-pressed="false">${escapeHtml(c.label)}</button>`).join("")}
         </div>
         <div class="chat-ai-instruction-row">
-          <input id="chatAiInstructions" type="text" maxlength="200" placeholder="예: 토요일 오전 9시~12시 직접 인수만 가능, 운반 불가" aria-label="대리 응대 상세 지침">
+          <input id="chatAiInstructions" type="text" maxlength="300" placeholder="추가 요청·주의사항 (예: 비 오는 날 제외, 로터리 작업기 필수)" aria-label="대리 응대 상세 지침">
           <button type="button" id="chatAiSavePolicy" class="button button-primary button-sm">저장</button>
         </div>
       </div>
@@ -259,21 +345,71 @@ function chatForm(target) {
   let draftMessageId = crypto.randomUUID();
   let lastSubmittedBody = null;
   let currentConv = null;
-  let currentAiMode = opts.aiMode || "off";
-  let pendingInitialAi = opts.aiMode && opts.aiMode !== "off" ? { mode: opts.aiMode, policy: opts.aiPolicy || null } : null;
-  const activeChips = new Set(Array.isArray(opts.aiPolicy?.chips) ? opts.aiPolicy.chips : []);
+  let currentAiMode = requestedAiMode;
+  let fullDelegationEnabled = requestedFullDelegation;
+  let pendingInitialAi =
+    (requestedAiMode && requestedAiMode !== "off") || requestedFullDelegation
+      ? {
+          mode: requestedAiMode === "off" ? "autonomous" : requestedAiMode,
+          fullDelegation: requestedFullDelegation,
+          policy: initialPolicyOverride,
+        }
+      : null;
+  const activeChips = new Set(Array.isArray(initialPolicyOverride?.chips) ? initialPolicyOverride.chips : []);
   let instructionsDirty = false;
 
-  if (opts.aiPolicy && typeof opts.aiPolicy === "object") {
-    if (opts.aiPolicy.allowNegotiation === false) activeChips.add("noNegotiation");
-    if (Array.isArray(opts.aiPolicy.autoReplyOn)) {
-      if (opts.aiPolicy.autoReplyOn.includes("schedule")) activeChips.add("pickupTime");
-      if (opts.aiPolicy.autoReplyOn.includes("compatibility") || opts.aiPolicy.autoReplyOn.includes("spec")) activeChips.add("compatibility");
-      if (opts.aiPolicy.autoReplyOn.includes("availability") || opts.aiPolicy.autoReplyOn.includes("weather")) activeChips.add("availability");
+  const applyPolicyValuesToInputs = (policy) => {
+    const p = policy && typeof policy === "object" ? policy : {};
+    if (typeof p.fullDelegation === "boolean") {
+      fullDelegationEnabled = p.fullDelegation;
     }
-    if (typeof opts.aiPolicy.instructions === "string" && $("chatAiInstructions")) {
-      $("chatAiInstructions").value = opts.aiPolicy.instructions;
+    if ($("chatPolicyTargetStart") && document.activeElement !== $("chatPolicyTargetStart")) {
+      if (p.targetStart) $("chatPolicyTargetStart").value = p.targetStart;
+      else if (!$("chatPolicyTargetStart").value && filterStart) $("chatPolicyTargetStart").value = filterStart;
     }
+    if ($("chatPolicyTargetEnd") && document.activeElement !== $("chatPolicyTargetEnd")) {
+      if (p.targetEnd) $("chatPolicyTargetEnd").value = p.targetEnd;
+      else if (!$("chatPolicyTargetEnd").value && filterEnd) $("chatPolicyTargetEnd").value = filterEnd;
+      if ($("chatPolicyTargetStart")?.value) $("chatPolicyTargetEnd").min = $("chatPolicyTargetStart").value;
+    }
+    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
+    const budgetVal = isBuyer ? p.maxBudget : (p.minPrice ?? p.maxBudget);
+    const activeListing = item || (currentConv?.listingId ? listingById(currentConv.listingId) : null);
+    const fallbackBudget = filterBudget || (activeListing?.price != null ? String(Math.trunc(Number(activeListing.price))) : "");
+    if ($("chatPolicyBudgetInput") && document.activeElement !== $("chatPolicyBudgetInput")) {
+      if (budgetVal !== null && budgetVal !== undefined && budgetVal !== "") {
+        $("chatPolicyBudgetInput").value = String(budgetVal);
+      } else if (!$("chatPolicyBudgetInput").value && fallbackBudget) {
+        $("chatPolicyBudgetInput").value = fallbackBudget;
+      }
+    }
+    if ($("chatPolicyAreaPyeong") && document.activeElement !== $("chatPolicyAreaPyeong")) {
+      if (p.areaPyeong !== null && p.areaPyeong !== undefined && p.areaPyeong !== "") {
+        $("chatPolicyAreaPyeong").value = String(p.areaPyeong);
+      } else if (!$("chatPolicyAreaPyeong").value && filterArea) {
+        $("chatPolicyAreaPyeong").value = filterArea;
+      }
+    }
+    if ($("chatPolicyPickupPreference") && document.activeElement !== $("chatPolicyPickupPreference") && typeof p.pickupPreference === "string") {
+      $("chatPolicyPickupPreference").value = p.pickupPreference;
+    }
+    const textRule = p.customRules || p.instructions;
+    if ($("chatAiInstructions") && typeof textRule === "string" && document.activeElement !== $("chatAiInstructions")) {
+      $("chatAiInstructions").value = textRule;
+    }
+    if (p.allowNegotiation === false) activeChips.add("noNegotiation");
+    else if (p.allowNegotiation === true) activeChips.delete("noNegotiation");
+  };
+
+  if (initialPolicyOverride) {
+    if (Array.isArray(initialPolicyOverride.autoReplyOn)) {
+      if (initialPolicyOverride.autoReplyOn.includes("schedule")) activeChips.add("pickupTime");
+      if (initialPolicyOverride.autoReplyOn.includes("compatibility") || initialPolicyOverride.autoReplyOn.includes("spec")) activeChips.add("compatibility");
+      if (initialPolicyOverride.autoReplyOn.includes("availability") || initialPolicyOverride.autoReplyOn.includes("weather")) activeChips.add("availability");
+    }
+    applyPolicyValuesToInputs(initialPolicyOverride);
+  } else {
+    applyPolicyValuesToInputs({});
   }
 
   const sortedMessages = () => [...bySeq.values()].sort((a, b) => a.seq - b.seq);
@@ -285,6 +421,36 @@ function chatForm(target) {
     const list = sortedMessages();
     return list.length ? list[0].seq : null;
   };
+
+  function updateDelegationSummary() {
+    const el = $("chatDelegationSummary");
+    if (!el) return;
+    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
+    if ($("chatPolicyBudgetLabel")) {
+      $("chatPolicyBudgetLabel").textContent = isBuyer ? "예산 상한(원)" : "최소 수락 금액(원)";
+    }
+    const startVal = $("chatPolicyTargetStart")?.value || "";
+    const endVal = $("chatPolicyTargetEnd")?.value || "";
+    const budgetRaw = $("chatPolicyBudgetInput")?.value || "";
+    const areaRaw = $("chatPolicyAreaPyeong")?.value || "";
+    const pickupRaw = $("chatPolicyPickupPreference")?.value.trim() || "";
+    const allowNeg = !activeChips.has("noNegotiation");
+
+    const parts = [];
+    if (startVal) parts.push(`일정 ${startVal}${endVal && endVal !== startVal ? `~${endVal}` : ""}`);
+    if (budgetRaw && Number(budgetRaw) >= 0) parts.push(`${isBuyer ? "예산" : "최소가"} ${money(Number(budgetRaw))}`);
+    if (areaRaw && Number(areaRaw) > 0) parts.push(`${areaRaw}평`);
+    parts.push(allowNeg ? "흥정 가능" : "흥정 불가");
+    if (pickupRaw) parts.push(pickupRaw);
+
+    if (fullDelegationEnabled || parts.length > 1) {
+      el.hidden = false;
+      el.innerHTML = parts.map((p) => `<span class="chat-delegation-pill">${escapeHtml(p)}</span>`).join("");
+    } else {
+      el.hidden = true;
+      el.innerHTML = "";
+    }
+  }
 
   function syncAiControlUi() {
     const bar = $("chatAiControlBar");
@@ -300,7 +466,22 @@ function chatForm(target) {
       chip.classList.toggle("active", active);
       chip.setAttribute("aria-pressed", String(active));
     });
+    if ($("chatFullDelegationToggle")) {
+      $("chatFullDelegationToggle").checked = fullDelegationEnabled;
+      $("chatFullDelegationToggle").disabled = aiBusy;
+    }
+    const isFullActive = fullDelegationEnabled && currentAiMode === "autonomous";
+    const fullBadge = $("chatFullDelegationBadge");
+    if (fullBadge) {
+      fullBadge.textContent = isFullActive ? "ON" : "OFF";
+      fullBadge.classList.toggle("is-active", isFullActive);
+    }
+    bar.querySelector(".delegated-full-panel")?.classList.toggle("is-active", isFullActive);
+    if ($("chatPolicyAllowNegotiation")) {
+      $("chatPolicyAllowNegotiation").checked = !activeChips.has("noNegotiation");
+    }
     if ($("chatAiSavePolicy")) $("chatAiSavePolicy").disabled = aiBusy;
+    updateDelegationSummary();
   }
 
   function hydratePolicyFromConv(conv) {
@@ -321,9 +502,8 @@ function chatForm(target) {
           if (policy.autoReplyOn.includes("availability") || policy.autoReplyOn.includes("weather")) activeChips.add("availability");
         }
       }
-      if ($("chatAiInstructions") && document.activeElement !== $("chatAiInstructions")) {
-        $("chatAiInstructions").value = typeof policy.instructions === "string" ? policy.instructions : "";
-      }
+      fullDelegationEnabled = Boolean(policy.fullDelegation);
+      applyPolicyValuesToInputs(policy);
     }
     syncAiControlUi();
   }
@@ -333,9 +513,39 @@ function chatForm(target) {
     if (activeChips.has("pickupTime")) autoReplyOn.push("schedule");
     if (activeChips.has("compatibility")) autoReplyOn.push("compatibility", "spec");
     if (activeChips.has("availability")) autoReplyOn.push("availability", "weather");
+    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
+    const startVal = $("chatPolicyTargetStart")?.value || null;
+    const endRaw = $("chatPolicyTargetEnd")?.value || null;
+    const endVal = startVal && endRaw && endRaw < startVal ? startVal : (endRaw || startVal);
+    const budgetRaw = $("chatPolicyBudgetInput")?.value;
+    const budgetNum = budgetRaw !== "" && budgetRaw != null && Number.isFinite(Number(budgetRaw)) && Number(budgetRaw) >= 0
+      ? Math.trunc(Number(budgetRaw))
+      : null;
+    const areaRaw = $("chatPolicyAreaPyeong")?.value;
+    const areaNum = areaRaw !== "" && areaRaw != null && Number.isFinite(Number(areaRaw)) && Number(areaRaw) > 0
+      ? Number(areaRaw)
+      : null;
+    const pickupPreference = $("chatPolicyPickupPreference")?.value.trim().slice(0, 120) || "";
+    const customText = $("chatAiInstructions")?.value.trim() || "";
+    const fullDelegation = Boolean($("chatFullDelegationToggle")?.checked ?? fullDelegationEnabled);
+
     return {
-      instructions: $("chatAiInstructions")?.value.trim() || "",
+      fullDelegation,
+      autoExecuteTransaction: fullDelegation,
+      intent: currentConv?.listingType || item?.type || (state.transaction === "sale" ? "sale" : "rent"),
+      targetStart: startVal,
+      targetEnd: endVal,
+      maxBudget: isBuyer ? budgetNum : null,
+      minPrice: isBuyer ? null : budgetNum,
       allowNegotiation: !activeChips.has("noNegotiation"),
+      areaPyeong: areaNum,
+      cropIds: Array.isArray(state.filters?.cropIds) ? state.filters.cropIds : [],
+      operations: Array.isArray(state.filters?.operations) ? state.filters.operations : [],
+      ownedModelId: runtime.selectedOwnedMachineId || null,
+      region: state.region || null,
+      pickupPreference,
+      customRules: customText.slice(0, 300),
+      instructions: customText,
       autoReplyOn,
       chips: [...activeChips],
     };
@@ -344,13 +554,86 @@ function chatForm(target) {
   function renderPausedBanner(conv) {
     const banner = $("chatPausedBanner");
     if (!banner) return;
-    const reason = conv?.aiPausedReason;
-    if (!reason) {
+    const reason = conv?.aiPausedReason || "";
+    const draft = conv?.aiDraft || conv?.aiDraftJson || null;
+    const waitingForUser = isWaitingForUserConv(conv);
+
+    if (!reason && !waitingForUser) {
       banner.hidden = true;
+      banner.className = "chat-paused-banner";
       banner.innerHTML = "";
       return;
     }
+
     banner.hidden = false;
+    if (reason === "transaction_completed") {
+      const ct = draft?.completedTransaction;
+      const lastSys = [...sortedMessages()].reverse().find((m) => m.senderKind === "system");
+      const detailText = ct?.kind === "rental" && ct.start
+        ? `${ct.start} ~ ${ct.end} (${ct.days}일 · ${money(ct.totalPrice)}) 대여 요청이 접수되었어요.`
+        : ct?.kind === "purchase" && Number.isFinite(Number(ct.price))
+          ? `${money(ct.price)} 구매 신청이 접수되었어요.`
+          : (conv?.escalationSummary || lastSys?.body || "조건과 예산에 맞춰 거래 요청이 자동으로 접수되었습니다.");
+      banner.className = "delegated-complete-banner";
+      banner.innerHTML = `
+        <div class="delegated-banner-copy">
+          <strong>✅ 농농이가 사용자의 의도·예산·일정에 맞춰 거래를 자동 접수했어요!</strong>
+          <small>${escapeHtml(detailText)}</small>
+        </div>
+        <div class="delegated-banner-actions">
+          <button type="button" id="chatGoRequestsBtn" class="button button-primary button-sm">대여 요청 내역 확인하기 ›</button>
+        </div>
+      `;
+      $("chatGoRequestsBtn")?.addEventListener("click", () => {
+        stopChatPolling();
+        hideDialog($("formBackdrop"));
+        deps.refreshAuthenticatedData?.();
+        deps.setView?.("requests");
+      });
+      return;
+    }
+
+    if (waitingForUser) {
+      const code = reason.startsWith("escalated:")
+        ? reason.slice("escalated:".length).trim()
+        : (draft?.reasonCode || draft?.rationale || "");
+      const label = code ? (ESCALATION_REASON_LABEL[code] || code) : "";
+      const lastSys = [...sortedMessages()].reverse().find((m) => m.senderKind === "system");
+      const summary = conv?.escalationSummary || draft?.summaryForUser || lastSys?.body || "";
+      const subtitleParts = [
+        label ? `사유: ${label}` : "",
+        summary && summary !== label ? summary : "",
+        "상대방에게는 대답하지 않고 조용히 대기 중이에요. 확인 후 직접 답장해 주세요.",
+      ].filter(Boolean);
+      const isMine = !draft?.targetUserId || draft.targetUserId === runtime.accountUser?.id;
+      const suggestedDraft = isMine ? (draft?.body || draft?.suggestedReplyDraft || "") : "";
+
+      banner.className = "delegated-wait-banner";
+      banner.innerHTML = `
+        <div class="delegated-banner-copy">
+          <strong>⏸️ 적합한 정보가 없어 농농이가 대답하지 않고 기다리고 있어요</strong>
+          <small>${escapeHtml(subtitleParts.join(" · "))}</small>
+        </div>
+        <div class="delegated-banner-actions">
+          <button type="button" id="chatFillSuggestedReply" class="button button-primary button-sm">✍️ 내가 직접 답장하기</button>
+          <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 자동 응대 켜기</button>
+        </div>
+      `;
+      $("chatFillSuggestedReply")?.addEventListener("click", () => {
+        const input = $("chatMessage");
+        if (!input) return;
+        if (suggestedDraft && !input.value.trim()) {
+          input.value = suggestedDraft;
+        }
+        input.focus();
+      });
+      $("chatResumeAiBtn")?.addEventListener("click", () => {
+        saveAiPolicy("autonomous", collectPolicy(), { resume: true });
+      });
+      return;
+    }
+
+    banner.className = "chat-paused-banner";
     banner.innerHTML = `
       <span class="chat-paused-text">⚠️ ${escapeHtml(formatPausedReason(reason))}</span>
       <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 자동 응대 켜기</button>
@@ -363,8 +646,14 @@ function chatForm(target) {
   function renderDraftBar(conv) {
     const bar = $("chatDraftBar");
     if (!bar) return;
-    const draft = conv?.aiDraftJson;
-    if (!draft || !draft.body || draft.targetUserId !== runtime.accountUser?.id) {
+    const draft = conv?.aiDraft || conv?.aiDraftJson;
+    if (
+      !draft ||
+      !draft.body ||
+      draft.targetUserId !== runtime.accountUser?.id ||
+      isWaitingForUserConv(conv) ||
+      conv?.aiPausedReason === "transaction_completed"
+    ) {
       bar.hidden = true;
       bar.innerHTML = "";
       return;
@@ -441,7 +730,11 @@ function chatForm(target) {
     if (!$("chatLog")) return;
     const log = $("chatLog");
     const prevHeight = log.scrollHeight;
-    const list = sortedMessages();
+    const list = sortedMessages().filter((msg) => {
+      if (msg.senderKind !== "system") return true;
+      const sharedReason = !msg.escalationReason || msg.escalationReason === "rental_handoff" || msg.escalationReason === "both_ai_handoff" || msg.escalationReason === "transaction_completed";
+      return sharedReason || msg.senderId === runtime.accountUser?.id;
+    });
     log.innerHTML = list.length
       ? list.map((msg) => {
           if (msg.senderKind === "system") {
@@ -468,6 +761,7 @@ function chatForm(target) {
 
   function applyConvMetadata(conv) {
     if (!conv) return;
+    const prevPausedReason = currentConv?.aiPausedReason;
     currentConv = conv;
     conversationId = conv.id;
     const isBuyer = conv.buyerId === runtime.accountUser?.id;
@@ -477,6 +771,10 @@ function chatForm(target) {
     hydratePolicyFromConv(conv);
     renderPausedBanner(conv);
     renderDraftBar(conv);
+    if (conv.aiPausedReason === "transaction_completed" && prevPausedReason && prevPausedReason !== "transaction_completed") {
+      deps.loadCatalog?.({ quiet: true });
+      deps.refreshAuthenticatedData?.();
+    }
   }
 
   async function saveAiPolicy(mode, policy, { quiet = false, resume = false } = {}) {
@@ -506,7 +804,9 @@ function chatForm(target) {
       }
       deps.refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
       if (!quiet) {
-        const modeLabel = mode === "autonomous" ? "자동 응대" : mode === "copilot" ? "초안 확인" : "끄기";
+        const modeLabel = mode === "autonomous"
+          ? (policy?.fullDelegation ? "거래 전담(자동 진행)" : "자동 응대")
+          : mode === "copilot" ? "초안 확인" : "끄기";
         toast(`농농이 대리 응대를 '${modeLabel}'(으)로 저장했습니다.`);
       }
     } catch (error) {
@@ -571,8 +871,8 @@ function chatForm(target) {
         : `listingId=${encodeURIComponent(listingId)}&limit=50`;
       const data = await apiFetch(`/api/conversations?${qs}`);
       if (epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
-      if (data.conversation) applyConvMetadata(data.conversation);
       for (const m of data.messages || []) bySeq.set(m.seq, m);
+      if (data.conversation) applyConvMetadata(data.conversation);
       hasMoreOlder = Boolean(data.hasMoreOlder);
       renderChat();
       startPolling();
@@ -581,8 +881,17 @@ function chatForm(target) {
         pendingInitialAi = null;
         const isBuyer = currentConv ? currentConv.buyerId === runtime.accountUser?.id : true;
         const existingMode = currentConv ? (isBuyer ? currentConv.buyerAiMode : currentConv.ownerAiMode) : "off";
-        if (!existingMode || existingMode === "off") {
-          await saveAiPolicy(init.mode, init.policy || collectPolicy(), { quiet: true });
+        const existingPolicy = currentConv ? (isBuyer ? currentConv.buyerAiPolicy : currentConv.ownerAiPolicy) : null;
+        const needsDelegation = Boolean(init.fullDelegation && !existingPolicy?.fullDelegation);
+        if (!existingMode || existingMode === "off" || needsDelegation) {
+          const mergedPolicy = {
+            ...collectPolicy(),
+            ...(init.policy || {}),
+            ...(init.fullDelegation ? { fullDelegation: true, autoExecuteTransaction: true } : {}),
+          };
+          applyPolicyValuesToInputs(mergedPolicy);
+          syncAiControlUi();
+          await saveAiPolicy(init.mode, mergedPolicy, { quiet: true });
         }
       }
     } catch (error) {
@@ -596,13 +905,20 @@ function chatForm(target) {
   async function pollNewMessages() {
     if (!conversationId || epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
     try {
+      const prevPaused = currentConv?.aiPausedReason;
       const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(conversationId)}&after_seq=${maxSeq()}&limit=50`);
       if (epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
-      if (data.conversation) applyConvMetadata(data.conversation);
       const incoming = data.messages || [];
       if (incoming.length) {
         for (const m of incoming) bySeq.set(m.seq, m);
         renderChat();
+      }
+      if (data.conversation) {
+        applyConvMetadata(data.conversation);
+        if (data.conversation.aiPausedReason === "transaction_completed" && prevPaused !== "transaction_completed") {
+          deps.loadCatalog?.({ quiet: true });
+          deps.refreshAuthenticatedData?.();
+        }
       }
     } catch {
       // Transient polling errors recover on next tick unless auth changed
@@ -617,19 +933,39 @@ function chatForm(target) {
 
   syncAiControlUi();
 
+  const setPolicyPanelOpen = (open) => {
+    const panel = $("chatAiPolicyPanel");
+    if (!panel) return;
+    panel.hidden = !open;
+    $("chatAiPolicyToggle")?.setAttribute("aria-expanded", String(open));
+    if ($("chatAiPolicyToggle")) {
+      $("chatAiPolicyToggle").textContent = open ? "위임 조건 ▴" : "위임 조건 ▾";
+    }
+  };
+
   $("chatAiPolicyToggle")?.addEventListener("click", () => {
     const panel = $("chatAiPolicyPanel");
     if (!panel) return;
-    const nextHidden = !panel.hidden;
-    panel.hidden = nextHidden;
-    $("chatAiPolicyToggle").setAttribute("aria-expanded", String(!nextHidden));
-    $("chatAiPolicyToggle").textContent = nextHidden ? "상세 지침 ▾" : "상세 지침 ▴";
+    setPolicyPanelOpen(panel.hidden);
+  });
+
+  $("chatFullDelegationToggle")?.addEventListener("change", () => {
+    fullDelegationEnabled = Boolean($("chatFullDelegationToggle")?.checked);
+    instructionsDirty = true;
+    if (fullDelegationEnabled) {
+      setPolicyPanelOpen(true);
+      saveAiPolicy("autonomous", collectPolicy());
+    } else {
+      syncAiControlUi();
+      saveAiPolicy(currentAiMode, collectPolicy());
+    }
   });
 
   $("chatAiControlBar")?.querySelectorAll(".chat-ai-mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const mode = btn.dataset.aiMode;
       if (!mode || mode === currentAiMode) return;
+      if (mode === "off") fullDelegationEnabled = false;
       saveAiPolicy(mode, collectPolicy());
     });
   });
@@ -645,12 +981,33 @@ function chatForm(target) {
     });
   });
 
-  $("chatAiInstructions")?.addEventListener("input", () => {
+  $("chatPolicyAllowNegotiation")?.addEventListener("change", () => {
+    if ($("chatPolicyAllowNegotiation")?.checked) activeChips.delete("noNegotiation");
+    else activeChips.add("noNegotiation");
     instructionsDirty = true;
+    syncAiControlUi();
+  });
+
+  ["chatPolicyTargetStart", "chatPolicyTargetEnd", "chatPolicyBudgetInput", "chatPolicyAreaPyeong", "chatPolicyPickupPreference", "chatAiInstructions"].forEach((id) => {
+    $(id)?.addEventListener("input", () => {
+      instructionsDirty = true;
+      if (id === "chatPolicyTargetStart") {
+        const startVal = $("chatPolicyTargetStart")?.value || "";
+        const endEl = $("chatPolicyTargetEnd");
+        if (endEl) {
+          endEl.min = startVal || minToday;
+          if (startVal && (!endEl.value || endEl.value < startVal)) {
+            endEl.value = startVal;
+          }
+        }
+      }
+      updateDelegationSummary();
+    });
   });
 
   $("chatAiSavePolicy")?.addEventListener("click", () => {
-    saveAiPolicy(currentAiMode, collectPolicy());
+    const nextMode = fullDelegationEnabled && currentAiMode === "off" ? "autonomous" : currentAiMode;
+    saveAiPolicy(nextMode, collectPolicy());
   });
 
   $("chatLoadOlder").addEventListener("click", async () => {

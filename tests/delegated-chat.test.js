@@ -645,3 +645,295 @@ test("7. LLM 키 미설정 시 안전 종료 및 HTTP /api/conversations + /api/
   assert.equal(replyHttp.body.result.skipped, true);
   assert.equal(replyHttp.body.result.reason, "LLM_UNAVAILABLE");
 });
+
+test("8. fullDelegation 거래 전담 모드: 환경·예산 검증 후 대여/구매 자동 접수(transaction_completed) 검증", async () => {
+  const owner8 = await signupHttp(baseUrl, "dc_owner8", "전담소유");
+  const buyer8 = await signupHttp(baseUrl, "dc_buyer8", "전담구매");
+  const { listing: rentListing } = await createListing(
+    owner8.user,
+    {
+      id: randomUUID(),
+      title: "아세아 관리기 풀세트 대여",
+      type: "rent",
+      modelId: "asia-amc900",
+      cropIds: ["pepper"],
+      operations: ["till", "ridge"],
+      areaMin: 300,
+      areaMax: 2500,
+      price: 120000,
+      region: "영양읍",
+      condition: "good",
+      included: "로터리, 두둑성형기",
+      pickup: "영양읍 창고 오전 9시 직접 인수",
+      description: "고추밭 작업에 적합합니다.",
+    },
+    { pool }
+  );
+
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const policyRes = await updateConversationAiPolicy(
+    buyer8.user,
+    {
+      listingId: rentListing.id,
+      mode: "autonomous",
+      policy: {
+        fullDelegation: true,
+        intent: "rent",
+        targetStart: tomorrow,
+        targetEnd: tomorrow,
+        maxBudget: 150000,
+        allowNegotiation: false,
+        areaPyeong: 500,
+        cropIds: ["pepper"],
+        operations: ["till"],
+        ownedModelId: null,
+        region: "영양읍",
+        pickupPreference: "오전 9시 직접 인수",
+        customRules: "비 오는 날 제외",
+      },
+    },
+    { pool }
+  );
+  assert.equal(policyRes.conversation.buyerAiPolicy.fullDelegation, true);
+  assert.equal(policyRes.conversation.buyerAiPolicy.autoExecuteTransaction, true);
+  assert.equal(policyRes.conversation.buyerAiPolicy.maxConsecutiveAiTurns, 6);
+  assert.equal(policyRes.conversation.buyerAiPolicy.maxBudget, 150000);
+  const convId = policyRes.conversation.id;
+
+  const ownerReply = await sendMessage(
+    owner8.user,
+    { id: randomUUID(), conversationId: convId, body: `내일(${tomorrow}) 오전 9시 12만원에 대여 가능합니다.` },
+    { pool }
+  );
+
+  let round = 0;
+  const mockWeather = async ({ region }) => ({
+    region,
+    weather: { date: tomorrow, summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 8, tempMax: 18 },
+    rangeForecast: [{ date: tomorrow, summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 8, tempMax: 18 }],
+  });
+  const mockCall = async ({ system, tools }) => {
+    round += 1;
+    assert.ok(system.includes("거래 전담 모드 (Full Delegation)"));
+    assert.ok(system.includes("150,000원"));
+    assert.ok(tools.some((t) => t.name === "complete_delegated_transaction"));
+    if (round === 1) {
+      return {
+        content: [
+          { type: "tool_use", id: "c1", name: "check_availability", input: { start: tomorrow, end: tomorrow } },
+          { type: "tool_use", id: "c2", name: "get_weather", input: { region: "영양읍", date: tomorrow, endDate: tomorrow } },
+          { type: "tool_use", id: "c3", name: "check_farm_compatibility", input: { areaPyeong: 500 } },
+        ],
+      };
+    }
+    return {
+      content: [
+        {
+          type: "tool_use",
+          id: "c4",
+          name: "complete_delegated_transaction",
+          input: {
+            start: tomorrow,
+            end: tomorrow,
+            agreedPrice: 120000,
+            note: "오전 9시 직접 인수 합의",
+            closingReply: "날씨와 일정·예산이 모두 맞아 내일 오전 9시 인수로 대여 신청을 자동 접수했습니다.",
+          },
+        },
+      ],
+    };
+  };
+
+  const txRes = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: ownerReply.message.seq,
+    targetRole: "buyer",
+    today: kstToday(),
+    pool,
+    call: mockCall,
+    getWeather: mockWeather,
+  });
+  assert.equal(txRes.action, "transaction_completed");
+  assert.equal(txRes.kind, "rental");
+  assert.equal(txRes.aiPausedReason, "transaction_completed");
+  assert.equal(txRes.rentalRequest.listingId, rentListing.id);
+  assert.equal(txRes.rentalRequest.requesterId, buyer8.user.id);
+  assert.equal(txRes.rentalRequest.totalPrice, 120000);
+  assert.equal(txRes.rentalRequest.status, "pending");
+
+  const rentalCheck = await pool.query(`SELECT * FROM rental_requests WHERE listing_id = $1`, [rentListing.id]);
+  assert.equal(rentalCheck.rows.length, 1);
+  assert.equal(rentalCheck.rows[0].requester_id, buyer8.user.id);
+
+  const convState = await getConversationMessages(buyer8.user.id, { conversationId: convId, pool });
+  assert.equal(convState.conversation.aiPausedReason, "transaction_completed");
+  assert.ok(convState.messages.some((m) => m.senderKind === "ai_proxy" && m.body.includes("자동 접수")));
+
+  // 판매 매물에 대해서도 purchase_orders 자동 생성 검증
+  const { listing: saleListing } = await createListing(
+    owner8.user,
+    {
+      id: randomUUID(),
+      title: "중고 구보다 트랙터 판매",
+      type: "sale",
+      modelId: "asia-amc900",
+      cropIds: ["pepper"],
+      operations: ["till"],
+      price: 3500000,
+      region: "영양읍",
+      condition: "used",
+      pickup: "영양읍 직거래",
+      description: "정상 작동합니다.",
+    },
+    { pool }
+  );
+  await updateConversationAiPolicy(
+    buyer8.user,
+    {
+      listingId: saleListing.id,
+      mode: "autonomous",
+      policy: { fullDelegation: true, intent: "sale", maxBudget: 4000000, pickupPreference: "영양읍 직거래" },
+    },
+    { pool }
+  );
+  const ownerSaleReply = await sendMessage(
+    owner8.user,
+    { id: randomUUID(), conversationId: (await getConversationMessages(buyer8.user.id, { listingId: saleListing.id, pool })).conversation.id, body: "350만원에 직거래 가능합니다." },
+    { pool }
+  );
+  const saleTxRes = await runDelegatedChatReply({
+    conversationId: ownerSaleReply.conversation.id,
+    triggerSeq: ownerSaleReply.message.seq,
+    targetRole: "buyer",
+    pool,
+    call: async () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "s1",
+          name: "complete_delegated_transaction",
+          input: {
+            agreedPrice: 3500000,
+            note: "영양읍 직거래 합의",
+            closingReply: "예산 범위 내 조건이라 구매 신청을 자동 접수했습니다.",
+          },
+        },
+      ],
+    }),
+  });
+  assert.equal(saleTxRes.action, "transaction_completed");
+  assert.equal(saleTxRes.kind, "purchase");
+  assert.equal(saleTxRes.purchaseOrder.listingId, saleListing.id);
+  assert.equal(saleTxRes.purchaseOrder.buyerId, buyer8.user.id);
+  assert.equal(saleTxRes.purchaseOrder.price, 3500000);
+  assert.equal(saleTxRes.purchaseOrder.status, "pending");
+});
+
+test("9. 정보 부족·예산 초과 시 무응답 대기(ai_proxy 미전송 및 waitingForUser) 검증", async () => {
+  const owner9 = await signupHttp(baseUrl, "dc_owner9", "대기소유");
+  const buyer9 = await signupHttp(baseUrl, "dc_buyer9", "대기구매");
+  const { listing: list9 } = await createListing(
+    owner9.user,
+    {
+      id: randomUUID(),
+      title: "대동 경운기 대여",
+      type: "rent",
+      modelId: "asia-amc900",
+      cropIds: ["pepper"],
+      operations: ["till"],
+      price: 100000,
+      region: "영양읍",
+      condition: "good",
+      description: "직접 인수",
+    },
+    { pool }
+  );
+
+  // Case A: 매물 정보에 없는 질문(미기재 수리 이력) -> ai_proxy 전송 없이 escalate 및 사용자 대기
+  const q1 = await sendMessage(
+    buyer9.user,
+    { id: randomUUID(), listingId: list9.id, body: "작년에 미션 오일 교환이나 엔진 수리 이력이 있나요?" },
+    { pool }
+  );
+  const convId = q1.conversation.id;
+  await updateConversationAiPolicy(owner9.user, { conversationId: convId, mode: "autonomous" }, { pool });
+
+  const escUnknown = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: q1.message.seq,
+    targetRole: "owner",
+    pool,
+    call: async () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "u1",
+          name: "escalate_to_user",
+          input: {
+            reasonCode: "unknown_condition",
+            summaryForUser: "매물 정보에 작년 미션 오일 교환 및 수리 이력이 없어 답변하지 않고 기다리고 있어요.",
+            suggestedReplyDraft: "작년 가을에 점검 후 오일 교환 완료했습니다.",
+          },
+        },
+      ],
+    }),
+  });
+  assert.equal(escUnknown.action, "escalated");
+  assert.equal(escUnknown.waitingForUser, true);
+  assert.equal(escUnknown.aiPausedReason, "escalated:unknown_condition");
+
+  const stateAfterUnknown = await getConversationMessages(owner9.user.id, { conversationId: convId, pool });
+  assert.equal(stateAfterUnknown.messages.filter((m) => m.senderKind === "ai_proxy").length, 0);
+  assert.equal(stateAfterUnknown.conversation.waitingForUser, true);
+  assert.ok(stateAfterUnknown.conversation.escalationSummary.includes("수리 이력"));
+  assert.equal(stateAfterUnknown.conversation.aiDraftJson?.waitingForUser, true);
+  assert.equal(stateAfterUnknown.conversation.aiDraftJson?.suggestedReplyDraft, "작년 가을에 점검 후 오일 교환 완료했습니다.");
+
+  // Case B: fullDelegation 모드에서 예산 초과 제안 -> 서버 가드레일이 자동 실행 차단 및 무응답 대기
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  await updateConversationAiPolicy(
+    buyer9.user,
+    {
+      conversationId: convId,
+      mode: "autonomous",
+      policy: { fullDelegation: true, intent: "rent", targetStart: tomorrow, targetEnd: tomorrow, maxBudget: 90000 },
+    },
+    { pool }
+  );
+  const q2 = await sendMessage(
+    owner9.user,
+    { id: randomUUID(), conversationId: convId, body: "운반비 포함해서 13만원에 대여 가능합니다." },
+    { pool }
+  );
+  const escBudget = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: q2.message.seq,
+    targetRole: "buyer",
+    today: kstToday(),
+    pool,
+    call: async () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "b1",
+          name: "complete_delegated_transaction",
+          input: {
+            start: tomorrow,
+            end: tomorrow,
+            agreedPrice: 130000,
+            closingReply: "13만원으로 접수하겠습니다.",
+          },
+        },
+      ],
+    }),
+  });
+  assert.equal(escBudget.action, "escalated");
+  assert.equal(escBudget.reasonCode, "budget_exceeded");
+  assert.equal(escBudget.aiPausedReason, "escalated:budget_exceeded");
+  assert.equal(escBudget.waitingForUser, true);
+
+  const rentalCount = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list9.id]);
+  assert.equal(rentalCount.rows[0].cnt, 0);
+  const stateAfterBudget = await getConversationMessages(buyer9.user.id, { conversationId: convId, pool });
+  assert.equal(stateAfterBudget.messages.filter((m) => m.senderKind === "ai_proxy").length, 0);
+});

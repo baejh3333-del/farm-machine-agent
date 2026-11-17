@@ -876,18 +876,21 @@ export function createAiPanel({
   }
 
   function applySelectedPhotoDataUrl(dataUrl, label = "첨부한 기계 사진") {
-    muteLiveVoiceForPhoto();
     agentPhoto = dataUrl;
     photoIsNew = true;
     photoLabel = label;
     savedDraft = null;
     showPhotoPreview();
+    // 음성 대화 중이면 마이크를 끄지 않고 사진을 바로 농농이에게 보내 음성으로 답하게 한다.
+    if (isLiveVoiceActive()) {
+      sendPhotoDuringLiveVoice();
+      return;
+    }
     $("aiInput")?.focus();
   }
 
   async function handlePhotoFile(file, labelOverride) {
     if (!file) return;
-    muteLiveVoiceForPhoto();
     try {
       applySelectedPhotoDataUrl(await shrinkPhoto(file), labelOverride || file.name || "첨부한 기계 사진");
     } catch (error) {
@@ -907,9 +910,11 @@ export function createAiPanel({
     $("aiPhotoInput")?.click();
   });
   $("aiPhotoInput")?.addEventListener("change", () => handlePhotoFileInput($("aiPhotoInput")));
+  $("aiVoicePhotoBtn")?.addEventListener("click", () => {
+    $("aiPhotoInput")?.click();
+  });
   $("aiCameraButton")?.addEventListener("click", () => {
     setPlusMenuOpen(false);
-    muteLiveVoiceForPhoto();
     openCameraCapture({
       fallbackInput: $("aiCameraInput"),
       triggerButton: $("aiCameraButton"),
@@ -2463,6 +2468,8 @@ export function createAiPanel({
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
 
     const uiContext = collectUiContext();
+    // 음성 대화 중에 올린 사진이 아직 안 보내졌으면 이 말과 함께 보낸다(예: 고장 부위 사진 + "여기서 연기가 나요").
+    const voicePhoto = takeLivePhoto();
     // 위임 전에 맞장구가 먼저 나오면 같은 발화가 이미 기억에 있다: 에이전트에는 그 앞까지만 history로 보낸다.
     let committedAt = -1;
     if (payload?.userTurnCommitted) {
@@ -2483,7 +2490,8 @@ export function createAiPanel({
       insuranceOffer,
       insuranceAsked,
       fullDelegation: fullDelegationEnabled,
-      pendingAction: takePendingAction(),
+      pendingAction: voicePhoto ? null : takePendingAction(),
+      ...(voicePhoto ? { image: voicePhoto } : {}),
     });
     } catch (error) {
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
@@ -2507,9 +2515,10 @@ export function createAiPanel({
       ? result.reply.trim()
       : "말씀하신 내용을 확인했어요.";
     if (!result?.insuranceAsk) trackInsurance(result);
+    const photoNote = voicePhoto ? photoSummaryText(result?.photoSummary) : "";
     rememberAgentTurn(
-      ...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]),
-      { role: "assistant", content: reply },
+      ...(committedAt >= 0 ? [] : [{ role: "user", content: voicePhoto ? `[사진 첨부] ${userText}` : userText }]),
+      { role: "assistant", content: [reply, photoNote].filter(Boolean).join("\n") },
     );
 
     const listingIds = result?.reservation || result?.createdListing || result?.updatedListing
@@ -2522,14 +2531,78 @@ export function createAiPanel({
     // 답변을 그대로 읽게 한다. 실행은 말로 요청하면 서버가 바로 처리하므로 버튼을 누르라고 덧붙이지 않는다.
     const spokenSummary = tidySpokenText(reply);
     const thinkingContext = buildDelegationThinkingContext(result, listingIds);
+    scheduleHeldLivePhoto();
     return { spokenSummary, ...(thinkingContext ? { thinkingContext } : {}), result };
   }
 
-  function muteLiveVoiceForPhoto() {
-    if (isLiveVoiceActive() && !liveController.muted) {
-      liveController.setMuted(true);
-      syncLiveMuteButton(true);
-      syncLiveVoiceBar(liveController.state);
+  // 음성 대화 중 올린 사진: 위임 턴이 진행 중이면 그 턴이 가져가고, 아니면 바로 보내 음성으로 답하게 한다.
+  let livePhotoInFlight = false;
+
+  function takeLivePhoto() {
+    if (!isLiveVoiceActive() || !photoIsNew || !agentPhoto) return null;
+    const photo = agentPhoto;
+    lastPhotoDataUrl = photo;
+    photoIsNew = false;
+    showPhotoPreview();
+    return photo;
+  }
+
+  // 확인 중에 올려 둔 사진은 다음 말과 함께 보내되, 사용자가 3초 안에 말하지 않으면 사진만 먼저 보낸다.
+  function scheduleHeldLivePhoto() {
+    if (!photoIsNew || !agentPhoto) return;
+    const liveGen = liveVoiceGeneration;
+    setTimeout(() => {
+      if (liveGen !== liveVoiceGeneration || !photoIsNew || !isLiveVoiceActive()) return;
+      if (liveController.state === "thinking" || liveController.state === "speaking") {
+        scheduleHeldLivePhoto();
+        return;
+      }
+      sendPhotoDuringLiveVoice();
+    }, 3000);
+  }
+
+  async function sendPhotoDuringLiveVoice() {
+    if (livePhotoInFlight || liveController?.state === "thinking") return; // 진행 중인 위임 턴이 사진을 함께 보낸다.
+    const photo = takeLivePhoto();
+    if (!photo) return;
+    const gen = sessionGeneration;
+    const liveGen = liveVoiceGeneration;
+    livePhotoInFlight = true;
+    const message = "이 사진을 보고 기계 상태를 알려 주세요.";
+    appendAiMessage(message, "user", [], photo);
+    const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
+    pending.classList.add("is-thinking");
+    try {
+      const uiContext = collectUiContext();
+      const result = await askAgent(message, {
+        history: agentHistory,
+        region: uiContext.region,
+        uiContext,
+        inputMode: "voice",
+        image: photo,
+        sessionId: agentSessionId,
+        insuranceAsked,
+        fullDelegation: fullDelegationEnabled,
+      });
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      pending.remove();
+      if (result?.sessionId) agentSessionId = result.sessionId;
+      if (result?.mode !== "agent") throw new Error("사진을 지금 확인하지 못했어요.");
+      if (!result.insuranceAsk) trackInsurance(result);
+      renderAgentResult(message, result, { photo: true });
+      const spoken = tidySpokenText(result.reply || "");
+      if (spoken && isLiveVoiceActive()) {
+        liveController.notifyUiEvent(`사진 확인 결과다. 이 내용을 사용자에게 그대로 짧게 말해 준다: ${spoken}`);
+      }
+    } catch (error) {
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      pending.remove();
+      const msg = error?.message && /[가-힣]/.test(error.message) ? error.message : "사진을 지금 확인하지 못했어요.";
+      appendAiMessage(`${msg} 사진을 다시 올려 주시거나 말로 설명해 주세요.`, "assistant");
+      if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진을 다시 올려 주시거나 말로 설명해 주세요.`);
+    } finally {
+      if (liveGen === liveVoiceGeneration) livePhotoInFlight = false;
+      scrollAiToEnd();
     }
   }
 

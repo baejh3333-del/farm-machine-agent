@@ -8,6 +8,13 @@ export const INSURANCE_PRODUCTS = [
     id: "farm-machinery-comprehensive",
     name: "농기계종합보험 (정책보험)",
     insurer: "NH농협손해보험",
+    // 보험사 공식 고객센터. 상품 상담·가입 안내는 가까운 지역 농협에서도 받을 수 있다.
+    contact: {
+      phone: "1644-9000",
+      url: "https://www.nhfire.co.kr",
+      checkedAt: "2026-11-17",
+      source: { title: "NH농협손해보험 공식 안내문 · 고객지원센터 1644-9000", url: "https://www.nhfire.co.kr/file/announce/단체실손의료보험과 개인실손의료보험간 연계제도 안내.pdf" },
+    },
     audience: ["owner"],
     machineTypes: [
       "cultivator", "tractor", "combine", "ricePlanter", "sprayer", "carrier",
@@ -30,6 +37,12 @@ export const INSURANCE_PRODUCTS = [
     id: "farmer-safety",
     name: "농업인안전보험 (정책보험)",
     insurer: "NH농협생명",
+    contact: {
+      phone: "1544-4000",
+      url: "https://www.nhlife.co.kr",
+      checkedAt: "2026-11-17",
+      source: { title: "NH농협생명 약관 이용 가이드북 · 내맘같은 고객센터 1544-4000", url: "https://image.kebhana.com/cont/download/insdocument/provide/L42B13101M_agree.pdf" },
+    },
     audience: ["renter", "owner"],
     machineTypes: "all",
     summary: "농작업을 하다 다치거나 관련 질병이 생겼을 때 본인을 보상해요. 기계를 빌려 쓰는 분에게도 해당돼요.",

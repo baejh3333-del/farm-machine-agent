@@ -1173,31 +1173,42 @@ export function createAiPanel({
     return link;
   }
 
-  function appendRepairCenters(bubble, centers) {
+  // 연락처 카드(이름·설명·전화·사이트 버튼). 수리센터와 보험 상담이 같은 모양을 쓴다.
+  function appendContactCards(bubble, heading, items) {
     const wrap = document.createElement("div");
     wrap.className = "ai-centers";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
-    title.textContent = "🔧 수리·상담 연락처";
+    title.textContent = heading;
     wrap.append(title);
-    for (const center of centers.slice(0, 5)) {
+    for (const item of items.slice(0, 5)) {
       const card = document.createElement("div");
       card.className = "ai-center-card";
       const name = document.createElement("strong");
-      name.textContent = center.name;
+      name.textContent = item.name;
       const services = document.createElement("small");
-      services.textContent = center.services || "";
+      services.textContent = item.services || "";
       const actions = document.createElement("div");
       actions.className = "ai-confirm-actions";
-      if (center.phone) actions.append(linkButton(`📞 ${center.phone}`, `tel:${center.phone.replace(/[^0-9]/g, "")}`));
-      if (center.url) actions.append(linkButton("🌐 사이트", center.url, true));
+      if (item.phone) actions.append(linkButton(`📞 ${item.phone}`, `tel:${item.phone.replace(/[^0-9]/g, "")}`));
+      if (item.url) actions.append(linkButton("🌐 사이트", item.url, true));
       const checked = document.createElement("small");
       checked.className = "ai-center-checked";
-      checked.textContent = `확인일 ${center.checkedAt || "-"}`;
-      card.append(name, services, actions, checked);
+      checked.textContent = `확인일 ${item.checkedAt || "-"}`;
+      card.append(name, services);
+      if (actions.childElementCount) card.append(actions);
+      card.append(checked);
       wrap.append(card);
     }
     bubble.append(wrap);
+  }
+
+  function appendRepairCenters(bubble, centers) {
+    appendContactCards(bubble, "🔧 수리·상담 연락처", centers);
+  }
+
+  function appendInsuranceContacts(bubble, contacts) {
+    appendContactCards(bubble, "🛡️ 보험 상담 연락처", contacts);
   }
 
   function priceText(draft) {
@@ -1496,6 +1507,7 @@ export function createAiPanel({
     const listed = result.createdListing || result.updatedListing;
     if (listed) renderCreatedListingButton(bubble, listed);
     if (Array.isArray(result.repairCenters) && result.repairCenters.length) appendRepairCenters(bubble, result.repairCenters);
+    if (Array.isArray(result.insuranceContacts) && result.insuranceContacts.length) appendInsuranceContacts(bubble, result.insuranceContacts);
     if (result.listingDraft) appendListingDraft(bubble, result.listingDraft);
     if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
 

@@ -5,11 +5,14 @@ import {
   buildInsuranceRecommendation,
   classifyInsuranceReply,
   cleanInsuranceOffer,
+  createInsuranceConsult,
   handleInsuranceTurn,
   insuranceOfferFor,
   LOCAL_NH_FALLBACK,
   pickOffice,
 } from "../server/insurance-flow.js";
+import { createPglitePool } from "../server/db.js";
+import { initEnvironment, runMigrations } from "../server/migrator.js";
 import { INSURANCE_OFFICES, MACHINERY_INSURANCE_ELIGIBILITY } from "../server/knowledge/insurance.js";
 import { MACHINE_TYPES } from "../src/data/farm-machines.js";
 
@@ -163,4 +166,63 @@ test("추천할 때 보험사 상담 전화·사이트 카드를 함께 준다 (
 
   const rental = await handleInsuranceTurn("네", { stage: "ask", kind: "rental", listingId: "rent-1" }, { user, region: "입암면", deps: d });
   assert.deepEqual(rental.insuranceContacts.map((card) => card.phone), ["1544-4000", null]);
+});
+
+test("createInsuranceConsult: 동시 요청에도 접수 중 신청은 1건만 생성되고 나머지는 idempotent 응답을 받는다", async (t) => {
+  const pool = createPglitePool("memory://");
+  t.after(() => pool.end());
+  await initEnvironment({ env: "test", pool });
+  await runMigrations({ env: "test", pool });
+
+  await pool.query(
+    `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, true, now(), now())`,
+    [user.id, user.name, "user-1@example.com"],
+  );
+  await pool.query(
+    `INSERT INTO listings (id, owner_id, type, brand, title, machine_type, crop_ids, operations, area_min, area_max, price, region, condition, inspected_at)
+     VALUES ($1, $2, 'rent', '대동', '테스트 트랙터', 'tractor', ARRAY['rice'], ARRAY['tillage'], 100, 1000, 50000, '입암면', 'good', CURRENT_DATE)`,
+    ["rent-1", user.id],
+  );
+
+  // 1) listingId가 있는 경우 동시 6건 요청
+  const withListing = await Promise.all(
+    Array.from({ length: 6 }, () =>
+      createInsuranceConsult(
+        user,
+        { productId: "farmer-safety", officeId: "nam-yeongyang-nh", listingId: "rent-1", kind: "rental", region: "입암면" },
+        { pool },
+      ),
+    ),
+  );
+  const createdWithListing = withListing.filter((r) => !r.idempotent);
+  assert.equal(createdWithListing.length, 1);
+  assert.equal(new Set(withListing.map((r) => r.id)).size, 1);
+
+  // 2) listingId가 NULL인 경우 동시 6건 요청도 1건만 생성
+  const withoutListing = await Promise.all(
+    Array.from({ length: 6 }, () =>
+      createInsuranceConsult(
+        user,
+        { productId: "farm-machinery-comprehensive", officeId: "yeongyang-nh", listingId: null, kind: "purchase", region: "영양읍" },
+        { pool },
+      ),
+    ),
+  );
+  const createdWithoutListing = withoutListing.filter((r) => !r.idempotent);
+  assert.equal(createdWithoutListing.length, 1);
+  assert.equal(new Set(withoutListing.map((r) => r.id)).size, 1);
+
+  const countRes = await pool.query(`SELECT count(*)::int AS cnt FROM insurance_consult_requests WHERE user_id = $1`, [user.id]);
+  assert.equal(countRes.rows[0].cnt, 2);
+
+  // 3) 기존 신청이 closed로 바뀌면 같은 조합으로 새 신청을 남길 수 있다
+  await pool.query(`UPDATE insurance_consult_requests SET status = 'closed' WHERE id = $1`, [createdWithListing[0].id]);
+  const reopened = await createInsuranceConsult(
+    user,
+    { productId: "farmer-safety", officeId: "nam-yeongyang-nh", listingId: "rent-1", kind: "rental", region: "입암면" },
+    { pool },
+  );
+  assert.equal(reopened.idempotent, false);
+  assert.notEqual(reopened.id, createdWithListing[0].id);
 });

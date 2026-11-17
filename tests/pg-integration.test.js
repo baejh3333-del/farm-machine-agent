@@ -9,7 +9,6 @@ import sharp from "sharp";
 
 import accountHandler from "../api/account.js";
 import agentHandler from "../api/agent.js";
-import voiceHandler from "../api/voice.js";
 import conversationsHandler from "../api/conversations.js";
 import listingsHandler from "../api/listings.js";
 import meHandler from "../api/me.js";
@@ -125,7 +124,8 @@ before(async () => {
     ["/api/listings", listingsHandler],
     ["/api/recommend", recommendHandler],
     ["/api/agent", agentHandler],
-    ["/api/voice", voiceHandler],
+    // Vercel 무료 플랜 함수 12개 제한 때문에 /api/voice는 /api/agent?route=voice로 넘긴다(vercel.json rewrites).
+    ["/api/voice", agentHandler],
     ["/api/me", meHandler],
     ["/api/requests", requestsHandler],
     ["/api/conversations", conversationsHandler],
@@ -1039,6 +1039,9 @@ test("[PGlite 로컬 엔진] 11. 농농이 음성 인식: 기능 확인, WAV 검
   };
 
   // 키가 없으면 서버 인식이 없다고 알려 주고(브라우저 인식으로), 인식 요청은 503
+  const viaRewrite = await apiReq(baseUrl, "/api/agent?route=voice");
+  assert.equal(viaRewrite.status, 200);
+  assert.deepEqual(viaRewrite.body, { serverStt: false, provider: null, maxSeconds: 30 });
   const caps = await apiReq(baseUrl, "/api/voice");
   assert.equal(caps.status, 200);
   assert.deepEqual(caps.body, { serverStt: false, provider: null, maxSeconds: 30 });

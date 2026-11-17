@@ -21,6 +21,7 @@ import {
   runAgentTurn,
 } from "../server/nongnong-agent.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
+import voiceApi from "../server/voice-api.js";
 import { createRentalRequest } from "../server/rentals.js";
 import { toggleFavorite } from "../server/user-data.js";
 import { getWeatherAndMapConfig } from "../server/weather.js";
@@ -91,7 +92,7 @@ async function preparePhoto(dataUrl) {
   }
 }
 
-export default handle(["POST"], async (request) => {
+const agentApi = handle(["POST"], async (request) => {
   const started = Date.now();
   const body = await readJson(request, { maxBytes: MAX_UPLOAD_JSON_BYTES });
   const action = body.action === "execute" ? "execute" : "chat";
@@ -175,3 +176,13 @@ export default handle(["POST"], async (request) => {
     return { status: 200, body: { outcome: "failed", code: error.code, message: error.message } };
   }
 });
+
+// /api/voice는 함수 개수 제한 때문에 이 함수로 들어온다(vercel.json rewrites: /api/voice → /api/agent?route=voice).
+function isVoiceRoute(request) {
+  const url = new URL(request.url || "/", "http://localhost");
+  return url.pathname === "/api/voice" || url.searchParams.get("route") === "voice";
+}
+
+export default function agentOrVoice(request, response) {
+  return isVoiceRoute(request) ? voiceApi(request, response) : agentApi(request, response);
+}

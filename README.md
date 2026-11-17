@@ -101,7 +101,7 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 | `ZAI_ASR_MODEL` | `glm-asr-2512` | Z.ai 인식 모델 |
 | `VOICE_LIMIT_PER_MINUTE` / `VOICE_LIMIT_PER_DAY` / `VOICE_GLOBAL_LIMIT_PER_DAY` | 10 / 100 / 3000 | 음성 인식 호출 제한(IP 기준, 전체 하루) |
 
-마이크는 **HTTPS**(또는 localhost)에서만 동작합니다. Vercel에서는 `api/voice.js`의 `maxDuration`을 30초로 두었습니다.
+마이크는 **HTTPS**(또는 localhost)에서만 동작합니다. Vercel 무료 플랜의 함수 개수(12개) 제한 때문에 `/api/voice`는 따로 함수를 두지 않고 `vercel.json` rewrites로 `/api/agent?route=voice`에 넘깁니다(처리 코드: `server/voice-api.js`).
 
 ## 호출 제한과 DB 타임아웃
 
@@ -119,7 +119,7 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 - `api/listings.js`: 매물 조회 API
 - `src/ai/recommend-agent.js`: 화면과 추천 API 연결
 - `src/ai/voice.js`, `src/ai/voice-panel.js`: 녹음·WAV 변환·브라우저 인식·읽어 주기와 채팅창 음성 조작
-- `server/voice.js`, `api/voice.js`: 서버 음성 인식(OpenAI·Z.ai)
+- `server/voice.js`, `server/voice-api.js`: 서버 음성 인식(OpenAI·Z.ai)과 `/api/voice` 처리(배포에서는 `api/agent.js`가 넘겨받음)
 - `server/agent.js`: 서버 추천 후보 선정과 AI 호출
 - `server/llm.js`: AI 호출(Z.ai·Claude 공급자 선택과 형식 변환)
 - `server/nongnong-agent.js`: 농농이 통합 에이전트(질문·검색·대여 제안, 승인 후 실행·상태 확인, 음성 차례 안내와 말로 한 승인 차단)

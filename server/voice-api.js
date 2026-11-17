@@ -1,6 +1,8 @@
-import { fail, handle, MAX_UPLOAD_JSON_BYTES, readJson } from "../server/http.js";
-import { enforceRateLimit } from "../server/rate-limit.js";
-import { MAX_AUDIO_BYTES, transcribe, voiceCapabilities, VoiceError } from "../server/voice.js";
+// /api/voice 처리. Vercel 무료 플랜 함수 개수(12개) 제한 때문에 따로 함수를 두지 않고
+// vercel.json rewrites로 /api/agent?route=voice에 넘겨 api/agent.js가 이 처리기를 부른다.
+import { fail, handle, MAX_UPLOAD_JSON_BYTES, readJson } from "./http.js";
+import { enforceRateLimit } from "./rate-limit.js";
+import { MAX_AUDIO_BYTES, transcribe, voiceCapabilities, VoiceError } from "./voice.js";
 
 // GET: 서버 음성 인식 사용 가능 여부(화면이 브라우저 인식으로 대신할지 정한다)
 // POST { audio: base64 WAV }: 음성을 글자로 바꾼다. 음성은 저장하지 않는다.

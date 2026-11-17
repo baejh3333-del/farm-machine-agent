@@ -59,6 +59,8 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/호환성/찜/채팅 문의/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물, 보유 농기계)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
 2. **첫 턴 즉시 추천 (매우 중요)**: 사용자가 작물(고추·벼·배추·감자), 작업(두둑·멀칭·로터리·수확 등), 또는 기종(관리기·트랙터·이앙기 등) 중 하나라도 언급하며 빌리기·사기·찾기를 요청하면, 면적·날짜·예산을 먼저 캐묻지 말고 **반드시 첫 턴에 즉시 search_listings 도구를 호출해 추천 매물 카드를 먼저 보여준다**.
    - 날짜가 아직 없으면 날짜 없이 검색해 후보를 먼저 보여 준 뒤, "어느 날짜에 빌리실지 골라 바로 예약해 보세요"처럼 1줄로 안내한다.
+   - **다시 검색하지 않기**: search_listings는 처음 추천할 때, 사용자가 다시·다른 매물 추천을 요청할 때, 조건(작물·작업·지역·가격·대여/구매)이 바뀔 때만 호출한다. 그 밖의 답변(질문에 답하기, 날짜·가격 확인, 구매·예약 진행)에서는 [최근 보여 준 매물]을 그대로 쓰고 다시 검색하지 않는다.
+   - search_listings에는 [이미 받은 정보]의 목적(대여 rent/구매 sale), 작물, 지역, 예산을 빠짐없이 넣는다. 조건에서 벗어난 매물은 추천하지 않는다.
 3. 부족한 정보가 있어 선택을 받아야 할 때는(예: 작물·기종·작업이 전혀 없는 경우) 한 번에 **가장 필요한 질문 1개만** 간결하게 묻고, 선택지가 있으면 offer_choices 도구(missingField, allowCustom, skippable 포함)로 원탭 선택 버튼을 제공한다. 여러 질문을 한꺼번에 쏟아내지 않고, 모르는 값을 임의로 채우지 않는다(작물을 모르면 고추로 가정하지 않는다).
 4. **대여/구매 전 맞춤 확인 & 유연한 답변**:
    - 사용자가 "우리 농장에 사용 가능한지?", "내 농기계와 호환되는지?", "몇 평에 맞는지?"처럼 호환성·면적 적합성을 물으면 즉시 check_farm_compatibility 도구를 호출해 매물의 areaMin~areaMax(1평≈3.3㎡), 포함 작업기(included), 사용자 보유 농기계(ownedMachines / selectedOwnedModelId)와의 연결 호환성을 정확히 확인해 자연스럽게 설명한다.
@@ -461,6 +463,11 @@ export function cleanUiContext(raw) {
   const selectedOwnedModelId = typeof raw.selectedOwnedModelId === "string" && Object.hasOwn(SPEC_BY_ID, raw.selectedOwnedModelId)
     ? raw.selectedOwnedModelId
     : null;
+  const shownListingIds = [...new Set(
+    (Array.isArray(raw.shownListingIds) ? raw.shownListingIds : [])
+      .filter((id) => typeof id === "string" && id.trim().length > 0)
+      .map((id) => id.trim().slice(0, 80)),
+  )].slice(0, 6);
   const favoriteIds = [...new Set(
     (Array.isArray(raw.favoriteIds) ? raw.favoriteIds : [])
       .filter((id) => typeof id === "string" && id.trim().length > 0)
@@ -479,6 +486,7 @@ export function cleanUiContext(raw) {
     ownedMachines,
     selectedOwnedModelId,
     favoriteIds,
+    shownListingIds,
   };
 }
 
@@ -1176,13 +1184,46 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
   return slots;
 }
 
+const TRANSACTION_IN_TEXT = (text) => (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|구매|구입)/.test(text)
+  ? "sale"
+  : /(?:빌리|빌려|대여|임대)/.test(text) ? "rent" : null);
+const FRESH_CARDS_REQUEST = /다시|다른|더\s*보|또\s*있|추천|찾아|보여|목록|카드|뭐\s*있|어떤\s*(?:거|게|것)|있어\?|있나|알아봐/;
+
+/** 모델이 빠뜨리거나 잘못 넣은 검색 조건을 대화에서 이미 받은 정보로 채운다(조건에 안 맞는 매물 추천 방지). */
+export function applyKnownFactsToSearch(input, { facts = {}, sell = false, text = "" } = {}) {
+  const next = { ...(input && typeof input === "object" ? input : {}) };
+  const spoken = TRANSACTION_IN_TEXT(String(text || ""));
+  if (spoken) next.transaction = spoken;
+  else if (!sell && (facts.transaction === "rent" || facts.transaction === "sale")) next.transaction = facts.transaction;
+  if (!Object.hasOwn(CROP_BY_ID, next.cropId) && Array.isArray(facts.cropIds) && facts.cropIds.length === 1 && Object.hasOwn(CROP_BY_ID, facts.cropIds[0])) {
+    next.cropId = facts.cropIds[0];
+  }
+  if (!cleanRegion(next.region) && typeof facts.region === "string" && Object.hasOwn(REGION_COORDS, facts.region)) next.region = facts.region;
+  if (!(Number.isSafeInteger(next.maxPrice) && next.maxPrice > 0) && Number.isSafeInteger(facts.maxPrice) && facts.maxPrice > 0
+    && facts.transaction === next.transaction) {
+    next.maxPrice = facts.maxPrice;
+  }
+  return next;
+}
+
+/** 직전에 보여 준 카드와 같은 매물이면, 다시 추천해 달라거나 조건을 바꾼 게 아닌 한 카드를 또 띄우지 않는다. */
+export function shouldShowCards(listingIds, { shownListingIds = [], text = "" } = {}) {
+  if (!Array.isArray(listingIds) || !listingIds.length) return false;
+  const shown = new Set(Array.isArray(shownListingIds) ? shownListingIds : []);
+  if (!shown.size || listingIds.some((id) => !shown.has(id))) return true;
+  const said = String(text || "");
+  if (FRESH_CARDS_REQUEST.test(said)) return true;
+  const changed = extractLearnedSlots({ text: said });
+  return Object.keys(changed).length > 0;
+}
+
 const SELL_INTENT = /팔(?:고\s*싶|려|래|겠|아\s*줘)|판매\s*(?:하|할|글|등록)|내놓|빌려\s*주(?:고|려|기)/;
 
 /**
  * 대화 기록(사용자 말)·세션 슬롯·화면 조건에서 이미 받은 정보를 모아 모델이 다시 묻지 않게 한다.
  * 반환: 시스템 프롬프트에 붙일 글(없으면 "").
  */
-export function summarizeKnownFacts({ history = [], text = "", sessionSlots = null, uiCtx = {} } = {}) {
+export function collectKnownFacts({ history = [], text = "", sessionSlots = null, uiCtx = {} } = {}) {
   const facts = { ...(sessionSlots && typeof sessionSlots === "object" && !Array.isArray(sessionSlots) ? sessionSlots : {}) };
   Object.assign(facts, extractLearnedSlots({ uiCtx }));
   let sell = false;
@@ -1196,6 +1237,12 @@ export function summarizeKnownFacts({ history = [], text = "", sessionSlots = nu
     if (SELL_INTENT.test(said)) sell = true;
     else if (learned.transaction) sell = false;
   }
+  return { facts, sell };
+}
+
+export function summarizeKnownFacts(input = {}) {
+  const { history = [] } = input;
+  const { facts, sell } = collectKnownFacts(input);
   const lines = [];
   const purpose = sell ? "판매·빌려주기" : facts.transaction === "sale" ? "구매" : facts.transaction === "rent" ? "대여" : "";
   if (purpose) lines.push(`- 목적: ${purpose}`);
@@ -1290,6 +1337,7 @@ async function runTurn(
   if (uiCtx.viewingListingId && !catalog) await loadCatalog();
 
   const knownFacts = summarizeKnownFacts({ history, text, sessionSlots, uiCtx });
+  const known = collectKnownFacts({ history, text, sessionSlots, uiCtx });
   const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}`;
   const selectedTools = selectToolsForTurn({
     text,
@@ -1368,7 +1416,8 @@ async function runTurn(
 
       if (block.name === "search_listings") {
         searchedThisTurn = true;
-        output = searchListingsTool(block.input, await loadCatalog(), { region: effectiveRegion, userId: user?.id });
+        const searchInput = applyKnownFactsToSearch(block.input, { ...known, text });
+        output = searchListingsTool(searchInput, await loadCatalog(), { region: effectiveRegion, userId: user?.id });
         if (output.results) out.listingIds = output.results.map(({ id }) => id);
         if (output.start) out.searchDates = { start: output.start, end: output.end || output.start };
       } else if (block.name === "get_crop_guidance") {
@@ -1865,15 +1914,18 @@ async function runTurn(
     && !out.delegatedTransaction
     && !/도와드릴 수 없|관계없는/.test(texts.at(-1))
   ) {
-    const inferred = inferFallbackSearchInput(text, uiCtx);
+    // 모델이 검색하지 않은 턴에는, 사용자가 직접 찾아 달라고 했거나 아직 카드를 하나도 안 보여 줬을 때만 대신 찾는다.
+    const inferred = (FRESH_CARDS_REQUEST.test(text) || !uiCtx.shownListingIds?.length) ? inferFallbackSearchInput(text, uiCtx) : null;
     if (inferred) {
-      const autoSearch = searchListingsTool(inferred, await loadCatalog(), { region: effectiveRegion, userId: user?.id });
+      const autoSearch = searchListingsTool(applyKnownFactsToSearch(inferred, { ...known, text }), await loadCatalog(), { region: effectiveRegion, userId: user?.id });
       if (autoSearch?.results?.length) {
         out.listingIds = autoSearch.results.map(({ id }) => id);
         if (autoSearch.start) out.searchDates = { start: autoSearch.start, end: autoSearch.end || autoSearch.start };
       }
     }
   }
+
+  if (!shouldShowCards(out.listingIds, { shownListingIds: uiCtx.shownListingIds, text })) out.listingIds = [];
 
   const fallbackReply = out.delegatedTransaction
     ? `'${out.delegatedTransaction.title}' 거래를 농농이 전담 모드로 시작했어요.`

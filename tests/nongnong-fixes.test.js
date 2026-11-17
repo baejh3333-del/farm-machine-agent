@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { runAgentTurn, summarizeKnownFacts } from "../server/nongnong-agent.js";
+import { applyKnownFactsToSearch, collectKnownFacts, runAgentTurn, searchListingsTool, shouldShowCards, summarizeKnownFacts } from "../server/nongnong-agent.js";
 import { buildMockListings } from "../server/listing-seed.js";
 import { buildGptLiveInstructions } from "../server/gpt-live.js";
 import { isUnclearUtterance, joinSpokenText } from "../src/ai/spoken-text.js";
@@ -86,4 +86,69 @@ test("문제2: 실시간 음성 지시문은 중간 안내·반복 질문을 금
   assert.match(text, /중간 안내는 하지 않는다/);
   assert.match(text, /같은 질문이나 같은 문장을 반복하지 않는다/);
   assert.match(text, /잘 못 들었어요/);
+});
+
+// ───────── 문제 3 ─────────
+
+const BUY_HISTORY = [
+  { role: "user", content: "구매하려고 해" },
+  { role: "assistant", content: "어떤 작물에 쓰실 건가요?" },
+  { role: "user", content: "고구마 캐는 기계" },
+];
+
+test("문제3: 대화에서 '구매'라고 했으면 모델이 대여로 검색해도 구매 매물만 찾는다", () => {
+  const known = collectKnownFacts({ history: BUY_HISTORY, text: "가까운 걸로 보여줘", uiCtx: { transaction: "rent" } });
+  const input = applyKnownFactsToSearch({ cropId: null, operations: [], machineType: "rootHarvester", transaction: "rent" }, { ...known, text: "가까운 걸로 보여줘" });
+  assert.equal(input.transaction, "sale");
+  assert.equal(input.cropId, "sweetPotato");
+  const result = searchListingsTool(input, LISTINGS, { region: "청기면" });
+  assert.ok(result.count > 0);
+  for (const item of result.results) {
+    const original = LISTINGS.find(({ id }) => id === item.id);
+    assert.equal(original.type, "sale");
+    assert.equal(original.status, "open");
+    assert.ok(original.cropIds.includes("sweetPotato"));
+  }
+});
+
+test("문제3: 판매 완료·거래 중·수리 필요 매물은 추천 전에 걸러낸다", () => {
+  const base = LISTINGS.filter((item) => item.type === "sale" && item.cropIds.includes("sweetPotato"));
+  const blocked = base.map((item, i) => ({ ...item, status: ["dealing", "done", "open"][i % 3], condition: i % 3 === 2 ? "repair" : item.condition }));
+  const result = searchListingsTool({ cropId: "sweetPotato", operations: [], transaction: "sale" }, blocked, { region: "청기면" });
+  assert.equal(result.count, 0, JSON.stringify(result.results.map((r) => r.id)));
+});
+
+test("문제3: 같은 카드는 다시 추천·조건 변경이 아니면 또 띄우지 않는다", () => {
+  const shown = ["a", "b", "c"];
+  assert.equal(shouldShowCards(["a", "b", "c"], { shownListingIds: shown, text: "응" }), false);
+  assert.equal(shouldShowCards(["a", "b"], { shownListingIds: shown, text: "가격이 얼마야" }), false);
+  assert.equal(shouldShowCards(["a", "b", "c"], { shownListingIds: shown, text: "다른 거 추천해줘" }), true);
+  assert.equal(shouldShowCards(["a", "b", "c"], { shownListingIds: shown, text: "청기면으로 바꿔줘" }), true);
+  assert.equal(shouldShowCards(["a", "d"], { shownListingIds: shown, text: "응" }), true);
+  assert.equal(shouldShowCards(["a"], { shownListingIds: [], text: "응" }), true);
+});
+
+test("문제3: 카드를 이미 보여 준 뒤 일반 답변 턴에서는 같은 매물 카드를 다시 보내지 않는다", async (t) => {
+  withKey(t);
+  const first = searchListingsTool({ cropId: "sweetPotato", operations: [], transaction: "sale" }, LISTINGS, { region: "청기면" });
+  const shownIds = first.results.map(({ id }) => id);
+  const { call } = scripted([
+    toolUse("search_listings", { cropId: "sweetPotato", operations: [], transaction: "sale", region: null }),
+    textReply("세 매물 모두 거래 가능해요."),
+  ]);
+  const result = await runAgentTurn("응 알겠어", {
+    history: BUY_HISTORY,
+    uiContext: { region: "청기면", transaction: "rent", shownListingIds: shownIds },
+  }, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.listingIds, []);
+});
+
+test("문제3: 카드를 보여 준 뒤에는 작물 이름만 나와도 자동 검색 카드를 또 붙이지 않는다", async (t) => {
+  withKey(t);
+  const { call } = scripted([textReply("고구마 수확기는 두둑 폭을 맞춰 보셔야 해요.")]);
+  const result = await runAgentTurn("고구마 두둑 폭은 어떻게 해", {
+    history: BUY_HISTORY,
+    uiContext: { region: "청기면", shownListingIds: ["x1", "x2"] },
+  }, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.listingIds, []);
 });

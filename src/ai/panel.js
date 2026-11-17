@@ -1001,6 +1001,9 @@ export function createAiPanel({
     agentHistory = next.slice(-MAX_AGENT_HISTORY);
   }
 
+  // 직전에 카드로 보여 준 매물(순서 유지). 서버가 같은 카드를 또 띄우지 않고 "첫 번째" 같은 말을 알아듣는 데 쓴다.
+  let lastShownListingIds = [];
+
   function collectUiContext() {
     const filters = state.filters || {};
     const detailBackdrop = $("detailBackdrop");
@@ -1024,6 +1027,7 @@ export function createAiPanel({
       ...(owned.length ? { ownedMachines: owned.slice(0, 10) } : {}),
       ...(selectedOwnedModelId ? { selectedOwnedModelId } : {}),
       ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
+      ...(lastShownListingIds.length ? { shownListingIds: lastShownListingIds.slice(0, 6) } : {}),
       ...(quickOwnedNote ? { ownedMachineNote: quickOwnedNote } : {}),
       ...(fullDelegationEnabled ? { fullDelegation: true } : {}),
     };
@@ -1420,6 +1424,7 @@ export function createAiPanel({
     }
 
     if (listingIds.length) {
+      if (role === "assistant") lastShownListingIds = listingIds.filter((id) => listingById(id)).slice(0, 6);
       bubble.classList.add("has-results");
       const results = document.createElement("div");
       results.className = "ai-result";
@@ -2896,6 +2901,7 @@ export function createAiPanel({
     stopLiveVoice({ silent: true });
     stopFallbackVoice();
     agentHistory = [];
+    lastShownListingIds = [];
     agentSessionId = null;
     insuranceOffer = null;
     insuranceAsked = false;

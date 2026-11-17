@@ -3,7 +3,7 @@ import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, 
 import { available, compareListings } from "../data/recommendation.js";
 import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, addDays, koreanDateParts, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog, machineImage } from "../core/utils.js";
 import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites } from "../core/store.js";
-import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
+import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig, renderDetailListingMap } from "./map-weather.js";
 
 export function createCatalogViews(deps) {
 let lastPreviewCount = null;
@@ -642,6 +642,15 @@ function openDetail(id) {
           <p>${escapeHtml(item.description)}</p>
         </div>
 
+        <div class="detail-box detail-location-map-box">
+          <div class="detail-map-head">
+            <b>매물 위치 안내</b>
+            <span class="detail-map-dist">내 위치 기준 약 ${distanceKm(activeDistanceOrigin(), item, item.id)}km</span>
+          </div>
+          <p class="detail-map-address" id="detailMapAddress">${escapeHtml(item.address || `${item.region} 인근 농가`)}</p>
+          <div id="detailBottomMapCanvas" class="detail-bottom-map-canvas" aria-label="${escapeHtml(item.title)} 위치 지도"></div>
+        </div>
+
         <div class="detail-actions">
           <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${item.id}" aria-label="찜하기" aria-pressed="${isFav}">
             ${favoriteIcon()}
@@ -660,6 +669,7 @@ function openDetail(id) {
     </div>
   `;
   showDialog($("detailBackdrop"));
+  renderDetailListingMap($("detailBottomMapCanvas"), item);
 }
 
 function openFavoritesModal() {

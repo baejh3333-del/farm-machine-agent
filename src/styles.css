@@ -4545,3 +4545,130 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding-top: 4px;
   border-top: 1px dashed #d7e8dc;
 }
+
+/* =========================================
+   매물 상세 하단 단일 위치 지도
+   ========================================= */
+.detail-location-map-box {
+  margin-top: 12px;
+  padding: 14px 16px;
+}
+
+.detail-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.detail-map-dist {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #fff1e6;
+  color: #d95a00;
+}
+
+.detail-map-address {
+  margin: 6px 0 10px !important;
+  font-size: 0.84rem !important;
+  font-weight: 600;
+  color: var(--text-strong, #162a22) !important;
+}
+
+.detail-bottom-map-canvas {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line, #ded5c6);
+  background: #eef4ee;
+}
+
+.detail-map-loading {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--forest, #174233);
+}
+
+.detail-map-fallback {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.detail-fallback-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.detail-single-pin {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-fallback-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.detail-pin-pulse {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 111, 15, 0.24);
+  animation: detailPinPulse 2.2s ease-out infinite;
+}
+
+@keyframes detailPinPulse {
+  0% { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.detail-pin-badge {
+  position: relative;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #ff6f0f;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(255, 111, 15, 0.34);
+}
+
+.detail-fallback-meta {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(23, 66, 51, 0.1);
+  font-size: 0.76rem;
+  color: var(--text-strong, #162a22);
+}
+
+.detail-fallback-meta small {
+  color: var(--text-muted, #5e7468);
+  font-variant-numeric: tabular-nums;
+}

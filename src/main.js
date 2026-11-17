@@ -18,7 +18,7 @@ import {
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
 import { createAiPanel } from "./ai/panel.js";
-import { refreshWeatherAndMapConfig } from "./views/map-weather.js";
+import { refreshWeatherAndMapConfig, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
 initFontScale();
 
@@ -85,10 +85,12 @@ async function loadCatalog({ quiet = false } = {}) {
     if (epoch !== runtime.authEpoch) return;
     if (!Array.isArray(data.listings)) throw new Error("잘못된 매물 응답");
     runtime.catalog = data.listings;
+    ensureHongcheonRandomListing({ randomize: true });
     runtime.catalogState = "ready";
   } catch (error) {
     if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
     if (!quiet) console.error(error);
+    ensureHongcheonRandomListing({ randomize: false });
     runtime.catalogState = "error";
   }
   renderAll();

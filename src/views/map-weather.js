@@ -1,7 +1,228 @@
 import { MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
+import { applyModelSpecification } from "../data/machine-specifications.js";
 import { getRegionCoords } from "../data/korea-regions.js";
 import { $, escapeHtml, money, today, addDays, toast } from "../core/utils.js";
 import { state, runtime, apiFetch, persist } from "../core/store.js";
+
+export const DEFAULT_KAKAO_JS_KEY = "1535434b57df672bac4c1ff9a9170589";
+export const DEFAULT_KAKAO_REST_KEY = "6df1354c0ce056eef6569a59e1ed90c8";
+
+export const VIVALDI_PARK_ORIGIN = {
+  lat: 37.6456,
+  lng: 127.6844,
+  name: "홍천 비발디파크",
+  address: "강원특별자치도 홍천군 서면 한치골길 262",
+};
+
+export const HONGCHEON_NEARBY_FARM = {
+  id: "hc-vivaldi-1",
+  region: "서면 팔봉리",
+  farmName: "홍천 팔봉산 해바라기 농가",
+  address: "강원특별자치도 홍천군 서면 팔봉리 712",
+  lat: 37.6538,
+  lng: 127.6942,
+};
+
+const HONGCHEON_RANDOM_PRESETS = [
+  {
+    machineType: "tractor",
+    brand: "대동",
+    title: "45마력 트랙터 · 로터리 포함",
+    cropIds: ["pepper", "cabbage", "potato", "rice"],
+    operations: ["till"],
+    areaMin: 1000,
+    areaMax: 18000,
+    price: 130000,
+    included: "로터리 작업기",
+    description: "홍천 비발디파크 인근 팔봉산 해바라기 농가에서 바로 빌릴 수 있는 중형 트랙터입니다.",
+    summary: "벼·고추·배추·감자 밭갈이에 적합한 45마력 트랙터입니다.",
+  },
+  {
+    machineType: "cultivator",
+    brand: "아세아",
+    title: "8마력 다목적 관리기 · 두둑·로터리",
+    cropIds: ["pepper", "cabbage", "potato"],
+    operations: ["till", "ridge"],
+    areaMin: 100,
+    areaMax: 3500,
+    price: 45000,
+    included: "로터리·두둑 작업기",
+    description: "초보 농부도 다루기 쉬운 홍천 팔봉산 농가 보유 관리기입니다.",
+    summary: "고추·배추·감자 소규모 밭의 흙갈이와 두둑 성형에 쓰는 관리기입니다.",
+  },
+  {
+    machineType: "ridgeMulcher",
+    brand: "아세아",
+    title: "두둑·비닐 멀칭 겸용 휴립피복기",
+    cropIds: ["pepper", "cabbage", "potato"],
+    operations: ["ridge", "mulch"],
+    areaMin: 300,
+    areaMax: 5000,
+    price: 65000,
+    included: "피복 롤러·배토판",
+    description: "두둑 성형과 비닐 피복을 한 번에 처리하는 팔봉산 농가 장비입니다.",
+    summary: "고추·배추·감자 밭 두둑과 멀칭 작업을 동시에 진행할 수 있습니다.",
+  },
+  {
+    machineType: "ricePlanter",
+    brand: "국제",
+    title: "6조식 승용 이앙기",
+    cropIds: ["rice"],
+    operations: ["ricePlant"],
+    areaMin: 1000,
+    areaMax: 12000,
+    price: 160000,
+    included: "예비 모판 받침",
+    description: "팔봉리 일대 논 작업에 투입되는 6조식 이앙기입니다.",
+    summary: "벼 모내기에 쓰는 6조식 이앙기로 현장 시동 확인 후 대여 가능합니다.",
+  },
+  {
+    machineType: "sprayer",
+    brand: "한일",
+    title: "이동식 동력 분무기 · 릴 호스 세트",
+    cropIds: ["pepper", "cabbage", "potato", "rice"],
+    operations: ["spray"],
+    areaMin: 100,
+    areaMax: 8000,
+    price: 35000,
+    included: "고압 호스·노즐",
+    description: "노지 밭과 하우스 병해충 방제에 유용한 이동식 동력 분무기입니다.",
+    summary: "고추·배추·감자 방제 작업용 동력 분무기입니다.",
+  },
+  {
+    machineType: "potatoHarvester",
+    brand: "태광",
+    title: "감자 굴취기 · 진동 선별형",
+    cropIds: ["potato"],
+    operations: ["potatoHarvest"],
+    areaMin: 400,
+    areaMax: 9000,
+    price: 85000,
+    included: "굴취날·진동 선별판",
+    description: "강원 홍천 밭 토질에 맞춰 세팅된 감자 수확 전용 굴취기입니다.",
+    summary: "감자 손상을 줄이며 빠르게 수확할 수 있는 진동 선별 굴취기입니다.",
+  },
+  {
+    machineType: "carrier",
+    brand: "대동",
+    title: "궤도형 동력 운반차 덤프",
+    cropIds: ["pepper", "cabbage", "potato", "rice"],
+    operations: ["transport"],
+    areaMin: 100,
+    areaMax: 18000,
+    price: 55000,
+    included: "적재함·경사로 판",
+    description: "경사진 강원도 밭에서도 안정적으로 수확물을 나르는 궤도 운반차입니다.",
+    summary: "경사지 수확물·자재 운반에 적합한 궤도형 동력 운반차입니다.",
+  },
+];
+
+const kakaoAddressCache = new Map();
+let lastRandomPresetIndex = -1;
+
+export async function resolveKakaoAddress(lat, lng, fallbackAddress = "") {
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+  if (!Number.isFinite(numLat) || !Number.isFinite(numLng)) return fallbackAddress;
+  const cacheKey = `${numLat.toFixed(5)},${numLng.toFixed(5)}`;
+  if (kakaoAddressCache.has(cacheKey)) return kakaoAddressCache.get(cacheKey);
+
+  const restKey = runtime.mapConfig?.kakaoRestApiKey || DEFAULT_KAKAO_REST_KEY;
+  if (!restKey) return fallbackAddress;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(
+      `https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${encodeURIComponent(numLng)}&y=${encodeURIComponent(numLat)}`,
+      {
+        headers: { Authorization: `KakaoAK ${restKey}` },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timer);
+    if (!res.ok) return fallbackAddress;
+    const data = await res.json();
+    const doc = data?.documents?.[0];
+    const resolved = doc?.road_address?.address_name || doc?.address?.address_name || fallbackAddress;
+    if (resolved) kakaoAddressCache.set(cacheKey, resolved);
+    return resolved || fallbackAddress;
+  } catch {
+    return fallbackAddress;
+  }
+}
+
+export function ensureHongcheonRandomListing({ randomize = false } = {}) {
+  const existing = Array.isArray(runtime.catalog)
+    ? runtime.catalog.find((item) => item.id === HONGCHEON_NEARBY_FARM.id)
+    : null;
+
+  if (existing && !randomize && existing.lat && existing.lng && existing.farmName) {
+    return existing;
+  }
+
+  let idx = lastRandomPresetIndex;
+  if (randomize || idx < 0) {
+    if (HONGCHEON_RANDOM_PRESETS.length > 1) {
+      let next = Math.floor(Math.random() * HONGCHEON_RANDOM_PRESETS.length);
+      if (next === lastRandomPresetIndex) {
+        next = (next + 1) % HONGCHEON_RANDOM_PRESETS.length;
+      }
+      idx = next;
+    } else {
+      idx = 0;
+    }
+    lastRandomPresetIndex = idx;
+  }
+
+  const preset = HONGCHEON_RANDOM_PRESETS[idx] || HONGCHEON_RANDOM_PRESETS[0];
+  const baseItem = {
+    id: HONGCHEON_NEARBY_FARM.id,
+    type: "rent",
+    title: `${preset.title} · ${HONGCHEON_NEARBY_FARM.farmName}`,
+    brand: preset.brand,
+    machineType: preset.machineType,
+    cropIds: [...preset.cropIds],
+    operations: [...preset.operations],
+    areaMin: preset.areaMin,
+    areaMax: preset.areaMax,
+    price: preset.price,
+    region: HONGCHEON_NEARBY_FARM.region,
+    farmName: HONGCHEON_NEARBY_FARM.farmName,
+    address: HONGCHEON_NEARBY_FARM.address,
+    lat: HONGCHEON_NEARBY_FARM.lat,
+    lng: HONGCHEON_NEARBY_FARM.lng,
+    condition: "good",
+    inspectedAt: "2026-11-10",
+    included: preset.included,
+    pickup: "홍천 비발디파크 인근 농가 직접 인수 · 운반 협의",
+    description: preset.description,
+    summary: preset.summary,
+    booked: [],
+    owner: false,
+    ownerName: HONGCHEON_NEARBY_FARM.farmName,
+    status: "open",
+  };
+
+  const withSpec = applyModelSpecification(baseItem, idx);
+  const listing = {
+    ...withSpec,
+    title: baseItem.title,
+    brand: preset.brand,
+    included: preset.included,
+    description: `${preset.description} (${withSpec.model ? `참조 모델: ${withSpec.brand} ${withSpec.model}` : "현장 점검 완료"})`,
+    summary: preset.summary,
+    farmName: HONGCHEON_NEARBY_FARM.farmName,
+    address: HONGCHEON_NEARBY_FARM.address,
+    lat: HONGCHEON_NEARBY_FARM.lat,
+    lng: HONGCHEON_NEARBY_FARM.lng,
+  };
+
+  if (!Array.isArray(runtime.catalog)) runtime.catalog = [];
+  const rest = runtime.catalog.filter((item) => item.id !== HONGCHEON_NEARBY_FARM.id);
+  runtime.catalog = [listing, ...rest];
+  return listing;
+}
 
 const WEATHER_ICONS = {
   sun: "☀️",
@@ -42,10 +263,14 @@ function loadKakaoSdk(appKey) {
       if (window.kakao?.maps?.load) {
         window.kakao.maps.load(() => resolve(window.kakao.maps));
       } else {
+        kakaoSdkPromise = null;
         reject(new Error("Kakao Maps SDK load failed"));
       }
     };
-    script.onerror = () => reject(new Error("Kakao Maps SDK network error"));
+    script.onerror = () => {
+      kakaoSdkPromise = null;
+      reject(new Error("Kakao Maps SDK network error"));
+    };
     document.head.appendChild(script);
   });
   return kakaoSdkPromise;
@@ -551,13 +776,89 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
     refreshWeatherAndMapConfig({ onUpdate: () => onGpsUpdated?.() });
   };
 
-  if (runtime.mapConfig?.provider === "kakao" && runtime.mapConfig?.kakaoAppKey) {
-    renderKakaoMap(renderArea, items, runtime.mapConfig.kakaoAppKey, { onOpenDetail, onRetry, onSwitchToList });
+  const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
+  if (appKey) {
+    renderKakaoMap(renderArea, items, appKey, { onOpenDetail, onRetry, onSwitchToList });
   } else {
     renderMapError(
       renderArea,
       "지도 API 서버와 연결되지 않았습니다. 환경 설정을 확인하거나 잠시 후 다시 시도해 주세요.",
       { onRetry, onSwitchToList }
     );
+  }
+}
+
+function renderDetailMapFallback(container, item, coords, addressText) {
+  const label = item.farmName || `${item.region} 인근 농가`;
+  container.innerHTML = `
+    <div class="detail-map-fallback" role="region" aria-label="${escapeHtml(label)} 위치 지도">
+      <svg class="detail-fallback-svg" viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <pattern id="detailMapGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+            <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(23,66,51,0.06)" stroke-width="1" />
+          </pattern>
+        </defs>
+        <rect width="600" height="220" fill="#eef4ee" />
+        <rect width="600" height="220" fill="url(#detailMapGrid)" />
+        <path d="M-20,175 Q180,120 340,115 T620,65" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" />
+        <path d="M160,-10 Q250,110 380,235" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+        <circle cx="300" cy="110" r="64" fill="rgba(255, 111, 15, 0.08)" stroke="rgba(255, 111, 15, 0.25)" stroke-dasharray="5 5" stroke-width="1.5" />
+      </svg>
+      <div class="detail-single-pin detail-fallback-pin">
+        <span class="detail-pin-pulse"></span>
+        <span class="detail-pin-badge">${escapeHtml(label)}</span>
+      </div>
+      <div class="detail-fallback-meta">
+        <span>${escapeHtml(addressText)}</span>
+        <small>${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}</small>
+      </div>
+    </div>
+  `;
+}
+
+export async function renderDetailListingMap(container, item) {
+  if (!container || !item) return;
+
+  const coords = listingCoords(item, item.id);
+  const fallbackAddr = item.address || `${item.region} 인근 농가`;
+  container.innerHTML = `<div class="detail-map-loading">매물 위치 지도를 불러오는 중...</div>`;
+
+  resolveKakaoAddress(coords.lat, coords.lng, fallbackAddr).then((resolved) => {
+    const addrEl = $("detailMapAddress");
+    if (addrEl && resolved) addrEl.textContent = resolved;
+  });
+
+  const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
+  try {
+    const maps = await loadKakaoSdk(appKey);
+    if (!container.isConnected) return;
+    container.innerHTML = "";
+    const pos = new maps.LatLng(coords.lat, coords.lng);
+    const map = new maps.Map(container, {
+      center: pos,
+      level: 4,
+    });
+
+    new maps.Marker({
+      map,
+      position: pos,
+      title: item.farmName || item.title,
+    });
+
+    const overlayEl = document.createElement("div");
+    overlayEl.className = "detail-single-pin";
+    overlayEl.innerHTML = `<span class="detail-pin-badge">${escapeHtml(item.farmName || item.region)}</span>`;
+
+    new maps.CustomOverlay({
+      map,
+      position: pos,
+      content: overlayEl,
+      yAnchor: 2.35,
+      zIndex: 5,
+    });
+  } catch {
+    if (container.isConnected) {
+      renderDetailMapFallback(container, item, coords, fallbackAddr);
+    }
   }
 }

@@ -2492,6 +2492,8 @@ export const REGION_COORDS = {
   수비면: { name: "수비면", lat: 36.7988, lng: 129.2116, nx: 89, ny: 111 },
   석보면: { name: "석보면", lat: 36.5675, lng: 129.138, nx: 88, ny: 106 },
   일월면: { name: "일월면", lat: 36.7438, lng: 129.1135, nx: 88, ny: 109 },
+  "홍천 비발디파크": { name: "홍천 비발디파크", lat: 37.6456, lng: 127.6844, nx: 72, ny: 129 },
+  "서면 팔봉리": { name: "서면 팔봉리", lat: 37.6538, lng: 127.6942, nx: 72, ny: 129 },
 };
 
 for (const prov of KOREA_REGIONS) {
@@ -2523,10 +2525,23 @@ function stableHash(str) {
 }
 
 export function listingCoords(itemOrRegion, itemId = "") {
+  if (
+    itemOrRegion &&
+    typeof itemOrRegion === "object" &&
+    Number.isFinite(Number(itemOrRegion.lat)) &&
+    Number.isFinite(Number(itemOrRegion.lng))
+  ) {
+    return {
+      lat: Number(itemOrRegion.lat),
+      lng: Number(itemOrRegion.lng),
+    };
+  }
   const region = typeof itemOrRegion === "string" ? itemOrRegion : itemOrRegion?.region;
   const id = typeof itemOrRegion === "string" ? itemId : itemOrRegion?.id || itemId;
   const base = REGION_COORDS[region] || getRegionCoords(region) || REGION_COORDS["영양읍"];
-  if (!id) return { lat: base.lat, lng: base.lng };
+  if (!id || region === "서면 팔봉리" || id === "hc-vivaldi-1") {
+    return { lat: base.lat, lng: base.lng };
+  }
   const h1 = stableHash(`${id}:lat`);
   const h2 = stableHash(`${id}:lng`);
   const latOffset = ((h1 % 1000) / 1000 - 0.5) * 0.026;
@@ -2552,15 +2567,22 @@ const distanceCache = new Map();
 
 export function distanceKm(from, to, itemId) {
   const fromCoords =
-    from && typeof from === "object" && Number.isFinite(from.lat) && Number.isFinite(from.lng)
-      ? from
+    from && typeof from === "object" && Number.isFinite(Number(from.lat)) && Number.isFinite(Number(from.lng))
+      ? { lat: Number(from.lat), lng: Number(from.lng) }
       : REGION_COORDS[from] || getRegionCoords(from) || REGION_COORDS["영양읍"];
   const fromKey =
-    from && typeof from === "object" && Number.isFinite(from.lat)
-      ? `${from.lat.toFixed(4)},${from.lng.toFixed(4)}`
+    from && typeof from === "object" && Number.isFinite(Number(from.lat))
+      ? `${Number(from.lat).toFixed(4)},${Number(from.lng).toFixed(4)}`
       : String(from || "영양읍");
 
-  const key = JSON.stringify([fromKey, to, itemId || ""]);
+  const toRegion = typeof to === "object" && to ? to.region : to;
+  const toId = (typeof to === "object" && to ? to.id : null) || itemId || "";
+  const toCoordsKey =
+    typeof to === "object" && to && Number.isFinite(Number(to.lat)) && Number.isFinite(Number(to.lng))
+      ? `${Number(to.lat).toFixed(6)},${Number(to.lng).toFixed(6)}`
+      : `${toRegion || ""}:${toId}`;
+
+  const key = JSON.stringify([fromKey, toCoordsKey]);
   if (!distanceCache.has(key)) {
     const toCoords = listingCoords(to, itemId);
     const raw = haversineKm(fromCoords, toCoords);

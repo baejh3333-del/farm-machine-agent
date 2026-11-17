@@ -1001,6 +1001,33 @@ export function createAiPanel({
     agentHistory = next.slice(-MAX_AGENT_HISTORY);
   }
 
+  // 바로 앞 답변에서 확인을 물은 작업. 다음 말이 "네/해줘"면 서버가 모델 없이 바로 실행한다(한 턴만 유효).
+  let lastPendingAction = null;
+
+  function rememberPendingAction(result) {
+    const pending = result?.pendingAction;
+    if (pending && ["rental_request", "purchase_request"].includes(pending.type)) {
+      lastPendingAction = { ...pending, requestId: pending.requestId || crypto.randomUUID() };
+    } else if (result?.listingDraft && Number.isFinite(result.listingDraft.price) && result.listingDraft.price > 0) {
+      const draft = result.listingDraft;
+      lastPendingAction = {
+        ...draft,
+        listingType: draft.type === "sale" ? "sale" : "rent",
+        type: "create_listing",
+        requestId: crypto.randomUUID(),
+        ...(!draft.photoKey && lastPhotoDataUrl ? { photoDataUrl: lastPhotoDataUrl } : {}),
+      };
+    } else {
+      lastPendingAction = null;
+    }
+  }
+
+  function takePendingAction() {
+    const pending = lastPendingAction;
+    lastPendingAction = null;
+    return pending;
+  }
+
   // 직전에 카드로 보여 준 매물(순서 유지). 서버가 같은 카드를 또 띄우지 않고 "첫 번째" 같은 말을 알아듣는 데 쓴다.
   let lastShownListingIds = [];
 
@@ -1118,6 +1145,7 @@ export function createAiPanel({
 
   async function executeOneTapAction({ pendingAction, requestId = crypto.randomUUID(), triggerButton, onBusy, onDone, onError }) {
     const gen = sessionGeneration;
+    lastPendingAction = null; // 화면 버튼으로 처리하면 말로 다시 실행하지 않는다.
     onBusy?.();
     if (triggerButton) triggerButton.disabled = true;
     try {
@@ -2006,6 +2034,11 @@ export function createAiPanel({
 
   function renderAgentEffects(bubble, result, { reply = "", includeFollowUp = true } = {}) {
     if (!bubble || !result) return;
+    rememberPendingAction(result);
+    if (result.reservation || result.createdListing) {
+      // 말로 바로 실행한 작업도 화면 목록(대여 요청·내 매물)을 새로 고친다.
+      Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+    }
     if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
       savedDraft = { listingId: result.listingDraft.listingId, photoKey: result.listingDraft.photoKey, photoUrl: result.listingDraft.photoUrl };
     }
@@ -2437,7 +2470,9 @@ export function createAiPanel({
         if (agentHistory[i].role === "user" && agentHistory[i].content === userText) { committedAt = i; break; }
       }
     }
-    const result = await askAgent(userText, {
+    let result;
+    try {
+      result = await askAgent(userText, {
       history: committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory,
       region: uiContext.region,
       uiContext,
@@ -2448,7 +2483,22 @@ export function createAiPanel({
       insuranceOffer,
       insuranceAsked,
       fullDelegation: fullDelegationEnabled,
+      pendingAction: takePendingAction(),
     });
+    } catch (error) {
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+      // 무한 대기로 두지 않고, 이유와 다음 방법을 한 문장으로 말한다.
+      const reason = typeof error?.message === "string" && /[가-힣]/.test(error.message) ? error.message.trim() : "";
+      const spoken = error?.status === 401
+        ? "구매나 예약은 로그인한 뒤에 할 수 있어요. 화면에서 로그인하시면 바로 이어서 해 드릴게요."
+        : error?.status === 429
+          ? "요청이 잠깐 몰렸어요. 조금 뒤에 같은 말씀을 한 번 더 해 주세요."
+          : `죄송해요, ${reason || "처리 중에 연결 문제가 생겼어요."} 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요.`;
+      if (reason) toast(reason);
+      rememberAgentTurn(...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]), { role: "assistant", content: spoken });
+      appendAiMessage(spoken, "assistant");
+      return { spokenSummary: spoken };
+    }
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
     if (result?.sessionId) agentSessionId = result.sessionId;
     if (delegationId) renderedDelegationIds.add(delegationId);
@@ -2824,6 +2874,7 @@ export function createAiPanel({
         insuranceOffer,
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
+        pendingAction: sendingPhoto ? null : takePendingAction(),
       });
       if (gen !== sessionGeneration) return;
       if (agentResult?.sessionId) agentSessionId = agentResult.sessionId;
@@ -2895,6 +2946,7 @@ export function createAiPanel({
     stopFallbackVoice();
     agentHistory = [];
     lastShownListingIds = [];
+    lastPendingAction = null;
     agentSessionId = null;
     insuranceOffer = null;
     insuranceAsked = false;

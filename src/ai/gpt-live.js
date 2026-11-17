@@ -255,7 +255,7 @@ export function createGptLiveController({
       result = (await onClientDelegation({ delegationId, userText: utterance, userTurnCommitted })) || {};
     } catch (error) {
       if (current(s)) onError(error, { fatal: false, source: "delegation" });
-      result = { spokenSummary: "죄송합니다, 확인 중 문제가 생겼습니다. 잠시 후 다시 말씀해 주세요." };
+      result = { spokenSummary: "죄송해요, 처리 중에 연결 문제가 생겼어요. 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요." };
     }
     if (!current(s)) return;
     const { spokenSummary, thinkingContext } = result;

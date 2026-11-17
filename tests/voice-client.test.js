@@ -561,7 +561,8 @@ test("gpt-live 위임 처리 실패는 대화를 끊지 않고 음성으로 사�
   assert.deepEqual(errors.map((e) => e.info), [{ fatal: false, source: "delegation" }]);
   const apology = sent.filter((m) => m.type === "session.commentary.append" && m.delegation_id === "d-fail");
   assert.equal(apology.length, 1);
-  assert.match(apology[0].content, /죄송합니다/);
+  assert.match(apology[0].content, /죄송해요/);
+  assert.match(apology[0].content, /한 번 더 해 주시면 바로 다시 할게요/);
   assert.equal(live.ready, true);
   assert.equal(live.state, "listening");
 });

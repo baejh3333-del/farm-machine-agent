@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { applyKnownFactsToSearch, collectKnownFacts, runAgentTurn, searchListingsTool, shouldShowCards, summarizeKnownFacts, tidyReply } from "../server/nongnong-agent.js";
+import { applyKnownFactsToSearch, collectKnownFacts, runAgentTurn, searchListingsTool, shouldShowCards, settleReply, summarizeKnownFacts, tidyReply } from "../server/nongnong-agent.js";
+import { runConfirmedAction } from "../api/agent.js";
 import { isAffirmative } from "../server/nongnong.js";
 import { buildMockListings } from "../server/listing-seed.js";
 import { buildGptLiveInstructions } from "../server/gpt-live.js";
@@ -200,4 +201,63 @@ test("문제4: 실시간 음성 지시문은 분명한 요청을 바로 실행�
   assert.match(text, /확인 없이 바로 <\|SpawnThinking\|>로 실행/);
   assert.doesNotMatch(text, /음성만으로 무단 실행 금지/);
   assert.match(text, /DRGH-1400/);
+});
+
+// ───────── 문제 5 ─────────
+
+test("문제5: 직전에 보여 준 매물 카드(ID·순서)를 다음 턴 프롬프트에 넣어 '청기면 매물/첫 번째'로 바로 실행할 수 있다", async (t) => {
+  withKey(t);
+  const shown = LISTINGS.filter((item) => item.type === "sale" && item.cropIds.includes("sweetPotato")).slice(0, 3);
+  const target = shown.find((item) => item.region === "청기면") || shown[0];
+  const sent = [];
+  const deps = { beforeWrite: async () => {}, sendPurchaseMessage: async (_u, payload) => { sent.push(payload); return { conversation: { id: "c1" } }; } };
+  const { call, calls } = scripted([
+    toolUse("create_purchase_request", { listingId: target.id }),
+    textReply("구매 신청을 마쳤어요."),
+  ]);
+  const result = await runAgentTurn("청기면 매물로 구매해줘", {
+    user: USER,
+    inputMode: "voice",
+    history: BUY_HISTORY,
+    uiContext: { shownListingIds: shown.map(({ id }) => id) },
+  }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.match(calls[0].system, /최근 보여 준 매물/);
+  for (const [i, item] of shown.entries()) assert.match(calls[0].system, new RegExp(`${i + 1}번: id=${item.id}`));
+  assert.equal(sent[0].listingId, target.id);
+  // 모델이 번호를 빠뜨려도 신청 번호를 답변에 붙인다.
+  assert.match(result.reply, /^구매 신청을 마쳤어요\. 신청 번호는 P-[0-9A-F]{8}예요\.$/);
+});
+
+test("문제5: 쓰기 도구가 실패했는데 '잠시만 기다려 주세요'로 끝내면 이유와 다음 방법으로 바꾼다", () => {
+  const reply = settleReply("죄송합니다. 매물 정보를 찾는 데 어려움이 있어 다시 한 번 매물 정보를 확인해 보겠습니다. 잠시만 기다려 주세요.", {
+    out: {},
+    toolCalls: [{ tool: "create_purchase_request", ok: false, result: { ok: false, error: "매물을 찾을 수 없습니다." } }],
+  });
+  assert.equal(reply, "구매 신청을 하지 못했어요. 이유: 매물을 찾을 수 없습니다. 다른 매물을 찾아 드리거나 조건을 바꿔 다시 해 드릴까요?");
+});
+
+test("문제5: 아무것도 실행하지 않고 '잠시 후 진행할게요'라고만 하면 그 약속 문장을 지운다", () => {
+  assert.equal(
+    settleReply("가격은 320만원, 청기면 매물로 맞는지 안내드렸어요. 잠시 후에 구매 요청 진행할게요.", { out: {}, toolCalls: [] }),
+    "가격은 320만원, 청기면 매물로 맞는지 안내드렸어요.",
+  );
+  assert.equal(settleReply("잠시만 기다려 주세요.", { out: {}, toolCalls: [] }), "어떤 매물로 진행할지 한 번만 말씀해 주시면 바로 처리해 드릴게요.");
+  assert.equal(settleReply("청기면 매물은 320만원이에요.", { out: {}, toolCalls: [] }), null);
+});
+
+test("문제5: 확인 대기 작업 실행 중 연결 오류가 나면 무한 대기 대신 다시 시도할 수 있게 작업을 돌려준다", async () => {
+  const pending = { type: "purchase_request", listingId: "s2", title: "두루기계통상 DRB-1200PC · 청기면" };
+  let attempts = 0;
+  const run = async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("socket hang up");
+    return { outcome: "completed", reservation: { kind: "purchase", number: "P-ABCDEF12", listingId: "s2" } };
+  };
+  const first = await runConfirmedAction({ message: "네", pending, user: USER, requestId: "r1", run });
+  assert.match(first.reply, /구매 신청을 하지 못했어요\. 이유: 서버 연결이 잠시 불안정했어요\. "다시 해줘"라고 말씀하시면 바로 다시 시도할게요\./);
+  assert.deepEqual(first.pendingAction, pending);
+  const second = await runConfirmedAction({ message: "다시 해줘", pending: first.pendingAction, user: USER, requestId: "r1", run });
+  assert.equal(second.reply, "두루기계통상 DRB-1200PC 청기면 구매 신청을 완료했어요. 신청 번호는 P-ABCDEF12예요.");
+  assert.equal(await runConfirmedAction({ message: "고민해볼게", pending, user: USER, requestId: "r1", run }), null);
+  assert.equal(await runConfirmedAction({ message: "네", pending, user: null, requestId: "r1", run }), null);
 });

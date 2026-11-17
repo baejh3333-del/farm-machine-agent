@@ -515,6 +515,15 @@ function formatUiContextPrompt(uiCtx, catalog) {
   if (uiCtx.farmNotes) {
     lines.push(`- 농가 메모: ${String(uiCtx.farmNotes).slice(0, 200)}`);
   }
+  if (uiCtx.shownListingIds?.length && Array.isArray(catalog)) {
+    const shown = uiCtx.shownListingIds
+      .map((id) => catalog.find((l) => l.id === id))
+      .filter(Boolean)
+      .map((item, i) => `  ${i + 1}번: id=${item.id}, 제목="${item.title}", ${item.type === "rent" ? "대여" : "판매"}, 가격=${won(item.price)}${item.type === "rent" ? "/일" : ""}, 지역=${item.region}, 상태=${item.status === "open" && item.condition !== "repair" ? "거래 가능" : "거래 불가"}`);
+    if (shown.length) {
+      lines.push(`- 최근 보여 준 매물(화면 카드 순서. "첫 번째/1번/청기면 매물"은 이 목록에서 고르고, 이 id로 바로 도구를 호출한다):\n${shown.join("\n")}`);
+    }
+  }
   if (uiCtx.viewingListingId && Array.isArray(catalog)) {
     const item = catalog.find((l) => l.id === uiCtx.viewingListingId && l.status !== "removed");
     if (item) {
@@ -1220,6 +1229,50 @@ export function shouldShowCards(listingIds, { shownListingIds = [], text = "" } 
   return Object.keys(changed).length > 0;
 }
 
+const WRITE_TOOLS = new Set(["create_rental_request", "create_purchase_request", "create_listing", "update_listing"]);
+const WRITE_LABEL = {
+  create_rental_request: "대여 예약",
+  create_purchase_request: "구매 신청",
+  create_listing: "매물 등록",
+  update_listing: "매물 수정",
+};
+// "잠시 후 진행할게요", "기다려 주세요"처럼 실행을 미루기만 하는 말
+const DEFERRED_PROMISE = /잠시\s*(?:후|만)|기다려\s*주|곧\s*(?:진행|처리|신청)|(?:진행|처리|신청|요청)(?:을|를)?\s*(?:해\s*)?드릴게|진행할게|처리할게|다시\s*(?:한\s*번\s*)?(?:매물\s*정보를\s*)?확인해\s*보겠/;
+
+/**
+ * 쓰기 도구 결과와 답변이 어긋나지 않게 한다.
+ * - 실행에 성공했는데 번호를 말하지 않으면 번호를 붙인다.
+ * - 실행에 실패했으면 "기다려 주세요" 대신 이유와 다음 방법을 한 문장으로 말한다.
+ * - 아무것도 실행하지 않았는데 "잠시 후 진행할게요"라고만 하면 그 약속 문장을 지운다.
+ * 바꿀 필요가 없으면 null.
+ */
+export function settleReply(reply, { out = {}, toolCalls = [] } = {}) {
+  const text = typeof reply === "string" ? reply.trim() : "";
+  const done = out.reservation || out.createdListing || out.updatedListing;
+  if (done) {
+    const number = done.number;
+    if (number && !text.includes(number)) {
+      const what = out.reservation?.kind === "purchase" ? "구매 신청" : out.reservation ? "대여 예약 요청" : out.createdListing ? "매물 등록" : "매물 수정";
+      const title = done.title ? `${tidyReply(String(done.title).replace(/\s*·\s*/g, " "))} ` : "";
+      if (text && !DEFERRED_PROMISE.test(text) && /완료|마쳤|보냈|접수|등록했|신청했/.test(text)) {
+        return `${text} 신청 번호는 ${number}예요.`;
+      }
+      return `${title}${what}을 완료했어요. 신청 번호는 ${number}예요.`;
+    }
+    return null;
+  }
+  const failedWrite = [...toolCalls].reverse().find((call) => WRITE_TOOLS.has(call.tool) && call.ok === false);
+  if (failedWrite && (!text || DEFERRED_PROMISE.test(text))) {
+    const reason = String(failedWrite.result?.error || failedWrite.result?.message || "요청을 처리하지 못했어요").replace(/[.。]\s*$/, "");
+    return `${WRITE_LABEL[failedWrite.tool]}을 하지 못했어요. 이유: ${reason}. 다른 매물을 찾아 드리거나 조건을 바꿔 다시 해 드릴까요?`;
+  }
+  if (text && DEFERRED_PROMISE.test(text) && !out.pendingAction) {
+    const kept = text.split(/(?<=[.!?。])\s+/).filter((sentence) => !DEFERRED_PROMISE.test(sentence)).join(" ").trim();
+    return kept || "어떤 매물로 진행할지 한 번만 말씀해 주시면 바로 처리해 드릴게요.";
+  }
+  return null;
+}
+
 /** 모델 답변에 섞이는 "D R G H-1400" 같은 띄어 쓴 영문 기종명과 앞 쉼표를 정리한다. */
 export function tidyReply(text) {
   if (typeof text !== "string") return text;
@@ -1345,7 +1398,7 @@ async function runTurn(
   const loadCatalog = async () => (catalog ??= await (deps?.fetchListings
     ? deps.fetchListings()
     : fetchListings({ pool, viewerId: user?.id ?? null })));
-  if (uiCtx.viewingListingId && !catalog) await loadCatalog();
+  if ((uiCtx.viewingListingId || uiCtx.shownListingIds?.length) && !catalog) await loadCatalog();
 
   const knownFacts = summarizeKnownFacts({ history, text, sessionSlots, uiCtx });
   const known = collectKnownFacts({ history, text, sessionSlots, uiCtx });
@@ -1935,6 +1988,9 @@ async function runTurn(
   }
 
   if (!shouldShowCards(out.listingIds, { shownListingIds: uiCtx.shownListingIds, text })) out.listingIds = [];
+
+  const settled = settleReply(texts.at(-1) || "", { out, toolCalls });
+  if (settled !== null) return await finish(settled);
 
   const fallbackReply = out.delegatedTransaction
     ? `'${out.delegatedTransaction.title}' 거래를 농농이 전담 모드로 시작했어요.`

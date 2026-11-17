@@ -1,4 +1,4 @@
-import { CROPS, CROP_BY_ID, MACHINE_TYPES, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
+import { CROP_BY_ID, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
 import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
 import { listingDraftToFormValues } from "./photo.js";
@@ -71,7 +71,7 @@ function formatCompatibilitySummary(item) {
   return item.summary || "";
 }
 const CONFIDENCE_LABELS = { high: "높음", medium: "보통", low: "낮음" };
-const MAX_AGENT_HISTORY = 12;
+const MAX_AGENT_HISTORY = 24;
 const AGENT_RESET_RE = /^(?:새 상담(?: 시작)?|처음부터 다시(?: 할래요?)?|대화 초기화)[.!?\s]*$/;
 
 function formatShortDate(ymd) {
@@ -317,6 +317,185 @@ export async function openCameraCapture({ fallbackInput = null, triggerButton = 
   }
 }
 
+const INLINE_MD_RE = /(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|`[^`\n]+?`|\[[^\]\n]+\]\((?:https?:\/\/|\/)[^)\s]+\))/g;
+const MACHINE_LIST_HEADING_RE = /^(?:#{1,6}\s*|\*\*[^*\n]*)(?:추천\s*매물|매물\s*목록|추천\s*농기계|추천\s*기계|검색\s*결과|추천\s*리스트)/;
+const LIST_ITEM_RE = /^\s*(?:[-*•]|\d+[.)])\s+/;
+
+export function stripDuplicateMachineList(text, listingCount = 0) {
+  const raw = String(text || "").replace(/\r\n?/g, "\n").trim();
+  if (!raw || !listingCount) return raw;
+  const lines = raw.split("\n");
+  let cutIndex = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (LIST_ITEM_RE.test(line)) {
+      cutIndex = i;
+      break;
+    }
+    if (MACHINE_LIST_HEADING_RE.test(line)) {
+      const restHasList = lines.slice(i + 1).some((next) => LIST_ITEM_RE.test(next.trim()));
+      if (restHasList) {
+        cutIndex = i;
+        break;
+      }
+    }
+  }
+  if (cutIndex === -1) return raw;
+  const intro = lines.slice(0, cutIndex).join("\n").trim();
+  return intro || `조건에 맞는 매물 ${listingCount}건을 찾았어요. 아래 카드에서 비교해 보세요.`;
+}
+
+function appendInlineMarkdown(parent, text) {
+  const source = String(text || "");
+  let lastIndex = 0;
+  INLINE_MD_RE.lastIndex = 0;
+  let match;
+  while ((match = INLINE_MD_RE.exec(source)) !== null) {
+    if (match.index > lastIndex) {
+      parent.append(document.createTextNode(source.slice(lastIndex, match.index)));
+    }
+    const token = match[0];
+    if ((token.startsWith("**") && token.endsWith("**")) || (token.startsWith("__") && token.endsWith("__"))) {
+      const strong = document.createElement("strong");
+      strong.textContent = token.slice(2, -2);
+      parent.append(strong);
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      const em = document.createElement("em");
+      em.textContent = token.slice(1, -1);
+      parent.append(em);
+    } else if (token.startsWith("`") && token.endsWith("`")) {
+      const code = document.createElement("code");
+      code.className = "ai-md-code";
+      code.textContent = token.slice(1, -1);
+      parent.append(code);
+    } else if (token.startsWith("[")) {
+      const splitIdx = token.indexOf("](");
+      const label = token.slice(1, splitIdx);
+      const href = token.slice(splitIdx + 2, -1);
+      const link = document.createElement("a");
+      link.className = "ai-md-link";
+      link.href = href;
+      link.textContent = label;
+      if (href.startsWith("http")) {
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      }
+      parent.append(link);
+    }
+    lastIndex = match.index + token.length;
+  }
+  if (lastIndex < source.length) {
+    parent.append(document.createTextNode(source.slice(lastIndex)));
+  }
+}
+
+function renderMarkdownElement(text) {
+  const container = document.createElement("div");
+  container.className = "ai-md";
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  let paragraphLines = [];
+  let listEl = null;
+  let listType = null;
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    const p = document.createElement("p");
+    p.className = "ai-md-p";
+    paragraphLines.forEach((line, idx) => {
+      if (idx > 0) p.append(document.createElement("br"));
+      appendInlineMarkdown(p, line);
+    });
+    container.append(p);
+    paragraphLines = [];
+  };
+
+  const flushList = () => {
+    if (!listEl) return;
+    container.append(listEl);
+    listEl = null;
+    listType = null;
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s*(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = headingMatch[1].length;
+      const heading = document.createElement(level <= 2 ? "h3" : "h4");
+      heading.className = `ai-md-heading is-h${Math.min(level, 4)}`;
+      appendInlineMarkdown(heading, headingMatch[2].trim());
+      container.append(heading);
+      continue;
+    }
+
+    if (/^[-*_]{3,}\s*$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      const hr = document.createElement("hr");
+      hr.className = "ai-md-hr";
+      container.append(hr);
+      continue;
+    }
+
+    const quoteMatch = trimmed.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      const quote = document.createElement("blockquote");
+      quote.className = "ai-md-quote";
+      appendInlineMarkdown(quote, quoteMatch[1]);
+      container.append(quote);
+      continue;
+    }
+
+    const ulMatch = rawLine.match(/^\s*[-*•]\s+(.+)$/);
+    if (ulMatch) {
+      flushParagraph();
+      if (listType !== "ul") {
+        flushList();
+        listEl = document.createElement("ul");
+        listEl.className = "ai-md-list";
+        listType = "ul";
+      }
+      const li = document.createElement("li");
+      appendInlineMarkdown(li, ulMatch[1].trim());
+      listEl.append(li);
+      continue;
+    }
+
+    const olMatch = rawLine.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (olMatch) {
+      flushParagraph();
+      if (listType !== "ol") {
+        flushList();
+        listEl = document.createElement("ol");
+        listEl.className = "ai-md-list is-ordered";
+        listType = "ol";
+      }
+      const li = document.createElement("li");
+      appendInlineMarkdown(li, olMatch[1].trim());
+      listEl.append(li);
+      continue;
+    }
+
+    flushList();
+    paragraphLines.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  return container;
+}
+
 export function createAiPanel({
   state,
   runtime,
@@ -337,6 +516,8 @@ export function createAiPanel({
 }) {
   let recommendationPending = false;
   let agentHistory = [];
+  let agentSessionId = null;
+  let selectedLiveVoice = "noeul";
   let agentPhoto = null;
   let photoIsNew = false;
   let photoLabel = "첨부한 기계 사진";
@@ -344,7 +525,6 @@ export function createAiPanel({
   let savedDraft = null;
   let quickOwnedNote = "";
   let setupExpanded = false;
-  let pickerOpen = false;
   let plusMenuOpen = false;
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
@@ -398,12 +578,6 @@ export function createAiPanel({
       event.stopImmediatePropagation();
       setPlusMenuOpen(false);
       $("aiPlusButton")?.focus();
-      return;
-    }
-    if (pickerOpen) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setPickerOpen(false);
       return;
     }
     if (activeCameraCleanup) {
@@ -569,123 +743,9 @@ export function createAiPanel({
     return `내 초기 설정: ${region} · ${area} · ${ownedLabel}`;
   }
 
-  function appendInputToken(text) {
-    const input = $("aiInput");
-    if (!input) return;
-    const current = input.value.trim();
-    input.value = current ? `${current} ${text}` : text;
-    input.focus();
-  }
-
-  function setPickerOpen(nextOpen) {
-    pickerOpen = Boolean(nextOpen);
-    const drawer = $("aiPickerDrawer");
-    if (drawer) drawer.hidden = !pickerOpen;
-    document.querySelectorAll("[data-ai-picker-toggle]").forEach((btn) => {
-      btn.setAttribute("aria-expanded", String(pickerOpen));
-    });
-  }
-
-  function ensurePickerDrawer() {
-    if ($("aiPickerDrawer")) return $("aiPickerDrawer");
-    const panel = $("aiPanel");
-    const anchor = $("aiPhotoPreview") || $("aiForm");
-    if (!panel || !anchor) return null;
-
-    const drawer = document.createElement("div");
-    drawer.id = "aiPickerDrawer";
-    drawer.className = "ai-picker-drawer";
-    drawer.hidden = true;
-
-    const header = document.createElement("div");
-    header.className = "ai-picker-header";
-    const title = document.createElement("span");
-    title.textContent = "작물·기종 선택 (누르면 입력창에 들어가요)";
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "ai-picker-close";
-    closeBtn.textContent = "닫기 ✕";
-    closeBtn.addEventListener("click", () => setPickerOpen(false));
-    header.append(title, closeBtn);
-    drawer.append(header);
-
-    const cropSec = document.createElement("div");
-    cropSec.className = "ai-picker-section";
-    const cropLabel = document.createElement("div");
-    cropLabel.className = "ai-picker-label";
-    cropLabel.textContent = "작물";
-    const cropChips = document.createElement("div");
-    cropChips.className = "ai-picker-chips";
-    for (const crop of CROPS) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ai-picker-chip";
-      btn.textContent = crop.name;
-      btn.addEventListener("click", () => {
-        appendInputToken($("aiInput").value.trim() ? crop.name : `${crop.name}밭에 쓸 기계 찾고 있어요`);
-        setPickerOpen(false);
-      });
-      cropChips.append(btn);
-    }
-    cropSec.append(cropLabel, cropChips);
-
-    const machineSec = document.createElement("div");
-    machineSec.className = "ai-picker-section";
-    const machineLabel = document.createElement("div");
-    machineLabel.className = "ai-picker-label";
-    machineLabel.textContent = "농기계 기종";
-    const machineChips = document.createElement("div");
-    machineChips.className = "ai-picker-chips";
-    for (const machine of MACHINE_TYPES) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ai-picker-chip";
-      btn.textContent = machine.label;
-      btn.addEventListener("click", () => {
-        appendInputToken($("aiInput").value.trim() ? machine.label : `${machine.label} 찾고 있어요`);
-        setPickerOpen(false);
-      });
-      machineChips.append(btn);
-    }
-    machineSec.append(machineLabel, machineChips);
-
-    drawer.append(cropSec, machineSec);
-    const dock = document.querySelector(".ai-composer-dock");
-    if (dock) {
-      panel.insertBefore(drawer, dock);
-    } else if (anchor.parentNode) {
-      anchor.parentNode.insertBefore(drawer, anchor);
-    }
-
-    const form = $("aiForm");
-    if (form && !form.querySelector('[data-ai-picker-toggle="inline"]')) {
-      const inlineBtn = document.createElement("button");
-      inlineBtn.type = "button";
-      inlineBtn.className = "ai-picker-inline-btn";
-      inlineBtn.dataset.aiPickerToggle = "inline";
-      inlineBtn.setAttribute("aria-expanded", "false");
-      inlineBtn.setAttribute("aria-controls", "aiPickerDrawer");
-      inlineBtn.textContent = "작물·기종";
-      const input = $("aiInput");
-      if (input) form.insertBefore(inlineBtn, input);
-      else form.append(inlineBtn);
-    }
-    document.querySelectorAll('[data-ai-picker-toggle="inline"]').forEach((btn) => {
-      if (btn.dataset.boundPicker) return;
-      btn.dataset.boundPicker = "1";
-      btn.addEventListener("click", () => {
-        setPlusMenuOpen(false);
-        setPickerOpen(!pickerOpen);
-      });
-    });
-
-    return drawer;
-  }
-
   function renderStarterBar() {
     const root = $("aiStarters");
     if (!root) return;
-    ensurePickerDrawer();
     root.replaceChildren();
 
     const card = document.createElement("div");
@@ -786,15 +846,7 @@ export function createAiPanel({
     const guideText = document.createElement("p");
     guideText.className = "ai-starter-guide-text";
     guideText.textContent = "농사일이나 기종을 한 줄로 말하면 필요한 조건만 차례로 여쭤볼게요.";
-    const pickerBtn = document.createElement("button");
-    pickerBtn.type = "button";
-    pickerBtn.className = "ai-picker-trigger";
-    pickerBtn.dataset.aiPickerToggle = "starter";
-    pickerBtn.setAttribute("aria-expanded", String(pickerOpen));
-    pickerBtn.setAttribute("aria-controls", "aiPickerDrawer");
-    pickerBtn.textContent = "작물·기종 보기";
-    pickerBtn.addEventListener("click", () => setPickerOpen(!pickerOpen));
-    guide.append(guideText, pickerBtn);
+    guide.append(guideText);
 
     card.append(setupBar, form, guide);
     root.append(card);
@@ -936,7 +988,16 @@ export function createAiPanel({
   }
 
   function rememberAgentTurn(...entries) {
-    agentHistory = [...agentHistory, ...entries.filter((entry) => entry.content)].slice(-MAX_AGENT_HISTORY);
+    const next = [...agentHistory];
+    for (const entry of entries) {
+      if (!entry || typeof entry.content !== "string") continue;
+      const content = entry.content.trim();
+      if (!content) continue;
+      const prev = next.at(-1);
+      if (prev && prev.role === entry.role && prev.content === content) continue;
+      next.push({ role: entry.role, content });
+    }
+    agentHistory = next.slice(-MAX_AGENT_HISTORY);
   }
 
   function collectUiContext() {
@@ -1341,9 +1402,14 @@ export function createAiPanel({
   function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
-    const textNode = document.createElement("div");
-    textNode.textContent = text;
-    bubble.append(textNode);
+    if (role === "assistant") {
+      const displayText = listingIds.length ? stripDuplicateMachineList(text, listingIds.length) : text;
+      bubble.append(renderMarkdownElement(displayText));
+    } else {
+      const textNode = document.createElement("div");
+      textNode.textContent = text;
+      bubble.append(textNode);
+    }
     if (photo) {
       const img = document.createElement("img");
       img.className = "ai-chat-photo";
@@ -2138,8 +2204,62 @@ export function createAiPanel({
       liveAvailable: Boolean(serverCap.liveAvailable && webrtcSupported),
     };
     voiceCapability = cap;
+    const voiceIds = Array.isArray(cap.liveVoices) ? cap.liveVoices.map((v) => v.id).filter(Boolean) : [];
+    const defaultVoice = cap.liveVoice || voiceMod?.DEFAULT_LIVE_VOICE || "noeul";
+    selectedLiveVoice = voiceMod?.loadLiveVoicePreference
+      ? voiceMod.loadLiveVoicePreference(voiceIds.length ? voiceIds : null)
+      : defaultVoice;
+    ensureLiveVoiceSelect(cap.liveVoices || voiceMod?.LIVE_VOICE_OPTIONS);
     syncVoiceButtons(cap);
     return cap;
+  }
+
+  function ensureLiveVoiceSelect(options = null) {
+    const actions = $("aiVoiceLiveBar")?.querySelector(".ai-voice-live-actions");
+    if (!actions) return null;
+    let select = $("aiVoiceSelect");
+    if (!select) {
+      select = document.createElement("select");
+      select.id = "aiVoiceSelect";
+      select.className = "ai-voice-select";
+      select.setAttribute("aria-label", "실시간 음성 목소리 선택");
+      select.title = "실시간 음성 목소리 선택";
+      select.addEventListener("change", async () => {
+        const nextVoice = select.value;
+        if (!nextVoice || nextVoice === selectedLiveVoice) return;
+        selectedLiveVoice = nextVoice;
+        loadVoiceModule().then((mod) => mod?.saveLiveVoicePreference?.(nextVoice)).catch(() => {});
+        if (isLiveVoiceActive() && !liveVoiceStarting) {
+          toast("목소리를 바꿔서 대화를 이어갈게요.");
+          await stopLiveVoice({ silent: true });
+          await startLiveVoice();
+        }
+      });
+      actions.prepend(select);
+    }
+    const list = Array.isArray(options) && options.length
+      ? options
+      : [
+          { id: "noeul", label: "노을 (한국어 · 여성)" },
+          { id: "marin", label: "마린 (차분함 · 기본)" },
+          { id: "willow", label: "윌로우 (따뜻함 · 여성)" },
+          { id: "quartz", label: "쿼츠 (밝음 · 여성)" },
+          { id: "ripple", label: "리플 (부드러움 · 남성)" },
+          { id: "vesper", label: "베스퍼 (중저음 · 남성)" },
+        ];
+    const currentSignature = Array.from(select.options).map((o) => `${o.value}:${o.textContent}`).join("|");
+    const nextSignature = list.map((item) => `${item.id}:${item.label || item.id}`).join("|");
+    if (currentSignature !== nextSignature) {
+      select.innerHTML = "";
+      for (const item of list) {
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = item.label || item.id;
+        select.append(opt);
+      }
+    }
+    if (list.some((item) => item.id === selectedLiveVoice)) select.value = selectedLiveVoice;
+    return select;
   }
 
   function syncVoiceButtons(cap) {
@@ -2241,10 +2361,53 @@ export function createAiPanel({
       scrollAiToEnd();
     }
     if (meta?.done || meta?.final) {
-      if (bubble) bubble.classList.remove("is-live-transcript");
+      if (bubble) {
+        bubble.classList.remove("is-live-transcript");
+        if (!isUser) {
+          const finalText = bubble.textContent || "";
+          if (finalText.trim()) {
+            bubble.replaceChildren(renderMarkdownElement(finalText));
+          }
+        }
+      }
       if (isUser) liveUserBubble = null;
       else liveAssistantBubble = null;
     }
+  }
+
+  function buildDelegationThinkingContext(result, listingIds) {
+    if (!result || typeof result !== "object") return "";
+    const parts = [];
+    if (result.searchDates?.start) {
+      parts.push(`조회기간: ${result.searchDates.start}${result.searchDates.end ? `~${result.searchDates.end}` : ""}`);
+    }
+    if (result.weatherInfo && typeof result.weatherInfo === "object") {
+      const w = result.weatherInfo;
+      const wBits = [w.summary, w.badWeatherWarning, w.recommendation].filter(Boolean);
+      if (Array.isArray(w.goodAlternatives) && w.goodAlternatives.length) {
+        wBits.push(`맑은 추천일: ${w.goodAlternatives.map((d) => (typeof d === "string" ? d : d?.date || d?.label)).filter(Boolean).slice(0, 4).join(", ")}`);
+      }
+      if (wBits.length) parts.push(`날씨: ${wBits.join(" / ")}`);
+    }
+    if (Array.isArray(listingIds) && listingIds.length) {
+      const items = listingIds.slice(0, 4).map((id) => listingById(id)).filter(Boolean)
+        .map((item) => `${item.title}(${item.region}, ${item.type === "sale" ? `${item.price}원` : `일 ${item.dailyPrice}원`})`);
+      if (items.length) parts.push(`후보매물: ${items.join("; ")}`);
+    }
+    if (result.learnedSlots && typeof result.learnedSlots === "object") {
+      const s = result.learnedSlots;
+      const slotBits = [
+        s.region ? `지역=${s.region}` : "",
+        s.areaPyeong ? `면적=${s.areaPyeong}평` : "",
+        s.date ? `날짜=${s.date}${s.dateEnd ? `~${s.dateEnd}` : ""}` : "",
+        s.budgetWon ? `예산=${s.budgetWon}원` : "",
+      ].filter(Boolean);
+      if (slotBits.length) parts.push(`기억된조건: ${slotBits.join(", ")}`);
+    }
+    if (result.pendingAction?.title) {
+      parts.push(`승인대기: ${result.pendingAction.title}`);
+    }
+    return parts.join(" | ").slice(0, 780);
   }
 
   async function handleClientDelegation(payload, gen, liveGen) {
@@ -2259,18 +2422,27 @@ export function createAiPanel({
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
 
     const uiContext = collectUiContext();
+    // 위임 전에 맞장구가 먼저 나오면 같은 발화가 이미 기억에 있다: 에이전트에는 그 앞까지만 history로 보낸다.
+    let committedAt = -1;
+    if (payload?.userTurnCommitted) {
+      for (let i = agentHistory.length - 1; i >= 0; i -= 1) {
+        if (agentHistory[i].role === "user" && agentHistory[i].content === userText) { committedAt = i; break; }
+      }
+    }
     const result = await askAgent(userText, {
-      history: agentHistory,
+      history: committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory,
       region: uiContext.region,
       uiContext,
       inputMode: "voice",
       delegationId: delegationId || undefined,
+      sessionId: agentSessionId,
       savedDraft,
       insuranceOffer,
       insuranceAsked,
       fullDelegation: fullDelegationEnabled,
     });
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+    if (result?.sessionId) agentSessionId = result.sessionId;
     if (delegationId) renderedDelegationIds.add(delegationId);
 
     const reply = typeof result?.reply === "string" && result.reply.trim()
@@ -2278,7 +2450,7 @@ export function createAiPanel({
       : "말씀하신 내용을 확인했어요.";
     if (!result?.insuranceAsk) trackInsurance(result);
     rememberAgentTurn(
-      { role: "user", content: userText },
+      ...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]),
       { role: "assistant", content: reply },
     );
 
@@ -2298,18 +2470,21 @@ export function createAiPanel({
     ) {
       spokenSummary += " 화면에 승인 카드를 띄워 드렸어요. 내용을 확인하신 뒤 초록색 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.";
     }
-    return { spokenSummary, result };
+    const thinkingContext = buildDelegationThinkingContext(result, listingIds);
+    return { spokenSummary, ...(thinkingContext ? { thinkingContext } : {}), result };
   }
 
   function muteLiveVoiceForPhoto() {
     if (isLiveVoiceActive() && !liveController.muted) {
       liveController.setMuted(true);
       syncLiveMuteButton(true);
-      syncLiveVoiceBar("muted");
+      syncLiveVoiceBar(liveController.state);
     }
   }
 
   async function stopLiveVoice({ silent = false } = {}) {
+    // 세대를 올리면 onTurnCommitted가 막히므로, 말하던 중인 턴(목소리 변경·종료 직전)을 먼저 기억에 남긴다.
+    try { liveController?.commitPendingTurns?.(); } catch { /* ignore */ }
     liveVoiceGeneration += 1;
     liveVoiceStarting = false;
     const controller = liveController;
@@ -2357,13 +2532,16 @@ export function createAiPanel({
       syncLiveVoiceBar("connecting");
       const controller = liveMod.createGptLiveController({
         region: uiContext.region,
+        voice: selectedLiveVoice,
+        uiContext,
         history: agentHistory,
         audioElement: ensureVoiceAudioElement(),
         onState: (nextState) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           const resolvedState = nextState === "listening" && controller.muted ? "muted" : (nextState || "listening");
           syncLiveVoiceBar(resolvedState);
-          if (nextState === "listening") finalizeLiveTranscriptBubbles();
+          syncLiveMuteButton(controller.muted);
+          if (nextState === "listening" || nextState === "muted") finalizeLiveTranscriptBubbles();
           if (nextState === "closed" || nextState === "idle") {
             // 서버가 먼저 세션을 닫아도 다음 대화가 이전 말풍선에 이어 붙지 않게 정리한다.
             finalizeLiveTranscriptBubbles();
@@ -2378,6 +2556,13 @@ export function createAiPanel({
         onAssistantTranscriptDelta: (payload) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           appendOrUpdateTranscriptBubble("assistant", payload?.delta || "");
+        },
+        onTurnCommitted: (turn) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          if (turn?.delegated) return; // 위임 답변은 handleClientDelegation이 이미 기록했다.
+          if (turn?.text && (turn.role === "user" || turn.role === "assistant")) {
+            rememberAgentTurn({ role: turn.role, content: turn.text });
+          }
         },
         onClientDelegation: (payload) => handleClientDelegation(payload, gen, liveGen),
         onError: (error, info = {}) => {
@@ -2565,7 +2750,7 @@ export function createAiPanel({
     const nextMuted = !liveController.muted;
     liveController.setMuted(nextMuted);
     syncLiveMuteButton(nextMuted);
-    syncLiveVoiceBar(nextMuted ? "muted" : "listening");
+    syncLiveVoiceBar(liveController.state);
   });
   $("aiVoiceStopBtn")?.addEventListener("click", () => {
     stopLiveVoice();
@@ -2576,9 +2761,9 @@ export function createAiPanel({
     const panelObserver = new MutationObserver(() => {
       const isNowHidden = aiPanelEl.hidden;
       if (!wasPanelHidden && isNowHidden) {
+        try { liveController?.commitPendingTurns?.(); } catch { /* ignore */ }
         sessionGeneration += 1;
         setPlusMenuOpen(false);
-        setPickerOpen(false);
         stopLiveVoice({ silent: true });
         stopFallbackVoice();
       }
@@ -2606,7 +2791,6 @@ export function createAiPanel({
     if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
     $("aiStarters").hidden = true;
     setPlusMenuOpen(false);
-    setPickerOpen(false);
     $("aiMessages").querySelectorAll(".ai-follow-up, .ai-date-picker, .ai-plan-card").forEach((el) => el.remove());
     appendAiMessage(message, "user", [], sendingPhoto);
     let pending;
@@ -2630,6 +2814,7 @@ export function createAiPanel({
         history: agentHistory,
         region: uiContext.region,
         inputMode,
+        sessionId: agentSessionId,
         uiContext,
         image: sendingPhoto || undefined,
         savedDraft,
@@ -2638,6 +2823,7 @@ export function createAiPanel({
         fullDelegation: fullDelegationEnabled,
       });
       if (gen !== sessionGeneration) return;
+      if (agentResult?.sessionId) agentSessionId = agentResult.sessionId;
       pending.remove();
       pending = undefined;
       if (agentResult?.mode === "agent") {
@@ -2705,6 +2891,7 @@ export function createAiPanel({
     stopLiveVoice({ silent: true });
     stopFallbackVoice();
     agentHistory = [];
+    agentSessionId = null;
     insuranceOffer = null;
     insuranceAsked = false;
     savedDraft = null;
@@ -2712,7 +2899,6 @@ export function createAiPanel({
     setupExpanded = false;
     setFullDelegation(false);
     setPlusMenuOpen(false);
-    setPickerOpen(false);
     renderStarterBar();
     clearPhoto();
     if (initialWelcomeHtml) {

@@ -1,4 +1,4 @@
-// 농농 통합 오케스트레이션 에이전트 (OpenAI · Z.ai · Claude 공통, server/llm.js 기반).
+// 농농 통합 오케스트레이션 에이전트 (OpenAI · Claude 공통, server/llm.js 기반).
 // 흐름: 화면 컨텍스트 + 발화 의도 파악 → (모호하면) 원탭 선택지 제공 → (조회/날씨/사진/수리/시세)
 //      → 사용자가 긍정·예약 요청하면 즉시 대여·구매·매물 등록 실행 (미확정·비로그인 시 확인 카드 제안).
 import { randomUUID } from "node:crypto";
@@ -67,6 +67,7 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
    - 사용자가 "예약해줘", "네", "그걸로 해 주세요", "올려 주세요"처럼 분명히 긍정·실행 의사를 밝혔고 필수 조건(매물 ID, 시작일/반납일 등)이 모두 정해졌으면 create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다.
    - 아직 확정 전이거나 날짜/조건 확인용 카드를 먼저 띄워야 할 때는 propose_rental_request 또는 prepare_listing_draft를 호출한다.
    - 완료되면 도구 결과의 예약·등록 번호와 요약을 안내하고, 결제는 사용자가 [대여 요청] 메뉴나 판매자 채팅에서 직접 한다고 알려 준다.
+   - **교육이수증 안내**: 트랙터·굴착기·관리기·이앙기·콤바인·SS기·고소작업차·파쇄기 등 농기계 대여를 추천하거나 예약을 안내할 때는 **"+ 교육이수증 필요"**(임대사업소·안전교육 대상 기종 여부에 따라 안전교육 이수증이 필요할 수 있으므로 대여 전 확인 필요) 안내를 함께 포함한다.
    - 삭제는 지원하지 않는다. 취소·변경은 [대여 요청]·[내 기계 관리] 메뉴에서 직접 하도록 안내한다.
 
 ## 규칙
@@ -78,15 +79,16 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 정확한 주소와 연락처 같은 개인정보를 묻거나 알려 주지 않는다.
 - 검색 결과 매물은 화면에 카드로 따로 보이므로, 답변에서는 몇 개를 찾았는지와 고르는 데 도움이 되는 차이만 3~4문장 이내로 말한다.
 
-## 사진 상담
+## 고장·수리 및 사진 상담
 - 사진이 오면 먼저 note_photo로 기종, 추정 모델(카탈로그에 있을 때만), 확신도, 보이는 상태를 기록한다. 사진 판단은 "사진으로 보면 ~로 보여요"처럼 추정으로 말하고, 확신이 낮으면 확인 질문을 한다. 사진만으로 고장 원인이나 모델을 단정하지 않는다.
 - 사진과 함께 온 말로 의도를 고른다: 고장·수리, 정체·상태 문의, 판매, 대여 등록. 모호하면 offer_choices로 「고장·수리 문의」「이게 뭔지 궁금해요」「팔고 싶어요」「빌려주고 싶어요」 중에서 묻는다.
 - 사진에 사람 얼굴, 차량 번호판, 주소 같은 개인정보가 보이면 가리고 다시 올리도록 안내한다.
-- 수리는 get_repair_guide에 있는 단계만 안내한다. 안전 수칙 → 번호 붙인 점검 3~5단계 → "이럴 땐 멈추고 수리센터에 연락하세요" 순서로 짧게 말한다. 가이드에 없는 분해·정비·조정은 안내하지 않는다. 사용자가 해 봤는데 안 된다고 하거나 중단 조건에 해당하면 find_repair_centers로 연결한다. 전화번호와 사이트는 그 결과에 있는 것만 쓴다(화면에 카드로 보인다).
+- **고장·연기·누유·소음·시동 불량·수리 문의(사진 유무 무관)**:
+  1) 기종을 알면 get_repair_guide로 안전 수칙과 자가점검 3~5단계, 중단 조건을 조회해 짧게 안내한다.
+  2) **반드시 find_repair_centers도 함께 호출**해 가까운 수리센터·임대사업소·제조사 A/S 창구를 추천한다(화면에 전화·사이트 버튼 카드로 보이며, 답변에도 센터명·전화번호·웹사이트 URL을 도구 결과 그대로 안내한다).
+  3) 수리 흐름에서도 보험 보장이 포함될 수 있으므로, 답변 마지막에 **"보험 추천해드릴까요?"**를 함께 제안한다.
 - 판매·대여 등록을 원하면 estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 확정한다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 연식·사용시간·포함 작업기처럼 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
-- 보험은 사용자가 보험을 물었을 때만 get_insurance_info로 안내한다. 먼저 꺼내거나 가입을 권유하지 않고, 보험료를 확정해 말하지 않는다.
-- 대여·구매 예약을 마친 뒤 "보험을 추천해드릴까요?"는 화면이 한 번만 대신 묻는다. 예약 완료 답변에서 직접 보험을 묻거나 권하지 않는다.
-- 보험 가입이나 결제를 대신하지 않고, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
+- **보험 안내**: 대여 추천·예약 흐름과 고장·수리 안내 흐름 모두에서 **"보험 추천해드릴까요?"**로 먼저 제안할 수 있으며, 사용자가 보험을 묻거나 추천을 원하면 get_insurance_info로 안내한다. 보험료를 확정해 말하지 않고, 보험 가입·결제를 대신하지 않으며, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
 - 웹 검색 도구가 있으면, 위 도구에 없는 사실을 확인할 때만 쓰고 "웹 검색 결과라 확인이 필요해요"라고 밝힌다.
 - 시니어도 읽기 쉽게: 한 문장은 짧게, 어려운 말은 쉬운 말로 풀어 쓴다.`;
 
@@ -276,7 +278,7 @@ const TOOLS = [
   },
   {
     name: "find_repair_centers",
-    description: "근처 수리·상담 창구(지역 기관, 제조사 A/S)를 조회한다. 결과는 화면에 전화·사이트 버튼 카드로 보인다.",
+    description: "근처 수리·상담 창구(지역 기관, 제조사 A/S)의 전화번호와 웹사이트 URL을 조회한다. 고장·연기·누유·시동 불량·수리 문의 시 즉시 호출한다. 결과는 화면에 전화·사이트 버튼 카드로 보인다.",
     input_schema: { type: "object", properties: { region: { type: ["string", "null"] }, brand: { type: ["string", "null"] } } },
   },
   {
@@ -353,7 +355,7 @@ const TOOLS = [
   },
   {
     name: "get_insurance_info",
-    description: "사용자가 보험을 물었을 때만 쓴다. 역할(owner: 빌려주거나 파는 사람, renter: 빌리는 사람)에 맞는 보험 개요와 가입처를 조회한다.",
+    description: "역할(owner: 빌려주거나 파는 사람·수리 중인 소유자, renter: 빌리는 사람)에 맞는 농기계 보험 개요와 가입처를 조회한다. 대여·수리·보험 문의 흐름에서 사용한다.",
     input_schema: {
       type: "object",
       properties: { role: { type: "string", enum: ["owner", "renter"] }, machineType: { type: ["string", "null"] } },
@@ -552,7 +554,11 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
     count: results.length,
     ...(start ? { start, end } : {}),
     results,
-    note: results.length ? "순서대로 1번, 2번, 3번이다." : "조건에 맞는 매물이 없다. 조건을 넓히거나 다른 작업을 제안한다.",
+    note: results.length
+      ? (context.transaction === "rent"
+        ? "순서대로 1번, 2번, 3번이다. 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다."
+        : "순서대로 1번, 2번, 3번이다.")
+      : "조건에 맞는 매물이 없다. 조건을 넓히거나 다른 작업을 제안한다.",
   };
 }
 
@@ -858,11 +864,6 @@ export function cleanSavedDraft(draft) {
   return { listingId: draft.listingId, photoKey: draft.photoKey, photoUrl: typeof draft.photoUrl === "string" ? draft.photoUrl : null };
 }
 
-function asksInsurance(message, history) {
-  const recentUser = (Array.isArray(history) ? history : []).filter((item) => item?.role === "user").slice(-2).map((item) => String(item.content || ""));
-  return [message, ...recentUser].some((text) => /보험/.test(text));
-}
-
 function resolveListingPayload(input, { uiCtx, photoSummary, catalog } = {}) {
   const type = input?.type === "sale" ? "sale" : "rent";
   const modelId = Object.hasOwn(SPEC_BY_ID, input?.modelId) ? input.modelId : null;
@@ -1009,7 +1010,20 @@ const CORE_TOOL_NAMES = new Set([
   "lookup_machine_spec",
 ]);
 
-const EXTENDED_CONTEXT_PATTERN = /사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|연기|점검|정비|센터|a\/s|repair|broken|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
+const REPAIR_QUERY_PATTERN = /고장|수리|연기|누유|누수|안\s*걸|시동|소음|진동|덜컹|점검|정비|수리센터|수리점|공업사|서비스센터|경고등|과열|파손|부서|망가|고치|a\/s|repair|broken|smoke/i;
+
+function inferRepairBrand(text) {
+  const s = String(text || "");
+  if (/대동/i.test(s)) return "대동";
+  if (/아세아/i.test(s)) return "아세아텍";
+  if (/얀마/i.test(s)) return "얀마";
+  if (/혼다/i.test(s)) return "혼다";
+  if (/강농/i.test(s)) return "강농";
+  if (/두루/i.test(s)) return "두루기계통상";
+  return undefined;
+}
+
+const EXTENDED_CONTEXT_PATTERN = /사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|누수|연기|점검|정비|센터|수리점|공업사|경고등|과열|파손|부서|망가|고치|이상하|이상해|a\/s|repair|broken|smoke|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
 
 /**
  * 턴의 맥락(이미지, 발화, 대화 이력, 슬롯)에 따라 LLM에 전달할 도구 집합을 동적으로 고른다.
@@ -1157,7 +1171,7 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
 }
 
 /**
- * 한 번의 사용자 발화를 처리한다. AI 키(OPENAI_API_KEY / ZAI_API_KEY / ANTHROPIC_API_KEY)가 없으면
+ * 한 번의 사용자 발화를 처리한다. AI 키(OPENAI_API_KEY / ANTHROPIC_API_KEY)가 없으면
  * { mode: "unavailable" }를 돌려준다.
  */
 export async function runAgentTurn(message, context = {}, options = {}) {
@@ -1242,6 +1256,7 @@ async function runTurn(
   let draft = image ? null : cleanSavedDraft(savedDraft);
   let writeDone = false;
   let searchedThisTurn = false;
+  let repairGuideCalled = false;
   const texts = [];
   const finish = async (reply, extra = {}) => {
     const learnedSlots = extractLearnedSlots({ text, uiCtx, toolCalls });
@@ -1461,6 +1476,7 @@ async function runTurn(
         output = lookupMachineSpec(block.input || {});
         addSources(output.model?.sources);
       } else if (block.name === "get_repair_guide") {
+        repairGuideCalled = true;
         output = getRepairGuide({ machineType: block.input?.machineType, symptom: block.input?.symptom, text });
         addSources(output.guides?.map((guide) => guide.source));
       } else if (block.name === "find_repair_centers") {
@@ -1718,9 +1734,7 @@ async function runTurn(
           }
         }
       } else if (block.name === "get_insurance_info") {
-        output = asksInsurance(text, history)
-          ? getInsuranceInfo(block.input || {})
-          : { error: "보험은 요청하실 때만 안내해요. 사용자가 보험을 묻지 않았으니 보험 이야기를 하지 마세요." };
+        output = getInsuranceInfo(block.input || {});
         addSources(output.products?.map((product) => product.source));
       } else {
         output = { error: "지원하지 않는 도구입니다." };
@@ -1763,6 +1777,25 @@ async function runTurn(
         : part));
     }
     messages.push({ role: "user", content: results });
+  }
+
+  if (
+    texts.length
+    && (repairGuideCalled || REPAIR_QUERY_PATTERN.test(text))
+    && !out.repairCenters
+    && !out.reservation
+    && !out.createdListing
+    && !out.updatedListing
+    && !out.listingDraft
+    && !/도와드릴 수 없|관계없는/.test(texts.at(-1))
+  ) {
+    const fallbackCenters = await findRepairCenters(
+      { region: effectiveRegion, brand: inferRepairBrand(text) },
+      fetchOffices ? { fetchOffices } : {},
+    ).catch(() => null);
+    if (fallbackCenters?.centers?.length) {
+      out.repairCenters = fallbackCenters.centers;
+    }
   }
 
   if (
@@ -1841,7 +1874,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       days: verified.days,
       totalPrice: verified.totalPrice,
     },
-    message: `대여 요청을 보냈어요. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요.`,
+    message: `대여 요청을 보냈어요. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
   };
 }
 

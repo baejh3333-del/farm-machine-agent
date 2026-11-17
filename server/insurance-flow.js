@@ -8,7 +8,7 @@ import { getPool } from "./db.js";
 import { INSURANCE_OFFICES, INSURANCE_PRODUCTS, MACHINERY_INSURANCE_ELIGIBILITY } from "./knowledge/insurance.js";
 import { isAffirmative, reservationNumber } from "./nongnong.js";
 
-export const INSURANCE_ASK = "보험을 추천해드릴까요?";
+export const INSURANCE_ASK = "보험 추천해드릴까요?";
 const ASK_AGAIN = "보험을 추천해 드릴까요, 아니면 넘어갈까요?";
 const CONSULT_ASK = "가까운 농협 상담을 연결해 드릴까요?";
 const PREMIUM_NOTE = "보험료는 기계와 조건에 따라 달라서 농협 상담에서 확인할 수 있어요.";
@@ -32,7 +32,7 @@ const shortText = (value, max) => String(value ?? "").trim().slice(0, max);
 /** 화면이 돌려준 진행 상태를 검사한다. 모르는 값은 버린다. */
 export function cleanInsuranceOffer(raw) {
   if (!raw || typeof raw !== "object" || !STAGES.has(raw.stage)) return null;
-  const kind = raw.kind === "purchase" ? "purchase" : raw.kind === "rental" ? "rental" : null;
+  const kind = raw.kind === "purchase" ? "purchase" : raw.kind === "rental" ? "rental" : raw.kind === "repair" ? "repair" : null;
   if (!kind) return null;
   return {
     stage: raw.stage,
@@ -57,6 +57,16 @@ export function classifyInsuranceReply(message) {
 export function insuranceOfferFor(reservation, listing) {
   if (!reservation || (reservation.kind !== "rental" && reservation.kind !== "purchase")) return null;
   return { stage: "ask", kind: reservation.kind, listingId: reservation.listingId || null, machineType: listing?.machineType || null };
+}
+
+/** 수리·고장 안내 흐름에서 보험을 물을 때 쓸 진행 상태. */
+export function repairInsuranceOffer({ machineType = null, listingId = null } = {}) {
+  return {
+    stage: "ask",
+    kind: "repair",
+    listingId: shortText(listingId, 80) || null,
+    machineType: shortText(machineType, 40) || null,
+  };
 }
 
 export function pickOffice(...regions) {
@@ -124,6 +134,18 @@ export function buildInsuranceRecommendation({ kind, listing, machineType, offic
       ? `이 기계는 빌려주는 곳에서 보험에 가입돼 있어요. 매물 정보: "${shortText(listingText.match(/[^.\n]*보험[^.\n]*/)?.[0], 80)}"`
       : "보험 포함 여부는 빌려주는 분께 확인이 필요해요.");
     primary = safety;
+  } else if (kind === "repair") {
+    lines.push("수리·점검 중인 기계도 앞으로의 사고·손해에 대비해 보험 가입이나 보장을 확인해 두시면 좋아요.");
+    const resolvedType = machineType || listing?.machineType;
+    const eligibility = resolvedType ? MACHINERY_INSURANCE_ELIGIBILITY[resolvedType] : null;
+    if (eligibility?.status === "no") {
+      lines.push("이 기종은 농기계종합보험 대상이 아니에요.");
+      primary = safety;
+    } else {
+      if (eligibility?.status === "check") lines.push(eligibility.note);
+      primary = machinery;
+      alternative = safety;
+    }
   } else {
     const eligibility = MACHINERY_INSURANCE_ELIGIBILITY[machineType || listing?.machineType];
     if (eligibility && eligibility.status !== "no") {

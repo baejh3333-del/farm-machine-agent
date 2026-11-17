@@ -18,7 +18,7 @@ const rentable = LISTINGS.find((item) => item.type === "rent" && item.status ===
 const saleItem = LISTINGS.find((item) => item.type === "sale" && item.status === "open");
 const forSale = LISTINGS.find((item) => item.type === "sale");
 
-const AI_ENV = ["AI_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_VISION_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+const AI_ENV = ["AI_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
 
 function withEnv(t, values) {
   const previous = Object.fromEntries(AI_ENV.map((name) => [name, process.env[name]]));
@@ -177,21 +177,19 @@ test("도구 호출이 끝나지 않아도 최대 횟수에서 멈춘다", async
   assert.ok(result.reply);
 });
 
-test("공급자는 AI_PROVIDER를 따르고, 없으면 OpenAI → Z.ai → Anthropic 순으로 고른다", (t) => {
-  withEnv(t, { OPENAI_API_KEY: "o", ZAI_API_KEY: "z", ANTHROPIC_API_KEY: "a" });
+test("공급자는 AI_PROVIDER를 따르고, 없으면 OpenAI → Anthropic 순으로 고른다", (t) => {
+  withEnv(t, { OPENAI_API_KEY: "o", ANTHROPIC_API_KEY: "a" });
   assert.equal(llmProvider(), "openai");
-  process.env.AI_PROVIDER = "zai";
-  assert.equal(llmProvider(), "zai");
   process.env.AI_PROVIDER = "anthropic";
   assert.equal(llmProvider(), "anthropic");
   process.env.AI_PROVIDER = "openai";
   delete process.env.OPENAI_API_KEY;
   assert.equal(llmProvider(), null, "지정한 공급자의 키가 없으면 다른 공급자로 몰래 바꾸지 않는다");
   delete process.env.AI_PROVIDER;
-  assert.equal(llmProvider(), "zai");
+  assert.equal(llmProvider(), "anthropic");
 });
 
-test("Anthropic 형식 대화를 Z.ai(OpenAI 호환) 형식으로 바꾼다", () => {
+test("Anthropic 형식 대화를 OpenAI 형식으로 바꾼다", () => {
   const messages = toOpenAiMessages("시스템", [
     { role: "user", content: "고추 두둑" },
     { role: "assistant", content: [
@@ -208,7 +206,7 @@ test("Anthropic 형식 대화를 Z.ai(OpenAI 호환) 형식으로 바꾼다", ()
   ]);
 });
 
-test("Z.ai 응답의 tool_calls를 tool_use 블록으로 바꾸고 잘못된 인자는 빈 객체로 둔다", () => {
+test("OpenAI 응답의 tool_calls를 tool_use 블록으로 바꾸고 잘못된 인자는 빈 객체로 둔다", () => {
   const result = fromOpenAiResponse({ choices: [{ message: { content: "", tool_calls: [
     { id: "c1", type: "function", function: { name: "get_crop_guidance", arguments: "{\"cropId\":\"rice\"}" } },
     { id: "c2", type: "function", function: { name: "offer_choices", arguments: "{깨진 JSON" } },
@@ -220,8 +218,8 @@ test("Z.ai 응답의 tool_calls를 tool_use 블록으로 바꾸고 잘못된 인
   assert.equal(fromOpenAiResponse({ choices: [] }), null);
 });
 
-test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는 JSON 모드로 받는다", async (t) => {
-  withEnv(t, { ZAI_API_KEY: "zkey", ZAI_BASE_URL: "https://api.z.ai/api/coding/paas/v4/" });
+test("OpenAI 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는 JSON 모드로 받는다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey", OPENAI_BASE_URL: "https://example.invalid/v1/" });
   const requests = [];
   t.mock.method(globalThis, "fetch", async (url, request) => {
     requests.push({ url, request, body: JSON.parse(request.body) });
@@ -230,9 +228,9 @@ test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는
   });
 
   const chat = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ name: "x", description: "d", input_schema: { type: "object" } }] });
-  assert.equal(requests[0].url, "https://api.z.ai/api/coding/paas/v4/chat/completions");
-  assert.equal(requests[0].request.headers.authorization, "Bearer zkey");
-  assert.equal(requests[0].body.model, "glm-5.3");
+  assert.equal(requests[0].url, "https://example.invalid/v1/chat/completions");
+  assert.equal(requests[0].request.headers.authorization, "Bearer okey");
+  assert.equal(requests[0].body.model, "gpt-4o-mini");
   assert.equal(requests[0].body.tool_choice, "auto");
   assert.equal(requests[0].body.tools[0].function.name, "x");
   assert.deepEqual(chat.content, [{ type: "text", text: "안녕하세요" }]);
@@ -245,7 +243,7 @@ test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는
 });
 
 test("OpenAI 호출은 기본 엔드포인트·max_completion_tokens를 쓰고 insufficient_quota를 분류한다", async (t) => {
-  withEnv(t, { AI_PROVIDER: "openai", OPENAI_API_KEY: "okey", ZAI_API_KEY: "zkey" });
+  withEnv(t, { AI_PROVIDER: "openai", OPENAI_API_KEY: "okey", ANTHROPIC_API_KEY: "akey" });
   const requests = [];
   t.mock.method(globalThis, "fetch", async (url, request) => {
     requests.push({ url, request, body: JSON.parse(request.body) });
@@ -268,8 +266,8 @@ test("OpenAI 호출은 기본 엔드포인트·max_completion_tokens를 쓰고 i
   assert.equal(diag.category, "quota_exhausted");
 });
 
-test("Z.ai로 에이전트를 돌려도 검색 → 답변 흐름이 같다", async (t) => {
-  withEnv(t, { ZAI_API_KEY: "zkey" });
+test("OpenAI로 에이전트를 돌려도 검색 → 답변 흐름이 같다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey" });
   const bodies = [];
   t.mock.method(globalThis, "fetch", async (url, request) => {
     bodies.push(JSON.parse(request.body));
@@ -290,16 +288,16 @@ test("Z.ai로 에이전트를 돌려도 검색 → 답변 흐름이 같다", asy
   assert.ok(result.listingIds.length > 0);
 });
 
-test("Z.ai가 오류를 돌려주면 null로 처리해 규칙 기반 안내로 넘긴다", async (t) => {
-  withEnv(t, { ZAI_API_KEY: "zkey" });
-  t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code: "1113" } }, { status: 429 }));
+test("OpenAI가 오류를 돌려주면 null로 처리해 규칙 기반 안내로 넘긴다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey" });
+  t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code: "insufficient_quota" } }, { status: 429 }));
   assert.equal(await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }] }), null);
 });
 
 const IMAGE_BLOCK = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAA" } };
 
-test("Z.ai 기본 모델은 glm-5.3, 사진이 있으면 glm-5.3-flash를 쓴다", async (t) => {
-  withEnv(t, { ZAI_API_KEY: "zkey" });
+test("OpenAI 기본 모델은 gpt-4o-mini이고 OPENAI_MODEL로 바꿀 수 있다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey" });
   const models = [];
   t.mock.method(globalThis, "fetch", async (url, request) => {
     models.push(JSON.parse(request.body).model);
@@ -307,12 +305,12 @@ test("Z.ai 기본 모델은 glm-5.3, 사진이 있으면 glm-5.3-flash를 쓴다
   });
   await callLLM({ system: "S", messages: [{ role: "user", content: "글만" }] });
   await callLLM({ system: "S", messages: [{ role: "user", content: [{ type: "text", text: "사진" }, IMAGE_BLOCK] }] });
-  process.env.ZAI_VISION_MODEL = "x";
+  process.env.OPENAI_MODEL = "gpt-4.1-mini";
   await callLLM({ system: "S", messages: [{ role: "user", content: [IMAGE_BLOCK] }] });
-  assert.deepEqual(models, ["glm-5.3", "glm-5.3-flash", "x"]);
+  assert.deepEqual(models, ["gpt-4o-mini", "gpt-4o-mini", "gpt-4.1-mini"]);
 });
 
-test("이미지 블록을 Z.ai image_url 형식으로 바꾼다", () => {
+test("이미지 블록을 OpenAI image_url 형식으로 바꾼다", () => {
   const messages = toOpenAiMessages("", [{ role: "user", content: [{ type: "text", text: "이거 뭐예요" }, IMAGE_BLOCK] }]);
   assert.deepEqual(messages, [{ role: "user", content: [
     { type: "text", text: "이거 뭐예요" },
@@ -416,24 +414,31 @@ test("비로그인 판매 초안은 저장 없이 listingId·photoKey가 null이
   assert.match(calls[1].messages.at(-1).content[0].content, /loginRequired/);
 });
 
-test("보험을 묻지 않았으면 get_insurance_info를 거부한다", async (t) => {
+test("대여·수리 흐름에서 사용자가 직접 묻지 않아도 get_insurance_info를 사용할 수 있다", async (t) => {
   photoEnv(t);
   const { call, calls } = scripted([
-    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "owner" } }] },
-    { content: [{ type: "text", text: "알겠어요." }] },
+    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "owner", machineType: "tractor" } }] },
+    { content: [{ type: "text", text: "보험 추천해드릴까요?" }] },
   ]);
-  await runAgentTurn("빌려주고 싶어요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
-  assert.match(calls[0].system, /사용자가 보험을 물었을 때만/);
+  const res = await runAgentTurn("트랙터에서 연기가 나요", {}, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  assert.match(calls[0].system, /\+ 교육이수증 필요/);
+  assert.match(calls[0].system, /보험 추천해드릴까요\?/);
   const toolResult = calls[1].messages.at(-1).content[0];
-  assert.equal(toolResult.is_error, true);
-  assert.match(toolResult.content, /보험은 요청하실 때만 안내해요/);
+  assert.notEqual(toolResult.is_error, true);
+  assert.ok(Array.isArray(res.repairCenters) && res.repairCenters.length > 0, "연기/수리 문의 시 수리센터가 자동 보강된다");
+  assert.ok(res.repairCenters.some((c) => c.phone && c.url), "수리센터에 전화번호와 웹사이트 URL이 포함된다");
+});
 
-  const asked = scripted([
-    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "renter" } }] },
-    { content: [{ type: "text", text: "농업인안전보험이 있어요." }] },
+test("수리·연기 문의 시 get_repair_guide만 호출해도 repairCenters가 함께 반환된다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "get_repair_guide", input: { machineType: "tractor", symptom: "lowPowerSmoke" } }] },
+    { content: [{ type: "text", text: "먼저 에어클리너를 확인해 보세요." }] },
   ]);
-  await runAgentTurn("빌릴 때 보험도 들어야 해요?", {}, { listings: LISTINGS, call: asked.call, today: TODAY });
-  assert.notEqual(asked.calls[1].messages.at(-1).content[0].is_error, true);
+  const result = await runAgentTurn("대동 트랙터에서 연기가 나요", { region: "석보면" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  assert.ok(Array.isArray(result.repairCenters) && result.repairCenters.length > 0);
+  assert.ok(result.repairCenters.some((c) => c.id === "yeongyang-rental-office" && c.phone && c.url));
+  assert.ok(result.repairCenters.some((c) => c.brands.includes("대동") && c.phone && c.url));
 });
 
 test("AI_WEB_SEARCH가 없으면 웹 검색 도구를 보내지 않고, 켜면 보낸다", async (t) => {
@@ -454,19 +459,18 @@ test("이미지 + 모델 실패면 PHOTO_UNAVAILABLE로 구분된다", async (t)
   assert.deepEqual(await runAgentTurn("", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY }), { error: "PHOTO_UNAVAILABLE" });
 });
 
-test("웹 검색 도구는 공급자별 형식으로 바뀌고 결과 출처를 돌려준다", async (t) => {
-  withEnv(t, { ZAI_API_KEY: "zkey" });
-  let zBody;
+test("웹 검색 도구는 Anthropic 형식으로 바뀌고 결과 출처를 돌려준다(OpenAI에서는 제외)", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey" });
+  let oBody;
   t.mock.method(globalThis, "fetch", async (url, request) => {
-    zBody = JSON.parse(request.body);
-    return Response.json({ choices: [{ message: { content: "결과" } }], web_search: [{ title: "농진청", link: "https://www.rda.go.kr/x" }] });
+    oBody = JSON.parse(request.body);
+    return Response.json({ choices: [{ message: { content: "결과" } }] });
   });
-  const z = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
-  assert.equal(zBody.tools[0].type, "web_search");
-  assert.equal(zBody.tools[0].web_search.enable, true);
-  assert.deepEqual(z.sources, [{ title: "농진청", url: "https://www.rda.go.kr/x" }]);
+  const o = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
+  assert.equal(oBody.tools, undefined);
+  assert.deepEqual(o.content, [{ type: "text", text: "결과" }]);
 
-  delete process.env.ZAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
   process.env.ANTHROPIC_API_KEY = "akey";
   let aBody;
   t.mock.method(globalThis, "fetch", async (url, request) => {
@@ -540,8 +544,8 @@ test("[리뷰] 다음 라운드로 넘기는 글 블록에서 citations 같은 �
 });
 
 test("공급자 오류를 비밀값 없이 분류하고 잔액 부족을 재시도하지 않는다", async (t) => {
-  withEnv(t, { ZAI_API_KEY: "secret-key" });
-  const cases = [[401, "1000", "authentication"], [429, "1113", "quota_exhausted"], [429, "1302", "rate_limit"], [400, "1211", "model_or_endpoint"], [503, "1200", "provider_unavailable"]];
+  withEnv(t, { OPENAI_API_KEY: "secret-key" });
+  const cases = [[401, "invalid_api_key", "authentication"], [429, "insufficient_quota", "quota_exhausted"], [429, "rate_limit_exceeded", "rate_limit"], [400, "model_not_found", "model_or_endpoint"], [503, "api_error", "provider_unavailable"]];
   const logs = [];
   t.mock.method(console, "warn", (...args) => logs.push(args));
   for (const [status, code, category] of cases) {
@@ -569,7 +573,7 @@ test("빈 LLM 응답은 성공으로 보고하지 않는다", async (t) => {
 });
 
 test("잘못 지정한 공급자는 다른 공급자를 호출하지 않는다", async (t) => {
-  withEnv(t, { AI_PROVIDER: "typo", ZAI_API_KEY: "test" });
+  withEnv(t, { AI_PROVIDER: "typo", OPENAI_API_KEY: "test" });
   const fetchMock = t.mock.method(globalThis, "fetch", () => { throw new Error("must not call"); });
   let diagnostic;
   assert.equal(await callLLM({ messages: [], onError: (value) => { diagnostic = value; } }), null);
@@ -981,4 +985,48 @@ test("toggle_favorite와 open_listing_chat은 favoriteAction과 chatTarget을 �
   const ownChatRes = await runAgentTurn("내 매물에 채팅 열어줘", { user: USER }, { listings: [ownListing], call: ownChatFlow.call, today: TODAY });
   assert.equal(ownChatFlow.calls[1].messages.at(-1).content[0].is_error, true);
   assert.equal(ownChatRes.chatTarget, undefined);
+});
+
+test("AI_PROVIDER 미지정 시 1순위 공급자가 실패하면 설정된 다음 공급자로 폴백한다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey", ANTHROPIC_API_KEY: "akey" });
+
+  const urls = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    urls.push(String(url));
+    if (String(url).includes("openai.com")) {
+      const err = new Error("timeout");
+      err.name = "TimeoutError";
+      throw err;
+    }
+    return Response.json({ content: [{ type: "text", text: "Anthropic 폴백 응답" }] });
+  });
+
+  const result = await callLLM({ system: "S", messages: [{ role: "user", content: "안녕" }] });
+  assert.equal(urls.length, 2);
+  assert.match(urls[0], /api\.openai\.com/);
+  assert.match(urls[1], /api\.anthropic\.com/);
+  assert.deepEqual(result.content, [{ type: "text", text: "Anthropic 폴백 응답" }]);
+
+  // AI_PROVIDER가 명시돼 있으면 폴백하지 않는다.
+  process.env.AI_PROVIDER = "openai";
+  urls.length = 0;
+  const strict = await callLLM({ system: "S", messages: [{ role: "user", content: "안녕" }] });
+  assert.equal(strict, null);
+  assert.equal(urls.length, 1);
+});
+
+test("timeoutMs는 공급자 전체의 예산이라 1순위가 예산을 다 쓰면 다음 공급자로 넘어가지 않는다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey", ANTHROPIC_API_KEY: "akey" });
+  t.mock.method(console, "warn", () => {});
+  const urls = [];
+  t.mock.method(globalThis, "fetch", async (url, { signal }) => {
+    urls.push(String(url));
+    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+  });
+
+  const started = Date.now();
+  const result = await callLLM({ system: "S", messages: [{ role: "user", content: "안녕" }], timeoutMs: 1600 });
+  assert.equal(result, null);
+  assert.equal(urls.length, 1, "남은 예산이 부족하면 다음 공급자를 부르지 않는다");
+  assert.ok(Date.now() - started < 2500, "전체 대기 시간이 timeoutMs를 크게 넘지 않는다");
 });

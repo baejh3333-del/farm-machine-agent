@@ -121,7 +121,7 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
   host.hidden = false;
   host.className = `rental-weather-banner ${toneClass}${runtime.weatherExpanded ? " is-expanded" : ""}`;
   host.innerHTML = `
-    <div class="rwb-top-row">
+    <div class="rwb-top-row" id="weatherBannerToggle" role="button" tabindex="0" aria-expanded="${runtime.weatherExpanded ? "true" : "false"}" style="cursor: pointer;">
       <div class="rwb-main">
         <span class="rwb-icon" data-weather-icon="${escapeHtml(w.icon || "sun")}" aria-hidden="true">${icon}</span>
         <div class="rwb-copy">
@@ -139,14 +139,6 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
           <span class="rwb-metric">풍속 ${Number(w.windSpeed) || 0}m/s</span>
           ${Number.isFinite(w.humidity) ? `<span class="rwb-metric">습도 ${w.humidity}%</span>` : ""}
         </div>
-        <button
-          type="button"
-          class="rwb-expand-btn"
-          id="toggleWeatherForecastBtn"
-          aria-expanded="${runtime.weatherExpanded ? "true" : "false"}"
-        >
-          ${runtime.weatherExpanded ? "예보 접기 ▲" : "5일 예보 · 시간대별 보기 ▼"}
-        </button>
       </div>
     </div>
     ${
@@ -228,9 +220,17 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
     }
   `;
 
-  $("toggleWeatherForecastBtn")?.addEventListener("click", () => {
+  const weatherToggle = $("weatherBannerToggle");
+  const toggleWeather = () => {
     runtime.weatherExpanded = !runtime.weatherExpanded;
     renderWeatherBanner({ onSelectDate });
+  };
+  weatherToggle?.addEventListener("click", toggleWeather);
+  weatherToggle?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleWeather();
+    }
   });
 
   host.querySelectorAll("[data-forecast-date]").forEach((btn) => {

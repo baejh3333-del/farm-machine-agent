@@ -20,6 +20,8 @@ export default handle(["GET", "POST"], async (request) => {
       const result = await createGptLiveSession({
         sdp: body.sdp,
         region: typeof body.region === "string" ? body.region : undefined,
+        voice: typeof body.voice === "string" ? body.voice : undefined,
+        uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
         history: Array.isArray(body.history) ? body.history : [],
       });
       return { status: 201, body: result };

@@ -1,50 +1,50 @@
-// 농농이 AI 모델 호출 모듈. OpenAI(GPT), Z.ai(GLM), Anthropic(Claude)을 지원한다.
+// 농농이 AI 모델 호출 모듈. OpenAI(GPT)와 Anthropic(Claude)을 지원한다.
 // 에이전트 코드는 Anthropic Messages 형식(content 블록: text / tool_use / tool_result)으로만 다루고,
-// OpenAI·Z.ai를 쓸 때는 이 모듈이 OpenAI 호환 chat/completions 형식으로 바꿔 보내고 받는다.
+// OpenAI를 쓸 때는 이 모듈이 OpenAI chat/completions 형식으로 바꿔 보내고 받는다.
 // 키는 서버 환경 변수에만 두고 브라우저에 노출하지 않는다.
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 export const DEFAULT_ANTHROPIC_MODEL = "claude-haiku-5-5";
-export const DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
-export const DEFAULT_ZAI_MODEL = "glm-5.3";
-export const DEFAULT_ZAI_VISION_MODEL = "glm-5.3-flash";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 
 const env = (name) => process.env[name]?.trim() || "";
+// 다음 공급자로 넘어가려면 남아 있어야 하는 최소 시간 예산.
+const MIN_FALLBACK_BUDGET_MS = 1_500;
 
 const PROVIDERS = {
   openai: () => Boolean(env("OPENAI_API_KEY")),
-  zai: () => Boolean(env("ZAI_API_KEY")),
   anthropic: () => Boolean(env("ANTHROPIC_API_KEY")),
 };
 
 const MODEL_CONFIG = {
   openai: ["OPENAI_MODEL", DEFAULT_OPENAI_MODEL],
-  zai: ["ZAI_MODEL", DEFAULT_ZAI_MODEL],
   anthropic: ["ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL],
 };
 
-/** 사용할 공급자. AI_PROVIDER로 지정하고, 없으면 키가 있는 쪽(OpenAI → Z.ai → Anthropic 순)을 쓴다. */
-export function llmProvider() {
+/** 사용할 공급자 목록. AI_PROVIDER가 지정되면 그 하나만, 비어 있으면 키가 있는 공급자를 우선순위대로 반환한다. */
+export function llmProviders() {
   const chosen = env("AI_PROVIDER").toLowerCase();
-  if (chosen) return PROVIDERS[chosen]?.() ? chosen : null;
-  return Object.keys(PROVIDERS).find((name) => PROVIDERS[name]()) || null;
+  if (chosen) return PROVIDERS[chosen]?.() ? [chosen] : [];
+  return Object.keys(PROVIDERS).filter((name) => PROVIDERS[name]());
+}
+
+/** 사용할 공급자. AI_PROVIDER로 지정하고, 없으면 키가 있는 쪽(OpenAI → Anthropic 순)을 쓴다. */
+export function llmProvider() {
+  return llmProviders()[0] || null;
 }
 
 export function llmEnabled() {
   return llmProvider() !== null;
 }
 
-export function llmModel(provider = llmProvider(), { vision = false } = {}) {
-  // Z.ai는 사진이 있는 호출에만 이미지 입력을 지원하는 비전 모델을 쓴다. OpenAI·Claude 기본 모델은 같은 모델로 사진을 처리한다.
-  if (provider === "zai" && vision) return env("ZAI_VISION_MODEL") || DEFAULT_ZAI_VISION_MODEL;
+export function llmModel(provider = llmProvider()) {
   const [key, fallback] = MODEL_CONFIG[provider] || MODEL_CONFIG.anthropic;
   return env(key) || fallback;
 }
 
-// ---------- Z.ai(OpenAI 호환) 형식 변환 ----------
+// ---------- OpenAI 형식 변환 ----------
 
 function stringify(content) {
   return typeof content === "string" ? content : JSON.stringify(content);
@@ -89,9 +89,9 @@ export function hasImage(messages) {
 const isWebSearch = (tool) => tool?.type === "web_search";
 
 export function toOpenAiTools(tools = []) {
-  return tools.map((tool) => (isWebSearch(tool)
-    ? { type: "web_search", web_search: { enable: true, search_engine: "search_pro", search_result: true, count: 5 } }
-    : { type: "function", function: { name: tool.name, description: tool.description, parameters: tool.input_schema } }));
+  return tools
+    .filter((tool) => !isWebSearch(tool))
+    .map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.input_schema } }));
 }
 
 function toAnthropicTools(tools = []) {
@@ -141,24 +141,21 @@ export function fromOpenAiResponse(data, forcedTool) {
   return sources.length ? { content, sources } : { content };
 }
 
-async function callOpenAiCompatible(provider, { system, messages, tools, toolChoice, maxTokens, signal }) {
-  // OpenAI 호환 엔드포인트(OpenAI, Z.ai) 공통 호출. 구조화 결과가 필요하면 JSON 모드로 받아 도구 호출처럼 돌려준다.
+async function callOpenAi({ system, messages, tools, toolChoice, maxTokens, signal }) {
+  // OpenAI 호출. 구조화 결과가 필요하면 JSON 모드로 받아 도구 호출처럼 돌려준다.
   const forced = toolChoice?.type === "tool" ? tools?.find((tool) => tool.name === toolChoice.name) : null;
   const systemText = forced
     ? `${system}\n\n다른 설명 없이 아래 JSON 스키마에 맞는 JSON 객체 하나만 출력하라.\n${JSON.stringify(forced.input_schema)}`
     : system;
-  const isZai = provider === "zai";
-  const base = (isZai ? (env("ZAI_BASE_URL") || DEFAULT_ZAI_BASE_URL) : (env("OPENAI_BASE_URL") || DEFAULT_OPENAI_BASE_URL)).replace(/\/+$/, "");
-  const apiKey = isZai ? env("ZAI_API_KEY") : env("OPENAI_API_KEY");
-  // 내장 웹 검색 표시는 Z.ai 형식으로만 바꿀 수 있어 OpenAI 호출에서는 뺀다.
-  const callTools = (tools || []).filter((tool) => isZai || tool?.type !== "web_search");
+  const base = (env("OPENAI_BASE_URL") || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
+  const callTools = (tools || []).filter((tool) => tool?.type !== "web_search");
   const response = await fetch(`${base}/chat/completions`, {
     method: "POST",
     signal,
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${env("OPENAI_API_KEY")}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: llmModel(provider, { vision: hasImage(messages) }),
-      ...(isZai ? { max_tokens: maxTokens, thinking: { type: "disabled" } } : { max_completion_tokens: maxTokens }),
+      model: llmModel("openai"),
+      max_completion_tokens: maxTokens,
       messages: toOpenAiMessages(systemText, messages),
       ...(forced ? { response_format: { type: "json_object" } } : {}),
       ...(!forced && callTools.length ? { tools: toOpenAiTools(callTools), tool_choice: "auto" } : {}),
@@ -229,30 +226,50 @@ export function classifyLlmError(error) {
 }
 
 export async function callLLM({ system, messages, tools, toolChoice, maxTokens = 800, timeoutMs = 9000, signal, onError }) {
-  const provider = llmProvider();
-  if (!provider) {
+  const providers = llmProviders();
+  if (!providers.length) {
     onError?.({ category: env("AI_PROVIDER") && !PROVIDERS[env("AI_PROVIDER").toLowerCase()] ? "invalid_provider" : "missing_key" });
     return null;
   }
-  const started = Date.now();
-  try {
-    const call = provider === "anthropic" ? callAnthropic : (opts) => callOpenAiCompatible(provider, opts);
-    const timeout = AbortSignal.timeout(timeoutMs);
-    const result = await call({ system, messages, tools, toolChoice, maxTokens, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-    if (!Array.isArray(result?.content) || !result.content.some((block) =>
-      (block.type === "text" && typeof block.text === "string" && block.text.trim()) ||
-      (block.type === "tool_use" && typeof block.name === "string" && block.name.trim()))) {
-      const error = new Error("Empty or invalid LLM response");
-      error.name = "InvalidLlmResponse";
-      throw error;
+  // timeoutMs는 공급자별이 아니라 이 호출 전체의 시간 예산이다. 바깥 signal이 없는 호출자
+  // (delegated-chat, askLLMJson)도 공급자 수만큼 대기 시간이 늘지 않게, 남은 예산 안에서만 다음 공급자로 넘어간다.
+  const deadline = Date.now() + timeoutMs;
+  for (let i = 0; i < providers.length; i += 1) {
+    if (signal?.aborted) return null;
+    const remainingMs = deadline - Date.now();
+    if (i > 0 && remainingMs < MIN_FALLBACK_BUDGET_MS) {
+      console.warn("llm_fallback_skipped", { provider: providers[i], remainingMs });
+      return null;
     }
-    return result;
-  } catch (error) {
-    const diagnostic = { provider, category: classifyLlmError(error), status: error?.status, code: error?.providerCode, elapsedMs: Date.now() - started };
-    console.warn("llm_request_failed", diagnostic);
-    onError?.(diagnostic);
-    return null;
+    const provider = providers[i];
+    const started = Date.now();
+    try {
+      const call = provider === "anthropic" ? callAnthropic : callOpenAi;
+      const timeout = AbortSignal.timeout(Math.max(1, remainingMs));
+      const result = await call({ system, messages, tools, toolChoice, maxTokens, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+      if (!Array.isArray(result?.content) || !result.content.some((block) =>
+        (block.type === "text" && typeof block.text === "string" && block.text.trim()) ||
+        (block.type === "tool_use" && typeof block.name === "string" && block.name.trim()))) {
+        const error = new Error("Empty or invalid LLM response");
+        error.name = "InvalidLlmResponse";
+        throw error;
+      }
+      return result;
+    } catch (error) {
+      const diagnostic = {
+        provider,
+        category: classifyLlmError(error),
+        status: error?.status,
+        code: error?.providerCode,
+        elapsedMs: Date.now() - started,
+        ...(i < providers.length - 1 ? { fallbackTo: providers[i + 1] } : {}),
+      };
+      console.warn("llm_request_failed", diagnostic);
+      onError?.(diagnostic);
+      if (signal?.aborted || i === providers.length - 1) return null;
+    }
   }
+  return null;
 }
 
 

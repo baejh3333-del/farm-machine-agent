@@ -1,6 +1,6 @@
 // gpt-live-1 공식 WebRTC 세션 생성기(POST /v1/live/sessions).
 // API 키와 시스템 프롬프트는 서버에만 두고, 브라우저는 SDP Offer만 보내 Answer를 받는다.
-import { DEFAULT_OPENAI_LIVE_MODEL, DEFAULT_OPENAI_LIVE_VOICE, VoiceError } from "./voice.js";
+import { DEFAULT_OPENAI_LIVE_MODEL, resolveOpenAiLiveVoice, VoiceError } from "./voice.js";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -18,15 +18,67 @@ const SAFE_QUOTED = /^[A-Za-z0-9_.:\-[\]]{1,64}$/;
 const SDP_START = /\bv=0\b|\bo=-\s/;
 const SDP_LINE = /\b(?:a=(?:ice|fingerprint|candidate|group|msid|setup|rtpmap|mid|sctp)|m=(?:audio|application|video)\b|c=IN\s)/gi;
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_AREA_PYEONG = 10_000_000;
+
+/**
+ * 브라우저가 보낸 값(지역·매물 제목·이전 대화 등)을 지시문/초기 대화에 넣기 전에 정리한다.
+ * gpt-live 특수 토큰(<|SpawnThinking|> 등)과 꺾쇠·제어 문자를 지워, 다른 판매자가 쓴 매물 제목 같은
+ * 신뢰할 수 없는 글이 위임 토큰이나 지시문 구획을 흉내 내지 못하게 한다.
+ */
+export function cleanLiveText(value, max = 60) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/<\|[^|>]*\|>/g, " ")
+    .replace(/[<>|`\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+function summarizeUiContext(uiContext) {
+  if (!uiContext || typeof uiContext !== "object" || Array.isArray(uiContext)) return "";
+  const clean = (v, max = 60) => cleanLiveText(v, max);
+  const parts = [];
+  const region = clean(uiContext.region, 30);
+  if (region) parts.push(`지역=${region}`);
+  if (uiContext.transaction === "rent" || uiContext.transaction === "sale") {
+    parts.push(`거래=${uiContext.transaction === "sale" ? "구매" : "대여"}`);
+  }
+  const crop = clean(uiContext.selectedCropLabel || uiContext.selectedCrop, 30);
+  if (crop && crop !== "all") parts.push(`작물=${crop}`);
+  const area = typeof uiContext.areaPyeong === "number" || typeof uiContext.areaPyeong === "string"
+    ? Number(uiContext.areaPyeong)
+    : NaN;
+  if (Number.isFinite(area) && area > 0 && area <= MAX_AREA_PYEONG) {
+    parts.push(`면적=${Math.max(1, Math.round(area))}평`);
+  }
+  const date = ISO_DATE.test(String(uiContext.date ?? "")) ? uiContext.date : "";
+  const dateEnd = ISO_DATE.test(String(uiContext.dateEnd ?? "")) ? uiContext.dateEnd : "";
+  if (date) parts.push(dateEnd && dateEnd !== date ? `희망기간=${date}~${dateEnd}` : `희망일=${date}`);
+  const owned = clean(uiContext.ownedModelLabel, 50);
+  if (owned) parts.push(`보유농기계=${owned}`);
+  const viewing = clean(uiContext.viewingListingTitle, 60);
+  if (viewing) parts.push(`보고있는매물=${viewing}`);
+  return parts.join(", ");
+}
+
 /**
  * gpt-live-1 공식 프롬프트 템플릿(guides/live-prompting)에 맞춘 농농이 실시간 음성 지시문.
  */
-export function buildGptLiveInstructions({ region = "영양읍" } = {}) {
-  const safeRegion = typeof region === "string" && region.trim() ? region.trim() : "영양읍";
+export function buildGptLiveInstructions({ region = "영양읍", uiContext = null } = {}) {
+  const safeRegion = cleanLiveText(region, 30) || "영양읍";
+  const uiSummary = summarizeUiContext(uiContext);
   return [
     `너는 농기계 대여·구매·거래 플랫폼 모아농의 따뜻하고 믿음직한 한국어 음성 도우미 '농농이'다. 기본 안내 기준 지역은 ${safeRegion}이다.`,
-    "고령 농업인과 바쁜 현장 사용자를 배려해 경상도·전라도·충청도 사투리를 자연스럽게 알아듣고, 쉽고 또렷한 한국어 존댓말로 짧게 답한다.",
+    ...(uiSummary ? [`현재 사용자 화면에 선택된 조건: ${uiSummary}`] : []),
+    "고령 농업인과 바쁜 현장 사용자를 배려해 경상도·전라도·충청도 사투리를 자연스럽게 알아듣고, 쉽고 또렷한 한국어 존댓말로 한 번에 1~2문장씩 짧게 답한다.",
     "날짜, 금액, 평수, 마력, 기종명 등 중요한 숫자와 조건은 말로 분명하게 되읽어 확인한다.",
+    "",
+    "Conversation continuity policy:",
+    "- Remember every condition, constraint, and backend finding from earlier turns in this conversation (region, crop, area, dates, budget, owned machine, reservation conflicts, weather risks, and compatibility).",
+    "- Never ask again for a condition the user already gave unless they ask to change it.",
+    "- When a requested date, listing, or operation is NOT possible, explain clearly WHY it cannot be done (e.g., already reserved, rain/wind forecast, tractor horsepower/implement mismatch, area mismatch) and immediately suggest WHEN or WHAT alternative works based on prior context and backend results.",
     "",
     "Backchannel policy:",
     'Use moderate, warm Korean backchannels like "네", "아, 그러시군요", "알겠습니다" while listening so the user knows you are following without interrupting their train of thought.',
@@ -69,7 +121,7 @@ export function seedInputFromHistory(history, { maxChars = MAX_SEED_HISTORY_CHAR
       : typeof entry.content === "string"
         ? entry.content
         : "";
-    const text = rawText.replace(/\s+/g, " ").trim().slice(0, Math.min(500, budget));
+    const text = cleanLiveText(rawText, Math.min(500, budget));
     if (!text) continue;
     budget -= text.length;
     const isAssistant = entry.role === "assistant" || entry.role === "model";
@@ -160,11 +212,15 @@ function chooseFallback(status, details, state) {
   return null;
 }
 
-function buildSessionPayload({ model, voice, region, history, sdp, state }) {
+function buildSessionPayload({ model, voice, region, uiContext, history, sdp, state }) {
   const session = { model };
   if (!state.dropVoice) session.audio = { output: { voice } };
-  session.instructions = buildGptLiveInstructions({ region });
+  session.instructions = buildGptLiveInstructions({ region, uiContext });
   if (!state.dropInput) {
+    const activeHistory = state.dropHistory ? [] : history;
+    const developerNote = activeHistory.length
+      ? "앞선 대화 내용과 조건을 그대로 기억한 상태에서 이어서 자연스럽게 응대해 주세요. 목소리가 바뀌었거나 재연결된 경우 짧게 인사한 뒤 바로 이어서 말씀해 주세요."
+      : "한국어로 짧고 친근하게 인사하며 어떤 농사일이나 농기계를 찾으시는지 여쭤보고, 말씀을 기다려 주세요.";
     session.input = [
       {
         type: "message",
@@ -172,11 +228,11 @@ function buildSessionPayload({ model, voice, region, history, sdp, state }) {
         content: [
           {
             type: "input_text",
-            text: "한국어로 짧고 친근하게 인사하며 어떤 농사일이나 농기계를 찾으시는지 여쭤보고, 말씀을 기다려 주세요.",
+            text: developerNote,
           },
         ],
       },
-      ...(state.dropHistory ? [] : history),
+      ...activeHistory,
     ];
   }
   // delegation을 빼거나 null로 두면 공식 스펙상 client 위임과 같다.
@@ -194,6 +250,8 @@ function buildSessionPayload({ model, voice, region, history, sdp, state }) {
 export async function createGptLiveSession({
   sdp,
   region,
+  voice: requestedVoice,
+  uiContext = null,
   history = [],
   fetchImpl = fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -208,7 +266,7 @@ export async function createGptLiveSession({
 
   const baseUrl = (process.env.OPENAI_BASE_URL?.trim() || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
   const model = process.env.OPENAI_LIVE_MODEL?.trim() || DEFAULT_OPENAI_LIVE_MODEL;
-  const voice = process.env.OPENAI_LIVE_VOICE?.trim() || DEFAULT_OPENAI_LIVE_VOICE;
+  const voice = resolveOpenAiLiveVoice(requestedVoice);
 
   // 예전에는 sdp.trim()으로 마지막 줄의 CRLF까지 지웠다. SDP의 모든 줄은 CRLF로 끝나야 하므로
   // 앞뒤 공백을 정리한 뒤 마지막 CRLF를 하나 다시 붙인다(브라우저 원본 오퍼와 같은 형태).
@@ -229,7 +287,7 @@ export async function createGptLiveSession({
   try {
     let response;
     for (let attempt = 1; ; attempt += 1) {
-      const payload = buildSessionPayload({ model, voice, region, history: seededHistory, sdp: transportSdp, state });
+      const payload = buildSessionPayload({ model, voice, region, uiContext, history: seededHistory, sdp: transportSdp, state });
       response = await fetchImpl(`${baseUrl}/live/sessions`, {
         method: "POST",
         signal: controller.signal,

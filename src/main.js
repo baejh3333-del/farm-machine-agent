@@ -337,8 +337,80 @@ function bindEvents() {
   const cropSelect = $("cropSelect");
   cropSelect.add(new Option("전체 작물", "all"));
   for (const { id, name, emoji } of CROPS) cropSelect.add(new Option(emoji + " " + name, id));
+  cropSelect.hidden = true;
+  cropSelect.tabIndex = -1;
+
+  const cropDropdown = document.createElement("div");
+  cropDropdown.className = "crop-dropdown";
+  const cropBtn = document.createElement("button");
+  cropBtn.type = "button";
+  cropBtn.className = "crop-dropdown-btn";
+  cropBtn.id = "cropDropdownBtn";
+  cropBtn.setAttribute("aria-haspopup", "listbox");
+  cropBtn.setAttribute("aria-expanded", "false");
+  const cropBtnLabel = document.createElement("span");
+  cropBtnLabel.id = "cropDropdownLabel";
+  cropBtnLabel.textContent = "전체 작물";
+  const cropBtnCaret = document.createElement("span");
+  cropBtnCaret.className = "crop-dropdown-caret";
+  cropBtnCaret.setAttribute("aria-hidden", "true");
+  cropBtnCaret.textContent = "▾";
+  cropBtn.append(cropBtnLabel, cropBtnCaret);
+
+  const cropMenu = document.createElement("div");
+  cropMenu.className = "crop-dropdown-menu";
+  cropMenu.id = "cropDropdownMenu";
+  cropMenu.setAttribute("role", "listbox");
+  cropMenu.hidden = true;
+
+  const syncCropDropdown = (val) => {
+    const opt = Array.from(cropSelect.options).find((o) => o.value === val) || cropSelect.options[0];
+    cropBtnLabel.textContent = opt ? opt.textContent : "전체 작물";
+    cropMenu.querySelectorAll(".crop-dropdown-item").forEach((el) => {
+      const selected = el.dataset.value === (opt?.value || "all");
+      el.classList.toggle("is-selected", selected);
+      el.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+  };
+
+  for (const opt of cropSelect.options) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "crop-dropdown-item";
+    item.dataset.value = opt.value;
+    item.setAttribute("role", "option");
+    item.textContent = opt.textContent;
+    item.addEventListener("click", () => {
+      cropSelect.value = opt.value;
+      cropSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      cropMenu.hidden = true;
+      cropBtn.setAttribute("aria-expanded", "false");
+      cropDropdown.classList.remove("is-open");
+    });
+    cropMenu.append(item);
+  }
+
+  cropBtn.addEventListener("click", () => {
+    const nextOpen = cropMenu.hidden;
+    cropMenu.hidden = !nextOpen;
+    cropBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+    cropDropdown.classList.toggle("is-open", nextOpen);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!cropDropdown.contains(event.target)) {
+      cropMenu.hidden = true;
+      cropBtn.setAttribute("aria-expanded", "false");
+      cropDropdown.classList.remove("is-open");
+    }
+  });
+
+  cropDropdown.append(cropBtn, cropMenu);
+  cropSelect.parentNode.insertBefore(cropDropdown, cropSelect.nextSibling);
+
   cropSelect.addEventListener("change", () => {
     const chosen = cropSelect.value;
+    syncCropDropdown(chosen);
     state.selectedCrop = chosen;
     state.filters.cropIds = chosen === "all" ? [] : [chosen];
     if (chosen !== "all") {
@@ -351,6 +423,7 @@ function bindEvents() {
     persist(updateBadges);
     renderAll();
   });
+  syncCropDropdown(cropSelect.value);
   $("rentTab").addEventListener("click", () => catalogViews.setTransaction("rent"));
   $("saleTab").addEventListener("click", () => catalogViews.setTransaction("sale"));
 
@@ -1078,7 +1151,12 @@ function initLoginForm() {
 
   function renderAccount(user) {
     runtime.accountUser = user ?? null;
-    headerButton.textContent = isLoggedIn() ? `${runtime.accountUser.name} · 내 계정` : "로그인";
+    const loggedIn = isLoggedIn();
+    headerButton.textContent = loggedIn ? `${runtime.accountUser.name} · 내 계정` : "로그인";
+    const myPageDropdown = document.querySelector(".mypage-dropdown");
+    if (myPageDropdown) {
+      myPageDropdown.hidden = !loggedIn;
+    }
     updateBadges();
   }
 

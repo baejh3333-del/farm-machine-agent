@@ -4,6 +4,16 @@
 export const TARGET_SAMPLE_RATE = 16000;
 export const MAX_RECORD_SECONDS = 30;
 const SETTINGS_KEY = "nongnong.voice";
+const LIVE_VOICE_KEY = "nongnong.liveVoice";
+export const DEFAULT_LIVE_VOICE = "noeul";
+export const LIVE_VOICE_OPTIONS = Object.freeze([
+  { id: "noeul", label: "노을 (한국어 · 여성)" },
+  { id: "marin", label: "마린 (차분함 · 기본)" },
+  { id: "willow", label: "윌로우 (따뜻함 · 여성)" },
+  { id: "quartz", label: "쿼츠 (밝음 · 여성)" },
+  { id: "ripple", label: "리플 (부드러움 · 남성)" },
+  { id: "vesper", label: "베스퍼 (중저음 · 남성)" },
+]);
 const DEFAULT_SETTINGS = Object.freeze({ autoplay: "voice", rate: 0.9 });
 const AUTOPLAY_VALUES = ["voice", "always", "off"];
 const RATE_VALUES = [0.8, 0.9, 1];
@@ -129,6 +139,28 @@ export function loadVoiceSettings(storage = globalThis.localStorage) {
 export function saveVoiceSettings(settings, storage = globalThis.localStorage) {
   try {
     storage?.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // 저장하지 못해도 이번 화면에서는 그대로 쓴다.
+  }
+}
+
+export function loadLiveVoicePreference(allowedIds = null, storage = globalThis.localStorage) {
+  const valid = new Set(Array.isArray(allowedIds) && allowedIds.length ? allowedIds : LIVE_VOICE_OPTIONS.map((v) => v.id));
+  try {
+    const raw = storage?.getItem(LIVE_VOICE_KEY);
+    const clean = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+    if (clean && valid.has(clean)) return clean;
+  } catch {
+    // 저장소를 쓸 수 없으면 기본 한국어 목소리를 쓴다.
+  }
+  return valid.has(DEFAULT_LIVE_VOICE) ? DEFAULT_LIVE_VOICE : [...valid][0] || DEFAULT_LIVE_VOICE;
+}
+
+export function saveLiveVoicePreference(voiceId, storage = globalThis.localStorage) {
+  const clean = typeof voiceId === "string" ? voiceId.trim().toLowerCase() : "";
+  if (!clean) return;
+  try {
+    storage?.setItem(LIVE_VOICE_KEY, clean);
   } catch {
     // 저장하지 못해도 이번 화면에서는 그대로 쓴다.
   }

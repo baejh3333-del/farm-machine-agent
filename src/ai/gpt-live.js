@@ -1,11 +1,14 @@
 // gpt-live-1 WebRTC 브라우저 클라이언트: 마이크/원격 오디오 + oai-events DataChannel 수명주기.
-// 계약: onState("idle"|"connecting"|"listening"|"speaking"|"thinking"), ready/muted/state getter,
-// start()/stop()/setMuted()/notifyUiEvent(). start()는 stop()으로 취소되면 AbortError로 reject한다.
+// 계약: onState("idle"|"connecting"|"listening"|"muted"|"speaking"|"thinking"), ready/muted/state getter,
+// start()/stop()/setMuted()/notifyUiEvent()/commitPendingTurns(). start()는 stop()으로 취소되면 AbortError로 reject한다.
+// onTurnCommitted({ role, text, interrupted?, delegated? }): delegated 턴은 위임 답변을 읽어 준 것이라 패널이 이미 기록했다.
+// onClientDelegation({ delegationId, userText, userTurnCommitted }): userTurnCommitted면 그 발화는 이미 커밋됐다.
 // onError(error, { fatal, source }): fatal이면 세션은 이미 정리 중이고(source: "start"|"connection"),
 // fatal이 아니면 대화는 계속된다(source: "delegation"|"event"|"audio").
 import { createLiveVoiceSession } from "./recommend-agent.js";
 
 const GREETING = "한국어로 반갑게 인사하며 어떤 농사일이나 농기계를 찾으시는지 여쭤보고 대답을 기다려 주세요.";
+const CONTINUE_GREETING = "앞선 대화 내용과 조건을 기억한 상태에서, 짧게 인사하고 바로 이어서 도와드릴 점을 말씀해 주세요.";
 const PROGRESS = "모아농 매물과 기상·호환성 정보를 확인하고 있습니다.";
 
 function abortError() {
@@ -60,6 +63,8 @@ function defaultAudioElement() {
 
 export function createGptLiveController({
   region,
+  voice,
+  uiContext = null,
   history = [],
   createSession = createLiveVoiceSession,
   PeerConnectionCtor = globalThis.RTCPeerConnection,
@@ -70,9 +75,11 @@ export function createGptLiveController({
   gestureTarget = defaultGestureTarget(),
   iceTimeoutMs = 2500,
   closeTimeoutMs = 15000,
+  speakingIdleMs = 1500,
   onState = () => {},
   onUserTranscriptDelta = () => {},
   onAssistantTranscriptDelta = () => {},
+  onTurnCommitted = () => {},
   onClientDelegation = async () => ({}),
   onError = () => {},
 } = {}) {
@@ -85,12 +92,54 @@ export function createGptLiveController({
   let muted = false;
   let state = "idle";
   let userText = "";
+  let assistantText = "";
   let pendingUserText = "";
+  let lastUserCommit = ""; // 마지막으로 기록(커밋)한 사용자 발화: 위임 때 같은 턴을 두 번 남기지 않는다.
+  let delegatedReply = false; // 위임 결과를 읽어 주는 중인 발화는 패널이 이미 답변으로 기록했다.
+  let speakingTimer = null;
   let seq = 0;
 
   const setState = (next) => { if (state !== next) { state = next; onState(next); } };
+  const idleState = () => (muted ? "muted" : "listening");
+  // 듣는 중/마이크 꺼짐 사이만 바꾼다. 말하는 중·확인 중일 때는 그 상태를 유지한다.
+  const syncIdleState = () => { if (state === "listening" || state === "muted") setState(idleState()); };
   const id = (p) => `${p}_${Date.now()}_${seq++}`;
   const current = (s) => s && session === s && s.gen === gen;
+
+  function clearSpeakingTimer() {
+    if (speakingTimer) {
+      clearTimeout(speakingTimer);
+      speakingTimer = null;
+    }
+  }
+
+  function flushUserTurn() {
+    const text = userText.trim();
+    userText = "";
+    if (text) {
+      lastUserCommit = text;
+      onTurnCommitted({ role: "user", text });
+    }
+  }
+
+  function flushAssistantTurn({ interrupted = false } = {}) {
+    clearSpeakingTimer();
+    const text = assistantText.trim();
+    assistantText = "";
+    if (text) onTurnCommitted({ role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) });
+  }
+
+  function scheduleSpeakingIdle(s) {
+    clearSpeakingTimer();
+    if (!Number.isFinite(speakingIdleMs) || speakingIdleMs <= 0) return;
+    speakingTimer = setTimeout(() => {
+      speakingTimer = null;
+      if (!current(s)) return;
+      flushAssistantTurn();
+      if (state === "speaking") setState(idleState());
+    }, speakingIdleMs);
+    speakingTimer?.unref?.();
+  }
 
   function send(payload, s = session) {
     if (!s || !s.events || s.events.readyState !== "open") return false;
@@ -100,6 +149,7 @@ export function createGptLiveController({
   function release(s) {
     if (!s || s.released) return;
     s.released = true;
+    clearSpeakingTimer();
     try { s.removeGestureRetry?.(); } catch { /* ignore */ }
     try { s.stream?.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
     try { s.events?.close?.(); } catch { /* ignore */ }
@@ -113,13 +163,21 @@ export function createGptLiveController({
   }
 
   function teardown(s) {
+    const active = session === s;
+    if (active) {
+      flushUserTurn();
+      flushAssistantTurn();
+    }
     release(s);
-    if (session === s) {
+    if (active) {
       session = null;
       ready = false;
       greeted = false;
       userText = "";
+      assistantText = "";
       pendingUserText = "";
+      lastUserCommit = "";
+      delegatedReply = false;
       setState("idle");
     }
   }
@@ -129,14 +187,19 @@ export function createGptLiveController({
     const delegationId = event.delegation.id;
     if (s.seen.has(delegationId)) return;
     s.seen.add(delegationId);
-    const utterance = userText.trim() || pendingUserText;
+    flushAssistantTurn();
+    const utterance = (userText.trim() || pendingUserText).trim();
+    // 위임 전에 짧은 맞장구가 먼저 나오면 사용자 발화가 이미 기록됐을 수 있다.
+    const userTurnCommitted = Boolean(utterance) && utterance === lastUserCommit;
     pendingUserText = utterance;
+    lastUserCommit = utterance; // 패널이 이 발화를 위임 턴으로 기록한다.
     userText = "";
+    delegatedReply = true;
     setState("thinking");
     send({ type: "session.thinking.append", event_id: id("progress"), delegation_id: delegationId, content: PROGRESS }, s);
     let result = {};
     try {
-      result = (await onClientDelegation({ delegationId, userText: utterance })) || {};
+      result = (await onClientDelegation({ delegationId, userText: utterance, userTurnCommitted })) || {};
     } catch (error) {
       if (current(s)) onError(error, { fatal: false, source: "delegation" });
       result = { spokenSummary: "죄송합니다, 확인 중 문제가 생겼습니다. 잠시 후 다시 말씀해 주세요." };
@@ -149,7 +212,7 @@ export function createGptLiveController({
     if (spokenSummary) {
       send({ type: "session.commentary.append", event_id: id("result"), delegation_id: delegationId, content: String(spokenSummary).slice(0, 800) }, s);
     }
-    if (state === "thinking") setState("listening");
+    if (state === "thinking") setState(idleState());
   }
 
   function handleEvent(s, raw) {
@@ -158,22 +221,34 @@ export function createGptLiveController({
     try { event = JSON.parse(typeof raw === "string" ? raw : raw?.data); } catch { return; }
     if (!event || typeof event.type !== "string") return;
     switch (event.type) {
-      case "session.started":
+      case "session.started": {
         ready = true;
-        setState("listening");
+        setState(idleState());
         if (muted) send({ type: "session.input_audio.mute", event_id: id("mute") }, s);
-        if (!greeted && send({ type: "session.commentary.append", event_id: id("greeting"), delegation_id: null, content: GREETING }, s)) {
+        const opening = Array.isArray(history) && history.length > 0 ? CONTINUE_GREETING : GREETING;
+        if (!greeted && send({ type: "session.commentary.append", event_id: id("greeting"), delegation_id: null, content: opening }, s)) {
           greeted = true;
         }
         break;
+      }
       case "session.input_transcript.delta":
+        clearSpeakingTimer();
+        // 사용자가 말을 끊고 들어오면(barge-in) 직전 어시스턴트 발화를 마무리하고 즉시 듣는 상태로 전환한다.
+        if (state === "speaking") {
+          flushAssistantTurn({ interrupted: true });
+          setState(idleState());
+        }
+        if (!userText) delegatedReply = false; // 새 사용자 턴: 이후 발화는 위임 답변이 아니다.
         userText += event.delta || "";
         pendingUserText = userText;
         onUserTranscriptDelta({ delta: event.delta || "", text: userText, startMs: event.start_ms, endMs: event.end_ms });
         break;
       case "session.output_transcript.delta":
+        flushUserTurn();
+        assistantText += event.delta || "";
         if (state !== "thinking") setState("speaking");
         onAssistantTranscriptDelta({ delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms });
+        scheduleSpeakingIdle(s);
         break;
       case "session.delegation.created":
         handleDelegation(s, event).catch((e) => { if (current(s)) onError(e, { fatal: false, source: "delegation" }); });
@@ -181,10 +256,12 @@ export function createGptLiveController({
       case "session.input_audio.muted":
         muted = true;
         s.stream?.getAudioTracks?.().forEach((t) => { t.enabled = false; });
+        syncIdleState();
         break;
       case "session.input_audio.unmuted":
         muted = false;
         s.stream?.getAudioTracks?.().forEach((t) => { t.enabled = true; });
+        syncIdleState();
         break;
       case "session.closed":
         s.closing = true;
@@ -196,6 +273,7 @@ export function createGptLiveController({
         onError(new Error(event.error?.message || event.message || "gpt-live 오류"), { fatal: false, source: "event" });
         break;
       default:
+        console.debug?.("gpt_live_event", event.type);
     }
   }
 
@@ -269,10 +347,21 @@ export function createGptLiveController({
         const st = s.connection?.connectionState;
         if (st === "failed" || st === "closed") unexpected(s, "gpt-live 연결이 끊어졌습니다.");
       });
-      const stream = await getUserMedia({ audio: true });
+      let stream;
+      try {
+        stream = await getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch (err) {
+        if (err?.name !== "OverconstrainedError") throw err;
+        stream = await getUserMedia({ audio: true });
+      }
       if (!current(s)) { stream?.getTracks?.().forEach((t) => t.stop()); throw abortError(); }
       s.stream = stream;
-      stream.getAudioTracks?.().forEach((t) => { t.enabled = !muted; });
+      stream.getAudioTracks?.().forEach((t) => {
+        t.enabled = !muted;
+        t.addEventListener?.("ended", () => unexpected(s, "마이크 연결이 끊어졌어요. 마이크를 확인하고 다시 눌러 주세요."));
+      });
       stream.getTracks().forEach((track) => s.connection.addTrack(track, stream));
       s.events = s.connection.createDataChannel("oai-events");
       s.events.addEventListener("message", (e) => handleEvent(s, e.data));
@@ -283,7 +372,7 @@ export function createGptLiveController({
       check();
       await waitIce(s);
       check();
-      const result = await createSession({ sdp: s.connection.localDescription.sdp, region, history });
+      const result = await createSession({ sdp: s.connection.localDescription.sdp, region, voice, uiContext, history });
       check();
       if (!result?.transport?.sdp) throw new Error("gpt-live 세션 응답에 SDP가 없습니다.");
       await s.connection.setRemoteDescription({ type: "answer", sdp: result.transport.sdp });
@@ -310,7 +399,15 @@ export function createGptLiveController({
     muted = Boolean(next);
     session?.stream?.getAudioTracks?.().forEach((t) => { t.enabled = !muted; });
     send({ type: muted ? "session.input_audio.mute" : "session.input_audio.unmute", event_id: id("mute") });
+    if (session) syncIdleState();
     return muted;
+  }
+
+  // 진행 중인 사용자/어시스턴트 발화를 지금 기록한다(목소리 변경·종료 직전에 대화 기억을 잃지 않게).
+  function commitPendingTurns() {
+    if (!session) return;
+    flushUserTurn();
+    flushAssistantTurn({ interrupted: state === "speaking" });
   }
 
   function notifyUiEvent(text) {
@@ -344,6 +441,7 @@ export function createGptLiveController({
     start,
     stop,
     setMuted,
+    commitPendingTurns,
     notifyUiEvent,
     get state() { return state; },
     get ready() { return ready; },

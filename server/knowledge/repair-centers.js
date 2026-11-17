@@ -2,7 +2,7 @@
 // 지역 농협 농기계 수리센터는 공식 연락처를 확인하지 못해 아직 넣지 않았다(확인되면 kind: "coop"로 추가).
 
 const CHECKED_AT = "2026-11-16";
-const YEONGYANG = ["영양읍", "청기면", "입암면", "수비면"];
+const YEONGYANG = ["영양읍", "청기면", "입암면", "수비면", "석보면", "일월면", "영양군"];
 
 export const REPAIR_CENTERS = [
   {

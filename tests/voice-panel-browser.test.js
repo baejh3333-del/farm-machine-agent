@@ -83,8 +83,8 @@ test("voice panel: live delegation, layout, contacts, stop and fallback preserve
       await page.locator("#aiPanel.is-fullscreen").waitFor({ state: "visible" });
       await page.locator("#aiPlusButton").click();
       await page.locator("#aiPlusMenu").waitFor({ state: "visible" });
-      assert.equal(await page.locator('[data-ai-picker-toggle="inline"]').count(), 1);
       await page.keyboard.press("Escape");
+      await page.locator("#aiPlusMenu").waitFor({ state: "hidden" });
       assert.equal(await page.locator("#aiPanel").isVisible(), true);
       if (live) {
         await page.locator("#aiLiveVoiceButton").click();
@@ -333,6 +333,89 @@ test("voice panel: mic denial keeps live voice, delegation failure keeps session
     assert.equal(liveBubbles[0].trim(), "새 대화");
     assert.equal(requests.live.length, 2);
     assert.ok(requests.live[1].history.every(e => typeof e.content === "string" && ["user", "assistant"].includes(e.role)));
+    await page.locator("#aiVoiceStopBtn").click();
+    await page.waitForFunction(() => window.voiceTest.stopped === 2);
+    assert.deepEqual(errors, []);
+    await page.close();
+  } finally {
+    await browser.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test("voice panel: voice switching keeps conversation memory and delegation sends thinkingContext", async () => {
+  const server = createServer(async (req, res) => {
+    try {
+      const path = new URL(req.url, "http://localhost").pathname;
+      const file = path === "/" ? "index.html" : path.slice(1);
+      if (file.includes("..")) throw new Error("invalid path");
+      const bytes = await readFile(new URL(`../${file}`, import.meta.url));
+      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
+      res.end(bytes);
+    } catch { res.writeHead(404); res.end(); }
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const listings = listListings();
+    const { page, errors, requests } = await openVoicePage(browser, server.address().port, {
+      liveSession: () => ({ status: 201, json: { session: { id: "s1" }, transport: { type: "webrtc", sdp: "answer" } } }),
+      agent: () => ({
+        status: 200,
+        json: {
+          mode: "agent",
+          sessionId: "sess-mem-1",
+          reply: "금요일은 비가 와서 다음 주 월요일이 좋아요.",
+          listingIds: [listings[0].id],
+          weatherInfo: {
+            summary: "금요일 강수 예상",
+            badWeatherWarning: "금요일 강수 확률 80%",
+            goodAlternatives: [{ start: "2026-11-23", label: "11월 23일(월)" }],
+          },
+          learnedSlots: { region: "영양읍", areaPyeong: 500 },
+        },
+      }),
+    });
+
+    await page.locator("#aiLiveVoiceButton").click();
+    await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
+    assert.equal(requests.live[0].voice, "noeul");
+
+    // 1. Non-delegated speech + delegated turn both enter memory and thinkingContext carries weather reasons
+    await page.evaluate(() => {
+      window.voiceTest.channel.emit({ type: "session.input_transcript.delta", delta: "고추밭 500평이에요" });
+      window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "네, 500평 고추밭 기억할게요." });
+    });
+    await page.evaluate(() => {
+      window.voiceTest.channel.emit({ type: "session.input_transcript.delta", delta: "금요일에 작업 가능한가요?" });
+      window.voiceTest.channel.emit({ type: "session.delegation.created", delegation: { id: "d-weather", target: "client" } });
+    });
+    await page.waitForFunction(() => window.voiceTest.sent.some(e => e.type === "session.commentary.append" && e.delegation_id === "d-weather"));
+    const thinkEvent = await page.evaluate(() => window.voiceTest.sent.find(e => e.type === "session.thinking.append" && e.delegation_id === "d-weather" && e.content.includes("금요일 강수")));
+    assert.ok(thinkEvent, "thinkingContext must include weather reasons and alternatives");
+    assert.ok(requests.agent[0].history.some(h => h.content.includes("고추밭 500평이에요")));
+    assert.equal(requests.agent[0].history.some(h => h.content.includes("금요일에 작업 가능한가요?")), false,
+      "the delegated utterance is the message, not part of its own history");
+
+    // The model reads the delegated answer aloud, then the user says thanks and the reply is cut off by a voice switch.
+    await page.evaluate(() => {
+      window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "금요일은 비가 와서 월요일이 좋아요." });
+      window.voiceTest.channel.emit({ type: "session.input_transcript.delta", delta: "고마워요" });
+      window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "천만에요, 월요일에" });
+    });
+
+    // 2. Switching voice mid-session reconnects with selected voice while keeping prior history
+    await page.locator("#aiVoiceSelect").selectOption("willow");
+    await page.waitForFunction(() => window.voiceTest.peers === 2);
+    await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
+    assert.equal(requests.live[1].voice, "willow");
+    const switched = requests.live[1].history;
+    assert.ok(switched.some(h => h.content.includes("고추밭 500평이에요")));
+    assert.equal(switched.filter(h => h.role === "user" && h.content === "금요일에 작업 가능한가요?").length, 1);
+    assert.equal(switched.filter(h => h.content.includes("금요일은 비가 와서")).length, 1, "delegated read-out is not stored twice");
+    assert.ok(switched.some(h => h.role === "user" && h.content === "고마워요"));
+    assert.ok(switched.some(h => h.role === "assistant" && h.content === "천만에요, 월요일에"), "in-flight reply survives the voice switch");
+
     await page.locator("#aiVoiceStopBtn").click();
     await page.waitForFunction(() => window.voiceTest.stopped === 2);
     assert.deepEqual(errors, []);

@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  DEFAULT_LIVE_VOICE,
   encodeWav,
   koreanWon,
+  LIVE_VOICE_OPTIONS,
+  loadLiveVoicePreference,
   loadVoiceSettings,
   pickKoreanVoice,
   rentalSummaryForSpeech,
   resampleToMono,
+  saveLiveVoicePreference,
   saveVoiceSettings,
   textForSpeech,
   actionSummaryForSpeech,
@@ -315,7 +319,7 @@ test("gpt-live client delegation은 thinking → 결과 commentary 순으로 응
   emit({ type: "session.input_transcript.delta", delta: "트랙터" });
   emit({ type: "session.delegation.created", delegation: { id: "d1", target: "client" } });
   await new Promise((r) => setTimeout(r, 10));
-  assert.deepEqual(calls.delegations, [{ delegationId: "d1", userText: "트랙터" }]);
+  assert.deepEqual(calls.delegations, [{ delegationId: "d1", userText: "트랙터", userTurnCommitted: false }]);
   const types = sent.map((m) => `${m.type}:${m.delegation_id}`);
   assert.deepEqual(types, [
     "session.thinking.append:d1",
@@ -631,4 +635,159 @@ test("실시간 음성 세션 history는 역할·글이 온전한 최근 턴만 
     { role: "assistant", content: "찾았어요" },
   ]);
   assert.deepEqual(liveSessionHistory(undefined), []);
+});
+
+test("실시간 음성 목소리 선택은 저장·검증되고 잘못된 값은 기본값(noeul)으로 돌아간다", () => {
+  const memory = new Map();
+  const storage = { getItem: (k) => memory.get(k) ?? null, setItem: (k, v) => memory.set(k, v) };
+  assert.equal(loadLiveVoicePreference(null, storage), DEFAULT_LIVE_VOICE);
+  assert.ok(LIVE_VOICE_OPTIONS.some((v) => v.id === "willow"));
+  saveLiveVoicePreference("willow", storage);
+  assert.equal(loadLiveVoicePreference(null, storage), "willow");
+  assert.equal(loadLiveVoicePreference(["noeul", "marin"], storage), "noeul");
+  saveLiveVoicePreference("unknown", storage);
+  assert.equal(loadLiveVoicePreference(null, storage), "noeul");
+});
+
+test("gpt-live full-duplex: 말 끊기(barge-in), 발화 종료 후 듣기 복귀, 비위임 턴 기록 및 이어말하기", async () => {
+  const committed = [];
+  const { live, calls, emit, sent } = makeLive({
+    voice: "marin",
+    history: [{ role: "user", content: "고추밭 500평이에요" }],
+    speakingIdleMs: 30,
+    onTurnCommitted: (turn) => committed.push(turn),
+  });
+  await live.start();
+  assert.equal(calls.session[0].voice, "marin");
+  emit({ type: "session.started" });
+  const greeting = sent.find((m) => m.type === "session.commentary.append");
+  assert.match(greeting.content, /앞선 대화 내용/);
+
+  // 1) 어시스턴트 발화 중 사용자가 말 끊기 → 어시스턴트 턴 커밋(interrupted: true) + listening 전환
+  emit({ type: "session.output_transcript.delta", delta: "안녕하세요, 지난번 고추밭 " });
+  assert.equal(live.state, "speaking");
+  emit({ type: "session.input_transcript.delta", delta: "금요일에 빌려줘" });
+  assert.equal(live.state, "listening");
+  assert.deepEqual(committed, [{ role: "assistant", text: "안녕하세요, 지난번 고추밭", interrupted: true }]);
+
+  // 2) 위임 없이 어시스턴트가 바로 답하고 발화가 끝나면 user/assistant 턴을 커밋하고 listening으로 복귀
+  emit({ type: "session.output_transcript.delta", delta: "금요일은 비가 와서 월요일이 좋아요." });
+  assert.equal(live.state, "speaking");
+  assert.deepEqual(committed[1], { role: "user", text: "금요일에 빌려줘" });
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(live.state, "listening");
+  assert.deepEqual(committed[2], { role: "assistant", text: "금요일은 비가 와서 월요일이 좋아요.", interrupted: false });
+});
+
+test("gpt-live 처음 대화는 기본 인사, 마이크 제약(에코 제거)을 먼저 요청하고 안 되면 기본값으로 다시 연다", async () => {
+  const requested = [];
+  const track = { enabled: true, stop() {} };
+  const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+  const { live, emit, sent } = makeLive({
+    history: [],
+    getUserMedia: async (constraints) => {
+      requested.push(constraints);
+      if (requested.length === 1) throw namedError("OverconstrainedError");
+      return stream;
+    },
+  });
+  await live.start();
+  assert.equal(requested[0].audio.echoCancellation, true);
+  assert.equal(requested[0].audio.channelCount, 1);
+  assert.deepEqual(requested[1], { audio: true });
+  emit({ type: "session.started" });
+  assert.doesNotMatch(sent.find((m) => m.type === "session.commentary.append").content, /앞선 대화/);
+});
+
+test("gpt-live 마이크 끄기/켜기는 듣는 상태를 muted ↔ listening으로 맞추고, 말하는 중에는 말하기를 유지한다", async () => {
+  const { live, emit, calls } = makeLive({ speakingIdleMs: 20 });
+  await live.start();
+  emit({ type: "session.started" });
+  live.setMuted(true);
+  assert.equal(live.state, "muted");
+  live.setMuted(false);
+  assert.equal(live.state, "listening");
+
+  // 서버가 보낸 mute/unmute 이벤트도 상태에 반영한다.
+  emit({ type: "session.input_audio.muted" });
+  assert.equal(live.muted, true);
+  assert.equal(live.state, "muted");
+  emit({ type: "session.input_audio.unmuted" });
+  assert.equal(live.state, "listening");
+
+  // 말하는 중 마이크를 끄면 speaking 유지 → 발화가 끝나면 muted로 돌아간다.
+  emit({ type: "session.output_transcript.delta", delta: "안내해 드릴게요" });
+  live.setMuted(true);
+  assert.equal(live.state, "speaking");
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(live.state, "muted");
+  assert.deepEqual(calls.states.slice(-2), ["speaking", "muted"]);
+});
+
+test("gpt-live 위임 턴 중복 방지: 맞장구 뒤 위임이면 이미 기록된 발화로 알리고, 위임 답변 낭독은 delegated로 표시한다", async () => {
+  const committed = [];
+  const { live, emit, calls } = makeLive({ speakingIdleMs: 20, onTurnCommitted: (t) => committed.push(t) });
+  await live.start();
+  emit({ type: "session.started" });
+
+  // 맞장구("확인해 볼게요")가 먼저 나오면 사용자 발화가 그때 커밋된다.
+  emit({ type: "session.input_transcript.delta", delta: "트랙터 빌려줘" });
+  emit({ type: "session.output_transcript.delta", delta: "네, 확인해 볼게요." });
+  emit({ type: "session.delegation.created", delegation: { id: "d-a", target: "client" } });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(calls.delegations[0], { delegationId: "d-a", userText: "트랙터 빌려줘", userTurnCommitted: true });
+  assert.deepEqual(committed, [
+    { role: "user", text: "트랙터 빌려줘" },
+    { role: "assistant", text: "네, 확인해 볼게요.", interrupted: false },
+  ]);
+
+  // 위임 결과를 읽어 주는 발화는 delegated로 커밋된다(패널이 답변으로 이미 기록).
+  emit({ type: "session.output_transcript.delta", delta: "요약을 읽어 드려요." });
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(committed[2], { role: "assistant", text: "요약을 읽어 드려요.", interrupted: false, delegated: true });
+
+  // 다음 사용자 턴부터는 일반 턴이고, 맞장구 없이 바로 위임되면 아직 기록되지 않은 발화다.
+  emit({ type: "session.input_transcript.delta", delta: "금요일은?" });
+  emit({ type: "session.delegation.created", delegation: { id: "d-b", target: "client" } });
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(calls.delegations[1], { delegationId: "d-b", userText: "금요일은?", userTurnCommitted: false });
+  emit({ type: "session.input_transcript.delta", delta: "고마워" });
+  emit({ type: "session.output_transcript.delta", delta: "천만에요." });
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(committed.slice(-2), [
+    { role: "user", text: "고마워" },
+    { role: "assistant", text: "천만에요.", interrupted: false },
+  ]);
+});
+
+test("gpt-live commitPendingTurns는 말하던 중인 턴을 바로 기록하고 이후 stop에서 다시 기록하지 않는다", async () => {
+  const committed = [];
+  const { live, emit } = makeLive({ onTurnCommitted: (t) => committed.push(t) });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "콤바인 있어?" });
+  emit({ type: "session.output_transcript.delta", delta: "네, 영양읍에" });
+  live.commitPendingTurns();
+  assert.deepEqual(committed, [
+    { role: "user", text: "콤바인 있어?" },
+    { role: "assistant", text: "네, 영양읍에", interrupted: true },
+  ]);
+  const stopping = live.stop();
+  emit({ type: "session.closed" });
+  await stopping;
+  assert.equal(committed.length, 2);
+});
+
+test("gpt-live 마이크 트랙이 끊기면 세션을 정리하고 치명적 오류로 알린다", async () => {
+  const errors = [];
+  const track = Object.assign(new EventTarget(), { enabled: true, stopped: false, stop() { this.stopped = true; } });
+  const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+  const { live, emit } = makeLive({ getUserMedia: async () => stream, onError: (error, info) => errors.push({ error, info }) });
+  await live.start();
+  emit({ type: "session.started" });
+  track.dispatchEvent(new Event("ended"));
+  assert.deepEqual(errors.map((e) => e.info), [{ fatal: true, source: "connection" }]);
+  assert.match(errors[0].error.message, /마이크 연결이 끊어졌어요/);
+  assert.equal(live.state, "idle");
+  assert.equal(track.stopped, true);
 });

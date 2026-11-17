@@ -31,7 +31,6 @@ const AI_ENV = [
   "AI_PROVIDER",
   "AI_FULL_TOOLS",
   "OPENAI_API_KEY",
-  "ZAI_API_KEY",
   "ANTHROPIC_API_KEY",
 ];
 
@@ -113,7 +112,6 @@ before(async () => {
   prevEnv = saveEnv();
   delete process.env.DATABASE_URL;
   delete process.env.OPENAI_API_KEY;
-  delete process.env.ZAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.AI_FULL_TOOLS;
   process.env.APP_ENV = "test";

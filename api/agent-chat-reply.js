@@ -1,6 +1,7 @@
 import { getConversationMessages } from "../server/chat.js";
 import { runDelegatedChatReply } from "../server/delegated-chat.js";
 import { assertWritesAllowed, fail, handle, readJson, requireUser } from "../server/http.js";
+import { DEMO_OWNER_ID } from "../server/migrator.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
 import { requireUuid } from "../server/validate.js";
 
@@ -18,13 +19,21 @@ export default handle(["POST"], async (request) => {
     fail(404, "CONVERSATION_NOT_FOUND", "대화를 찾을 수 없습니다.");
   }
 
-  const targetRole = conv.buyerId === user.id ? "buyer" : "owner";
-  const mode = targetRole === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
+  const selfRole = conv.buyerId === user.id ? "buyer" : "owner";
+  const requestedRole = body?.targetRole;
+  const targetRole = requestedRole === "buyer" || requestedRole === "owner" ? requestedRole : selfRole;
+  const rawMode = targetRole === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
+  const isDemoOwnerAuto =
+    targetRole === "owner" && conv.ownerId === DEMO_OWNER_ID && conv.buyerAiMode === "autonomous";
+  const mode = rawMode !== "off" ? rawMode : (isDemoOwnerAuto ? "autonomous" : "off");
   if (mode !== "copilot" && mode !== "autonomous") {
     fail(400, "AI_MODE_OFF", "대리 응대 모드를 먼저 켜 주세요.");
   }
 
-  const forceDraft = typeof body?.forceDraft === "boolean" ? body.forceDraft : mode === "copilot";
+  const forceDraft =
+    targetRole === selfRole && typeof body?.forceDraft === "boolean"
+      ? body.forceDraft
+      : targetRole === selfRole && mode === "copilot";
   const triggerSeq = body?.triggerSeq != null ? Number(body.triggerSeq) : conv.lastSeq;
 
   const result = await runDelegatedChatReply({

@@ -1,9 +1,8 @@
 // 농농이 음성 인식(음성 → 글) 및 음성 기능 설정 조회. 키는 서버 환경 변수에만 두고, 음성은 인식에만 쓰고 저장하지 않는다.
-// 브라우저가 16kHz 모노 16비트 PCM WAV로 바꿔 보낸다(Z.ai는 wav/mp3만 받고, 30초 이하만 처리한다).
+// 브라우저가 16kHz 모노 16비트 PCM WAV로 바꿔 보낸다(30초 이하만 처리한다).
 //
 // 공급자 선택(VOICE_STT_PROVIDER):
 //   비우면 OPENAI_API_KEY가 있을 때 OpenAI. 없으면 서버 인식 없이 브라우저 음성 인식을 쓴다.
-//   zai: Z.ai glm-asr-2512. 공식 문서에 한국어 지원이 명시돼 있지 않아 직접 지정할 때만 쓴다.
 //   none: 서버 인식을 끈다.
 
 export const MAX_AUDIO_SECONDS = 30;
@@ -12,11 +11,18 @@ export const MAX_AUDIO_BYTES = 1_000_000;
 const DEFAULT_TIMEOUT_MS = 20000;
 
 export const DEFAULT_OPENAI_STT_MODEL = "gpt-4o-mini-transcribe";
-export const DEFAULT_ZAI_ASR_MODEL = "glm-asr-2512";
 export const DEFAULT_OPENAI_LIVE_MODEL = "gpt-live-1";
 export const DEFAULT_OPENAI_LIVE_VOICE = "noeul";
+export const OPENAI_LIVE_VOICES = Object.freeze([
+  { id: "noeul", label: "노을 (한국어 · 여성)" },
+  { id: "marin", label: "마린 (차분함 · 기본)" },
+  { id: "willow", label: "윌로우 (따뜻함 · 여성)" },
+  { id: "quartz", label: "쿼츠 (밝음 · 여성)" },
+  { id: "ripple", label: "리플 (부드러움 · 남성)" },
+  { id: "vesper", label: "베스퍼 (중저음 · 남성)" },
+].map((voice) => Object.freeze(voice)));
+const ALLOWED_LIVE_VOICE_IDS = new Set(OPENAI_LIVE_VOICES.map((item) => item.id));
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 
 // OpenAI 인식에 주는 힌트: 상황 설명과 자주 나오는 농기계·작업·지역 낱말.
 export const FARM_PROMPT =
@@ -37,9 +43,16 @@ export class VoiceError extends Error {
 export function voiceProvider() {
   const chosen = env("VOICE_STT_PROVIDER").toLowerCase();
   if (chosen === "none") return null;
-  if (chosen === "openai") return env("OPENAI_API_KEY") ? "openai" : null;
-  if (chosen === "zai") return env("ZAI_API_KEY") ? "zai" : null;
+  if (chosen && chosen !== "openai") return null;
   return env("OPENAI_API_KEY") ? "openai" : null;
+}
+
+export function resolveOpenAiLiveVoice(requested) {
+  const clean = typeof requested === "string" ? requested.trim().toLowerCase() : "";
+  if (clean && ALLOWED_LIVE_VOICE_IDS.has(clean)) return clean;
+  // 운영자가 지정한 기본 목소리는 목록 밖의 공식 목소리일 수 있어 그대로 두되, 내장 목소리 이름은
+  // 소문자 enum이므로 "Noeul"처럼 대소문자가 섞여 400이 나지 않게 소문자로 맞춘다.
+  return env("OPENAI_LIVE_VOICE").toLowerCase() || DEFAULT_OPENAI_LIVE_VOICE;
 }
 
 export function voiceCapabilities() {
@@ -50,7 +63,8 @@ export function voiceCapabilities() {
     maxSeconds: MAX_AUDIO_SECONDS,
     liveAvailable: Boolean(env("OPENAI_API_KEY")),
     liveModel: env("OPENAI_LIVE_MODEL") || DEFAULT_OPENAI_LIVE_MODEL,
-    liveVoice: env("OPENAI_LIVE_VOICE") || DEFAULT_OPENAI_LIVE_VOICE,
+    liveVoice: resolveOpenAiLiveVoice(),
+    liveVoices: OPENAI_LIVE_VOICES,
   };
 }
 
@@ -94,21 +108,15 @@ export function parseWav(buffer) {
   return { sampleRate: format.sampleRate, channels: format.channels, bitsPerSample: format.bitsPerSample, seconds };
 }
 
-function providerRequest(provider, wavBuffer) {
+function providerRequest(_provider, wavBuffer) {
   const form = new FormData();
   form.append("file", new Blob([wavBuffer], { type: "audio/wav" }), "voice.wav");
-  if (provider === "openai") {
-    form.append("model", env("OPENAI_STT_MODEL") || DEFAULT_OPENAI_STT_MODEL);
-    form.append("language", "ko");
-    form.append("prompt", FARM_PROMPT);
-    form.append("response_format", "json");
-    const base = (env("OPENAI_BASE_URL") || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
-    return { url: `${base}/audio/transcriptions`, key: env("OPENAI_API_KEY"), form };
-  }
-  form.append("model", env("ZAI_ASR_MODEL") || DEFAULT_ZAI_ASR_MODEL);
-  form.append("stream", "false");
-  const base = (env("ZAI_BASE_URL") || DEFAULT_ZAI_BASE_URL).replace(/\/+$/, "");
-  return { url: `${base}/audio/transcriptions`, key: env("ZAI_API_KEY"), form };
+  form.append("model", env("OPENAI_STT_MODEL") || DEFAULT_OPENAI_STT_MODEL);
+  form.append("language", "ko");
+  form.append("prompt", FARM_PROMPT);
+  form.append("response_format", "json");
+  const base = (env("OPENAI_BASE_URL") || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, "");
+  return { url: `${base}/audio/transcriptions`, key: env("OPENAI_API_KEY"), form };
 }
 
 /** WAV 녹음을 글자로 바꾼다. 로그에는 공급자·상태·길이만 남기고 음성·글자·키는 남기지 않는다. */

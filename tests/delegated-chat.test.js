@@ -78,12 +78,10 @@ before(async () => {
     APP_ENV: process.env.APP_ENV,
     DATABASE_URL: process.env.DATABASE_URL,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-    ZAI_API_KEY: process.env.ZAI_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   };
   delete process.env.DATABASE_URL;
   delete process.env.OPENAI_API_KEY;
-  delete process.env.ZAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   process.env.APP_ENV = "test";
 
@@ -1111,4 +1109,77 @@ test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 �
 
   const countAfterB = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list10.id]);
   assert.equal(countAfterB.rows[0].cnt, 0);
+});
+
+test("11. 시연 농가(demo-owner) 매물에서 구매자가 자동 응대(autonomous)로 문의 시 AI 자동 답장 스케줄 및 실행", async () => {
+  await pool.query(
+    `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+     VALUES ('demo-owner', '시연 농가', 'demo-owner@users.moa-farm.example.com', false, now(), now())
+     ON CONFLICT (id) DO NOTHING`
+  );
+  const demoListingId = randomUUID();
+  await pool.query(
+    `INSERT INTO listings (
+      id, owner_id, type, model_id, title, brand, machine_type,
+      crop_ids, operations, area_min, area_max, price, region,
+      condition, inspected_at, included, pickup, description, status, is_demo
+    ) VALUES (
+      $1, 'demo-owner', 'rent', 'asia-amc900', '시연용 아세아 관리기', '아세아', 'cultivator',
+      ARRAY['pepper'], ARRAY['till'], 100, 2000, 80000, '영양읍',
+      'good', '2026-10-12', '로터리', '직접 인수', '주말 오전 인수 가능', 'open', true
+    )`,
+    [demoListingId]
+  );
+
+  const buyer11 = await signupHttp(baseUrl, "dc_buyer11", "시연구매");
+  const policyHttp = await apiReq(baseUrl, "/api/conversations", {
+    method: "POST",
+    cookie: buyer11.cookie,
+    json: {
+      listingId: demoListingId,
+      action: "update_ai_policy",
+      mode: "autonomous",
+      policy: { instructions: "토요일 오전 대여 희망" },
+    },
+  });
+  assert.equal(policyHttp.status, 200);
+  const convId = policyHttp.body.conversation.id;
+  assert.equal(policyHttp.body.conversation.buyerAiMode, "autonomous");
+  assert.equal(policyHttp.body.conversation.ownerAiMode, "off");
+
+  const sendHttp = await apiReq(baseUrl, "/api/conversations", {
+    method: "POST",
+    cookie: buyer11.cookie,
+    json: {
+      action: "send",
+      id: randomUUID(),
+      conversationId: convId,
+      body: "이번 주 토요일 오전에 대여 가능할까요?",
+    },
+  });
+  assert.equal(sendHttp.status, 201);
+  assert.equal(sendHttp.body.aiReplyScheduled, true);
+
+  const replyRes = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: sendHttp.body.message.seq,
+    targetRole: "owner",
+    pool,
+    call: async () => ({
+      content: [
+        {
+          type: "tool_use",
+          id: "demo_reply",
+          name: "send_proxy_reply",
+          input: {
+            body: "네, 토요일 오전 직접 인수로 대여 가능합니다.",
+            confidence: "high",
+            rationale: "시연 매물 조건 일치",
+          },
+        },
+      ],
+    }),
+  });
+  assert.equal(replyRes.action, "replied");
+  assert.equal(replyRes.replyToSeq, sendHttp.body.message.seq);
 });

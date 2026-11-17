@@ -41,7 +41,7 @@
           <span class="nav-ai-dot" aria-hidden="true"></span>
           <span class="nav-label">AI 농농이</span>
         </button>
-        <div class="mypage-dropdown">
+        <div class="mypage-dropdown" hidden>
           <button type="button" class="nav-item mypage-trigger" id="myPageButton" aria-expanded="false" aria-controls="myPageMenu" aria-haspopup="true">
             <span class="nav-label">마이페이지</span>
             <span class="mypage-dot" id="myPageNotifDot" hidden aria-hidden="true"></span>
@@ -81,18 +81,13 @@
                   <span class="mypage-item-desc">보유 기종 · 작업기 호환</span>
                 </button>
               </div>
-              <div class="mypage-group">
-                <div class="mypage-group-title">서비스 안내</div>
-                <button type="button" class="mypage-menu-item" aria-label="모아농 브랜드 소개" data-view="about">
-                  <span class="mypage-item-head">
-                    <span class="mypage-item-title">모아농?</span>
-                  </span>
-                  <span class="mypage-item-desc">초보 농부를 위한 모아농 소개</span>
-                </button>
-              </div>
             </div>
           </div>
         </div>
+        <button type="button" class="nav-item" aria-label="모아농 브랜드 소개" data-view="about">
+          <span class="nav-icon" aria-hidden="true"></span>
+          <span class="nav-label">모아농?</span>
+        </button>
       </nav>
 
       <div class="topbar-left">
@@ -128,9 +123,7 @@
               <div class="banner-slide banner-slide-1 is-active" role="group" aria-roledescription="slide" aria-label="1 / 3">
                 <span class="banner-bg" aria-hidden="true"></span>
                 <div class="banner-copy">
-                  <span class="banner-tag">초보 농부를 위한 농기계 대여</span>
                   <h1 id="heroTitle" class="banner-title">농기계,<br />클릭 한 번으로</h1>
-                  <p>기계 이름 몰라도, 하려는 일만 알려주세요.</p>
                   <div class="banner-actions">
                     <button type="button" class="banner-cta" data-banner-view="browse">농기계 찾기</button>
                     <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide">작업 가이드 보기</button>
@@ -140,9 +133,7 @@
               <div class="banner-slide banner-slide-2" role="group" aria-roledescription="slide" aria-label="2 / 3" aria-hidden="true">
                 <span class="banner-bg" aria-hidden="true"></span>
                 <div class="banner-copy">
-                  <span class="banner-tag">우리 동네 농기계</span>
                   <h2 class="banner-title">멀리 갈 필요 없이,<br />가까운 곳에서</h2>
-                  <p>이웃 농가의 농기계를 바로 빌려요.</p>
                   <div class="banner-actions">
                     <button type="button" class="banner-cta" data-banner-view="browse" tabindex="-1">농기계 찾기</button>
                     <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
@@ -186,7 +177,6 @@
                 <button type="button" id="rentTab" class="tx-tab active" aria-pressed="true">
                   <span class="tx-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"></rect><path d="M3.5 9.5h17M8 3v4M16 3v4"></path><path d="M9 14.5l2 2 4-4"></path></svg></span>
                   <span class="tx-label">빌려쓰기 (일일 대여)</span>
-                  <span class="tx-pill">초보 추천</span>
                 </button>
                 <button type="button" id="saleTab" class="tx-tab" aria-pressed="false">
                   <span class="tx-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12l4-4 3 2 3-2 4 4"></path><path d="M7 16l2 2c.6.6 1.4.6 2 0l1-1 1 1c.6.6 1.4.6 2 0l2-2"></path><path d="M3 12l4 4M21 12l-4 4"></path></svg></span>
@@ -326,7 +316,7 @@
             <div class="step-card-header">
               <span class="step-number">2단계</span>
               <h3 id="stageStepTitle">지금 어떤 작업이 필요하신가요?</h3>
-              <small>농사 순서에 맞춰 필요한 작업을 눌러보세요 (중복 선택 가능)</small>
+              <small>농사 순서에 맞춰 필요한 작업을 눌러보세요</small>
             </div>
 
             <!-- 4단계 프로세스 탭 (밭·논 준비 -> 심기 -> 생육 관리 -> 수확) -->
@@ -570,7 +560,7 @@
             <span class="ai-hero-glow" aria-hidden="true"></span>
             <img src="./src/nongnong.png" width="68" height="68" alt="" />
           </div>
-          <h3 class="ai-hero-title">농기계 추천부터 거래 전담까지 한번에!</h3>
+          <h3 class="ai-hero-title">농농이에게 뭐든지 물어보세요!</h3>
           <div class="ai-capability-grid" role="group" aria-label="추천 빠른 질문">
             <button type="button" class="ai-capability-card" data-prompt="고추밭 500평 두둑·멀칭할 기계 추천해 줘">
               <span class="ai-cap-icon" aria-hidden="true">🚜</span>
@@ -638,18 +628,15 @@
         <div class="ai-composer-toolbar" role="toolbar" aria-label="입력 도구">
           <div class="ai-composer-tools-left">
             <div class="ai-plus-wrap" id="aiPlusWrap">
-              <button type="button" class="ai-plus-btn" id="aiPlusButton" aria-controls="aiPlusMenu" aria-expanded="false" aria-label="사진 및 작물·기종 도구 열기" title="사진·카메라·작물 선택">
-                <span aria-hidden="true">+</span>
+              <button type="button" class="ai-plus-btn" id="aiPlusButton" aria-controls="aiPlusMenu" aria-expanded="false" aria-label="사진·카메라 첨부 열기" title="사진·카메라 첨부">
+                <span aria-hidden="true">📎</span>
               </button>
-              <div class="ai-plus-menu" id="aiPlusMenu" role="menu" aria-label="추가 입력 도구" hidden>
-                <button type="button" class="ai-plus-menu-item ai-photo-btn" id="aiPhotoButton" role="menuitem" aria-label="기계 사진 올리기">
-                  <span aria-hidden="true">🖼️</span><span>사진</span>
-                </button>
+              <div class="ai-plus-menu" id="aiPlusMenu" role="menu" aria-label="사진·카메라 첨부 메뉴" hidden>
                 <button type="button" class="ai-plus-menu-item ai-camera-btn" id="aiCameraButton" role="menuitem" aria-label="카메라로 기계 사진 찍기">
                   <span aria-hidden="true">📷</span><span>카메라</span>
                 </button>
-                <button type="button" class="ai-plus-menu-item ai-picker-inline-btn" data-ai-picker-toggle="inline" role="menuitem" aria-expanded="false" aria-controls="aiPickerDrawer">
-                  <span aria-hidden="true">🌾</span><span>작물·기종</span>
+                <button type="button" class="ai-plus-menu-item ai-photo-btn" id="aiPhotoButton" role="menuitem" aria-label="기계 사진 올리기">
+                  <span aria-hidden="true">🖼️</span><span>사진</span>
                 </button>
               </div>
             </div>

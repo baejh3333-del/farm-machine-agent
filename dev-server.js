@@ -29,6 +29,7 @@ const apiRouteLoaders = new Map([
   ["/api/me", () => import("./api/me.js")],
   ["/api/requests", () => import("./api/requests.js")],
   ["/api/conversations", () => import("./api/conversations.js")],
+  ["/api/agent-chat-reply", () => import("./api/agent-chat-reply.js")],
   ["/api/photos", () => import("./api/photos.js")],
   ["/api/weather", () => import("./api/weather.js")],
   ["/api/voice", () => import("./server/voice-api.js")],

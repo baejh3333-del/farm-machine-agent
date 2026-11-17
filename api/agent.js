@@ -16,7 +16,7 @@ import {
   requireUser,
 } from "../server/http.js";
 import { validateAndReencodeImage } from "../server/images.js";
-import { createInsuranceConsult, handleInsuranceTurn, INSURANCE_ASK, insuranceOfferFor } from "../server/insurance-flow.js";
+import { createInsuranceConsult, handleInsuranceTurn, INSURANCE_ASK, insuranceOfferFor, repairInsuranceOffer } from "../server/insurance-flow.js";
 import { fetchListings } from "../server/listings-db.js";
 import { scheduleWaitUntil } from "../server/wait-until.js";
 import { createListing, updateListing } from "../server/listings-service.js";
@@ -46,14 +46,27 @@ const CHAT_WRITE_RATE_KIND = {
   toggle_favorite: "message",
 };
 
-/** 대여·구매 예약을 마친 응답이면, 이 대화에서 아직 안 물었을 때만 "보험을 추천해드릴까요?"를 덧붙인다. */
-async function attachInsuranceAsk(result, { asked, loadListings }) {
-  if (asked || !result?.reservation) return result;
-  const listings = await loadListings().catch(() => []);
-  const listing = listings.find((item) => item.id === result.reservation.listingId) || null;
-  const offer = insuranceOfferFor(result.reservation, listing);
+/** 대여·구매 예약·거래 위임 또는 수리 안내 응답이면, 이 대화에서 아직 안 물었을 때 "보험 추천해드릴까요?"를 덧붙인다. */
+export async function attachInsuranceAsk(result, { asked, loadListings }) {
+  if (asked || !result || result.pendingAction || result.choices?.length) return result;
+  let offer = null;
+  if (result.reservation) {
+    const listings = await loadListings().catch(() => []);
+    const listing = listings.find((item) => item.id === result.reservation.listingId) || null;
+    offer = insuranceOfferFor(result.reservation, listing);
+  } else if (result.delegatedTransaction) {
+    const kind = result.delegatedTransaction.type === "sale" ? "purchase" : "rental";
+    const listings = await loadListings().catch(() => []);
+    const listing = listings.find((item) => item.id === result.delegatedTransaction.listingId) || null;
+    offer = insuranceOfferFor({ kind, listingId: result.delegatedTransaction.listingId }, listing);
+  } else if (Array.isArray(result.repairCenters) && result.repairCenters.length > 0) {
+    offer = repairInsuranceOffer({ machineType: result.photoSummary?.machineType || null });
+  }
   if (!offer) return result;
-  return { ...result, insuranceAsk: INSURANCE_ASK, insuranceOffer: offer };
+  const alreadyAskedInReply = /보험\s*(?:을\s*)?추천해\s*드릴까요/.test(result.reply || "");
+  return alreadyAskedInReply
+    ? { ...result, insuranceOffer: offer }
+    : { ...result, insuranceAsk: INSURANCE_ASK, insuranceOffer: offer };
 }
 
 const EXECUTE_ACTIONS = {

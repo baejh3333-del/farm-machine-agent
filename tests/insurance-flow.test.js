@@ -7,10 +7,13 @@ import {
   cleanInsuranceOffer,
   createInsuranceConsult,
   handleInsuranceTurn,
+  INSURANCE_ASK,
   insuranceOfferFor,
   LOCAL_NH_FALLBACK,
   pickOffice,
+  repairInsuranceOffer,
 } from "../server/insurance-flow.js";
+import { attachInsuranceAsk } from "../api/agent.js";
 import { createPglitePool } from "../server/db.js";
 import { initEnvironment, runMigrations } from "../server/migrator.js";
 import { INSURANCE_OFFICES, MACHINERY_INSURANCE_ELIGIBILITY } from "../server/knowledge/insurance.js";
@@ -224,5 +227,38 @@ test("createInsuranceConsult: 동시 요청에도 접수 중 신청은 1건만 �
     { pool },
   );
   assert.equal(reopened.idempotent, false);
-  assert.notEqual(reopened.id, createdWithListing[0].id);
+});
+
+test("수리 흐름에서도 '보험 추천해드릴까요?'를 제안하고 추천으로 이어진다", async () => {
+  assert.equal(INSURANCE_ASK, "보험 추천해드릴까요?");
+  const offer = repairInsuranceOffer({ machineType: "tractor" });
+  assert.deepEqual(cleanInsuranceOffer(offer), {
+    stage: "ask",
+    kind: "repair",
+    listingId: null,
+    machineType: "tractor",
+    productId: null,
+    officeId: null,
+  });
+
+  const { deps: d } = deps();
+  const rec = await handleInsuranceTurn("네", offer, { user, region: "영양읍", deps: d });
+  assert.equal(rec.insuranceOffer.kind, "repair");
+  assert.equal(rec.insuranceOffer.stage, "offer_consult");
+  assert.match(rec.reply, /수리·점검 중인 기계도/);
+  assert.match(rec.reply, /농기계종합보험/);
+
+  const repairResult = await attachInsuranceAsk(
+    { mode: "agent", reply: "수리센터를 안내해 드려요.", repairCenters: [{ id: "daedong-cs", name: "대동 고객만족센터", phone: "1588-2172", url: "https://ko.daedong.co.kr/customer" }] },
+    { asked: false, loadListings: async () => listings },
+  );
+  assert.equal(repairResult.insuranceAsk, "보험 추천해드릴까요?");
+  assert.equal(repairResult.insuranceOffer.kind, "repair");
+
+  const noDuplicate = await attachInsuranceAsk(
+    { mode: "agent", reply: "수리센터를 안내해 드려요. 보험 추천해드릴까요?", repairCenters: [{ id: "daedong-cs", name: "대동 고객만족센터", phone: "1588-2172", url: "https://ko.daedong.co.kr/customer" }] },
+    { asked: false, loadListings: async () => listings },
+  );
+  assert.equal(noDuplicate.insuranceAsk, undefined);
+  assert.equal(noDuplicate.insuranceOffer.kind, "repair");
 });

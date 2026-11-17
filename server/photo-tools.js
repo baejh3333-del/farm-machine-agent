@@ -79,12 +79,17 @@ export function getRepairGuide({ machineType, symptom, text } = {}) {
   };
 }
 
-const servesRegion = (center, region) => center.regions === "all" || (Array.isArray(center.regions) && center.regions.includes(region));
+const servesRegion = (center, region) =>
+  center.regions === "all"
+  || (Array.isArray(center.regions) && center.regions.some((r) => region === r || region.includes(r) || r.includes(region)));
+
+const matchesBrand = (center, brand) =>
+  Array.isArray(center.brands) && center.brands.some((b) => brand === b || brand.includes(b) || b.includes(brand));
 
 /** 지역 기관 → 해당 브랜드 제조사 → 나머지 제조사 순으로 최대 5곳. 임대사업소 API는 설정돼 있을 때만 덧붙인다. */
 export async function findRepairCenters({ region, brand } = {}, { fetchOffices = fetchRentalOffices } = {}) {
   const local = REPAIR_CENTERS.filter((center) => center.kind !== "maker" && region && servesRegion(center, region));
-  const brandMakers = REPAIR_CENTERS.filter((center) => center.kind === "maker" && brand && center.brands.includes(brand));
+  const brandMakers = REPAIR_CENTERS.filter((center) => center.kind === "maker" && brand && matchesBrand(center, brand));
   const otherMakers = REPAIR_CENTERS.filter((center) => center.kind === "maker" && !brandMakers.includes(center));
 
   let offices = [];

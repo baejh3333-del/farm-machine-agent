@@ -130,8 +130,8 @@ function renderQuickWizard() {
           state.filters.stageIds = [];
         } else {
           state.filters.stageIds = state.filters.stageIds.includes(stageId)
-            ? state.filters.stageIds.filter((id) => id !== stageId)
-            : [...state.filters.stageIds, stageId];
+            ? []
+            : [stageId];
         }
         state.filters.operations = state.filters.operations.filter((id) =>
           !state.filters.stageIds.length || state.filters.stageIds.includes(OPERATION_BY_ID[id]?.stage)
@@ -484,7 +484,7 @@ function card(item) {
         <div class="card-meta">제조사: ${escapeHtml(item.brand)} · 최근 점검: ${escapeHtml(item.inspectedAt)}</div>
 
         <div class="card-summary">
-          <div class="summary-badge">${state.aiSummaries[item.id] ? "✦ AI 농농이 핵심 요약" : " 초보 농부 한줄 안내"}</div>
+          <div class="summary-badge">${state.aiSummaries[item.id] ? "✦ AI 농농이 핵심 요약" : " AI 한줄 설명"}</div>
           <p>${escapeHtml(summary)}</p>
         </div>
 

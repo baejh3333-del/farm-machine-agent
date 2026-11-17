@@ -9,6 +9,7 @@ import {
   updateConversationAiPolicy,
 } from "../server/chat.js";
 import { runDelegatedChatReply, scheduleDelegatedReply } from "../server/delegated-chat.js";
+import { DEMO_OWNER_ID } from "../server/migrator.js";
 
 export default handle(["GET", "POST"], async (request) => {
   const user = await requireUser(request);
@@ -51,15 +52,27 @@ export default handle(["GET", "POST"], async (request) => {
       roleMode === "autonomous" &&
       !conv.aiPausedReason &&
       conv.lastMessage &&
-      conv.lastMessage.senderId !== user.id &&
       conv.lastMessage.senderKind !== "system"
     ) {
-      await scheduleDelegatedReply({
-        conversationId: conv.id,
-        triggerSeq: conv.lastMessage.seq,
-        targetRole: result.role,
-      });
-      aiReplyScheduled = true;
+      if (conv.lastMessage.senderId !== user.id) {
+        await scheduleDelegatedReply({
+          conversationId: conv.id,
+          triggerSeq: conv.lastMessage.seq,
+          targetRole: result.role,
+        });
+        aiReplyScheduled = true;
+      } else if (
+        result.role === "buyer" &&
+        conv.ownerId === DEMO_OWNER_ID &&
+        conv.ownerAiMode === "off"
+      ) {
+        await scheduleDelegatedReply({
+          conversationId: conv.id,
+          triggerSeq: conv.lastMessage.seq,
+          targetRole: "owner",
+        });
+        aiReplyScheduled = true;
+      }
     }
     return { status: 200, body: { ...result, aiReplyScheduled } };
   }
@@ -122,7 +135,10 @@ export default handle(["GET", "POST"], async (request) => {
   const msgKind = result.message?.senderKind ?? "human";
   if (!result.idempotent && conv && msgKind !== "system" && !conv.aiPausedReason) {
     const targetRole = conv.buyerId === user.id ? "owner" : "buyer";
-    const targetMode = targetRole === "owner" ? conv.ownerAiMode : conv.buyerAiMode;
+    const rawTargetMode = targetRole === "owner" ? conv.ownerAiMode : conv.buyerAiMode;
+    const isDemoOwnerAuto =
+      targetRole === "owner" && conv.ownerId === DEMO_OWNER_ID && conv.buyerAiMode === "autonomous";
+    const targetMode = rawTargetMode !== "off" ? rawTargetMode : (isDemoOwnerAuto ? "autonomous" : "off");
     if (targetMode === "autonomous" || targetMode === "copilot") {
       await scheduleDelegatedReply({
         conversationId: conv.id,

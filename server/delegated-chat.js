@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getPool, kstToday, withTransaction } from "./db.js";
 import { callLLM, llmEnabled } from "./llm.js";
 import { fetchListingById } from "./listings-db.js";
+import { DEMO_OWNER_ID } from "./migrator.js";
 import { checkFarmCompatibilityTool } from "./nongnong-agent.js";
 import { MAX_RENTAL_DAYS } from "./rentals.js";
 import { formatIsoDate, requireUuid } from "./validate.js";
@@ -451,7 +452,10 @@ export async function runDelegatedChatReply({
     }
     const conv = convRes.rows[0];
     const targetUserId = targetRole === "buyer" ? conv.buyer_id : conv.owner_id;
-    const mode = targetRole === "buyer" ? conv.buyer_ai_mode : conv.owner_ai_mode;
+    const rawMode = targetRole === "buyer" ? conv.buyer_ai_mode : conv.owner_ai_mode;
+    const isDemoOwnerAuto =
+      targetRole === "owner" && conv.owner_id === DEMO_OWNER_ID && conv.buyer_ai_mode === "autonomous";
+    const mode = rawMode !== "off" ? rawMode : (isDemoOwnerAuto ? "autonomous" : "off");
     const policy = (targetRole === "buyer" ? conv.buyer_ai_policy : conv.owner_ai_policy) || {};
 
     if (mode === "off") {
@@ -747,7 +751,7 @@ export async function runDelegatedChatReply({
       messages: llmMessages,
       tools: DELEGATED_CHAT_TOOLS,
       maxTokens: 700,
-      timeoutMs: 12_000,
+      timeoutMs: 20_000,
     });
 
     if (!response || !Array.isArray(response.content)) {
@@ -1293,7 +1297,10 @@ export async function runDelegatedChatReply({
       );
 
       const otherRole = targetRole === "buyer" ? "owner" : "buyer";
-      const otherMode = otherRole === "buyer" ? latestConv.buyer_ai_mode : latestConv.owner_ai_mode;
+      const rawOtherMode = otherRole === "buyer" ? latestConv.buyer_ai_mode : latestConv.owner_ai_mode;
+      const otherIsDemoOwnerAuto =
+        otherRole === "owner" && conv.owner_id === DEMO_OWNER_ID && latestConv.buyer_ai_mode === "autonomous";
+      const otherMode = rawOtherMode !== "off" ? rawOtherMode : (otherIsDemoOwnerAuto ? "autonomous" : "off");
       const shouldChainNext = otherMode === "autonomous" && !latestConv.ai_paused_reason;
 
       return {

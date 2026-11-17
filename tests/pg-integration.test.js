@@ -17,6 +17,7 @@ import recommendHandler from "../api/recommend.js";
 import requestsHandler from "../api/requests.js";
 import { resetAuthCache } from "../server/account-auth.js";
 import { saveDraftPhoto } from "../server/listing-drafts.js";
+import { OPENAI_LIVE_VOICES } from "../server/voice.js";
 import { recommend } from "../server/agent.js";
 import { getConversationMessages, sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
@@ -923,8 +924,8 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
   const pendingAction = { type: "rental_request", listingId, start, end, note: "농농이로 요청" };
 
   // AI 키가 없으면 대화는 규칙 기반 상담으로 넘긴다
-  const prevKeys = { ZAI_API_KEY: process.env.ZAI_API_KEY, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY };
-  delete process.env.ZAI_API_KEY;
+  const prevKeys = { OPENAI_API_KEY: process.env.OPENAI_API_KEY, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY };
+  delete process.env.OPENAI_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   try {
     const chat = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "고추 두둑 빌릴래요" } });
@@ -1112,7 +1113,7 @@ test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매�
 });
 
 test("[PGlite 로컬 엔진] 11. 농농이 음성 인식: 기능 확인, WAV 검증, 공급자 없음 503, 호출 제한", async (t) => {
-  const keys = ["VOICE_STT_PROVIDER", "OPENAI_API_KEY", "ZAI_API_KEY", "ENABLE_RATE_LIMIT", "VOICE_LIMIT_PER_MINUTE"];
+  const keys = ["VOICE_STT_PROVIDER", "OPENAI_API_KEY", "ENABLE_RATE_LIMIT", "VOICE_LIMIT_PER_MINUTE"];
   const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   t.after(() => {
     for (const [k, v] of Object.entries(prev)) {
@@ -1135,10 +1136,10 @@ test("[PGlite 로컬 엔진] 11. 농농이 음성 인식: 기능 확인, WAV 검
   // 키가 없으면 서버 인식이 없다고 알려 주고(브라우저 인식으로), 인식 요청은 503
   const viaRewrite = await apiReq(baseUrl, "/api/agent?route=voice");
   assert.equal(viaRewrite.status, 200);
-  assert.deepEqual(viaRewrite.body, { serverStt: false, provider: null, maxSeconds: 30, liveAvailable: false, liveModel: "gpt-live-1", liveVoice: "noeul" });
+  assert.deepEqual(viaRewrite.body, { serverStt: false, provider: null, maxSeconds: 30, liveAvailable: false, liveModel: "gpt-live-1", liveVoice: "noeul", liveVoices: OPENAI_LIVE_VOICES });
   const caps = await apiReq(baseUrl, "/api/voice");
   assert.equal(caps.status, 200);
-  assert.deepEqual(caps.body, { serverStt: false, provider: null, maxSeconds: 30, liveAvailable: false, liveModel: "gpt-live-1", liveVoice: "noeul" });
+  assert.deepEqual(caps.body, { serverStt: false, provider: null, maxSeconds: 30, liveAvailable: false, liveModel: "gpt-live-1", liveVoice: "noeul", liveVoices: OPENAI_LIVE_VOICES });
   const none = await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: wav(1) } });
   assert.equal(none.status, 503);
   assert.equal(none.body.code, "VOICE_UNAVAILABLE");

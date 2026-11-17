@@ -4545,3 +4545,6 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding-top: 4px;
   border-top: 1px dashed #d7e8dc;
 }
+
+/* 매물 추천 박스만 보일 때(설명 글 없음) 위쪽 구분선·여백을 없앤다 */
+.chat-bubble.has-results > .ai-result:first-child { margin-top: 0; padding-top: 0; border-top: 0; }

@@ -3,6 +3,7 @@ import { getPool, kstToday, withTransaction } from "./db.js";
 import { callLLM, llmEnabled } from "./llm.js";
 import { fetchListingById } from "./listings-db.js";
 import { checkFarmCompatibilityTool } from "./nongnong-agent.js";
+import { MAX_RENTAL_DAYS } from "./rentals.js";
 import { formatIsoDate, requireUuid } from "./validate.js";
 import { scheduleWaitUntil } from "./wait-until.js";
 import { getWeatherAndMapConfig } from "./weather.js";
@@ -52,6 +53,9 @@ function checkListingAvailability(listing, startRaw, endRaw, today) {
     return { error: "반납일은 시작일보다 빠를 수 없습니다." };
   }
   const days = daysBetweenInclusive(start, end);
+  if (days > MAX_RENTAL_DAYS) {
+    return { error: `대여 기간은 최대 ${MAX_RENTAL_DAYS}일까지 요청할 수 있습니다.` };
+  }
   const booked = Array.isArray(listing.booked) ? listing.booked : [];
   const conflicts = booked.filter((r) => !(end < r.start || start > r.end));
 
@@ -983,6 +987,16 @@ export async function runDelegatedChatReply({
               effectiveTriggerSeq,
               reasonCode: "listing_unavailable",
               summaryForUser: "매물이 정비 중 상태여서 자동 대여 신청을 멈췄어요.",
+            });
+          }
+          if (!Number.isInteger(terminalAction.days) || terminalAction.days < 1 || terminalAction.days > MAX_RENTAL_DAYS) {
+            return persistEscalation(client, {
+              cleanConvId,
+              targetUserId,
+              targetRole,
+              effectiveTriggerSeq,
+              reasonCode: "invalid_schedule",
+              summaryForUser: `대여 기간은 최대 ${MAX_RENTAL_DAYS}일까지 요청할 수 있어 자동 접수를 멈췄어요.`,
             });
           }
           const overlapRes = await client.query(

@@ -17,6 +17,7 @@ import { createPglitePool, kstToday, setPool } from "../server/db.js";
 import { runDelegatedChatReply } from "../server/delegated-chat.js";
 import { createListing } from "../server/listings-service.js";
 import { initEnvironment, inspectDatabase, runMigrations } from "../server/migrator.js";
+import { MAX_RENTAL_DAYS } from "../server/rentals.js";
 
 function patchRes(res) {
   let code = 200;
@@ -936,4 +937,178 @@ test("9. 정보 부족·예산 초과 시 무응답 대기(ai_proxy 미전송 �
   assert.equal(rentalCount.rows[0].cnt, 0);
   const stateAfterBudget = await getConversationMessages(buyer9.user.id, { conversationId: convId, pool });
   assert.equal(stateAfterBudget.messages.filter((m) => m.senderKind === "ai_proxy").length, 0);
+});
+
+test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 및 365일 상한 허용 검증", async () => {
+  const owner10 = await signupHttp(baseUrl, "dc_owner10", "기간소유");
+  const buyer10 = await signupHttp(baseUrl, "dc_buyer10", "기간구매");
+  const { listing: list10 } = await createListing(
+    owner10.user,
+    {
+      id: randomUUID(),
+      title: "대동 트랙터 장기 대여",
+      type: "rent",
+      modelId: "asia-amc900",
+      cropIds: ["pepper"],
+      operations: ["till"],
+      price: 100000,
+      region: "영양읍",
+      condition: "good",
+      description: "직접 인수",
+    },
+    { pool }
+  );
+
+  const shiftDays = (iso, delta) => {
+    const d = new Date(`${iso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  };
+  const today = kstToday();
+  const start = shiftDays(today, 1);
+  const tooLongEnd = shiftDays(start, MAX_RENTAL_DAYS); // MAX_RENTAL_DAYS + 1 일
+  const maxAllowedEnd = shiftDays(start, MAX_RENTAL_DAYS - 1); // MAX_RENTAL_DAYS 일
+
+  const firstMsg = await sendMessage(
+    buyer10.user,
+    { id: randomUUID(), listingId: list10.id, body: "장기 대여 가능한가요?" },
+    { pool }
+  );
+  const convId = firstMsg.conversation.id;
+
+  // Case A: fullDelegation 모드에서 check_availability 및 complete_delegated_transaction 모두 365일 초과 거부
+  await updateConversationAiPolicy(
+    buyer10.user,
+    {
+      conversationId: convId,
+      mode: "autonomous",
+      policy: { fullDelegation: true, intent: "rent", targetStart: start, targetEnd: tooLongEnd },
+    },
+    { pool }
+  );
+  const ownerReplyA = await sendMessage(
+    owner10.user,
+    { id: randomUUID(), conversationId: convId, body: "원하시는 날짜 알려주시면 확인해드릴게요." },
+    { pool }
+  );
+
+  let roundA = 0;
+  let checkTooLongOut = null;
+  let checkMaxOut = null;
+  const resTooLong = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: ownerReplyA.message.seq,
+    targetRole: "buyer",
+    today,
+    pool,
+    call: async ({ messages }) => {
+      roundA += 1;
+      if (roundA === 1) {
+        return {
+          content: [
+            { type: "tool_use", id: "chk_over", name: "check_availability", input: { start, end: tooLongEnd } },
+            { type: "tool_use", id: "chk_max", name: "check_availability", input: { start, end: maxAllowedEnd } },
+          ],
+        };
+      }
+      const lastUser = messages[messages.length - 1];
+      const toolResults = Array.isArray(lastUser?.content) ? lastUser.content : [];
+      checkTooLongOut = JSON.parse(toolResults.find((b) => b.tool_use_id === "chk_over").content);
+      checkMaxOut = JSON.parse(toolResults.find((b) => b.tool_use_id === "chk_max").content);
+      return {
+        content: [
+          {
+            type: "tool_use",
+            id: "tx_over",
+            name: "complete_delegated_transaction",
+            input: {
+              start,
+              end: tooLongEnd,
+              closingReply: "366일 대여 접수하겠습니다.",
+            },
+          },
+        ],
+      };
+    },
+  });
+
+  assert.ok(checkTooLongOut?.error?.includes(String(MAX_RENTAL_DAYS)));
+  assert.equal(checkMaxOut?.available, true);
+  assert.equal(checkMaxOut?.days, MAX_RENTAL_DAYS);
+  assert.equal(resTooLong.action, "escalated");
+  assert.equal(resTooLong.reasonCode, "invalid_schedule");
+  assert.equal(resTooLong.waitingForUser, true);
+
+  const countAfterA = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list10.id]);
+  assert.equal(countAfterA.rows[0].cnt, 0);
+
+  // Case B: 일반 autonomous 모드에서 propose_rental_handoff도 365일 초과 시 거부
+  const buyerReplyB = await sendMessage(
+    buyer10.user,
+    { id: randomUUID(), conversationId: convId, body: "날짜 다시 확인해주세요." },
+    { pool }
+  );
+  await updateConversationAiPolicy(
+    buyer10.user,
+    {
+      conversationId: convId,
+      mode: "autonomous",
+      policy: { fullDelegation: false, intent: "rent" },
+    },
+    { pool }
+  );
+  const ownerReplyB = await sendMessage(
+    owner10.user,
+    { id: randomUUID(), conversationId: convId, body: "366일이나 365일 중 어떤 걸로 할까요?" },
+    { pool }
+  );
+
+  let roundB = 0;
+  let handoffOverOut = null;
+  const resHandoff = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: ownerReplyB.message.seq,
+    targetRole: "buyer",
+    today,
+    pool,
+    call: async ({ messages }) => {
+      roundB += 1;
+      if (roundB === 1) {
+        return {
+          content: [
+            {
+              type: "tool_use",
+              id: "ho_over",
+              name: "propose_rental_handoff",
+              input: { start, end: tooLongEnd },
+            },
+          ],
+        };
+      }
+      const lastUser = messages[messages.length - 1];
+      const toolResults = Array.isArray(lastUser?.content) ? lastUser.content : [];
+      handoffOverOut = JSON.parse(toolResults.find((b) => b.tool_use_id === "ho_over").content);
+      return {
+        content: [
+          {
+            type: "tool_use",
+            id: "reply_ok",
+            name: "send_proxy_reply",
+            input: {
+              body: `대여 기간은 최대 ${MAX_RENTAL_DAYS}일까지 가능해서 기간을 조정해 주세요.`,
+              confidence: "high",
+              rationale: "최대 대여 기간 초과 안내",
+            },
+          },
+        ],
+      };
+    },
+  });
+
+  assert.ok(handoffOverOut?.error?.includes(String(MAX_RENTAL_DAYS)));
+  assert.equal(resHandoff.action, "replied");
+  assert.equal(buyerReplyB.message.seq < ownerReplyB.message.seq, true);
+
+  const countAfterB = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list10.id]);
+  assert.equal(countAfterB.rows[0].cnt, 0);
 });

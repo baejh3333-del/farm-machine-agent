@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, checkModelCompatibility } from "../src/data/machine-specifications.js";
+import { CROPS, MACHINE_TYPES, OPERATIONS } from "../src/data/farm-machines.js";
+import { MACHINE_SPECIFICATIONS, SPEC_BY_ID, checkModelCompatibility, getSpecificationDefaults } from "../src/data/machine-specifications.js";
 import { buildMockListings } from "../server/listing-seed.js";
 import { listListings } from "../server/listings-db.js";
 
 test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사용한다", () => {
+  const expectedListings = MACHINE_TYPES.length * 10;
   for (const listings of [buildMockListings(), listListings()]) {
-    assert.equal(listings.length, 100);
-    assert.equal(new Set(listings.map((item) => item.modelId)).size, 12);
+    assert.equal(listings.length, expectedListings);
+    assert.ok(new Set(listings.map((item) => item.modelId)).size >= MACHINE_TYPES.length);
     for (const item of listings) {
       const model = SPEC_BY_ID[item.modelId];
       assert.ok(model);
@@ -25,10 +27,30 @@ test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사
   }
 });
 
-test("제조사 명시 관리기 조합만 승인하고 다른 본체를 거른다", () => {
+test("확장된 한국 농기계·작물·작업 카탈로그와 기종별 기본값이 모두 유효하다", () => {
+  assert.equal(CROPS.length, 51);
+  assert.equal(OPERATIONS.length, 29);
+  assert.equal(MACHINE_TYPES.length, 31);
+  assert.equal(MACHINE_SPECIFICATIONS.length, 206);
+  assert.equal(new Set(CROPS.map((c) => c.id)).size, CROPS.length);
+  assert.equal(new Set(OPERATIONS.map((o) => o.id)).size, OPERATIONS.length);
+  assert.equal(new Set(MACHINE_TYPES.map((m) => m.id)).size, MACHINE_TYPES.length);
+  assert.equal(new Set(MACHINE_SPECIFICATIONS.map((m) => m.id)).size, MACHINE_SPECIFICATIONS.length);
+  for (const mt of MACHINE_TYPES) {
+    assert.ok(MACHINE_SPECIFICATIONS.some((m) => m.machineType === mt.id), `${mt.id} 모델 누락`);
+    const defs = getSpecificationDefaults(mt.id);
+    assert.ok(defs.cropIds.length > 0 && defs.operations.length > 0);
+    assert.ok(defs.areaMin > 0 && defs.areaMax >= defs.areaMin);
+  }
+});
+
+test("제조사 명시 관리기 조합만 승인하고 다른 본체·출력 미달·브랜드 전용을 거른다", () => {
   assert.equal(checkModelCompatibility("asia-amc900", "asia-fm120n").status, "compatible");
+  assert.equal(checkModelCompatibility("asia-amc1000", "asia-fm120n").status, "compatible");
   assert.equal(checkModelCompatibility("daedong-dk550", "asia-fm120n").status, "incompatible");
   assert.equal(checkModelCompatibility("asia-amc900", "knong-kgph9000").status, "incompatible");
+  assert.equal(checkModelCompatibility("kubota-b2320", "dooroo-drp1006sg").status, "incompatible");
+  assert.equal(checkModelCompatibility("tym-t75", "daedong-dl7000").status, "incompatible");
 });
 
 test("출력 범위가 맞더라도 미확인 연결을 호환으로 판정하지 않는다", () => {

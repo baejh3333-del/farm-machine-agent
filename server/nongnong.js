@@ -283,11 +283,9 @@ function requireDates(args, today) {
   return { start, end, days };
 }
 
-export function createToolRunner({ user, today, lastUserMessage, deps, listingPhoto = null, inputMode = "text", confirmed = false, requestId = null }) {
-  // 화면 승인 버튼은 요청 ID를 함께 보내, 다시 눌러도 같은 요청으로 처리되게 한다.
-  const newId = () => requestId || randomUUID();
+export function createToolRunner({ user, today, lastUserMessage, deps, listingPhoto = null }) {
   let listingsCache = null;
-  const state = { shownListingIds: [], reservation: null, createdListing: null, updatedListing: null, pendingAction: null };
+  const state = { shownListingIds: [], reservation: null, createdListing: null, updatedListing: null };
 
   async function listings() {
     listingsCache ??= await deps.fetchListings();
@@ -386,7 +384,7 @@ export function createToolRunner({ user, today, lastUserMessage, deps, listingPh
     async create_rental_request(args) {
       const item = await findListing(args.listingId);
       const { start, end } = requireDates(args, today);
-      const id = newId();
+      const id = randomUUID();
       const result = await deps.createRentalRequest(user, { id, listingId: item.id, start, end, note: "농농 채팅으로 신청한 예약입니다." });
       const req = result.request || {};
       state.reservation = {
@@ -414,7 +412,7 @@ export function createToolRunner({ user, today, lastUserMessage, deps, listingPh
     async create_purchase_request(args) {
       const item = await findListing(args.listingId);
       if (item.type !== "sale" || item.status !== "open") toolFail("지금 구매 신청을 받을 수 없는 매물입니다.");
-      const id = newId();
+      const id = randomUUID();
       const body = `[농농 구매 신청] '${item.title}' 구매를 희망합니다. 확인 후 답장 부탁드립니다.`;
       const result = await deps.sendPurchaseMessage(user, { id, listingId: item.id, body });
       state.reservation = {
@@ -456,7 +454,7 @@ export function createToolRunner({ user, today, lastUserMessage, deps, listingPh
     },
 
     async create_listing(args) {
-      const id = newId();
+      const id = randomUUID();
       const description = composeListingDescription({ year: args.year, deposit: args.type === "rent" ? args.deposit : 0, description: args.description });
       const result = await deps.createListing(user, {
         id,
@@ -510,59 +508,6 @@ export function createToolRunner({ user, today, lastUserMessage, deps, listingPh
     },
   };
 
-  // 음성으로 받은 쓰기 요청은 바로 처리하지 않고, 화면 승인 카드에 보여 줄 요약을 만든다.
-  const describers = {
-    async create_rental_request(args) {
-      const item = await findListing(args.listingId);
-      const { start, end } = requireDates(args, today);
-      const days = rentalDays(start, end);
-      return {
-        title: "대여 예약 확인",
-        rows: [
-          ["기계", item.title],
-          ["지역", item.region],
-          ["기간", `${formatKoreanDate(start)} ~ ${formatKoreanDate(end)} · ${days}일`],
-          ["내야 하는 돈", `${won(item.price * days)} (하루 ${won(item.price)})`],
-        ],
-        args: { listingId: item.id, start, end },
-      };
-    },
-    async create_purchase_request(args) {
-      const item = await findListing(args.listingId);
-      if (item.type !== "sale" || item.status !== "open") toolFail("지금 구매 신청을 받을 수 없는 매물입니다.");
-      return { title: "구매 신청 확인", rows: [["기계", item.title], ["지역", item.region], ["판매가", won(item.price)]], args: { listingId: item.id } };
-    },
-    async create_listing(args) {
-      const rent = args.type === "rent";
-      const rows = [
-        ["종류", rent ? "빌려주기" : "팔기"],
-        ["기계", MACHINE_BY_ID[args.machineType]?.label || args.machineType],
-        ["제목", args.title],
-        ["제조사", args.brand],
-        ["연식", args.year],
-        ["상태", CONDITION_LABEL[args.condition]],
-        ["가격", Number.isSafeInteger(args.price) ? `${rent ? "하루 " : ""}${won(args.price)}` : ""],
-        ["보증금", rent && Number(args.deposit) > 0 ? won(args.deposit) : ""],
-        ["지역", args.region],
-        ["사진", listingPhoto ? "함께 올림" : "없음"],
-      ].filter(([, value]) => value);
-      return { title: "매물 등록 확인", rows, args };
-    },
-    async update_listing(args) {
-      const current = (await deps.fetchOwnListings()).find((l) => l.id === args.listingId && l.status !== "removed");
-      if (!current) toolFail("내가 등록한 매물을 찾을 수 없습니다.");
-      const rows = [["매물", current.title]];
-      if (typeof args.title === "string" && args.title.trim()) rows.push(["제목", `${current.title} → ${args.title.trim()}`]);
-      if (Number.isSafeInteger(args.price) && args.price >= 0) rows.push(["가격", `${won(current.price)} → ${won(args.price)}`]);
-      if (CONDITION_LABEL[args.condition]) rows.push(["상태", CONDITION_LABEL[args.condition]]);
-      if (typeof args.year === "string" && args.year.trim()) rows.push(["연식", args.year.trim()]);
-      if (Number.isSafeInteger(args.deposit) && args.deposit >= 0) rows.push(["보증금", won(args.deposit)]);
-      if (typeof args.description === "string" && args.description.trim()) rows.push(["상세 설명", args.description.trim().slice(0, 80)]);
-      if (rows.length === 1) toolFail("바꿀 내용이 없습니다.");
-      return { title: "매물 수정 확인", rows, args };
-    },
-  };
-
   async function run(name, rawArgs) {
     const handler = handlers[name];
     if (!handler) return { error: "알 수 없는 기능입니다." };
@@ -574,25 +519,10 @@ export function createToolRunner({ user, today, lastUserMessage, deps, listingPh
     }
     if (WRITE_TOOLS.has(name)) {
       if (!user) return { error: "LOGIN_REQUIRED", message: "로그인하지 않은 사용자입니다. 예약·등록은 로그인 후에 할 수 있다고 안내하세요." };
-      if (state.reservation || state.createdListing || state.updatedListing || state.pendingAction) return { error: "이번 대화 차례에서 이미 하나를 처리했습니다." };
-      if (inputMode === "voice" && !confirmed) {
-        try {
-          const summary = await describers[name](args);
-          state.pendingAction = { tool: name, ...summary };
-        } catch (error) {
-          if (error instanceof ToolError) return { error: error.message };
-          console.warn("nongnong describe failed", name, error instanceof Error ? error.message : "unknown");
-          return { error: "처리 중 문제가 생겼습니다. 잠시 후 다시 시도하도록 안내하세요." };
-        }
-        return {
-          error: "SCREEN_APPROVAL_REQUIRED",
-          message: "음성으로 받은 요청은 말만으로 처리하지 않습니다. 화면에 확인 카드를 띄웠습니다. 아직 처리되지 않았다고 말하고, 요청 내용을 짧게 되읽은 뒤 맞으면 화면의 승인 버튼을 눌러 달라고 안내하세요.",
-          summary: state.pendingAction.rows.map(([label, value]) => `${label}: ${value}`).join(" / "),
-        };
-      }
-      if (!confirmed && !isAffirmative(lastUserMessage)) {
+      if (!isAffirmative(lastUserMessage)) {
         return { error: "CONFIRMATION_REQUIRED", message: "사용자가 아직 분명히 동의하지 않았습니다. 예약하지 말고 한 번만 짧게 확인하세요." };
       }
+      if (state.reservation || state.createdListing || state.updatedListing) return { error: "이번 대화 차례에서 이미 하나를 처리했습니다." };
       try {
         await deps.beforeWrite?.(name);
       } catch (error) {
@@ -622,16 +552,7 @@ export function sanitizeHistory(messages) {
     .map((m) => ({ role: m.role, content: m.content.trim().slice(0, MAX_MESSAGE_CHARS) }));
 }
 
-const VOICE_GUIDE = `
-[음성으로 받은 말]
-- 이번 말은 음성 인식으로 받아 적은 글이다. 사용자가 확인했지만 잘못 들린 낱말이 남아 있을 수 있다.
-- 경상도·전라도·충청도 같은 사투리를 존중한다. 고치라고 하거나 흉내 내지 말고, 뜻을 알아듣고 표준어 존댓말로 답한다.
-- 날짜, 기간, 가격, 면적, 지역, 농기계 이름이 모호하면 추측하지 말고 한 번에 한두 가지만 쉬운 말로 되묻는다.
-- 숫자, 날짜, 금액, 농기계 이름은 "~로 들었어요. 맞으세요?"처럼 되읽어 확인한다.
-- 예약·구매 신청·등록·수정은 말로 "네"라고 해도 바로 처리되지 않는다. 도구를 부르면 화면에 확인 카드가 뜨고, 사용자가 화면의 승인 버튼을 눌러야 처리된다. 처리됐다고 말하지 않는다.
-- 답은 소리로도 읽힌다. 짧은 문장 2~4개로 쓰고, 표·기호·이모지는 쓰지 않는다. 날짜는 "11월 20일", 금액은 "4만 5천 원"처럼 쓴다.`;
-
-function buildInstructions({ user, today, listingPhoto, inputMode = "text" }) {
+function buildInstructions({ user, today, listingPhoto }) {
   return `${NONGNONG_INSTRUCTIONS}
 
 [지금 상황]
@@ -639,7 +560,7 @@ function buildInstructions({ user, today, listingPhoto, inputMode = "text" }) {
 - 로그인: ${user ? "로그인함" : "로그인 안 함 (추천까지만 가능)"}
 - 등록용 사진: ${listingPhoto ? "있음 (등록하면 함께 올라감)" : "없음"}
 - 지역 목록: ${REGIONS.join(", ")} (영양군)
-- 사용자가 "다음 주 화요일"처럼 말하면 오늘 날짜를 기준으로 YYYY-MM-DD로 바꿔 도구에 넘긴다.${inputMode === "voice" ? `\n${VOICE_GUIDE}` : ""}`;
+- 사용자가 "다음 주 화요일"처럼 말하면 오늘 날짜를 기준으로 YYYY-MM-DD로 바꿔 도구에 넘긴다.`;
 }
 
 export async function defaultCallModel(body) {
@@ -676,14 +597,13 @@ export function validPhoto(photo) {
   return typeof photo === "string" && photo.length <= MAX_PHOTO_CHARS && PHOTO_RE.test(photo) ? photo : null;
 }
 
-export async function runNongnong({ messages, user = null, today, deps, callModel = defaultCallModel, model, photo = null, photoIsNew = false, inputMode = "text" }) {
+export async function runNongnong({ messages, user = null, today, deps, callModel = defaultCallModel, model, photo = null, photoIsNew = false }) {
   const history = sanitizeHistory(messages);
   const last = history.at(-1);
   if (!last || last.role !== "user") throw new Error("마지막 메시지는 사용자 메시지여야 합니다.");
   const resolvedModel = model || process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
   const listingPhoto = validPhoto(photo);
-  const voice = inputMode === "voice";
-  const tools = createToolRunner({ user, today, lastUserMessage: last.content, deps, listingPhoto, inputMode: voice ? "voice" : "text" });
+  const tools = createToolRunner({ user, today, lastUserMessage: last.content, deps, listingPhoto });
   const input = history.map(({ role, content }) => ({ role, content }));
   if (listingPhoto && photoIsNew) {
     // 이번 메시지와 함께 올린 사진만 모델에 보여준다. 이전 사진 분석 결과는 대화 기록에 남아 있다.
@@ -699,7 +619,7 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     model: resolvedModel,
     store: false,
     max_output_tokens: 900,
-    instructions: buildInstructions({ user, today, listingPhoto, inputMode: voice ? "voice" : "text" }),
+    instructions: buildInstructions({ user, today, listingPhoto }),
     tools: TOOL_DEFINITIONS,
     include: ["reasoning.encrypted_content"],
     ...(/^gpt-6-(?:luna|sol)\b|^gpt-6\.1-terra\b/.test(resolvedModel) ? { reasoning: { effort: "low" } } : {}),
@@ -710,15 +630,7 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     const calls = (response.output || []).filter((item) => item.type === "function_call");
     if (!calls.length) {
       const reply = outputText(response) || "잠시 문제가 생겼어요. 다시 한 번 말씀해 주세요.";
-      return {
-        mode: "agent",
-        reply,
-        listingIds: tools.state.shownListingIds,
-        reservation: tools.state.reservation,
-        createdListing: tools.state.createdListing,
-        updatedListing: tools.state.updatedListing,
-        ...(tools.state.pendingAction ? { pendingAction: tools.state.pendingAction } : {}),
-      };
+      return { mode: "agent", reply, listingIds: tools.state.shownListingIds, reservation: tools.state.reservation, createdListing: tools.state.createdListing, updatedListing: tools.state.updatedListing };
     }
     input.push(...response.output);
     for (const call of calls) {
@@ -736,47 +648,4 @@ export async function runNongnong({ messages, user = null, today, deps, callMode
     createdListing: tools.state.createdListing,
     updatedListing: tools.state.updatedListing,
   };
-}
-
-// ───────────────────────── 화면 승인 후 처리 ─────────────────────────
-
-export const CONFIRMABLE_TOOLS = WRITE_TOOLS;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function userFacing(message) {
-  return String(message || "")
-    .replace(/\s*먼저 [a-z_]+로 찾아 주세요\./g, "")
-    .replace(/하도록 안내하세요\.?$/, "해 주세요.")
-    .trim();
-}
-
-/**
- * 음성 대화에서 띄운 승인 카드의 버튼을 눌렀을 때: 모델을 거치지 않고 카드에 적힌 작업을 그대로 처리한다.
- * 값 검사는 글로 요청할 때와 같은 도구 코드가 다시 한다.
- */
-export async function runConfirmedAction({ user = null, today, deps, action, photo = null }) {
-  const tool = action?.tool;
-  const args = action?.args;
-  if (!WRITE_TOOLS.has(tool) || !args || typeof args !== "object" || Array.isArray(args)) {
-    throw new Error("처리할 수 없는 작업입니다.");
-  }
-  const requestId = UUID_RE.test(action?.requestId || "") ? action.requestId : null;
-  const tools = createToolRunner({ user, today, lastUserMessage: "", deps, listingPhoto: validPhoto(photo), confirmed: true, requestId });
-  const result = await tools.run(tool, JSON.stringify(args));
-  const { state } = tools;
-  if (!result?.ok) {
-    const reason = result?.error === "LOGIN_REQUIRED" ? "로그인한 뒤에 다시 승인해 주세요." : userFacing(result?.message || result?.error) || "잠시 후 다시 시도해 주세요.";
-    return { mode: "agent", failed: true, reply: `처리하지 못했어요. ${reason}`, listingIds: [], reservation: null, createdListing: null, updatedListing: null };
-  }
-  let reply;
-  if (tool === "create_rental_request") {
-    reply = `✅ 대여 요청을 보냈어요. 예약 번호는 ${result.reservationNumber}이에요. ${result.period}, 내야 하는 돈은 ${result.amountDue}이에요. 소유 농가가 승인하면 [대여 요청] 메뉴에서 결제해 주세요.`;
-  } else if (tool === "create_purchase_request") {
-    reply = `✅ 구매 신청을 보냈어요. 신청 번호는 ${result.reservationNumber}이에요. 판매자가 확인하면 채팅에서 거래를 이어 가요.`;
-  } else if (tool === "create_listing") {
-    reply = `✅ 매물을 올렸어요. 등록 번호는 ${result.listingNumber}이에요.${result.photoAttached ? " 사진도 함께 올렸어요." : " 사진은 [내 기계 관리]에서 올릴 수 있어요."}`;
-  } else {
-    reply = `✅ 매물을 고쳤어요. 등록 번호는 ${result.listingNumber}이에요.`;
-  }
-  return { mode: "agent", reply, listingIds: [], reservation: state.reservation, createdListing: state.createdListing, updatedListing: state.updatedListing };
 }

@@ -1,4 +1,5 @@
 import { REGION_COORDS } from "../src/data/farm-machines.js";
+import { getRegionCoords, latLngToKmaGrid } from "../src/data/korea-regions.js";
 
 const KMA_ENDPOINT = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst";
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -139,10 +140,20 @@ function buildFallbackSlots({ tempMin, tempMax, pop, pty, sky, windSpeed, seed }
   });
 }
 
+function regionHashIndex(region) {
+  const idx = Object.keys(REGION_COORDS).indexOf(region);
+  if (idx >= 0) return idx;
+  let sum = 0;
+  for (let i = 0; i < String(region || "").length; i += 1) {
+    sum = (sum * 31 + String(region).charCodeAt(i)) % 97;
+  }
+  return sum;
+}
+
 function buildFallbackForecast(region, date, { inShortTermRange = false, fallbackReason = "" } = {}) {
   const month = Number(String(date).slice(5, 7)) || 5;
   const day = Number(String(date).slice(8, 10)) || 15;
-  const regionShift = Object.keys(REGION_COORDS).indexOf(region);
+  const regionShift = regionHashIndex(region);
   const seed = (month * 31 + day * 7 + Math.max(0, regionShift) * 13) % 100;
 
   // 계절별 평균 기온 범위 (영양군 기준)
@@ -260,13 +271,13 @@ function parseKmaDayItems(region, date, dayItems) {
   };
 }
 
-async function fetchKmaForecastAllDays(region, apiKey) {
-  const coords = REGION_COORDS[region] || REGION_COORDS["영양읍"];
+async function fetchKmaForecastAllDays(region, coords, apiKey) {
+  const resolvedCoords = coords || getRegionCoords(region);
   const { baseDate, baseTime } = kstBaseDateTime();
 
   // serviceKey는 이미 인코딩된 키와 디코딩된 키 모두 들어올 수 있어 그대로/인코딩 분기
   const encodedKey = apiKey.includes("%") ? apiKey : encodeURIComponent(apiKey);
-  const url = `${KMA_ENDPOINT}?serviceKey=${encodedKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${coords.nx}&ny=${coords.ny}`;
+  const url = `${KMA_ENDPOINT}?serviceKey=${encodedKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${resolvedCoords.nx}&ny=${resolvedCoords.ny}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
@@ -299,15 +310,15 @@ async function fetchKmaForecastAllDays(region, apiKey) {
   }
 }
 
-async function getKmaMapForRegion(safeRegion, kmaApiKey) {
+async function getKmaMapForRegion(safeRegion, coords, kmaApiKey) {
   if (!kmaApiKey) return { map: null, reason: "NO_KEY" };
-  const cacheKey = `kma-all:${safeRegion}`;
+  const cacheKey = `kma-all:${coords.nx},${coords.ny}:${safeRegion}`;
   const cached = weatherCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return { map: cached.value, reason: "" };
   }
   try {
-    const map = await fetchKmaForecastAllDays(safeRegion, kmaApiKey);
+    const map = await fetchKmaForecastAllDays(safeRegion, coords, kmaApiKey);
     weatherCache.set(cacheKey, { at: Date.now(), value: map });
     return { map, reason: "" };
   } catch (err) {
@@ -329,8 +340,31 @@ function resolveDayWeather(safeRegion, targetDate, todayYmd, kmaMap, kmaErrorRea
   return buildFallbackForecast(safeRegion, targetDate, { inShortTermRange, fallbackReason });
 }
 
-export async function getWeatherAndMapConfig({ region = "영양읍", date = "", endDate = "", days = 5 } = {}) {
-  const safeRegion = Object.hasOwn(REGION_COORDS, region) ? region : "영양읍";
+export async function getWeatherAndMapConfig({
+  region = "영양읍",
+  lat = null,
+  lng = null,
+  date = "",
+  endDate = "",
+  days = 5,
+} = {}) {
+  const safeRegion = typeof region === "string" && region.trim() ? region.trim() : "영양읍";
+  const hasExplicitLatLng =
+    lat !== null &&
+    lat !== "" &&
+    lng !== null &&
+    lng !== "" &&
+    Number.isFinite(Number(lat)) &&
+    Number.isFinite(Number(lng));
+  const resolvedCoords = hasExplicitLatLng
+    ? (() => {
+        const numLat = Number(lat);
+        const numLng = Number(lng);
+        const grid = latLngToKmaGrid(numLat, numLng);
+        return { name: safeRegion, lat: numLat, lng: numLng, nx: grid.nx, ny: grid.ny };
+      })()
+    : getRegionCoords(safeRegion);
+
   const todayYmd = kstTodayYmd();
   const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayYmd;
   const safeEndDate = /^\d{4}-\d{2}-\d{2}$/.test(endDate) && endDate >= targetDate ? endDate : "";
@@ -339,7 +373,7 @@ export async function getWeatherAndMapConfig({ region = "영양읍", date = "", 
   const kakaoAppKey = String(process.env.KAKAO_MAP_JS_KEY || "").trim() || null;
   const kmaApiKey = String(process.env.KMA_WEATHER_API_KEY || "").trim() || null;
 
-  const { map: kmaMap, reason: kmaErrorReason } = await getKmaMapForRegion(safeRegion, kmaApiKey);
+  const { map: kmaMap, reason: kmaErrorReason } = await getKmaMapForRegion(safeRegion, resolvedCoords, kmaApiKey);
 
   const weather = resolveDayWeather(safeRegion, targetDate, todayYmd, kmaMap, kmaErrorReason);
 
@@ -362,7 +396,7 @@ export async function getWeatherAndMapConfig({ region = "영양읍", date = "", 
   return {
     region: safeRegion,
     today: todayYmd,
-    coords: REGION_COORDS[safeRegion],
+    coords: resolvedCoords,
     weather,
     forecastDays,
     rangeForecast,

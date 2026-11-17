@@ -1,6 +1,7 @@
 import { createGarage } from "./garage.js";
 import { accountRequest, getSocialProviders, signInWithSocial } from "./account.js";
 import { CROPS, CROP_OPERATIONS, MACHINE_BY_ID, OPERATION_BY_ID } from "./data/farm-machines.js";
+import { KOREA_REGIONS, getRegionCoords, findNearestRegion } from "./data/korea-regions.js";
 import { initFontScale } from "./core/a11y.js";
 import {
   $, escapeHtml, today, addDays, areaLabel, syncServerTime, toast, showDialog, hideDialog,
@@ -39,6 +40,23 @@ const appDeps = {
   renderListings: (...args) => catalogViews.renderListings(...args),
 };
 
+function getOwnedMachinesSnapshot() {
+  if (isLoggedIn()) {
+    return {
+      owned: Array.isArray(runtime.ownedMachines) ? runtime.ownedMachines : [],
+      selectedId: typeof runtime.selectedOwnedMachineId === "string" ? runtime.selectedOwnedMachineId : "",
+    };
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem("moa-owned-machines-v1") || "{}");
+    const owned = Array.isArray(saved?.owned) ? saved.owned : [];
+    const selectedId = typeof saved?.selectedId === "string" ? saved.selectedId : owned[0]?.id || "";
+    return { owned, selectedId };
+  } catch {
+    return { owned: [], selectedId: "" };
+  }
+}
+
 const catalogViews = createCatalogViews(appDeps);
 const txViews = createTransactionViews(appDeps);
 const aiPanel = createAiPanel({
@@ -53,6 +71,11 @@ const aiPanel = createAiPanel({
   refreshAuthenticatedData: (...args) => refreshAuthenticatedData(...args),
   savePendingIntentAndRedirectLogin: (...args) => savePendingIntentAndRedirectLogin(...args),
   setView: (...args) => setView(...args),
+  openNewListing: (...args) => txViews.openNewListing(...args),
+  toggleFavorite: (...args) => toggleFavorite(...args),
+  isFavorite: (id) => activeFavorites().includes(id),
+  openChat: (target) => txViews.chatForm(target),
+  getOwnedMachines: () => getOwnedMachinesSnapshot(),
 });
 
 async function loadCatalog({ quiet = false } = {}) {
@@ -75,6 +98,8 @@ async function loadCatalog({ quiet = false } = {}) {
 async function refreshAuthenticatedData({ includeRequests = true, includeConversations = true } = {}) {
   if (!isLoggedIn()) {
     resetAccountRuntimeState();
+    runtime.ownedMachines = [];
+    runtime.selectedOwnedMachineId = "";
     runtime.garage?.resetToGuest();
     updateBadges();
     renderAll();
@@ -91,7 +116,9 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     if (epoch !== runtime.authEpoch) return;
 
     runtime.serverFavorites = Array.isArray(meData?.favorites) ? meData.favorites : [];
-    runtime.garage?.setExternalOwned(meData?.ownedMachines || [], meData?.selectedOwnedMachineId || "");
+    runtime.ownedMachines = Array.isArray(meData?.ownedMachines) ? meData.ownedMachines : [];
+    runtime.selectedOwnedMachineId = typeof meData?.selectedOwnedMachineId === "string" ? meData.selectedOwnedMachineId : "";
+    runtime.garage?.setExternalOwned(runtime.ownedMachines, runtime.selectedOwnedMachineId);
 
     if (reqData) {
       runtime.incomingRequests = Array.isArray(reqData.incoming) ? reqData.incoming : [];
@@ -130,6 +157,11 @@ function syncFavoriteButtons(id, isFav) {
     const label = button.querySelector(".favorite-label");
     if (label) label.textContent = isFav ? "찜한 기계" : "찜하기";
   });
+  document.querySelectorAll(`.ai-rec-fav-btn[data-ai-favorite="${escapedId}"]`).forEach((button) => {
+    button.setAttribute("aria-pressed", String(isFav));
+    button.classList.toggle("is-favorited", isFav);
+    button.textContent = isFav ? "❤️ 찜됨" : "🤍 찜";
+  });
 }
 
 async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
@@ -146,7 +178,7 @@ async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
   }
 
   const escapedId = CSS.escape(id);
-  const buttons = [...document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"], [data-fav-remove="${escapedId}"]`)];
+  const buttons = [...document.querySelectorAll(`[data-favorite="${escapedId}"], [data-detail-fav="${escapedId}"], [data-fav-remove="${escapedId}"], .ai-rec-fav-btn[data-ai-favorite="${escapedId}"]`)];
   buttons.forEach((btn) => { btn.disabled = true; });
   try {
     const res = await apiFetch("/api/me", {
@@ -202,9 +234,15 @@ function updateBadges() {
       ownerBadge.textContent = String(runtime.approvableRequestCount);
     }
   }
+  const myPageDot = $("myPageNotifDot");
+  if (myPageDot) {
+    const hasPending = favCount > 0 || (isLoggedIn() && runtime.approvableRequestCount > 0);
+    myPageDot.hidden = !hasPending;
+  }
 }
 
 const viewIds = { garage: "garageView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
+const MY_PAGE_VIEWS = new Set(["requests", "owner", "ownerLoginRequired", "garage", "about"]);
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
 const MAIN_PAGE_VIEWS = ["home", "browse"];
@@ -216,6 +254,10 @@ function markNav(view) {
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
+  }
+  const myPageBtn = $("myPageButton");
+  if (myPageBtn) {
+    myPageBtn.classList.toggle("active", MY_PAGE_VIEWS.has(view));
   }
 }
 
@@ -272,6 +314,7 @@ function renderAll() {
   catalogViews.renderListings();
   txViews.renderBuyerRequests();
   updateBadges();
+  aiPanel.refreshContextBar?.();
 }
 
 function bindEvents() {
@@ -309,13 +352,243 @@ function bindEvents() {
     catalogViews.renderListings();
   });
 
-  $("regionSelect").addEventListener("change", (event) => {
-    state.region = event.target.value;
+  const syncRegionSelect = (regionName) => {
+    const sel = $("regionSelect");
+    if (!sel) return;
+    const hasOption = [...sel.options].some((o) => o.value === regionName);
+    if (!hasOption) {
+      const opt = document.createElement("option");
+      opt.value = regionName;
+      opt.textContent = regionName;
+      sel.append(opt);
+    }
+    sel.value = regionName;
+  };
+
+  const formatRegionLabel = (regionName, userCoords) => {
+    const info = getRegionCoords(regionName);
+    if (userCoords && Number.isFinite(userCoords.lat) && Number.isFinite(userCoords.lng)) {
+      const shortPlace = info?.subRegion || info?.city || regionName;
+      return `📍 GPS · ${shortPlace}`;
+    }
+    if (info?.subRegion) {
+      return `📍 ${info.province} ${info.city} · ${info.subRegion}`;
+    }
+    if (info?.province && info?.city && info.province !== info.city) {
+      return `📍 ${info.province} ${info.city}`;
+    }
+    return `📍 ${regionName}`;
+  };
+
+  const updateRegionPickerTrigger = () => {
+    const btn = $("regionPickerBtn");
+    const label = $("regionPickerLabel");
+    const hasGps = Boolean(state.userCoords && Number.isFinite(state.userCoords.lat) && Number.isFinite(state.userCoords.lng));
+    if (label) label.textContent = formatRegionLabel(state.region, hasGps ? state.userCoords : null);
+    if (btn) btn.classList.toggle("is-gps", hasGps);
+    syncRegionSelect(state.region);
+  };
+
+  const applyRegionSelection = (nextRegion, { coords = null, notice = "" } = {}) => {
+    state.region = nextRegion;
+    state.userCoords = coords;
+    runtime.userCoords = coords;
     persist(updateBadges);
+    updateRegionPickerTrigger();
     renderAll();
     refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
-    toast(`내 동네가 '${state.region}'(으)로 설정되었습니다.`);
+    if (notice) toast(notice);
+  };
+
+  $("regionSelect")?.addEventListener("change", (event) => {
+    const next = event.target.value;
+    applyRegionSelection(next, {
+      coords: null,
+      notice: `내 동네가 '${next}'(으)로 설정되었습니다.`,
+    });
   });
+
+  // 전국 지역 선택 모달 (GPS + 시/도 -> 시/군/구 -> 읍/면)
+  const regionDialog = $("regionPickerDialog");
+  const regionPickerBtn = $("regionPickerBtn");
+  const provListEl = $("regionProvinceList");
+  const cityAreaEl = $("regionCityArea");
+  const gpsBtn = $("regionGpsBtn");
+  let activeProvince = getRegionCoords(state.region)?.province || KOREA_REGIONS[0].name;
+  let activeSubCity = null;
+
+  const closeRegionPicker = () => {
+    if (!regionDialog) return;
+    hideDialog(regionDialog);
+    regionPickerBtn?.setAttribute("aria-expanded", "false");
+  };
+
+  const renderCityStep = () => {
+    if (!cityAreaEl) return;
+    const prov = KOREA_REGIONS.find((p) => p.name === activeProvince) || KOREA_REGIONS[0];
+    if (activeSubCity && Array.isArray(activeSubCity.subRegions) && activeSubCity.subRegions.length) {
+      const wholeName = `${prov.name} ${activeSubCity.name}`;
+      cityAreaEl.innerHTML = `
+        <div class="region-step-title">
+          <span>3단계 · ${escapeHtml(activeSubCity.name)} 읍·면 선택</span>
+          <button type="button" class="region-sub-back" id="regionSubBackBtn">← ${escapeHtml(prov.shortName)} 시/군/구로</button>
+        </div>
+        <div class="region-cities-grid">
+          <button type="button" class="region-city-btn${state.region === wholeName ? " is-selected" : ""}" data-select-region="${escapeHtml(wholeName)}">
+            ${escapeHtml(activeSubCity.name)} 전체
+          </button>
+          ${activeSubCity.subRegions
+            .map(
+              (sub) => `
+            <button type="button" class="region-city-btn${state.region === sub.name ? " is-selected" : ""}" data-select-region="${escapeHtml(sub.name)}">
+              ${escapeHtml(sub.name)}
+            </button>`
+            )
+            .join("")}
+        </div>
+      `;
+      $("regionSubBackBtn")?.addEventListener("click", () => {
+        activeSubCity = null;
+        renderCityStep();
+      });
+    } else {
+      cityAreaEl.innerHTML = `
+        <div class="region-step-title">
+          <span>2단계 · ${escapeHtml(prov.name)} 시/군/구 선택</span>
+        </div>
+        <div class="region-cities-grid">
+          ${prov.cities
+            .map((city) => {
+              const fullName = `${prov.name} ${city.name}`;
+              const hasSubs = Array.isArray(city.subRegions) && city.subRegions.length > 0;
+              const isSelected =
+                state.region === fullName ||
+                (hasSubs && city.subRegions.some((s) => s.name === state.region));
+              return `
+                <button
+                  type="button"
+                  class="region-city-btn${isSelected ? " is-selected" : ""}"
+                  data-city-name="${escapeHtml(city.name)}"
+                  data-has-subs="${hasSubs ? "1" : "0"}"
+                  data-select-region="${escapeHtml(fullName)}"
+                >
+                  ${escapeHtml(city.name)}${hasSubs ? " ▸" : ""}
+                </button>`;
+            })
+            .join("")}
+        </div>
+      `;
+    }
+
+    cityAreaEl.querySelectorAll("[data-select-region]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.hasSubs === "1") {
+          const cityObj = prov.cities.find((c) => c.name === btn.dataset.cityName);
+          if (cityObj) {
+            activeSubCity = cityObj;
+            renderCityStep();
+            return;
+          }
+        }
+        const chosen = btn.dataset.selectRegion;
+        if (!chosen) return;
+        closeRegionPicker();
+        applyRegionSelection(chosen, {
+          coords: null,
+          notice: `내 동네가 '${chosen}'(으)로 설정되었습니다.`,
+        });
+      });
+    });
+  };
+
+  const renderProvinceStep = () => {
+    if (!provListEl) return;
+    provListEl.innerHTML = `
+      <div class="region-step-title"><span>1단계 · 시/도 선택</span></div>
+      ${KOREA_REGIONS.map(
+        (p) => `
+        <button
+          type="button"
+          class="region-prov-btn${p.name === activeProvince ? " is-active" : ""}"
+          data-province="${escapeHtml(p.name)}"
+        >
+          <span>${escapeHtml(p.name)}</span>
+        </button>`
+      ).join("")}
+    `;
+    provListEl.querySelectorAll("[data-province]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeProvince = btn.dataset.province;
+        activeSubCity = null;
+        renderProvinceStep();
+        renderCityStep();
+      });
+    });
+  };
+
+  const openRegionPicker = () => {
+    if (!regionDialog) return;
+    const current = getRegionCoords(state.region);
+    activeProvince = current?.province || KOREA_REGIONS[0].name;
+    activeSubCity = null;
+    if (current?.subRegion) {
+      const prov = KOREA_REGIONS.find((p) => p.name === activeProvince);
+      const city = prov?.cities.find((c) => c.name === current.city);
+      if (city?.subRegions?.length) activeSubCity = city;
+    }
+    renderProvinceStep();
+    renderCityStep();
+    regionPickerBtn?.setAttribute("aria-expanded", "true");
+    showDialog(regionDialog, regionPickerBtn);
+  };
+
+  regionPickerBtn?.addEventListener("click", openRegionPicker);
+  $("closeRegionPicker")?.addEventListener("click", closeRegionPicker);
+  regionDialog?.addEventListener("click", (event) => {
+    if (event.target === regionDialog) closeRegionPicker();
+  });
+
+  gpsBtn?.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      toast("이 브라우저에서는 위치(GPS) 기능을 지원하지 않습니다.");
+      return;
+    }
+    gpsBtn.disabled = true;
+    gpsBtn.textContent = "📍 현재 위치 확인 중...";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        gpsBtn.disabled = false;
+        gpsBtn.textContent = "📍 내 위치로 자동 설정 (GPS)";
+        const coords = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          ...(Number.isFinite(pos.coords.accuracy) ? { accuracy: Math.round(pos.coords.accuracy) } : {}),
+          source: "gps",
+        };
+        const nearest = findNearestRegion(coords.lat, coords.lng);
+        const regionName = nearest?.name || state.region;
+        closeRegionPicker();
+        applyRegionSelection(regionName, {
+          coords,
+          notice: `현재 GPS 위치(${regionName}) 기준으로 설정되었습니다.`,
+        });
+      },
+      (err) => {
+        gpsBtn.disabled = false;
+        gpsBtn.textContent = "📍 내 위치로 자동 설정 (GPS)";
+        if (err?.code === 1) {
+          toast("위치 접근 권한이 거부되었습니다. 시/도를 직접 선택해 주세요.");
+        } else if (err?.code === 3) {
+          toast("위치 확인 시간이 초과되었습니다. 시/도를 직접 선택해 주세요.");
+        } else {
+          toast("현재 위치를 가져오지 못했습니다. 시/도를 직접 선택해 주세요.");
+        }
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+  });
+
+  updateRegionPickerTrigger();
 
   // 상단 빠른 검색바 연동
   $("searchInput").addEventListener("input", () => catalogViews.renderListings());
@@ -638,6 +911,69 @@ function bindEvents() {
   $("buyerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
 
 
+  const myPageDropdown = document.querySelector(".mypage-dropdown");
+  const myPageBtn = $("myPageButton");
+  const myPageMenu = $("myPageMenu");
+  let myPageHoverTimer = null;
+  let myPageClosedByClick = false;
+  let myPageOpenedByHoverAt = 0;
+  const setMyPageOpen = (open, { returnFocus = false } = {}) => {
+    if (!myPageMenu || !myPageBtn) return;
+    myPageMenu.hidden = !open;
+    myPageBtn.setAttribute("aria-expanded", String(open));
+    myPageDropdown?.classList.toggle("is-open", open);
+    if (!open) {
+      myPageOpenedByHoverAt = 0;
+      if (returnFocus) myPageBtn.focus({ preventScroll: true });
+    }
+  };
+  if (myPageBtn && myPageMenu) {
+    myPageBtn.addEventListener("click", () => {
+      if (!myPageMenu.hidden && Date.now() - myPageOpenedByHoverAt < 350) {
+        myPageOpenedByHoverAt = 0;
+        myPageClosedByClick = false;
+        return;
+      }
+      const nextOpen = myPageMenu.hidden;
+      myPageOpenedByHoverAt = 0;
+      myPageClosedByClick = !nextOpen;
+      setMyPageOpen(nextOpen);
+    });
+    if (myPageDropdown && window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) {
+      myPageDropdown.addEventListener("pointerenter", () => {
+        clearTimeout(myPageHoverTimer);
+        if (!myPageClosedByClick && myPageMenu.hidden) {
+          myPageOpenedByHoverAt = Date.now();
+          setMyPageOpen(true);
+        }
+      });
+      myPageDropdown.addEventListener("pointerleave", () => {
+        myPageClosedByClick = false;
+        clearTimeout(myPageHoverTimer);
+        myPageHoverTimer = setTimeout(() => setMyPageOpen(false), 140);
+      });
+    }
+    myPageMenu.addEventListener("click", (event) => {
+      if (event.target.closest("[data-view], [data-action]")) {
+        setMyPageOpen(false);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (myPageMenu.hidden) return;
+      if (event.target instanceof Element && event.target.closest(".mypage-dropdown")) return;
+      setMyPageOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !event.isComposing && !myPageMenu.hidden) {
+        setMyPageOpen(false, { returnFocus: true });
+      }
+    });
+  }
+
+  $("headerAiOpen")?.addEventListener("click", () => {
+    setMyPageOpen(false);
+    aiPanel.openAiPanel();
+  });
   $("aiLauncher").addEventListener("click", aiPanel.openAiPanel);
   $("aiExpand").addEventListener("click", aiPanel.toggleAiPanelSize);
   window.visualViewport?.addEventListener("resize", aiPanel.syncAiViewport);
@@ -656,7 +992,7 @@ function bindEvents() {
     if ($("aiPanel").hidden) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest("#aiPanel, #aiLauncher, .dialog-backdrop, #toast")) return;
+    if (target.closest("#aiPanel, #aiLauncher, #headerAiOpen, .dialog-backdrop, #toast")) return;
     closeAiPanel({ returnFocus: false });
   });
   document.addEventListener("keydown", (event) => {
@@ -677,7 +1013,15 @@ function bindEvents() {
 if (state.selectedCrop && state.selectedCrop !== "all" && !state.filters.cropIds.length) {
   state.filters.cropIds = [state.selectedCrop];
 }
-$("regionSelect").value = state.region;
+if ($("regionSelect")) {
+  if (![...$("regionSelect").options].some((o) => o.value === state.region)) {
+    const opt = document.createElement("option");
+    opt.value = state.region;
+    opt.textContent = state.region;
+    $("regionSelect").append(opt);
+  }
+  $("regionSelect").value = state.region;
+}
 // 메인 배너: 4초마다 자동으로 다음 장, 멈춤/재생·이전/다음·점 선택
 
 function initLoginForm() {
@@ -966,14 +1310,26 @@ runtime.garage = createGarage({
   isAuthenticated: isLoggedIn,
   async onAddMachine(item) {
     const res = await apiFetch("/api/me", { method: "POST", json: { action: "addOwned", ...item } });
+    if (res?.userData) {
+      runtime.ownedMachines = Array.isArray(res.userData.ownedMachines) ? res.userData.ownedMachines : [];
+      runtime.selectedOwnedMachineId = typeof res.userData.selectedOwnedMachineId === "string" ? res.userData.selectedOwnedMachineId : "";
+    }
     return res.userData;
   },
   async onSelectMachine(id) {
     const res = await apiFetch("/api/me", { method: "POST", json: { action: "selectOwned", id } });
+    if (res?.userData) {
+      runtime.ownedMachines = Array.isArray(res.userData.ownedMachines) ? res.userData.ownedMachines : [];
+      runtime.selectedOwnedMachineId = typeof res.userData.selectedOwnedMachineId === "string" ? res.userData.selectedOwnedMachineId : "";
+    }
     return res.userData;
   },
   async onRemoveMachine(id) {
     const res = await apiFetch("/api/me", { method: "POST", json: { action: "removeOwned", id } });
+    if (res?.userData) {
+      runtime.ownedMachines = Array.isArray(res.userData.ownedMachines) ? res.userData.ownedMachines : [];
+      runtime.selectedOwnedMachineId = typeof res.userData.selectedOwnedMachineId === "string" ? res.userData.selectedOwnedMachineId : "";
+    }
     return res.userData;
   },
   openRental(id, start, end) {

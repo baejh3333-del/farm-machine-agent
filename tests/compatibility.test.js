@@ -9,10 +9,13 @@ test('세트는 두 매물이 모두 가능한 기간에 제조사 확인 조합
   const { results } = findCompatibleRentals(listings, options);
   assert.ok(results.length);
   for (const item of results) {
-    assert.equal(item.power.modelId, 'asia-amc900');
+    assert.ok(['asia-amc900', 'asia-amc1000'].includes(item.power.modelId));
     assert.equal(item.implement.modelId, 'asia-fm120n');
     assert.equal(item.totalPrice, (item.power.price + item.implement.price) * 3);
   }
+  assert.ok(results.some((item) => item.power.modelId === 'asia-amc900'));
+  const withAmc1000 = [...listings, { ...listings.find((item) => item.modelId === 'asia-amc900'), id: 'extra-amc1000', modelId: 'asia-amc1000' }];
+  assert.ok(findCompatibleRentals(withAmc1000, options).results.some((item) => item.power.modelId === 'asia-amc1000'));
   const powerId = results[0].power.id;
   const implementId = results[0].implement.id;
   const blocked = listings.map((item) => item.id === powerId || item.id === implementId ? { ...item, booked: [{ start: '2026-11-22', end: '2026-11-23' }] } : item);

@@ -5,6 +5,8 @@ import { getMigrations } from "better-auth/db/migration";
 import { buildAccountAuthOptions } from "./account-auth.js";
 import { describeDatabaseTarget, getPool, usesLocalDatabase, withTransaction } from "./db.js";
 import { buildMockListings } from "./listing-seed.js";
+import { CROPS, CROP_OPERATIONS, MACHINE_TYPES, OPERATIONS, STAGES } from "../src/data/farm-machines.js";
+import { MACHINE_SPECIFICATIONS } from "../src/data/machine-specifications.js";
 
 export const VALID_ENVS = new Set(["development", "test", "preview", "production"]);
 export const DEFAULT_MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
@@ -86,7 +88,7 @@ export async function inspectDatabase({ pool = getPool(), migrationsDir = DEFAUL
   }
 
   const counts = {};
-  for (const name of ["user", "session", "listings", "favorites", "owned_machines", "rental_requests", "conversations", "messages", "agent_sessions", "agent_messages", "agent_actions", "purchase_orders", "agent_tool_calls", "farm_profiles"]) {
+  for (const name of ["user", "session", "listings", "favorites", "owned_machines", "rental_requests", "conversations", "messages", "agent_sessions", "agent_messages", "agent_actions", "purchase_orders", "agent_tool_calls", "farm_profiles", "crop_catalog", "operation_catalog", "machine_type_catalog", "machine_model_specs"]) {
     if (tables.includes(name)) {
       const res = await pool.query(`SELECT count(*)::int AS count FROM "${name}"`);
       counts[name] = res.rows[0].count;
@@ -277,8 +279,125 @@ export async function runMigrations({
       applied.push(file);
     }
 
+    await syncCatalogReference({ pool });
+
     return { environment: env, target, applied, skipped };
   });
+}
+
+export async function syncCatalogReference({ pool = getPool(), client = null } = {}) {
+  const run = async (db) => {
+    const regRes = await db.query("SELECT to_regclass('machine_model_specs')::text AS reg");
+    if (!regRes.rows[0]?.reg) {
+      return { synced: false, crops: 0, operations: 0, machineTypes: 0, models: 0 };
+    }
+    const stageById = Object.fromEntries(STAGES.map((stage) => [stage.id, stage.label]));
+
+    for (const crop of CROPS) {
+      await db.query(
+        `INSERT INTO crop_catalog (id, name, category, description, peak_work_months, operation_ids, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, now())
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           category = EXCLUDED.category,
+           description = EXCLUDED.description,
+           peak_work_months = EXCLUDED.peak_work_months,
+           operation_ids = EXCLUDED.operation_ids,
+           updated_at = now()`,
+        [
+          crop.id,
+          crop.name,
+          crop.category || "",
+          crop.description || "",
+          crop.peakWorkMonths || [],
+          CROP_OPERATIONS[crop.id] || [],
+        ]
+      );
+    }
+
+    for (const op of OPERATIONS) {
+      await db.query(
+        `INSERT INTO operation_catalog (id, label, stage_id, stage_label, default_machine_types, updated_at)
+         VALUES ($1, $2, $3, $4, $5, now())
+         ON CONFLICT (id) DO UPDATE SET
+           label = EXCLUDED.label,
+           stage_id = EXCLUDED.stage_id,
+           stage_label = EXCLUDED.stage_label,
+           default_machine_types = EXCLUDED.default_machine_types,
+           updated_at = now()`,
+        [
+          op.id,
+          op.label,
+          op.stage,
+          stageById[op.stage] || "",
+          op.defaultMachineTypes || [],
+        ]
+      );
+    }
+
+    for (const mt of MACHINE_TYPES) {
+      await db.query(
+        `INSERT INTO machine_type_catalog (id, label, role, area_min, area_max, description, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, now())
+         ON CONFLICT (id) DO UPDATE SET
+           label = EXCLUDED.label,
+           role = EXCLUDED.role,
+           area_min = EXCLUDED.area_min,
+           area_max = EXCLUDED.area_max,
+           description = EXCLUDED.description,
+           updated_at = now()`,
+        [
+          mt.id,
+          mt.label,
+          mt.role || "standalone",
+          mt.areaMin ?? null,
+          mt.areaMax ?? null,
+          mt.description || "",
+        ]
+      );
+    }
+
+    for (const spec of MACHINE_SPECIFICATIONS) {
+      await db.query(
+        `INSERT INTO machine_model_specs (id, brand, model, machine_type, role, specs, facts, connection, sources, unknowns, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10, now())
+         ON CONFLICT (id) DO UPDATE SET
+           brand = EXCLUDED.brand,
+           model = EXCLUDED.model,
+           machine_type = EXCLUDED.machine_type,
+           role = EXCLUDED.role,
+           specs = EXCLUDED.specs,
+           facts = EXCLUDED.facts,
+           connection = EXCLUDED.connection,
+           sources = EXCLUDED.sources,
+           unknowns = EXCLUDED.unknowns,
+           updated_at = now()`,
+        [
+          spec.id,
+          spec.brand,
+          spec.model,
+          spec.machineType,
+          spec.role,
+          JSON.stringify(spec.specs || {}),
+          JSON.stringify(spec.facts || []),
+          JSON.stringify(spec.connection || {}),
+          JSON.stringify(spec.sources || []),
+          spec.unknowns || [],
+        ]
+      );
+    }
+
+    return {
+      synced: true,
+      crops: CROPS.length,
+      operations: OPERATIONS.length,
+      machineTypes: MACHINE_TYPES.length,
+      models: MACHINE_SPECIFICATIONS.length,
+    };
+  };
+
+  if (client) return run(client);
+  return withTransaction(run, pool);
 }
 
 export async function seedDemoListings({
@@ -294,6 +413,8 @@ export async function seedDemoListings({
   }
 
   return withTransaction(async (client) => {
+    const catalogSync = await syncCatalogReference({ client });
+
     await client.query(
       `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
        VALUES ($1, '시연 농가', 'demo-owner@users.moa-farm.example.com', false, now(), now())
@@ -353,7 +474,7 @@ export async function seedDemoListings({
       inserted += res.rowCount ?? 0;
     }
 
-    return { environment: env, totalDemo: listings.length, inserted };
+    return { environment: env, totalDemo: listings.length, inserted, catalogSync };
   }, pool);
 }
 

@@ -1,0 +1,617 @@
+/* Nongnong AI Panel — GPT Plan Mode, Compact Cards, Pickers, Weather & Actions */
+
+.ai-result,
+.ai-rec-card,
+.ai-rec-info,
+.ai-rec-card-actions,
+.ai-plan-card,
+.ai-weather-bar,
+.ai-weather-caution,
+.ai-chat-cta-wrap,
+.ai-picker-drawer,
+.ai-starter-card {
+  white-space: normal;
+}
+
+/* 1. Compact Recommendation Cards (Fix pre-wrap blank space & oversized buttons) */
+.ai-result {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line, #dbe2dc);
+  display: grid;
+  gap: 6px;
+}
+
+.ai-rec-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #dbe2dc);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.ai-rec-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-bubble.assistant .ai-rec-info strong {
+  margin: 0;
+  line-height: 1.35;
+  font-size: 0.875rem;
+}
+
+.ai-rec-info small {
+  margin-top: 0;
+  line-height: 1.35;
+  font-size: 0.75rem;
+  color: var(--text-muted, #5c6860);
+}
+
+.ai-rec-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.ai-rec-card-actions .button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.ai-rec-fav-btn[aria-pressed="true"],
+.ai-rec-fav-btn.is-favorited {
+  background: #fff0f2;
+  border-color: #f3b5be;
+  color: #b4233c;
+  font-weight: 700;
+}
+
+/* 2. Pre-Favorite 1:1 Chat CTA inside assistant bubble */
+.ai-chat-cta-wrap {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-chat-cta-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid #9ccab0;
+  background: #f4faf5;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-chat-cta-btn:hover {
+  background: #e3f4e9;
+}
+
+/* 3. GPT Plan Mode Starter & Initial Setup Bar */
+#aiStarters.ai-quick-builder {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.ai-starter-card {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-setup-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid #d7e8dc;
+  background: #f4faf5;
+  font-size: 0.76rem;
+  color: #1f4d32;
+}
+
+.ai-setup-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.ai-setup-toggle {
+  flex-shrink: 0;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid #9ccab0;
+  background: #ffffff;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-setup-toggle:hover {
+  background: #eaf5ee;
+}
+
+.ai-setup-form {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line, #dbe2dc);
+  background: #ffffff;
+}
+
+.ai-setup-form[hidden] {
+  display: none;
+}
+
+.ai-setup-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.ai-setup-field {
+  display: grid;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-muted, #5c6860);
+}
+
+.ai-setup-field.is-full {
+  grid-column: 1 / -1;
+}
+
+.ai-setup-field input,
+.ai-setup-field select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #dbe2dc);
+  font: inherit;
+  font-size: 0.78rem;
+  background: #ffffff;
+}
+
+.ai-setup-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ai-setup-form-actions .button {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 0.76rem;
+  border-radius: 999px;
+}
+
+.ai-starter-guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #5c6860);
+  line-height: 1.4;
+}
+
+.ai-starter-guide-text {
+  margin: 0;
+}
+
+.ai-picker-trigger {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #dbe2dc);
+  background: #ffffff;
+  color: var(--forest, #183a26);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-picker-trigger:hover,
+.ai-picker-trigger[aria-expanded="true"] {
+  background: #eef7f1;
+  border-color: #9ccab0;
+}
+
+/* 4. GPT Plan Mode Interactive Question Card */
+.ai-plan-card {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #cce5d6;
+  border-radius: 12px;
+  background: #f7fbf8;
+  display: grid;
+  gap: 8px;
+}
+
+.ai-plan-step {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--primary, #1f7a44);
+}
+
+.ai-plan-question {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--forest, #183a26);
+  line-height: 1.4;
+}
+
+.ai-plan-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-plan-option-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid #9ccab0;
+  background: #ffffff;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ai-plan-option-btn:hover {
+  background: #e3f4e9;
+  border-color: var(--primary, #1f7a44);
+}
+
+.ai-plan-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ai-plan-sub-btn {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #5c6860);
+  font: inherit;
+  font-size: 0.74rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ai-plan-sub-btn:hover {
+  color: var(--forest, #183a26);
+}
+
+/* 5. On-Demand Crop & Machine Picker Drawer */
+.ai-picker-drawer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line, #dbe2dc);
+  background: #f9fcfa;
+  display: grid;
+  gap: 8px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.ai-picker-drawer[hidden] {
+  display: none;
+}
+
+.ai-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--forest, #183a26);
+}
+
+.ai-picker-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #5c6860);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.ai-picker-section {
+  display: grid;
+  gap: 5px;
+}
+
+.ai-picker-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted, #5c6860);
+}
+
+.ai-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ai-picker-chip {
+  min-height: 28px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #cce5d6;
+  background: #ffffff;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-picker-chip:hover {
+  background: #e3f4e9;
+  border-color: var(--primary, #1f7a44);
+}
+
+.ai-form .ai-picker-inline-btn {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line, #dbe2dc);
+  background: #f4faf5;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-form .ai-picker-inline-btn[aria-expanded="true"] {
+  background: #e3f4e9;
+  border-color: #9ccab0;
+}
+
+/* 6. Weather-Aware Dynamic Date Selection */
+.ai-weather-bar {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #d7e8dc;
+  background: #f4faf5;
+  display: grid;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+.ai-weather-bar.is-warning {
+  border-color: #f0c987;
+  background: #fff9eb;
+}
+
+.ai-weather-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--forest, #183a26);
+}
+
+.ai-weather-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: #dff2e6;
+  color: #185c34;
+}
+
+.ai-weather-bar.is-warning .ai-weather-badge {
+  background: #fde7b8;
+  color: #854d0e;
+}
+
+.ai-weather-msg {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-strong, #232b26);
+  line-height: 1.4;
+}
+
+.ai-weather-alts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ai-weather-alt-btn {
+  min-height: 28px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #9ccab0;
+  background: #ffffff;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-weather-alt-btn:hover {
+  background: #e3f4e9;
+}
+
+.ai-weather-caution {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #f0c987;
+  background: #fff9eb;
+  display: grid;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: #713f12;
+}
+
+.ai-weather-caution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ai-weather-proceed-btn {
+  min-height: 28px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #d9b061;
+  background: #ffffff;
+  color: #713f12;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-weather-proceed-btn:hover {
+  background: #fef3c7;
+}
+
+/* 7. Camera Capture Button & WebRTC Modal */
+.ai-camera-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .ai-camera-btn .ai-camera-label {
+    display: none;
+  }
+}
+
+.edit-photo-field {
+  display: grid;
+  gap: 8px;
+}
+
+.edit-camera-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.camera-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 18, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.camera-modal {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.camera-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.camera-modal-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--forest, #183a26);
+}
+
+.camera-modal-hint {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c6860);
+}
+
+.camera-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111814;
+  display: grid;
+  place-items: center;
+}
+
+.camera-viewport video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(17, 24, 20, 0.65);
+}
+
+.camera-status[hidden] {
+  display: none;
+}
+
+.camera-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.camera-modal-actions .button-primary {
+  flex: 1 1 140px;
+}

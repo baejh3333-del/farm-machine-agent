@@ -111,8 +111,13 @@ test("작업을 먼저 입력해도 유지하며 선택 조건은 건너뛸 수 
 });
 
 test("목 DB는 현재 카탈로그의 모든 기종과 두 거래 방식을 포함한다", () => {
-  assert.equal(LISTINGS.length, 100);
-  assert.equal(new Set(LISTINGS.map(({ id }) => id)).size, 100);
+  const expectedCount = MACHINE_TYPES.length * 10;
+  assert.equal(LISTINGS.length, expectedCount);
+  assert.equal(new Set(LISTINGS.map(({ id }) => id)).size, expectedCount);
+  assert.equal(selectCandidates("배추 흙갈이 대여", {}).cropId, "cabbage");
+  assert.equal(selectCandidates("양배추 흙갈이 대여", {}).cropId, "cabbageHead");
+  assert.equal(selectCandidates("땅콩 흙갈이 대여", {}).cropId, "peanut");
+  assert.equal(selectCandidates("배 방제 대여", {}).cropId, "pear");
   assert.deepEqual(new Set(LISTINGS.map(({ machineType }) => machineType)), new Set(MACHINE_TYPES.map(({ id }) => id)));
   for (const { id } of MACHINE_TYPES) {
     assert.equal(LISTINGS.filter((item) => item.machineType === id && item.type === "rent").length, 6);
@@ -251,4 +256,31 @@ test("대화 초안(draft) 모드는 끼어들기 여부와 대기 질문에 맞
     if (previous === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = previous;
   }
+});
+
+test("초안을 등록 화면 값으로 바꾸고, 저장 안 된 초안은 사진 data URL을 넘긴다", async () => {
+  const { listingDraftToFormValues } = await import("../src/ai/photo.js");
+  const base = {
+    type: "rent", title: "관리기 빌려드려요", description: "소개글", price: 45000,
+    machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍",
+    priceBasis: { count: 3, min: 40000, max: 50000, unit: "day", lowConfidence: false },
+  };
+  const saved = listingDraftToFormValues(
+    { ...base, listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/a.webp", photoUrl: "/api/photos?key=x" },
+    "data:image/jpeg;base64,AAA",
+  );
+  assert.equal(saved.id, "11111111-1111-4111-8111-111111111111");
+  assert.equal(saved.draftPhotoKey, "listings/11111111-1111-4111-8111-111111111111/a.webp");
+  assert.equal(saved.draftPhotoUrl, "/api/photos?key=x");
+  assert.equal(saved.photoDataUrl, undefined);
+  assert.deepEqual(
+    { type: saved.type, title: saved.title, description: saved.description, price: saved.price, machineType: saved.machineType, modelId: saved.modelId, brand: saved.brand },
+    { type: "rent", title: "관리기 빌려드려요", description: "소개글", price: 45000, machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍" },
+  );
+
+  const unsaved = listingDraftToFormValues({ ...base, listingId: null, photoKey: null, photoUrl: null, price: null }, "data:image/jpeg;base64,AAA");
+  assert.match(unsaved.id, /^[0-9a-f-]{36}$/);
+  assert.equal(unsaved.draftPhotoKey, undefined);
+  assert.equal(unsaved.photoDataUrl, "data:image/jpeg;base64,AAA");
+  assert.equal(unsaved.price, "");
 });

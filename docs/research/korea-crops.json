@@ -1,0 +1,728 @@
+{
+  "checkedAt": "2026-11-17",
+  "sources": [
+    {
+      "id": "nongsaro-fc",
+      "organization": "농촌진흥청 농사로",
+      "title": "농업기술길잡이 - 식량작물 (벼·콩·옥수수·고구마·보리·밀)",
+      "url": "https://www.nongsaro.go.kr/portal/ps/psb/psbx/cropEbookMain.ps?menuId=PS65290&stdPrdlstCode=FC&sSearchType=srchType01",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nongsaro-vc",
+      "organization": "농촌진흥청 농사로",
+      "title": "농업기술길잡이 - 채소 (고추·마늘·양파·배추·무·대파·생강)",
+      "url": "https://www.nongsaro.go.kr/portal/ps/psb/psbx/cropEbookLst.ps?menuId=PS65290&stdPrdlstCode=VC&sStdPrdlstCode=VC021001&totalSearchYn=Y",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nongsaro-vc-gh",
+      "organization": "농촌진흥청 농사로",
+      "title": "농업기술길잡이 - 시설채소 (딸기·토마토)",
+      "url": "https://www.nongsaro.go.kr/portal/ps/psb/psbx/cropEbookLst.ps?menuId=PS65290&stdPrdlstCode=VC&sStdPrdlstCode=VC010804",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nongsaro-ft",
+      "organization": "농촌진흥청 농사로",
+      "title": "농업기술길잡이 - 과수 (사과·배·복숭아·포도)",
+      "url": "https://www.nongsaro.go.kr/portal/ps/psb/psbx/cropEbookLst.ps?menuId=PS65290&stdPrdlstCode=FT&sStdPrdlstCode=FT020604",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nongsaro-pg",
+      "organization": "농촌진흥청 농사로",
+      "title": "농업기술길잡이 - 특용작물 (참깨·들깨)",
+      "url": "https://www.nongsaro.go.kr/portal/ps/psb/psbx/cropEbookLst.ps?menuId=PS65290&stdPrdlstCode=PG&sStdPrdlstCode=PG01PG12&totalSearchYn=Y",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nongsaro-schedule",
+      "organization": "농촌진흥청 농사로",
+      "title": "농작업일정 및 주요 원예·특용작물 재배력",
+      "url": "https://www.nongsaro.go.kr/portal/ps/psb/psbl/workScheduleDtl.ps?menuId=PS00087&cntntsNo=30625",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nics-soybean",
+      "organization": "국립식량과학원",
+      "title": "콩 수확후처리 일관 기계화 시스템 및 동시파종 기술",
+      "url": "https://www.nics.go.kr/bbs/view.do?m=100000126&bbsSn=569628&homepageSeCode=nics&bbsId=research",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nics-barley-wheat",
+      "organization": "국립식량과학원",
+      "title": "맥류(보리·밀) 파종 및 수확 일관 기계화 연구",
+      "url": "https://www.nics.go.kr/bbs/view.do?m=100000126&bbsSn=202725&homepageSeCode=nics&bbsId=research",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nics-onestop",
+      "organization": "국립식량과학원",
+      "title": "식량작물 작목별 종합정보 (벼·콩·옥수수·고구마·맥류)",
+      "url": "https://www.nics.go.kr/oneStopApi/oneStopCrop.do?subCategoryCode=IC011601&subTechCode=GS&homepageSeCode=oneStopIndex&m=700000190",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "nihhs-fruit",
+      "organization": "국립원예특작과학원",
+      "title": "과수 재배기술정보 및 과원 기계화(방제·전정)",
+      "url": "https://fruit.nihhs.go.kr/apple/openApi/cropTechInfo.do",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "rda-field-mech",
+      "organization": "농촌진흥청",
+      "title": "밭작물 전 과정 기계화 모델 및 영농정보",
+      "url": "https://www.rda.go.kr/board/board.do?boardId=farmprmninfo&prgId=day_farmprmninfoEntry&currPage=8&dataNo=100000810883&mode=updateCnt",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "rda-nongsaro-db",
+      "organization": "농촌진흥청",
+      "title": "농사로 연계 작목·기계화 표준 DB",
+      "url": "https://www.rda.go.kr/middlePopOpenPopNongsaroDBView.do?no=1402",
+      "checkedAt": "2026-11-17"
+    },
+    {
+      "id": "kosis-mech",
+      "organization": "통계청 KOSIS",
+      "title": "농업기계 보유 및 밭농업 기계화 이용 실태 통계",
+      "url": "https://kosis.kr/statHtml/statHtml.do?orgId=143&tblId=DT_143004N_025",
+      "checkedAt": "2026-11-17"
+    }
+  ],
+  "stages": [
+    {
+      "id": "prepare",
+      "label": "밭·논 준비",
+      "operations": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "level"]
+    },
+    {
+      "id": "plant",
+      "label": "심기",
+      "operations": ["transplant", "seed", "ricePlant", "directSeed", "garlicOnionPlant"]
+    },
+    {
+      "id": "care",
+      "label": "생육 관리",
+      "operations": ["spray", "orchardSpray", "droneSpray", "water", "hill", "weedMow"]
+    },
+    {
+      "id": "orchard",
+      "label": "과원·전정 관리",
+      "operations": ["pruneShred"]
+    },
+    {
+      "id": "harvest",
+      "label": "수확",
+      "operations": ["riceHarvest", "potatoHarvest", "rootHarvest", "thresh", "forageBale", "transport"]
+    }
+  ],
+  "operations": [
+    {
+      "id": "till",
+      "label": "흙갈이·로터리",
+      "stage": "prepare",
+      "defaultMachineTypes": ["tractor", "rotavator", "cultivator", "tiller"]
+    },
+    {
+      "id": "deepTill",
+      "label": "심경·쟁기질",
+      "stage": "prepare",
+      "defaultMachineTypes": ["tractor", "plow"]
+    },
+    {
+      "id": "spreadFertilizer",
+      "label": "비료·퇴비 살포",
+      "stage": "prepare",
+      "defaultMachineTypes": ["spreader", "tractor", "loader"]
+    },
+    {
+      "id": "ridge",
+      "label": "두둑·고랑 만들기",
+      "stage": "prepare",
+      "defaultMachineTypes": ["ridgeMulcher", "cultivator", "tractor"]
+    },
+    {
+      "id": "mulch",
+      "label": "멀칭·비닐 피복",
+      "stage": "prepare",
+      "defaultMachineTypes": ["ridgeMulcher", "cultivator"]
+    },
+    {
+      "id": "level",
+      "label": "논 고르기",
+      "stage": "prepare",
+      "defaultMachineTypes": ["tractor", "rotavator"]
+    },
+    {
+      "id": "transplant",
+      "label": "모종 심기",
+      "stage": "plant",
+      "defaultMachineTypes": ["transplanter", "tractor"]
+    },
+    {
+      "id": "seed",
+      "label": "씨감자 파종",
+      "stage": "plant",
+      "defaultMachineTypes": ["potatoPlanter", "tractor"]
+    },
+    {
+      "id": "ricePlant",
+      "label": "모 심기",
+      "stage": "plant",
+      "defaultMachineTypes": ["ricePlanter"]
+    },
+    {
+      "id": "directSeed",
+      "label": "밭작물·맥류 직파",
+      "stage": "plant",
+      "defaultMachineTypes": ["tractor", "ridingCultivator"]
+    },
+    {
+      "id": "garlicOnionPlant",
+      "label": "마늘·양파 파종·정식",
+      "stage": "plant",
+      "defaultMachineTypes": ["garlicOnionPlanter", "transplanter", "tractor"]
+    },
+    {
+      "id": "spray",
+      "label": "방제",
+      "stage": "care",
+      "defaultMachineTypes": ["sprayer", "tractor", "cultivator"]
+    },
+    {
+      "id": "orchardSpray",
+      "label": "과수 SS 방제",
+      "stage": "care",
+      "defaultMachineTypes": ["speedSprayer", "sprayer"]
+    },
+    {
+      "id": "droneSpray",
+      "label": "드론 방제",
+      "stage": "care",
+      "defaultMachineTypes": ["agriDrone"]
+    },
+    {
+      "id": "water",
+      "label": "관수",
+      "stage": "care",
+      "defaultMachineTypes": ["sprayer", "cultivator"]
+    },
+    {
+      "id": "hill",
+      "label": "북주기",
+      "stage": "care",
+      "defaultMachineTypes": ["cultivator", "ridingCultivator", "tractor"]
+    },
+    {
+      "id": "weedMow",
+      "label": "제초·예초",
+      "stage": "care",
+      "defaultMachineTypes": ["mower", "ridingCultivator", "cultivator"]
+    },
+    {
+      "id": "pruneShred",
+      "label": "전정·잔가지 파쇄",
+      "stage": "orchard",
+      "defaultMachineTypes": ["shredder", "tractor"]
+    },
+    {
+      "id": "riceHarvest",
+      "label": "벼 수확",
+      "stage": "harvest",
+      "defaultMachineTypes": ["combine"]
+    },
+    {
+      "id": "potatoHarvest",
+      "label": "감자 굴취",
+      "stage": "harvest",
+      "defaultMachineTypes": ["potatoHarvester", "tractor"]
+    },
+    {
+      "id": "rootHarvest",
+      "label": "땅속작물·마늘·양파 굴취/수확",
+      "stage": "harvest",
+      "defaultMachineTypes": ["rootHarvester", "tractor", "cultivator"]
+    },
+    {
+      "id": "thresh",
+      "label": "탈곡·선별",
+      "stage": "harvest",
+      "defaultMachineTypes": ["thresher", "combine"]
+    },
+    {
+      "id": "forageBale",
+      "label": "사료작물 수확·곤포",
+      "stage": "harvest",
+      "defaultMachineTypes": ["baler", "tractor", "loader"]
+    },
+    {
+      "id": "transport",
+      "label": "수확물 운반",
+      "stage": "harvest",
+      "defaultMachineTypes": ["carrier", "tiller", "loader", "tractor"]
+    }
+  ],
+  "crops": [
+    {
+      "id": "rice",
+      "name": "벼",
+      "emoji": "",
+      "category": "식량작물",
+      "description": "논 준비·써레질·이앙·드론방제·콤바인 수확",
+      "growingSeasons": ["단작(5~10월)"],
+      "peakWorkMonths": [4, 5, 7, 8, 9, 10],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-fc", "nics-onestop", "kosis-mech"]
+    },
+    {
+      "id": "soybean",
+      "name": "콩",
+      "emoji": "",
+      "category": "식량작물",
+      "description": "로터리·두둑파종·북주기·콤바인 수확·탈곡선별",
+      "growingSeasons": ["단작(5~10월)", "맥류후작(6~11월)"],
+      "peakWorkMonths": [5, 6, 7, 8, 10, 11],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-fc", "nics-soybean", "rda-field-mech"]
+    },
+    {
+      "id": "corn",
+      "name": "옥수수",
+      "emoji": "",
+      "category": "식량작물",
+      "description": "멀칭파종·북주기·방제·식용수확 및 사료곤포",
+      "growingSeasons": ["봄파종(4~8월)", "사료용(4~9월)"],
+      "peakWorkMonths": [4, 5, 7, 8, 9],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-fc", "nics-onestop"]
+    },
+    {
+      "id": "sweetPotato",
+      "name": "고구마",
+      "emoji": "",
+      "category": "식량작물",
+      "description": "두둑·멀칭·순 정식·줄기파쇄·굴취 수확",
+      "growingSeasons": ["보통재배(5~10월)", "조기재배(4~8월)"],
+      "peakWorkMonths": [4, 5, 9, 10],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-fc", "nics-onestop", "rda-field-mech"]
+    },
+    {
+      "id": "barleyWheat",
+      "name": "보리·밀",
+      "emoji": "",
+      "category": "식량작물",
+      "description": "답리작 세조파종·배수골·추비방제·콤바인 수확",
+      "growingSeasons": ["가을파종 월동재배(10~6월)"],
+      "peakWorkMonths": [10, 11, 2, 3, 5, 6],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-fc", "nics-barley-wheat", "nics-onestop"]
+    },
+    {
+      "id": "pepper",
+      "name": "고추",
+      "emoji": "",
+      "category": "채소",
+      "description": "두둑·멀칭·정식·주기적 방제·운반",
+      "growingSeasons": ["노지재배(4~10월)"],
+      "peakWorkMonths": [4, 5, 6, 7, 8, 9],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "nongsaro-schedule", "rda-field-mech"]
+    },
+    {
+      "id": "garlic",
+      "name": "마늘",
+      "emoji": "",
+      "category": "채소",
+      "description": "심경·비닐피복·마늘파종·방제·줄기절단·굴취",
+      "growingSeasons": ["난지형(9~5월)", "한지형(10~6월)"],
+      "peakWorkMonths": [9, 10, 4, 5, 6],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "rda-field-mech", "nongsaro-schedule"]
+    },
+    {
+      "id": "onion",
+      "name": "양파",
+      "emoji": "",
+      "category": "채소",
+      "description": "두둑·멀칭·양파정식·방제·줄기절단·굴취",
+      "growingSeasons": ["가을정식(10~6월)"],
+      "peakWorkMonths": [10, 11, 4, 5, 6],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "rda-field-mech", "nongsaro-schedule"]
+    },
+    {
+      "id": "radish",
+      "name": "무",
+      "emoji": "",
+      "category": "채소",
+      "description": "심경·두둑·직파·방제·관수·굴취/운반",
+      "growingSeasons": ["봄무(3~6월)", "고랭지무(6~9월)", "김장무(8~11월)"],
+      "peakWorkMonths": [3, 4, 8, 9, 10, 11],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "nongsaro-schedule"]
+    },
+    {
+      "id": "cabbage",
+      "name": "배추",
+      "emoji": "",
+      "category": "채소",
+      "description": "두둑·멀칭·정식·방제·관수·수확운반",
+      "growingSeasons": ["봄배추(3~6월)", "고랭지배추(5~9월)", "김장배추(8~11월)"],
+      "peakWorkMonths": [4, 5, 8, 9, 10, 11],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "rda-field-mech", "nongsaro-schedule"]
+    },
+    {
+      "id": "potato",
+      "name": "감자",
+      "emoji": "",
+      "category": "채소",
+      "description": "파종·북주기·방제·감자굴취",
+      "growingSeasons": ["봄감자(3~6월)", "고랭지감자(4~9월)", "가을감자(8~11월)"],
+      "peakWorkMonths": [3, 4, 6, 7, 8, 10],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "rda-field-mech"]
+    },
+    {
+      "id": "greenOnion",
+      "name": "대파",
+      "emoji": "",
+      "category": "채소",
+      "description": "깊이갈이·정식·연백 북주기·방제·굴취",
+      "growingSeasons": ["봄파종(3~10월)", "월동대파(9~4월)"],
+      "peakWorkMonths": [4, 5, 7, 8, 10, 11],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "rda-field-mech", "nongsaro-schedule"]
+    },
+    {
+      "id": "ginger",
+      "name": "생강",
+      "emoji": "",
+      "category": "채소",
+      "description": "심경·종강파종·차광/관수·서리전 굴취",
+      "growingSeasons": ["노지재배(4~11월)"],
+      "peakWorkMonths": [4, 5, 7, 8, 10, 11],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc", "nongsaro-schedule"]
+    },
+    {
+      "id": "apple",
+      "name": "사과",
+      "emoji": "",
+      "category": "과수",
+      "description": "동계·하계 전정 및 파쇄·SS방제·과원제초·운반",
+      "growingSeasons": ["다년생 영년작물(연중관리, 9~11월 수확)"],
+      "peakWorkMonths": [2, 3, 5, 6, 7, 9, 10, 11],
+      "recommendedStages": ["prepare", "care", "orchard", "harvest"],
+      "sourceIds": ["nongsaro-ft", "nihhs-fruit"]
+    },
+    {
+      "id": "pear",
+      "name": "배",
+      "emoji": "",
+      "category": "과수",
+      "description": "전정·잔가지 파쇄·SS방제·초생제초·수확운반",
+      "growingSeasons": ["다년생 영년작물(연중관리, 8~10월 수확)"],
+      "peakWorkMonths": [2, 3, 4, 6, 8, 9, 10],
+      "recommendedStages": ["prepare", "care", "orchard", "harvest"],
+      "sourceIds": ["nongsaro-ft", "nihhs-fruit"]
+    },
+    {
+      "id": "peach",
+      "name": "복숭아",
+      "emoji": "",
+      "category": "과수",
+      "description": "전정·잔가지 파쇄·SS방제·예초·수확운반",
+      "growingSeasons": ["다년생 영년작물(연중관리, 6~9월 수확)"],
+      "peakWorkMonths": [2, 3, 5, 6, 7, 8, 9],
+      "recommendedStages": ["prepare", "care", "orchard", "harvest"],
+      "sourceIds": ["nongsaro-ft", "nihhs-fruit"]
+    },
+    {
+      "id": "grape",
+      "name": "포도",
+      "emoji": "",
+      "category": "과수",
+      "description": "전정·파쇄·비가림/노지 방제·예초·운반",
+      "growingSeasons": ["다년생 영년작물(연중관리, 7~10월 수확)"],
+      "peakWorkMonths": [2, 3, 5, 6, 8, 9, 10],
+      "recommendedStages": ["prepare", "care", "orchard", "harvest"],
+      "sourceIds": ["nongsaro-ft", "nihhs-fruit"]
+    },
+    {
+      "id": "strawberry",
+      "name": "딸기",
+      "emoji": "",
+      "category": "시설·특용",
+      "description": "시설 토양로터리·두둑·정식·방제·전동운반",
+      "growingSeasons": ["촉성재배(9~5월)", "반촉성(1~6월)"],
+      "peakWorkMonths": [8, 9, 11, 12, 1, 2, 3, 4],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc-gh", "nongsaro-schedule"]
+    },
+    {
+      "id": "tomato",
+      "name": "토마토",
+      "emoji": "",
+      "category": "시설·특용",
+      "description": "하우스 경운·멀칭·정식·관비·방제·운반",
+      "growingSeasons": ["촉성·반촉성·억제 연중시설재배"],
+      "peakWorkMonths": [3, 4, 5, 6, 9, 10, 11],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-vc-gh", "nongsaro-schedule"]
+    },
+    {
+      "id": "sesame",
+      "name": "참깨·들깨",
+      "emoji": "",
+      "category": "시설·특용",
+      "description": "로터리·비닐피복·직파/정식·예방방제·탈곡선별",
+      "growingSeasons": ["참깨(5~8월)", "들깨(6~10월)"],
+      "peakWorkMonths": [5, 6, 7, 8, 9, 10],
+      "recommendedStages": ["prepare", "plant", "care", "harvest"],
+      "sourceIds": ["nongsaro-pg", "nongsaro-schedule", "rda-field-mech"]
+    }
+  ],
+  "cropOperations": {
+    "rice": ["deepTill", "till", "spreadFertilizer", "level", "ricePlant", "spray", "droneSpray", "riceHarvest", "transport"],
+    "soybean": ["deepTill", "till", "spreadFertilizer", "ridge", "directSeed", "hill", "spray", "droneSpray", "riceHarvest", "thresh", "transport"],
+    "corn": ["till", "spreadFertilizer", "ridge", "mulch", "directSeed", "hill", "spray", "forageBale", "transport"],
+    "sweetPotato": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "transplant", "spray", "rootHarvest", "transport"],
+    "barleyWheat": ["till", "spreadFertilizer", "directSeed", "spray", "droneSpray", "riceHarvest", "thresh", "transport"],
+    "pepper": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "transplant", "spray", "water", "transport"],
+    "garlic": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "garlicOnionPlant", "spray", "water", "rootHarvest", "transport"],
+    "onion": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "garlicOnionPlant", "spray", "water", "rootHarvest", "transport"],
+    "radish": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "directSeed", "spray", "water", "rootHarvest", "transport"],
+    "cabbage": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "transplant", "spray", "water", "transport"],
+    "potato": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "seed", "hill", "spray", "potatoHarvest", "transport"],
+    "greenOnion": ["deepTill", "till", "spreadFertilizer", "ridge", "transplant", "hill", "spray", "water", "rootHarvest", "transport"],
+    "ginger": ["deepTill", "till", "spreadFertilizer", "ridge", "mulch", "directSeed", "spray", "water", "rootHarvest", "transport"],
+    "apple": ["spreadFertilizer", "orchardSpray", "water", "weedMow", "pruneShred", "transport"],
+    "pear": ["spreadFertilizer", "orchardSpray", "water", "weedMow", "pruneShred", "transport"],
+    "peach": ["spreadFertilizer", "orchardSpray", "water", "weedMow", "pruneShred", "transport"],
+    "grape": ["spreadFertilizer", "orchardSpray", "water", "weedMow", "pruneShred", "transport"],
+    "strawberry": ["till", "spreadFertilizer", "ridge", "mulch", "transplant", "spray", "water", "transport"],
+    "tomato": ["till", "spreadFertilizer", "ridge", "mulch", "transplant", "spray", "water", "transport"],
+    "sesame": ["till", "spreadFertilizer", "ridge", "mulch", "directSeed", "transplant", "spray", "thresh", "transport"]
+  },
+  "cropMachineGuidance": {
+    "rice": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "추경·춘경 시 트랙터 부착 쟁기질" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["tiller"], "notes": "트랙터 로터베이터 정지 작업" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": ["agriDrone"], "notes": "밑거름·이삭거름 살포" },
+      "level": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": [], "notes": "무논 써레질 및 균평 작업" },
+      "ricePlant": { "primaryMachines": ["ricePlanter"], "secondaryMachines": ["carrier"], "notes": "승용이앙기(드문모심기 포함) 및 육묘상자 운반" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": [], "notes": "동력분무기·광역방제기" },
+      "droneSpray": { "primaryMachines": ["agriDrone"], "secondaryMachines": [], "notes": "항공방제용 농업용 드론" },
+      "riceHarvest": { "primaryMachines": ["combine"], "secondaryMachines": [], "notes": "자탈형·보통형 콤바인 수확" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": ["tiller"], "notes": "수확 곡물·톤백 운반 및 상차" }
+    },
+    "soybean": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "배수 불량 논콩 전환 필지 심경" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "쇄토·정지 작업" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "tractor"], "secondaryMachines": ["cultivator"], "notes": "배수용 두둑 성형" },
+      "directSeed": { "primaryMachines": ["tractor"], "secondaryMachines": ["ridingCultivator"], "notes": "트랙터 부착 평형작휴 동시파종기" },
+      "hill": { "primaryMachines": ["ridingCultivator", "cultivator"], "secondaryMachines": ["tractor"], "notes": "중경제초 및 배토(북주기)" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": [], "notes": "노린재·병해충 방제" },
+      "droneSpray": { "primaryMachines": ["agriDrone"], "secondaryMachines": [], "notes": "대면적 드론 방제" },
+      "riceHarvest": { "primaryMachines": ["combine"], "secondaryMachines": [], "notes": "콩 전용·보통형 콤바인 예취·탈곡" },
+      "thresh": { "primaryMachines": ["thresher"], "secondaryMachines": ["combine"], "notes": "소규모 예취 후 탈곡기·선별기 처리" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": [], "notes": "수확 콩 포대 운반" }
+    },
+    "corn": {
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "로터리 경운" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "퇴비·밑거름 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "tractor"], "secondaryMachines": ["cultivator"], "notes": "두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher"], "secondaryMachines": ["cultivator"], "notes": "식용 찰옥수수 비닐 피복" },
+      "directSeed": { "primaryMachines": ["tractor", "ridingCultivator"], "secondaryMachines": ["cultivator"], "notes": "정밀 점파 파종" },
+      "hill": { "primaryMachines": ["cultivator", "ridingCultivator"], "secondaryMachines": [], "notes": "도복 방지 북주기 및 제초" },
+      "spray": { "primaryMachines": ["sprayer"], "secondaryMachines": ["agriDrone"], "notes": "조명나방 등 방제" },
+      "forageBale": { "primaryMachines": ["baler", "tractor", "loader"], "secondaryMachines": [], "notes": "사료용 옥수수 수확·원형곤포 작업" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": [], "notes": "식용 자루·곤포 사일리지 운반" }
+    },
+    "sweetPotato": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "괴근 비대용 심경" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "정지 작업" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "비료 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "tractor"], "secondaryMachines": ["cultivator"], "notes": "고구마 전용 높은 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher"], "secondaryMachines": ["cultivator"], "notes": "비닐 피복" },
+      "transplant": { "primaryMachines": ["transplanter", "tractor"], "secondaryMachines": [], "notes": "고구마 순 정식기(반자동·자동)" },
+      "spray": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "병해충 방제" },
+      "rootHarvest": { "primaryMachines": ["rootHarvester", "tractor"], "secondaryMachines": ["shredder"], "notes": "줄기파쇄기 선행 후 진동 굴취기 수확" },
+      "transport": { "primaryMachines": ["carrier", "tractor"], "secondaryMachines": ["tiller"], "notes": "고구마 상자 운반" }
+    },
+    "barleyWheat": {
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": [], "notes": "답리작 로터리 정지" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "완효성 비료·추비 살포" },
+      "directSeed": { "primaryMachines": ["tractor"], "secondaryMachines": [], "notes": "트랙터 부착 세조파기·휴립세조파 일관 파종" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": [], "notes": "붉은곰팡이병 등 방제" },
+      "droneSpray": { "primaryMachines": ["agriDrone"], "secondaryMachines": [], "notes": "습답·대면적 드론 추비 및 방제" },
+      "riceHarvest": { "primaryMachines": ["combine"], "secondaryMachines": [], "notes": "맥류 겸용 콤바인 수확" },
+      "thresh": { "primaryMachines": ["thresher", "combine"], "secondaryMachines": [], "notes": "정선·탈곡" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": [], "notes": "수확 곡물 운반" }
+    },
+    "pepper": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "정식 전 깊이갈이" },
+      "till": { "primaryMachines": ["tractor", "rotavator", "cultivator"], "secondaryMachines": ["tiller"], "notes": "로터리 정지" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": ["carrier"], "notes": "퇴비·기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": ["tractor"], "notes": "배수 양호 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "흑색·배색 비닐 멀칭" },
+      "transplant": { "primaryMachines": ["transplanter"], "secondaryMachines": ["tractor"], "notes": "고추 정식기" },
+      "spray": { "primaryMachines": ["sprayer", "cultivator"], "secondaryMachines": ["speedSprayer"], "notes": "탄저병·총채벌레 주기적 방제" },
+      "water": { "primaryMachines": ["sprayer", "cultivator"], "secondaryMachines": [], "notes": "점적관수·관수 펌프 운용" },
+      "transport": { "primaryMachines": ["carrier", "tiller"], "secondaryMachines": ["tractor"], "notes": "수확 마대·건고추 운반" }
+    },
+    "garlic": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "파종 전 심경" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "쇄토·평탄화" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "밑거름·퇴비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "tractor"], "secondaryMachines": ["cultivator"], "notes": "마늘 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher"], "secondaryMachines": ["cultivator"], "notes": "비닐 피복" },
+      "garlicOnionPlant": { "primaryMachines": ["garlicOnionPlanter", "tractor"], "secondaryMachines": ["cultivator"], "notes": "마늘 쪽 파종기(피복 동시형 포함)" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": ["agriDrone"], "notes": "잎마름병·고자리파리 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "구 비대기 스프링클러·관수" },
+      "rootHarvest": { "primaryMachines": ["rootHarvester", "tractor"], "secondaryMachines": ["cultivator"], "notes": "줄기절단 후 마늘 굴취기·수집수확기" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": ["tiller"], "notes": "망·톤백 수확물 운반" }
+    },
+    "onion": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "정식 전 심경" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "로터리 정지" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "tractor"], "secondaryMachines": ["cultivator"], "notes": "정식 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher"], "secondaryMachines": ["cultivator"], "notes": "유공 비닐 피복" },
+      "garlicOnionPlant": { "primaryMachines": ["garlicOnionPlanter", "transplanter"], "secondaryMachines": ["tractor"], "notes": "승용·보행형 양파 정식기" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": ["agriDrone"], "notes": "노균병·총채벌레 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "건조기 관수" },
+      "rootHarvest": { "primaryMachines": ["rootHarvester", "tractor"], "secondaryMachines": ["cultivator"], "notes": "줄기절단기·굴취기·수집기" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": ["tiller"], "notes": "양파 망·톤백 운반" }
+    },
+    "radish": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "직근 신장용 깊이갈이(30cm 내외)" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "부드러운 쇄토" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "밑거름 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "tractor"], "secondaryMachines": ["cultivator"], "notes": "배수 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher"], "secondaryMachines": ["cultivator"], "notes": "비닐 피복" },
+      "directSeed": { "primaryMachines": ["tractor", "ridingCultivator"], "secondaryMachines": ["cultivator"], "notes": "무 점파 파종기" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": [], "notes": "진딧물·무름병 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "발아 및 근 비대기 관수" },
+      "rootHarvest": { "primaryMachines": ["rootHarvester", "tractor"], "secondaryMachines": [], "notes": "인발형·굴취형 무 수확기" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": ["tiller"], "notes": "무 파렛트·트럭 상차 운반" }
+    },
+    "cabbage": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "정식 전 심경" },
+      "till": { "primaryMachines": ["tractor", "rotavator", "cultivator"], "secondaryMachines": ["tiller"], "notes": "로터리 정지" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "퇴비·석회·기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": ["tractor"], "notes": "두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "멀칭 피복" },
+      "transplant": { "primaryMachines": ["transplanter", "tractor"], "secondaryMachines": [], "notes": "배추 정식기" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": ["agriDrone"], "notes": "배추좀나방·무름병 방제" },
+      "water": { "primaryMachines": ["sprayer", "cultivator"], "secondaryMachines": [], "notes": "결구기 충분 관수" },
+      "transport": { "primaryMachines": ["carrier", "tractor", "loader"], "secondaryMachines": ["tiller"], "notes": "수확 배추 망·운반차 이동" }
+    },
+    "potato": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "심경 정지" },
+      "till": { "primaryMachines": ["tractor", "rotavator", "cultivator"], "secondaryMachines": [], "notes": "쇄토" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "밑거름 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": ["tractor"], "notes": "두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "비닐 피복" },
+      "seed": { "primaryMachines": ["potatoPlanter", "tractor"], "secondaryMachines": [], "notes": "트랙터 부착 감자 파종기" },
+      "hill": { "primaryMachines": ["cultivator", "ridingCultivator"], "secondaryMachines": ["tractor"], "notes": "녹화 방지 북주기(배토)" },
+      "spray": { "primaryMachines": ["sprayer", "tractor"], "secondaryMachines": ["agriDrone"], "notes": "역병·진딧물 방제" },
+      "potatoHarvest": { "primaryMachines": ["potatoHarvester", "tractor"], "secondaryMachines": ["cultivator"], "notes": "진동·수집형 감자 굴취기" },
+      "transport": { "primaryMachines": ["carrier", "tractor"], "secondaryMachines": ["tiller"], "notes": "감자 박스 운반" }
+    },
+    "greenOnion": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "연백부 확보를 위한 심경" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "로터리 정지" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": ["tractor"], "notes": "고랑·두둑 작업" },
+      "transplant": { "primaryMachines": ["transplanter", "tractor"], "secondaryMachines": [], "notes": "대파 정식기" },
+      "hill": { "primaryMachines": ["cultivator", "ridingCultivator"], "secondaryMachines": [], "notes": "관리기 배토(연백부 생육용 2~3회 북주기)" },
+      "spray": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "파밤나방·녹병 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "관수 관리" },
+      "rootHarvest": { "primaryMachines": ["rootHarvester", "tractor"], "secondaryMachines": ["cultivator"], "notes": "트랙터 부착 대파 굴취기" },
+      "transport": { "primaryMachines": ["carrier", "tractor"], "secondaryMachines": ["tiller"], "notes": "결속 대파 운반" }
+    },
+    "ginger": {
+      "deepTill": { "primaryMachines": ["tractor", "plow"], "secondaryMachines": [], "notes": "배수 개선 깊이갈이" },
+      "till": { "primaryMachines": ["tractor", "rotavator"], "secondaryMachines": ["cultivator"], "notes": "정지 작업" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "완숙퇴비·기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": ["tractor"], "notes": "두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "짚·비닐 피복" },
+      "directSeed": { "primaryMachines": ["tractor", "cultivator"], "secondaryMachines": [], "notes": "종강 심기·복토" },
+      "spray": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "뿌리썩음병·조명나방 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": ["cultivator"], "notes": "점적·스프링클러 관수" },
+      "rootHarvest": { "primaryMachines": ["rootHarvester", "tractor"], "secondaryMachines": ["cultivator"], "notes": "줄기 제거 후 트랙터 굴취기 수확" },
+      "transport": { "primaryMachines": ["carrier", "tiller"], "secondaryMachines": ["tractor"], "notes": "저장·큐어링용 운반" }
+    },
+    "apple": {
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": ["carrier"], "notes": "과원 밑거름·퇴비 살포" },
+      "orchardSpray": { "primaryMachines": ["speedSprayer"], "secondaryMachines": ["sprayer"], "notes": "SS기(스피드스프레이어) 정밀 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "미세살수·점적관수 관리" },
+      "weedMow": { "primaryMachines": ["mower", "ridingCultivator"], "secondaryMachines": ["tractor"], "notes": "승용·보행 제초기 초생 관리" },
+      "pruneShred": { "primaryMachines": ["shredder", "tractor"], "secondaryMachines": [], "notes": "전정 후 잔가지 파쇄기 처리" },
+      "transport": { "primaryMachines": ["carrier", "loader", "tractor"], "secondaryMachines": [], "notes": "고소작업·수확 콘티박스 운반" }
+    },
+    "pear": {
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": ["carrier"], "notes": "기비·퇴비 살포" },
+      "orchardSpray": { "primaryMachines": ["speedSprayer"], "secondaryMachines": ["sprayer"], "notes": "흑성병·꼬마배나무이 SS 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "비대기 관수" },
+      "weedMow": { "primaryMachines": ["mower", "ridingCultivator"], "secondaryMachines": ["tractor"], "notes": "과원 제초" },
+      "pruneShred": { "primaryMachines": ["shredder", "tractor"], "secondaryMachines": [], "notes": "전정 가지 파쇄·퇴비화" },
+      "transport": { "primaryMachines": ["carrier", "loader", "tractor"], "secondaryMachines": [], "notes": "과실 상자 운반" }
+    },
+    "peach": {
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": ["carrier"], "notes": "시비 관리" },
+      "orchardSpray": { "primaryMachines": ["speedSprayer"], "secondaryMachines": ["sprayer"], "notes": "세균구멍병·복숭아순나방 SS 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "관수 관리" },
+      "weedMow": { "primaryMachines": ["mower", "ridingCultivator"], "secondaryMachines": ["tractor"], "notes": "초생재배 예초" },
+      "pruneShred": { "primaryMachines": ["shredder", "tractor"], "secondaryMachines": [], "notes": "전정·잔가지 파쇄" },
+      "transport": { "primaryMachines": ["carrier", "tractor"], "secondaryMachines": [], "notes": "수확 상자 저속 운반" }
+    },
+    "grape": {
+      "spreadFertilizer": { "primaryMachines": ["spreader", "cultivator"], "secondaryMachines": ["carrier"], "notes": "유기물·비료 시용" },
+      "orchardSpray": { "primaryMachines": ["speedSprayer", "sprayer"], "secondaryMachines": [], "notes": "노균병·탄저병 SS/동력방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "점적관수" },
+      "weedMow": { "primaryMachines": ["mower", "ridingCultivator"], "secondaryMachines": ["cultivator"], "notes": "열간 제초" },
+      "pruneShred": { "primaryMachines": ["shredder", "tractor"], "secondaryMachines": [], "notes": "동계 전정지 파쇄" },
+      "transport": { "primaryMachines": ["carrier"], "secondaryMachines": ["tiller"], "notes": "포도 상자 하우스·과원 운반" }
+    },
+    "strawberry": {
+      "till": { "primaryMachines": ["cultivator", "tractor"], "secondaryMachines": ["rotavator"], "notes": "하우스 내 소형 관리기·소형트랙터 저속 로터리" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "carrier"], "secondaryMachines": ["cultivator"], "notes": "토양재배 시 퇴비·밑거름 투입" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "토경재배 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "비닐 멀칭" },
+      "transplant": { "primaryMachines": ["transplanter"], "secondaryMachines": [], "notes": "모종 정식 보조" },
+      "spray": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "잿빛곰팡이·흰가루병 하우스 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "관수·양액 관비" },
+      "transport": { "primaryMachines": ["carrier"], "secondaryMachines": [], "notes": "고설베드 통로용 전동운반차·외발운반차" }
+    },
+    "tomato": {
+      "till": { "primaryMachines": ["cultivator", "tractor"], "secondaryMachines": ["rotavator"], "notes": "시설 내 소형 경운·로터리" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "carrier"], "secondaryMachines": [], "notes": "기비 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "토경 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "비닐 피복" },
+      "transplant": { "primaryMachines": ["transplanter"], "secondaryMachines": [], "notes": "정식 작업" },
+      "spray": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "가루이·역병 시설 방제" },
+      "water": { "primaryMachines": ["sprayer"], "secondaryMachines": [], "notes": "관비·양액 관리" },
+      "transport": { "primaryMachines": ["carrier"], "secondaryMachines": [], "notes": "전동운반차 수확 상자 이송" }
+    },
+    "sesame": {
+      "till": { "primaryMachines": ["tractor", "rotavator", "cultivator"], "secondaryMachines": [], "notes": "로터리 정지" },
+      "spreadFertilizer": { "primaryMachines": ["spreader", "tractor"], "secondaryMachines": [], "notes": "밑거름 살포" },
+      "ridge": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": ["tractor"], "notes": "배수 두둑 성형" },
+      "mulch": { "primaryMachines": ["ridgeMulcher", "cultivator"], "secondaryMachines": [], "notes": "참깨 흑색비닐 피복" },
+      "directSeed": { "primaryMachines": ["cultivator", "tractor"], "secondaryMachines": [], "notes": "참깨·들깨 점파 파종" },
+      "transplant": { "primaryMachines": ["transplanter"], "secondaryMachines": ["cultivator"], "notes": "규격묘 육묘 후 기계 정식" },
+      "spray": { "primaryMachines": ["sprayer", "cultivator"], "secondaryMachines": ["agriDrone"], "notes": "장마 전 역병·잎마름병 예방 방제" },
+      "thresh": { "primaryMachines": ["thresher", "combine"], "secondaryMachines": [], "notes": "예취·건조 후 탈곡·선별" },
+      "transport": { "primaryMachines": ["carrier", "tiller"], "secondaryMachines": [], "notes": "수확 단·포대 운반" }
+    }
+  }
+}

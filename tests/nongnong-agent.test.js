@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  checkFarmCompatibilityTool,
+  cleanUiContext,
   proposeRentalTool,
   runAgentTurn,
   sanitizeHistory,
@@ -13,9 +15,10 @@ import { askLLMJson, callLLM, fromOpenAiResponse, llmProvider, toOpenAiMessages 
 const LISTINGS = buildMockListings();
 const TODAY = "2026-11-16";
 const rentable = LISTINGS.find((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair" && !item.booked.length);
+const saleItem = LISTINGS.find((item) => item.type === "sale" && item.status === "open");
 const forSale = LISTINGS.find((item) => item.type === "sale");
 
-const AI_ENV = ["AI_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+const AI_ENV = ["AI_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_VISION_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
 
 function withEnv(t, values) {
   const previous = Object.fromEntries(AI_ENV.map((name) => [name, process.env[name]]));
@@ -229,7 +232,7 @@ test("Z.ai 호출은 Bearer 키와 tools(auto)를 보내고, 구조화 결과는
   const chat = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ name: "x", description: "d", input_schema: { type: "object" } }] });
   assert.equal(requests[0].url, "https://api.z.ai/api/coding/paas/v4/chat/completions");
   assert.equal(requests[0].request.headers.authorization, "Bearer zkey");
-  assert.equal(requests[0].body.model, "glm-5.1");
+  assert.equal(requests[0].body.model, "glm-5.3");
   assert.equal(requests[0].body.tool_choice, "auto");
   assert.equal(requests[0].body.tools[0].function.name, "x");
   assert.deepEqual(chat.content, [{ type: "text", text: "안녕하세요" }]);
@@ -291,6 +294,249 @@ test("Z.ai가 오류를 돌려주면 null로 처리해 규칙 기반 안내로 �
   withEnv(t, { ZAI_API_KEY: "zkey" });
   t.mock.method(globalThis, "fetch", async () => Response.json({ error: { code: "1113" } }, { status: 429 }));
   assert.equal(await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }] }), null);
+});
+
+const IMAGE_BLOCK = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAA" } };
+
+test("Z.ai 기본 모델은 glm-5.3, 사진이 있으면 glm-5.3-flash를 쓴다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey" });
+  const models = [];
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    models.push(JSON.parse(request.body).model);
+    return Response.json({ choices: [{ message: { content: "ok" } }] });
+  });
+  await callLLM({ system: "S", messages: [{ role: "user", content: "글만" }] });
+  await callLLM({ system: "S", messages: [{ role: "user", content: [{ type: "text", text: "사진" }, IMAGE_BLOCK] }] });
+  process.env.ZAI_VISION_MODEL = "x";
+  await callLLM({ system: "S", messages: [{ role: "user", content: [IMAGE_BLOCK] }] });
+  assert.deepEqual(models, ["glm-5.3", "glm-5.3-flash", "x"]);
+});
+
+test("이미지 블록을 Z.ai image_url 형식으로 바꾼다", () => {
+  const messages = toOpenAiMessages("", [{ role: "user", content: [{ type: "text", text: "이거 뭐예요" }, IMAGE_BLOCK] }]);
+  assert.deepEqual(messages, [{ role: "user", content: [
+    { type: "text", text: "이거 뭐예요" },
+    { type: "image_url", image_url: { url: "data:image/jpeg;base64,AAA" } },
+  ] }]);
+});
+
+test("Anthropic 호출은 이미지 블록을 그대로 보낸다", async (t) => {
+  withEnv(t, { ANTHROPIC_API_KEY: "akey" });
+  let body;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    body = JSON.parse(request.body);
+    return Response.json({ content: [{ type: "text", text: "ok" }] });
+  });
+  await callLLM({ system: "S", messages: [{ role: "user", content: [{ type: "text", text: "사진" }, IMAGE_BLOCK] }] });
+  assert.equal(body.messages[0].content[1].type, "image");
+  assert.equal(body.model, "claude-haiku-5-5");
+});
+
+// ---------- 사진 상담 (Task 5) ----------
+const PHOTO = { mediaType: "image/webp", base64: "UkFXV0VCUA==", dataUrl: "data:image/webp;base64,UkFXV0VCUA==" };
+const USER = { id: "user-1", name: "농부" };
+
+function photoEnv(t, extra = {}) {
+  withEnv(t, { ANTHROPIC_API_KEY: "akey", ...extra });
+}
+
+test("사진이 있으면 첫 사용자 메시지에 이미지 블록이 붙고 응답에는 data URL이 없다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([{ content: [{ type: "text", text: "관리기로 보여요." }] }]);
+  const result = await runAgentTurn("", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  const content = calls[0].messages.at(-1).content;
+  assert.ok(Array.isArray(content));
+  assert.ok(content.some((block) => block.type === "image" && block.source.data === PHOTO.base64));
+  assert.ok(content.some((block) => block.type === "text" && block.text.trim()));
+  assert.doesNotMatch(JSON.stringify(result), /base64,/);
+});
+
+test("note_photo 결과가 photoSummary로 돌아오고 modelId는 카탈로그에 있는 것만 남는다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "note_photo", input: { machineType: "cultivator", modelId: "fake-model", confidence: "medium", observations: ["바퀴에 흙", "녹 약간"] } }] },
+    { content: [{ type: "text", text: "관리기로 보여요." }] },
+  ]);
+  const result = await runAgentTurn("이거 뭐예요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.photoSummary, { machineType: "cultivator", modelId: null, confidence: "medium", observations: ["바퀴에 흙", "녹 약간"] });
+});
+
+test("수리 흐름: get_repair_guide → find_repair_centers 결과가 repairCenters로 돌아온다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [
+      { type: "tool_use", id: "r1", name: "get_repair_guide", input: { machineType: "cultivator" } },
+      { type: "tool_use", id: "r2", name: "find_repair_centers", input: { brand: "아세아텍" } },
+    ] },
+    { content: [{ type: "text", text: "먼저 연료를 확인해 보세요." }] },
+  ]);
+  const result = await runAgentTurn("시동이 안 걸려요", { image: PHOTO, region: "영양읍" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  const guideResult = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(guideResult.guides[0].symptom, "noStart");
+  assert.ok(result.repairCenters.length > 0);
+  assert.ok(result.repairCenters.some((center) => center.brands.includes("아세아텍")));
+  assert.ok(result.sources.some((source) => /nongsaro|danyang|jincheon|gijang/.test(source.url)));
+});
+
+test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 턴은 savedDraft를 재사용한다", async (t) => {
+  photoEnv(t);
+  const draftCall = { type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "아세아 관리기 빌려드려요", description: "소개글", machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍" } };
+  let saves = 0;
+  const saveDraft = async (user, dataUrl) => {
+    saves += 1;
+    assert.equal(user.id, USER.id);
+    assert.equal(dataUrl, PHOTO.dataUrl);
+    return { listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", photoUrl: "/api/photos?key=x" };
+  };
+  const first = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "초안을 만들었어요." }] }]);
+  const r1 = await runAgentTurn("빌려주고 싶어요", { image: PHOTO, user: USER }, { listings: LISTINGS, call: first.call, today: TODAY, saveDraft });
+  assert.equal(saves, 1);
+  assert.equal(r1.listingDraft.listingId, "11111111-1111-4111-8111-111111111111");
+  assert.equal(r1.listingDraft.type, "rent");
+  assert.equal(r1.listingDraft.priceBasis.unit, "day");
+  assert.ok(r1.listingDraft.price > 0);
+
+  const second = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "고쳤어요." }] }]);
+  const r2 = await runAgentTurn("제목만 바꿔 줘", { user: USER, savedDraft: { listingId: r1.listingDraft.listingId, photoKey: r1.listingDraft.photoKey, photoUrl: r1.listingDraft.photoUrl } }, { listings: LISTINGS, call: second.call, today: TODAY, saveDraft });
+  assert.equal(saves, 1, "같은 대화에서 사진을 다시 저장하지 않는다");
+  assert.equal(r2.listingDraft.photoKey, r1.listingDraft.photoKey);
+});
+
+test("비로그인 판매 초안은 저장 없이 listingId·photoKey가 null이다", async (t) => {
+  photoEnv(t);
+  let saves = 0;
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터 팝니다", description: "소개글", machineType: "tractor", modelId: null, brand: null } }] },
+    { content: [{ type: "text", text: "초안이에요." }] },
+  ]);
+  const result = await runAgentTurn("팔고 싶어요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY, saveDraft: async () => { saves += 1; } });
+  assert.equal(saves, 0);
+  assert.equal(result.listingDraft.listingId, null);
+  assert.equal(result.listingDraft.photoKey, null);
+  assert.match(calls[1].messages.at(-1).content[0].content, /loginRequired/);
+});
+
+test("보험을 묻지 않았으면 get_insurance_info를 거부한다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "owner" } }] },
+    { content: [{ type: "text", text: "알겠어요." }] },
+  ]);
+  await runAgentTurn("빌려주고 싶어요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  assert.match(calls[0].system, /사용자가 보험을 물었을 때만/);
+  const toolResult = calls[1].messages.at(-1).content[0];
+  assert.equal(toolResult.is_error, true);
+  assert.match(toolResult.content, /보험은 요청하실 때만 안내해요/);
+
+  const asked = scripted([
+    { content: [{ type: "tool_use", id: "i1", name: "get_insurance_info", input: { role: "renter" } }] },
+    { content: [{ type: "text", text: "농업인안전보험이 있어요." }] },
+  ]);
+  await runAgentTurn("빌릴 때 보험도 들어야 해요?", {}, { listings: LISTINGS, call: asked.call, today: TODAY });
+  assert.notEqual(asked.calls[1].messages.at(-1).content[0].is_error, true);
+});
+
+test("AI_WEB_SEARCH가 없으면 웹 검색 도구를 보내지 않고, 켜면 보낸다", async (t) => {
+  photoEnv(t);
+  const off = scripted([{ content: [{ type: "text", text: "ok" }] }]);
+  await runAgentTurn("고추", {}, { listings: LISTINGS, call: off.call, today: TODAY });
+  assert.ok(!off.calls[0].tools.some((tool) => tool.type === "web_search"));
+  process.env.AI_WEB_SEARCH = "1";
+  const on = scripted([{ content: [{ type: "text", text: "ok" }] }]);
+  await runAgentTurn("고추", {}, { listings: LISTINGS, call: on.call, today: TODAY });
+  assert.ok(on.calls[0].tools.some((tool) => tool.type === "web_search"));
+  delete process.env.AI_WEB_SEARCH;
+});
+
+test("이미지 + 모델 실패면 PHOTO_UNAVAILABLE로 구분된다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([]);
+  assert.deepEqual(await runAgentTurn("", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY }), { error: "PHOTO_UNAVAILABLE" });
+});
+
+test("웹 검색 도구는 공급자별 형식으로 바뀌고 결과 출처를 돌려준다", async (t) => {
+  withEnv(t, { ZAI_API_KEY: "zkey" });
+  let zBody;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    zBody = JSON.parse(request.body);
+    return Response.json({ choices: [{ message: { content: "결과" } }], web_search: [{ title: "농진청", link: "https://www.rda.go.kr/x" }] });
+  });
+  const z = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
+  assert.equal(zBody.tools[0].type, "web_search");
+  assert.equal(zBody.tools[0].web_search.enable, true);
+  assert.deepEqual(z.sources, [{ title: "농진청", url: "https://www.rda.go.kr/x" }]);
+
+  delete process.env.ZAI_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "akey";
+  let aBody;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    aBody = JSON.parse(request.body);
+    return Response.json({ content: [
+      { type: "web_search_tool_result", tool_use_id: "s1", content: [{ type: "web_search_result", title: "농사로", url: "https://www.nongsaro.go.kr/y" }] },
+      { type: "text", text: "결과" },
+    ] });
+  });
+  const a = await callLLM({ system: "S", messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search" }] });
+  assert.deepEqual(aBody.tools[0], { type: "web_search_20250305", name: "web_search", max_uses: 3 });
+  assert.deepEqual(a.sources, [{ title: "농사로", url: "https://www.nongsaro.go.kr/y" }]);
+});
+
+test("[리뷰] 새 사진을 보내면 이전 초안을 쓰지 않고 새로 저장한다", async (t) => {
+  photoEnv(t);
+  let saves = 0;
+  const saveDraft = async () => {
+    saves += 1;
+    return { listingId: "33333333-3333-4333-8333-333333333333", photoKey: "listings/33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444.webp", photoUrl: "/api/photos?key=new" };
+  };
+  const old = { listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", photoUrl: "/api/photos?key=old" };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "관리기", description: "소개", machineType: "cultivator" } }] },
+    { content: [{ type: "text", text: "새 초안" }] },
+  ]);
+  const result = await runAgentTurn("이것도 빌려줄래요", { image: PHOTO, user: USER, savedDraft: old }, { listings: LISTINGS, call, today: TODAY, saveDraft });
+  assert.equal(saves, 1);
+  assert.equal(result.listingDraft.listingId, "33333333-3333-4333-8333-333333333333");
+});
+
+test("[리뷰] 사진은 첫 호출에만 보내고 다음 라운드에는 인식 요약 글로 바꾼다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "note_photo", input: { machineType: "cultivator", confidence: "high", observations: ["녹"] } }] },
+    { content: [{ type: "text", text: "관리기예요." }] },
+  ]);
+  await runAgentTurn("이거 뭐예요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY });
+  const hasImage = (request) => request.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "image"));
+  assert.equal(hasImage(calls[0]), true);
+  assert.equal(hasImage(calls[1]), false);
+  assert.match(JSON.stringify(calls[1].messages), /사진 인식/);
+});
+
+test("[리뷰] 사진 턴이 전체 제한 시간을 넘기면 진행 중인 요청을 취소하고 PHOTO_UNAVAILABLE로 끝낸다", async (t) => {
+  photoEnv(t);
+  let receivedSignal;
+  let saves = 0;
+  const call = async ({ signal }) => {
+    receivedSignal = signal;
+    return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+  };
+  const result = await runAgentTurn("팔래요", { image: PHOTO, user: USER }, { listings: LISTINGS, call, today: TODAY, timeoutMs: 20, saveDraft: async () => { saves += 1; } });
+  assert.deepEqual(result, { error: "PHOTO_UNAVAILABLE" });
+  assert.equal(receivedSignal.aborted, true);
+  assert.equal(saves, 0);
+});
+
+test("[리뷰] 다음 라운드로 넘기는 글 블록에서 citations 같은 부가 필드를 뺀다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [
+      { type: "text", text: "찾아볼게요", citations: [{ type: "web_search_result_location", url: "https://x" }] },
+      { type: "tool_use", id: "g1", name: "get_crop_guidance", input: { cropId: "rice" } },
+    ] },
+    { content: [{ type: "text", text: "끝" }] },
+  ]);
+  await runAgentTurn("벼", {}, { listings: LISTINGS, call, today: TODAY });
+  const assistant = calls[1].messages.find((m) => m.role === "assistant" && Array.isArray(m.content));
+  assert.deepEqual(assistant.content[0], { type: "text", text: "찾아볼게요" });
 });
 
 test("공급자 오류를 비밀값 없이 분류하고 잔액 부족을 재시도하지 않는다", async (t) => {
@@ -364,4 +610,360 @@ test("음성으로 들어온 질문이면 되묻기·되읽기 지시를 더하�
   const typed = scripted([{ content: [{ type: "text", text: "네" }] }]);
   await runAgentTurn("고추 두둑", {}, { listings: LISTINGS, call: typed.call, today: TODAY });
   assert.doesNotMatch(typed.calls[0].system, /음성 인식/);
+});
+
+test("음성: 로그인 상태에서 말로 \"네\"라고 해도 대여 예약은 바로 만들지 않고 확인 카드로 넘긴다", async (t) => {
+  withKey(t, "test");
+  let wrote = false;
+  const deps = { beforeWrite: async () => {}, createRentalRequest: async () => { wrote = true; return { request: {} }; } };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
+    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
+  ]);
+  const result = await runAgentTurn("네 예약해 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(wrote, false);
+  assert.equal(result.reservation, undefined);
+  assert.equal(result.pendingAction.type, "rental_request");
+  assert.equal(result.pendingAction.listingId, rentable.id);
+});
+
+test("음성: 말로 \"네\"라고 해도 구매 신청·매물 등록·수정은 바로 처리하지 않는다", async (t) => {
+  withKey(t, "test");
+  const writes = [];
+  const deps = {
+    beforeWrite: async () => {},
+    sendPurchaseMessage: async () => { writes.push("purchase"); return {}; },
+    createListing: async () => { writes.push("listing"); return { listing: { id: "x" } }; },
+    updateListing: async () => { writes.push("update"); return {}; },
+    fetchOwnListings: async () => [{ ...rentable, ownerId: USER.id }],
+  };
+  const purchase = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "create_purchase_request", input: { listingId: saleItem.id } }] },
+    { content: [{ type: "text", text: "확인 버튼을 눌러 주세요." }] },
+  ]);
+  const bought = await runAgentTurn("네 살게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: purchase.call, today: TODAY, deps });
+  assert.equal(bought.pendingAction.type, "purchase_request");
+
+  const listing = scripted([
+    { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "tractor", title: "트랙터 빌려드려요", price: 80000, region: "영양읍" } }] },
+    { content: [{ type: "text", text: "초안을 확인해 주세요." }] },
+  ]);
+  const drafted = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
+  assert.equal(drafted.createdListing, undefined);
+  assert.ok(drafted.listingDraft);
+
+  const update = scripted([
+    { content: [{ type: "tool_use", id: "u1", name: "update_listing", input: { listingId: rentable.id, price: 10000 } }] },
+    { content: [{ type: "text", text: "바뀔 내용을 확인해 주세요." }] },
+  ]);
+  await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
+  assert.match(JSON.stringify(update.calls[1].messages.at(-1).content), /VOICE_CONFIRMATION_REQUIRED/);
+  assert.deepEqual(writes, []);
+});
+
+test("OpenAI로 사진 상담을 하면 같은 모델에 image_url을 보내고 웹 검색 표시는 보내지 않는다", async (t) => {
+  withEnv(t, { OPENAI_API_KEY: "okey" });
+  let body;
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    body = JSON.parse(request.body);
+    return Response.json({ choices: [{ message: { content: "관리기로 보여요" } }] });
+  });
+  await callLLM({ system: "S", messages: [{ role: "user", content: [{ type: "text", text: "이거 뭐예요" }, IMAGE_BLOCK] }], tools: [{ name: "x", description: "d", input_schema: { type: "object" } }, { type: "web_search" }] });
+  assert.equal(body.model, "gpt-4o-mini");
+  assert.equal(body.messages.find((m) => m.role === "user").content[1].type, "image_url");
+  assert.deepEqual(body.tools.map((tool) => tool.type), ["function"]);
+});
+
+test("[통합 오케스트레이터] 로그인 + 긍정 발화 시 create_rental_request가 즉시 대여 예약을 실행한다", async (t) => {
+  withKey(t, "test");
+  const createdCalls = [];
+  const deps = {
+    beforeWrite: async () => {},
+    createRentalRequest: async (u, payload) => {
+      createdCalls.push({ user: u.id, ...payload });
+      return { request: { id: payload.id, days: 2, totalPrice: rentable.price * 2 } };
+    },
+  };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
+    { content: [{ type: "text", text: "예약을 접수했어요!" }] },
+  ]);
+  const result = await runAgentTurn("네 예약해 주세요", { user: USER }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(createdCalls.length, 1);
+  assert.equal(createdCalls[0].listingId, rentable.id);
+  assert.equal(result.reservation.kind, "rental");
+  assert.match(result.reservation.number, /^R-[0-9A-F]{8}$/);
+  assert.equal(result.pendingAction, undefined);
+});
+
+test("[통합 오케스트레이터] 긍정하지 않은 발화에서는 create_rental_request도 DB 쓰기 없이 확인 카드로 전환된다", async (t) => {
+  withKey(t, "test");
+  let wrote = false;
+  const deps = { createRentalRequest: async () => { wrote = true; return {}; } };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
+  ]);
+  const result = await runAgentTurn("이거 상태 괜찮나요?", { user: USER }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(wrote, false);
+  assert.equal(result.reservation, undefined);
+  assert.equal(result.pendingAction.type, "rental_request");
+  assert.equal(result.pendingAction.listingId, rentable.id);
+});
+
+test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능 확인, 비용 계산, 날씨 및 uiContext가 통합 동작한다", async (t) => {
+  withKey(t, "test");
+  const actions = { purchase: [], listing: [], weather: [] };
+  const deps = {
+    beforeWrite: async () => {},
+    getWeather: async (opts) => {
+      actions.weather.push(opts);
+      return { region: opts.region, rangeForecast: [{ date: opts.date, summary: "맑음", pop: 10, tempMin: 2, tempMax: 12, icon: "sun", source: "kma" }] };
+    },
+    sendPurchaseMessage: async (u, payload) => {
+      actions.purchase.push(payload);
+      return { conversation: { id: "conv-99" } };
+    },
+    createListing: async (u, payload) => {
+      actions.listing.push(payload);
+      return { listing: { id: payload.id, title: payload.title } };
+    },
+  };
+
+  // 1) check_availability + calculate_cost + get_weather + uiContext 프롬프트 주입
+  const checkFlow = scripted([
+    { content: [
+      { type: "tool_use", id: "c1", name: "check_availability", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } },
+      { type: "tool_use", id: "c2", name: "calculate_cost", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } },
+      { type: "tool_use", id: "c3", name: "get_weather", input: { region: "영양읍", start: "2026-11-20" } },
+    ] },
+    { content: [{ type: "text", text: "비어 있고 날씨도 맑아요." }] },
+  ]);
+  const r1 = await runAgentTurn(
+    "이 날짜 괜찮나요?",
+    { user: USER, uiContext: { region: "영양읍", cropIds: ["pepper"], date: "2026-11-20", dateEnd: "2026-11-21", viewingListingId: rentable.id } },
+    { listings: LISTINGS, call: checkFlow.call, today: TODAY, deps },
+  );
+  assert.match(checkFlow.calls[0].system, new RegExp(rentable.id));
+  assert.match(checkFlow.calls[0].system, /고추/);
+  assert.equal(actions.weather.length, 1);
+  assert.equal(r1.reply, "비어 있고 날씨도 맑아요.");
+
+  // 2) create_purchase_request
+  const buyFlow = scripted([
+    { content: [{ type: "tool_use", id: "b1", name: "create_purchase_request", input: { listingId: forSale.id } }] },
+    { content: [{ type: "text", text: "구매 신청을 보냈어요." }] },
+  ]);
+  const r2 = await runAgentTurn("그걸로 살게요 진행해 주세요", { user: USER }, { listings: LISTINGS, call: buyFlow.call, today: TODAY, deps });
+  assert.equal(actions.purchase.length, 1);
+  assert.equal(r2.reservation.kind, "purchase");
+  assert.equal(r2.reservation.conversationId, "conv-99");
+
+  // 3) create_listing
+  const sellFlow = scripted([
+    { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "cultivator", title: "아세아 관리기 빌려드려요", price: 45000 } }] },
+    { content: [{ type: "text", text: "매물을 등록했어요!" }] },
+  ]);
+  const r3 = await runAgentTurn("이대로 올려 주세요", { user: USER, uiContext: { region: "청기면", cropIds: ["pepper"] } }, { listings: LISTINGS, call: sellFlow.call, today: TODAY, deps });
+  assert.equal(actions.listing.length, 1);
+  assert.equal(actions.listing[0].region, "청기면");
+  assert.equal(r3.createdListing.title, "아세아 관리기 빌려드려요");
+  assert.match(r3.createdListing.number, /^L-[0-9A-F]{8}$/);
+});
+
+test("[통합 오케스트레이터] 모델이 첫 턴 검색 없이 되물어도 작물·작업 언급 시 서버가 매물을 즉시 보강한다", async (t) => {
+  withKey(t, "test");
+  const { call } = scripted([
+    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 면적과 날짜를 알려주시겠어요?" }] },
+  ]);
+  const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
+  assert.equal(result.mode, "agent");
+  assert.ok(result.listingIds.length > 0 && result.listingIds.length <= 3);
+});
+
+test("cleanUiContext는 ownedMachines·selectedOwnedModelId·favoriteIds를 검증·정제한다", () => {
+  const cleaned = cleanUiContext({
+    ownedMachines: [
+      { modelId: "asia-amc900", name: "내 아세아 관리기" },
+      { modelId: "unknown-model", name: "유령 기계" },
+      { modelId: "daedong-dk550", name: "" },
+    ],
+    selectedOwnedModelId: "asia-amc900",
+    favoriteIds: ["l-1", "l-1", " l-2 ", "", 123],
+  });
+  assert.deepEqual(cleaned.ownedMachines, [
+    { modelId: "asia-amc900", name: "내 아세아 관리기" },
+    { modelId: "daedong-dk550", name: "대동 DK550HSRQ5" },
+  ]);
+  assert.equal(cleaned.selectedOwnedModelId, "asia-amc900");
+  assert.deepEqual(cleaned.favoriteIds, ["l-1", "l-2"]);
+
+  const invalidSelected = cleanUiContext({ selectedOwnedModelId: "not-in-spec" });
+  assert.equal(invalidSelected.selectedOwnedModelId, null);
+});
+
+test("check_farm_compatibility는 농장 평수(1평≈3.3㎡)와 보유 농기계 호환성을 검사한다", async (t) => {
+  const implementListing = {
+    ...rentable,
+    id: "impl-fm120n",
+    title: "아세아텍 FM-120N 휴립멀칭기",
+    machineType: "ridgeMulcher",
+    modelId: "asia-fm120n",
+    areaMin: 300,
+    areaMax: 1500,
+    included: "작업기 단품",
+  };
+  const standaloneListing = {
+    ...rentable,
+    id: "stand-ph1r",
+    title: "얀마 PH1,R 정식기",
+    machineType: "transplanter",
+    modelId: "yanmar-ph1r",
+    areaMin: 300,
+    areaMax: 1500,
+  };
+
+  const fitCompat = checkFarmCompatibilityTool(
+    { listingId: implementListing.id, areaPyeong: 200 },
+    [implementListing],
+    { selectedOwnedModelId: "asia-amc900" },
+  );
+  assert.equal(fitCompat.areaM2, 660);
+  assert.equal(fitCompat.areaFit, "fit");
+  assert.equal(fitCompat.compatibility.status, "compatible");
+
+  const mismatch = checkFarmCompatibilityTool(
+    { listingId: implementListing.id, areaPyeong: 600, ownedModelId: "daedong-dk550" },
+    [implementListing],
+  );
+  assert.equal(mismatch.areaFit, "too_large");
+  assert.equal(mismatch.compatibility.status, "incompatible");
+
+  const standalone = checkFarmCompatibilityTool(
+    { listingId: standaloneListing.id, areaPyeong: 100 },
+    [standaloneListing],
+  );
+  assert.equal(standalone.compatibility.status, "standalone");
+
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "fc1", name: "check_farm_compatibility", input: { listingId: implementListing.id } }] },
+    { content: [{ type: "text", text: "200평 농장과 보유하신 AMC-900 관리기에 잘 맞아요." }] },
+  ]);
+  const res = await runAgentTurn(
+    "우리 농장에 맞고 내 관리기와 호환되나요?",
+    { uiContext: { areaPyeong: 200, selectedOwnedModelId: "asia-amc900", ownedMachines: [{ modelId: "asia-amc900", name: "아세아 900" }], viewingListingId: implementListing.id } },
+    { listings: [implementListing], call, today: TODAY },
+  );
+  assert.match(calls[0].system, /아세아 900\(asia-amc900\)/);
+  const toolOut = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(toolOut.compatibility.status, "compatible");
+  assert.equal(res.reply, "200평 농장과 보유하신 AMC-900 관리기에 잘 맞아요.");
+});
+
+test("offer_choices는 하위 호환 choices와 Plan Mode용 planQuestion을 함께 반환한다", async (t) => {
+  withKey(t, "test");
+  const { call } = scripted([{
+    content: [{
+      type: "tool_use",
+      id: "oc1",
+      name: "offer_choices",
+      input: {
+        question: "어떤 작업을 하실 예정인가요?",
+        choices: ["두둑 만들기", "비닐 멀칭", "로터리"],
+        missingField: "operation",
+        allowCustom: true,
+        skippable: true,
+      },
+    }],
+  }]);
+  const result = await runAgentTurn("기계 추천해줘", {}, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.choices, ["두둑 만들기", "비닐 멀칭", "로터리"]);
+  assert.deepEqual(result.planQuestion, {
+    question: "어떤 작업을 하실 예정인가요?",
+    options: ["두둑 만들기", "비닐 멀칭", "로터리"],
+    missingField: "operation",
+    allowCustom: true,
+    skippable: true,
+  });
+});
+
+test("get_weather는 나쁜 날씨를 감지하면 badWeatherWarning과 예약 충돌이 없는 goodAlternatives·weatherInfo를 반환한다", async (t) => {
+  withKey(t, "test");
+  const bookedListing = {
+    ...rentable,
+    id: "weather-booked-1",
+    booked: [{ start: "2026-11-18", end: "2026-11-18" }],
+  };
+  const forecastDays = [
+    { date: "2026-11-16", summary: "비 예상", icon: "rain", suitability: "caution", pop: 80, tempMin: 3, tempMax: 9, advice: "비 예보가 있습니다.", source: "kma" },
+    { date: "2026-11-17", summary: "비 예상", icon: "rain", suitability: "caution", pop: 70, tempMin: 2, tempMax: 10, advice: "비 예보가 있습니다.", source: "kma" },
+    { date: "2026-11-18", summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 1, tempMax: 12, advice: "작업 적합", source: "kma" },
+    { date: "2026-11-19", summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 2, tempMax: 13, advice: "작업 적합", source: "kma" },
+    { date: "2026-11-20", summary: "구름 조금", icon: "cloud", suitability: "good", pop: 20, tempMin: 3, tempMax: 14, advice: "작업 적합", source: "kma" },
+  ];
+  const deps = {
+    getWeather: async ({ region }) => ({
+      region,
+      weather: forecastDays[1],
+      rangeForecast: [forecastDays[1]],
+      forecastDays,
+    }),
+  };
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "w1", name: "get_weather", input: { region: "영양읍", start: "2026-11-17", listingId: bookedListing.id } }] },
+    { content: [{ type: "text", text: "17일은 비 예보가 있어 19일이나 20일을 추천드려요." }] },
+  ]);
+  const res = await runAgentTurn("17일 날씨 어때요?", {}, { listings: [bookedListing], call, today: TODAY, deps });
+  const toolOut = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(toolOut.badWeatherWarning, true);
+  assert.match(toolOut.warningReason, /비 예상/);
+  assert.deepEqual(toolOut.goodAlternatives.map((a) => a.start), ["2026-11-19", "2026-11-20"]);
+  assert.equal(res.weatherInfo.hasBadWeather, true);
+  assert.deepEqual(res.weatherInfo.goodAlternatives.map((a) => a.start), ["2026-11-19", "2026-11-20"]);
+});
+
+test("toggle_favorite와 open_listing_chat은 favoriteAction과 chatTarget을 반환하고 본인 매물 채팅은 거절한다", async (t) => {
+  withKey(t, "test");
+  const favCalls = [];
+  const deps = {
+    beforeWrite: async () => {},
+    toggleFavorite: async (u, payload) => {
+      favCalls.push({ userId: u.id, ...payload });
+      return { isFavorite: true };
+    },
+  };
+
+  // 1) 로그인 사용자 찜하기
+  const favFlow = scripted([
+    { content: [{ type: "tool_use", id: "f1", name: "toggle_favorite", input: { listingId: rentable.id, favorite: true } }] },
+    { content: [{ type: "text", text: "찜 목록에 추가했어요." }] },
+  ]);
+  const favRes = await runAgentTurn("이거 찜해줘", { user: USER }, { listings: LISTINGS, call: favFlow.call, today: TODAY, deps });
+  assert.equal(favCalls.length, 1);
+  assert.deepEqual(favRes.favoriteAction, { listingId: rentable.id, favorite: true, title: rentable.title, synced: true });
+
+  // 2) 비로그인 사용자 찜하기 (게스트 동기화용)
+  const guestFavFlow = scripted([
+    { content: [{ type: "tool_use", id: "f2", name: "toggle_favorite", input: { listingId: rentable.id } }] },
+    { content: [{ type: "text", text: "화면에 찜으로 표시했어요." }] },
+  ]);
+  const guestFavRes = await runAgentTurn("찜해줘", {}, { listings: LISTINGS, call: guestFavFlow.call, today: TODAY });
+  assert.deepEqual(guestFavRes.favoriteAction, { listingId: rentable.id, favorite: true, title: rentable.title, synced: false });
+
+  // 3) 1:1 채팅 열기 (타인 매물 성공, 본인 매물 거절)
+  const ownListing = { ...rentable, id: "own-listing-1", ownerId: USER.id };
+  const chatFlow = scripted([
+    { content: [{ type: "tool_use", id: "ch1", name: "open_listing_chat", input: { listingId: rentable.id, prefillMessage: "내일 대여 가능한가요?" } }] },
+    { content: [{ type: "text", text: "소유자와의 1:1 채팅을 열었어요." }] },
+  ]);
+  const chatRes = await runAgentTurn("판매자한테 먼저 물어볼래요", { user: USER }, { listings: [rentable, ownListing], call: chatFlow.call, today: TODAY });
+  assert.deepEqual(chatRes.chatTarget, { listingId: rentable.id, title: rentable.title, prefill: "내일 대여 가능한가요?" });
+
+  const ownChatFlow = scripted([
+    { content: [{ type: "tool_use", id: "ch2", name: "open_listing_chat", input: { listingId: ownListing.id } }] },
+    { content: [{ type: "text", text: "본인 매물에는 채팅을 열 수 없어요." }] },
+  ]);
+  const ownChatRes = await runAgentTurn("내 매물에 채팅 열어줘", { user: USER }, { listings: [ownListing], call: ownChatFlow.call, today: TODAY });
+  assert.equal(ownChatFlow.calls[1].messages.at(-1).content[0].is_error, true);
+  assert.equal(ownChatRes.chatTarget, undefined);
 });

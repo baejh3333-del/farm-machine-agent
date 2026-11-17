@@ -22,7 +22,10 @@ export function compareListings(a, b, region, sort) {
 }
 
 export function selectMatchingListings(message, context, listings) {
-  const namedCrops = CROPS.filter(({ name }) => message.includes(name)).map(({ id }) => id);
+  const matchedCrops = CROPS.filter(({ name }) => message.includes(name));
+  const namedCrops = matchedCrops
+    .filter((crop) => !matchedCrops.some((other) => other.id !== crop.id && other.name.includes(crop.name)))
+    .map(({ id }) => id);
   const cropIds = namedCrops.length ? namedCrops : (Array.isArray(context.cropIds) ? context.cropIds.filter((id) => Object.hasOwn(CROP_BY_ID, id)) : []);
   const cropId = cropIds.length === 1 ? cropIds[0] : undefined;
   const namedOperations = operationPatterns.filter(([, pattern]) => pattern.test(message)).map(([id]) => id);

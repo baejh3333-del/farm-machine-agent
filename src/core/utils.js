@@ -114,7 +114,34 @@ export const getListingPhotoSrc = (item) => {
   return "";
 };
 export const hasListingPhoto = (item) => Boolean(getListingPhotoSrc(item));
-export const machineImage = (type) => `./src/images/machines/${type?.id || "tractor"}.jpg`;
+const MACHINE_IMAGE_FALLBACK = {
+  tiller: "cultivator",
+  ridingCultivator: "cultivator",
+  rotavator: "tractor",
+  plow: "tractor",
+  spreader: "tractor",
+  loader: "tractor",
+  baler: "tractor",
+  speedSprayer: "sprayer",
+  agriDrone: "sprayer",
+  garlicOnionPlanter: "potatoPlanter",
+  rootHarvester: "potatoHarvester",
+  mower: "cultivator",
+  shredder: "cultivator",
+  thresher: "combine",
+  excavator: "tractor",
+  aerialLift: "carrier",
+  seeder: "potatoPlanter",
+  ridger: "ridgeMulcher",
+  dryer: "combine",
+  sorter: "combine",
+  forageHarvester: "combine",
+};
+export const machineImage = (type) => {
+  const id = typeof type === "string" ? type : type?.id;
+  const resolved = MACHINE_IMAGE_FALLBACK[id] || id || "tractor";
+  return `./src/images/machines/${resolved}.jpg`;
+};
 
 export function pictureIcon(name) {
   return `<img class="picture-icon" src="./src/images/icons/${name}.jpg" alt="" width="32" height="32">`;

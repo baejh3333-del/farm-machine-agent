@@ -252,11 +252,6 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
     return summary;
   }
 
-  /** 말로 이어 가던 대화에서 선택지를 누르면 그 차례도 음성 대화로 본다. */
-  function keepVoiceMode() {
-    voiceOrigin = true;
-  }
-
   /** 다음 전송이 음성에서 왔는지 알려 주고 표시를 지운다. */
   function consumeInputMode() {
     primeSpeech(); // 전송 버튼을 누른 순간이라 자동 읽기 길을 터 둘 수 있다.
@@ -295,5 +290,5 @@ export function createVoiceControls({ isBusy = () => false } = {}) {
     prepareSpeech().then(() => { $("aiVoiceSettings").hidden = !canSpeak(); }),
   ]).catch(() => {});
 
-  return { ready, attachSpeech, autoSpeak, decorateConfirmation, keepVoiceMode, consumeInputMode, stopSpeaking, cancel, isRecording: () => state !== "idle" };
+  return { ready, attachSpeech, autoSpeak, decorateConfirmation, consumeInputMode, stopSpeaking, cancel, isRecording: () => state !== "idle" };
 }

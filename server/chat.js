@@ -2,6 +2,16 @@ import { getPool, withTransaction } from "./db.js";
 import { fail, HttpError } from "./http.js";
 import { normalizeText, requireUuid } from "./validate.js";
 
+const VALID_AI_MODES = new Set(["off", "copilot", "autonomous"]);
+const VALID_SENDER_KINDS = new Set(["human", "ai_proxy", "system"]);
+const VALID_AI_CONFIDENCES = new Set(["high", "medium", "low"]);
+const VALID_AUTO_REPLY_TOPICS = new Set(["schedule", "spec", "availability", "compatibility", "weather"]);
+
+function toIsoOrNull(value) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
 function toConversationDto(row, lastMessage = null) {
   return {
     id: String(row.id),
@@ -14,12 +24,24 @@ function toConversationDto(row, lastMessage = null) {
     buyerId: row.buyer_id,
     buyerName: row.buyer_name,
     lastSeq: Number(row.last_seq),
+    buyerAiMode: row.buyer_ai_mode ?? "off",
+    ownerAiMode: row.owner_ai_mode ?? "off",
+    buyerAiPolicy: row.buyer_ai_policy && typeof row.buyer_ai_policy === "object" ? row.buyer_ai_policy : {},
+    ownerAiPolicy: row.owner_ai_policy && typeof row.owner_ai_policy === "object" ? row.owner_ai_policy : {},
+    aiConsecutiveTurns: Number(row.ai_consecutive_turns ?? 0),
+    aiPausedReason: row.ai_paused_reason ?? null,
+    aiLastRunAt: toIsoOrNull(row.ai_last_run_at),
+    aiDraftJson: row.ai_draft_json ?? null,
     lastMessage: lastMessage
       ? {
           id: String(lastMessage.id),
           seq: Number(lastMessage.seq),
           senderId: lastMessage.sender_id,
           body: lastMessage.body,
+          senderKind: lastMessage.sender_kind ?? "human",
+          aiConfidence: lastMessage.ai_confidence ?? null,
+          replyToSeq: lastMessage.reply_to_seq != null ? Number(lastMessage.reply_to_seq) : null,
+          escalationReason: lastMessage.escalation_reason ?? null,
           createdAt: lastMessage.created_at instanceof Date ? lastMessage.created_at.toISOString() : String(lastMessage.created_at),
         }
       : null,
@@ -36,6 +58,10 @@ function toMessageDto(row) {
     senderId: row.sender_id,
     senderName: row.sender_name ?? null,
     body: row.body,
+    senderKind: row.sender_kind ?? "human",
+    aiConfidence: row.ai_confidence ?? null,
+    replyToSeq: row.reply_to_seq != null ? Number(row.reply_to_seq) : null,
+    escalationReason: row.escalation_reason ?? null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
   };
 }
@@ -80,7 +106,33 @@ async function findExistingMessage(db, messageId, { lock = false } = {}) {
   return res.rows[0] || null;
 }
 
-export async function sendMessage(user, payload, { pool = getPool() } = {}) {
+function validateMessageMeta(options = {}) {
+  const senderKind = options.senderKind ?? "human";
+  if (!VALID_SENDER_KINDS.has(senderKind)) {
+    fail(400, "INVALID_SENDER_KIND", "올바르지 않은 발신 주체입니다.");
+  }
+  const aiConfidence = options.aiConfidence ?? null;
+  if (aiConfidence !== null && !VALID_AI_CONFIDENCES.has(aiConfidence)) {
+    fail(400, "INVALID_AI_CONFIDENCE", "올바르지 않은 AI 확신도입니다.");
+  }
+  const rawReplyToSeq = options.replyToSeq ?? null;
+  let replyToSeq = null;
+  if (rawReplyToSeq !== null) {
+    const num = Number(rawReplyToSeq);
+    if (!Number.isSafeInteger(num) || num < 1) {
+      fail(400, "INVALID_REPLY_TO_SEQ", "올바르지 않은 응답 대상 순번입니다.");
+    }
+    replyToSeq = num;
+  }
+  const escalationReason = options.escalationReason
+    ? normalizeText(options.escalationReason, { min: 1, max: 200, field: "에스컬레이션 사유" })
+    : null;
+  return { senderKind, aiConfidence, replyToSeq, escalationReason };
+}
+
+export async function sendMessage(user, payload, options = {}) {
+  const { pool = getPool() } = options;
+  const { senderKind, aiConfidence, replyToSeq, escalationReason } = validateMessageMeta(options);
   const messageId = requireUuid(payload?.id ?? payload?.messageId, "메시지 ID");
   const body = normalizeText(payload?.body, { min: 1, max: 500, field: "메시지 내용", allowNewlines: true });
   const conversationId = payload?.conversationId ? requireUuid(payload.conversationId, "대화방 ID") : null;
@@ -166,19 +218,47 @@ export async function sendMessage(user, payload, { pool = getPool() } = {}) {
         };
       }
 
-      const seqRes = await client.query(
-        `UPDATE conversations
-         SET last_seq = last_seq + 1, updated_at = now()
-         WHERE id = $1
-         RETURNING last_seq`,
-        [lockedConv.id]
-      );
+      let seqRes;
+      if (senderKind === "human") {
+        seqRes = await client.query(
+          `UPDATE conversations
+           SET last_seq = last_seq + 1,
+               updated_at = now(),
+               ai_consecutive_turns = 0,
+               ai_paused_reason = NULL,
+               ai_draft_json = CASE WHEN ai_draft_json->>'targetUserId' = $2 THEN NULL ELSE ai_draft_json END
+           WHERE id = $1
+           RETURNING last_seq`,
+          [lockedConv.id, user.id]
+        );
+      } else if (senderKind === "ai_proxy") {
+        seqRes = await client.query(
+          `UPDATE conversations
+           SET last_seq = last_seq + 1,
+               updated_at = now(),
+               ai_consecutive_turns = ai_consecutive_turns + 1,
+               ai_last_run_at = now(),
+               ai_draft_json = CASE WHEN ai_draft_json->>'targetUserId' = $2 THEN NULL ELSE ai_draft_json END
+           WHERE id = $1
+           RETURNING last_seq`,
+          [lockedConv.id, user.id]
+        );
+      } else {
+        seqRes = await client.query(
+          `UPDATE conversations
+           SET last_seq = last_seq + 1,
+               updated_at = now()
+           WHERE id = $1
+           RETURNING last_seq`,
+          [lockedConv.id]
+        );
+      }
       const nextSeq = Number(seqRes.rows[0].last_seq);
 
       await client.query(
-        `INSERT INTO messages (id, conversation_id, sender_id, seq, body)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [messageId, lockedConv.id, user.id, nextSeq, body]
+        `INSERT INTO messages (id, conversation_id, sender_id, seq, body, sender_kind, ai_confidence, reply_to_seq, escalation_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [messageId, lockedConv.id, user.id, nextSeq, body, senderKind, aiConfidence, replyToSeq, escalationReason]
       );
 
       const insertedMsgRes = await client.query(
@@ -209,6 +289,9 @@ export async function sendMessage(user, payload, { pool = getPool() } = {}) {
           message: toMessageDto(existing),
         };
       }
+      if (senderKind === "ai_proxy" && replyToSeq != null) {
+        fail(409, "AI_REPLY_ALREADY_EXISTS", "이미 해당 메시지에 대한 AI 대리 응답이 존재합니다.");
+      }
       fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
     }
     throw error;
@@ -235,13 +318,17 @@ export async function listConversationsForUser(userId, { listingId = null, pool 
             lm.seq AS last_msg_seq,
             lm.sender_id AS last_msg_sender_id,
             lm.body AS last_msg_body,
+            lm.sender_kind AS last_msg_sender_kind,
+            lm.ai_confidence AS last_msg_ai_confidence,
+            lm.reply_to_seq AS last_msg_reply_to_seq,
+            lm.escalation_reason AS last_msg_escalation_reason,
             lm.created_at AS last_msg_created_at
      FROM conversations c
      JOIN listings l ON l.id = c.listing_id
      JOIN "user" ou ON ou.id = l.owner_id
      JOIN "user" bu ON bu.id = c.buyer_id
      LEFT JOIN LATERAL (
-       SELECT m.id, m.seq, m.sender_id, m.body, m.created_at
+       SELECT m.id, m.seq, m.sender_id, m.body, m.sender_kind, m.ai_confidence, m.reply_to_seq, m.escalation_reason, m.created_at
        FROM messages m
        WHERE m.conversation_id = c.id
        ORDER BY m.seq DESC
@@ -261,6 +348,10 @@ export async function listConversationsForUser(userId, { listingId = null, pool 
             seq: row.last_msg_seq,
             sender_id: row.last_msg_sender_id,
             body: row.last_msg_body,
+            sender_kind: row.last_msg_sender_kind,
+            ai_confidence: row.last_msg_ai_confidence,
+            reply_to_seq: row.last_msg_reply_to_seq,
+            escalation_reason: row.last_msg_escalation_reason,
             created_at: row.last_msg_created_at,
           }
         : null
@@ -360,9 +451,212 @@ export async function getConversationMessages(
       seq: lastMessage.seq,
       sender_id: lastMessage.senderId,
       body: lastMessage.body,
+      sender_kind: lastMessage.senderKind,
+      ai_confidence: lastMessage.aiConfidence,
+      reply_to_seq: lastMessage.replyToSeq,
+      escalation_reason: lastMessage.escalationReason,
       created_at: lastMessage.createdAt,
     } : null),
     messages,
     hasMoreOlder,
   };
 }
+
+function sanitizeAiPolicy(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  if (typeof raw.instructions === "string") {
+    out.instructions = raw.instructions.trim().slice(0, 500);
+  }
+  if (typeof raw.allowNegotiation === "boolean") {
+    out.allowNegotiation = raw.allowNegotiation;
+  }
+  if (raw.minPrice === null) {
+    out.minPrice = null;
+  } else if (raw.minPrice !== undefined && Number.isFinite(Number(raw.minPrice)) && Number(raw.minPrice) >= 0) {
+    out.minPrice = Math.trunc(Number(raw.minPrice));
+  }
+  if (typeof raw.allowDelivery === "boolean") {
+    out.allowDelivery = raw.allowDelivery;
+  }
+  if (typeof raw.preferredPickupWindow === "string") {
+    out.preferredPickupWindow = raw.preferredPickupWindow.trim().slice(0, 60);
+  }
+  if (raw.maxConsecutiveAiTurns !== undefined) {
+    const turns = Number(raw.maxConsecutiveAiTurns);
+    if (Number.isFinite(turns)) {
+      out.maxConsecutiveAiTurns = Math.min(10, Math.max(1, Math.trunc(turns)));
+    }
+  }
+  if (Array.isArray(raw.autoReplyOn)) {
+    out.autoReplyOn = [...new Set(raw.autoReplyOn.filter((t) => typeof t === "string" && VALID_AUTO_REPLY_TOPICS.has(t)))];
+  }
+  if (typeof raw.desiredDate === "string") {
+    out.desiredDate = raw.desiredDate.trim().slice(0, 30);
+  }
+  if (raw.areaPyeong !== undefined && Number.isFinite(Number(raw.areaPyeong)) && Number(raw.areaPyeong) > 0) {
+    out.areaPyeong = Math.trunc(Number(raw.areaPyeong));
+  }
+  if (typeof raw.ownedModelId === "string") {
+    out.ownedModelId = raw.ownedModelId.trim().slice(0, 80);
+  }
+  if (typeof raw.needDelivery === "boolean") {
+    out.needDelivery = raw.needDelivery;
+  }
+  return out;
+}
+
+async function fetchLastMessageRow(db, conversationId) {
+  const res = await db.query(
+    `SELECT m.*, u.name AS sender_name
+     FROM messages m
+     JOIN "user" u ON u.id = m.sender_id
+     WHERE m.conversation_id = $1
+     ORDER BY m.seq DESC
+     LIMIT 1`,
+    [conversationId]
+  );
+  return res.rows[0] || null;
+}
+
+export async function updateConversationAiPolicy(user, payload, { pool = getPool() } = {}) {
+  const conversationId = payload?.conversationId ? requireUuid(payload.conversationId, "대화방 ID") : null;
+  const listingId = payload?.listingId ? normalizeText(payload.listingId, { min: 1, max: 80, field: "매물 ID" }) : null;
+  if (!conversationId && !listingId) {
+    fail(400, "INVALID_TARGET", "대화방 또는 매물을 지정해 주세요.");
+  }
+
+  const hasMode = payload?.mode !== undefined && payload?.mode !== null;
+  const mode = hasMode ? String(payload.mode).trim() : null;
+  if (hasMode && !VALID_AI_MODES.has(mode)) {
+    fail(400, "INVALID_AI_MODE", "올바르지 않은 대리 응대 모드입니다.");
+  }
+  const hasPolicy = payload?.policy !== undefined;
+  const policy = hasPolicy ? sanitizeAiPolicy(payload.policy) : null;
+
+  return withTransaction(async (client) => {
+    let lockedConv;
+    let role;
+
+    if (conversationId) {
+      const convRes = await client.query(`SELECT * FROM conversations WHERE id = $1 FOR UPDATE`, [conversationId]);
+      if (!convRes.rows.length) {
+        fail(404, "CONVERSATION_NOT_FOUND", "대화를 찾을 수 없습니다.");
+      }
+      lockedConv = convRes.rows[0];
+      if (listingId && lockedConv.listing_id !== listingId) {
+        fail(400, "CONVERSATION_MISMATCH", "대화방과 매물 정보가 일치하지 않습니다.");
+      }
+      const listRes = await client.query(`SELECT id, owner_id, status FROM listings WHERE id = $1`, [lockedConv.listing_id]);
+      const listing = listRes.rows[0];
+      if (!listing) fail(404, "LISTING_NOT_FOUND", "매물을 찾을 수 없습니다.");
+      if (lockedConv.buyer_id === user.id) {
+        role = "buyer";
+      } else if (listing.owner_id === user.id) {
+        role = "owner";
+      } else {
+        fail(403, "FORBIDDEN", "이 대화의 대리 응대 설정을 변경할 권한이 없습니다.");
+      }
+    } else {
+      const listRes = await client.query(`SELECT id, owner_id, status FROM listings WHERE id = $1`, [listingId]);
+      const listing = listRes.rows[0];
+      if (!listing) {
+        fail(404, "LISTING_NOT_FOUND", "매물을 찾을 수 없습니다.");
+      }
+      if (listing.owner_id === user.id) {
+        fail(403, "SELF_INQUIRY_FORBIDDEN", "본인이 등록한 매물에는 구매자 문의를 시작할 수 없습니다.");
+      }
+      const priorConv = await client.query(
+        `SELECT id FROM conversations WHERE listing_id = $1 AND buyer_id = $2`,
+        [listingId, user.id]
+      );
+      if (!priorConv.rows.length && listing.status === "removed") {
+        fail(404, "LISTING_NOT_FOUND", "매물을 찾을 수 없습니다.");
+      }
+      await client.query(
+        `INSERT INTO conversations (listing_id, buyer_id, last_seq)
+         VALUES ($1, $2, 0)
+         ON CONFLICT (listing_id, buyer_id) DO NOTHING`,
+        [listingId, user.id]
+      );
+      const lockedRes = await client.query(
+        `SELECT * FROM conversations WHERE listing_id = $1 AND buyer_id = $2 FOR UPDATE`,
+        [listingId, user.id]
+      );
+      lockedConv = lockedRes.rows[0];
+      role = "buyer";
+    }
+
+    const nextMode = hasMode ? mode : (role === "buyer" ? lockedConv.buyer_ai_mode : lockedConv.owner_ai_mode);
+    const nextPolicy = hasPolicy ? policy : (role === "buyer" ? lockedConv.buyer_ai_policy : lockedConv.owner_ai_policy);
+    const isReenabling = nextMode === "copilot" || nextMode === "autonomous";
+    const nextPausedReason = isReenabling ? null : lockedConv.ai_paused_reason;
+    const nextTurns = isReenabling && lockedConv.ai_paused_reason ? 0 : lockedConv.ai_consecutive_turns;
+
+    if (role === "buyer") {
+      await client.query(
+        `UPDATE conversations
+         SET buyer_ai_mode = $2,
+             buyer_ai_policy = $3::jsonb,
+             ai_paused_reason = $4,
+             ai_consecutive_turns = $5,
+             ai_draft_json = CASE WHEN $2 = 'off' AND ai_draft_json->>'targetUserId' = $6 THEN NULL ELSE ai_draft_json END,
+             updated_at = now()
+         WHERE id = $1`,
+        [lockedConv.id, nextMode, JSON.stringify(nextPolicy), nextPausedReason, nextTurns, user.id]
+      );
+    } else {
+      await client.query(
+        `UPDATE conversations
+         SET owner_ai_mode = $2,
+             owner_ai_policy = $3::jsonb,
+             ai_paused_reason = $4,
+             ai_consecutive_turns = $5,
+             ai_draft_json = CASE WHEN $2 = 'off' AND ai_draft_json->>'targetUserId' = $6 THEN NULL ELSE ai_draft_json END,
+             updated_at = now()
+         WHERE id = $1`,
+        [lockedConv.id, nextMode, JSON.stringify(nextPolicy), nextPausedReason, nextTurns, user.id]
+      );
+    }
+
+    const convRow = await fetchConversationById(client, lockedConv.id);
+    const lastMsgRow = await fetchLastMessageRow(client, lockedConv.id);
+    return {
+      conversation: toConversationDto(convRow, lastMsgRow),
+      role,
+    };
+  }, pool);
+}
+
+export async function dismissAiDraft(user, payload, { pool = getPool() } = {}) {
+  const conversationId = requireUuid(payload?.conversationId, "대화방 ID");
+  return withTransaction(async (client) => {
+    const convRes = await client.query(`SELECT * FROM conversations WHERE id = $1 FOR UPDATE`, [conversationId]);
+    if (!convRes.rows.length) {
+      fail(404, "CONVERSATION_NOT_FOUND", "대화를 찾을 수 없습니다.");
+    }
+    const lockedConv = convRes.rows[0];
+    const listRes = await client.query(`SELECT id, owner_id FROM listings WHERE id = $1`, [lockedConv.listing_id]);
+    const listing = listRes.rows[0];
+    if (!listing) fail(404, "LISTING_NOT_FOUND", "매물을 찾을 수 없습니다.");
+    if (lockedConv.buyer_id !== user.id && listing.owner_id !== user.id) {
+      fail(403, "FORBIDDEN", "이 대화에 접근할 수 없습니다.");
+    }
+
+    await client.query(
+      `UPDATE conversations
+       SET ai_draft_json = CASE WHEN ai_draft_json->>'targetUserId' = $2 THEN NULL ELSE ai_draft_json END,
+           updated_at = now()
+       WHERE id = $1`,
+      [conversationId, user.id]
+    );
+
+    const convRow = await fetchConversationById(client, conversationId);
+    const lastMsgRow = await fetchLastMessageRow(client, conversationId);
+    return {
+      conversation: toConversationDto(convRow, lastMsgRow),
+    };
+  }, pool);
+}
+
+export { fetchConversationById, toConversationDto, toMessageDto };

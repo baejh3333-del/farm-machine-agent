@@ -9,9 +9,13 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
-  <link rel="stylesheet" href="/src/styles.css" />
-  <link rel="stylesheet" href="/src/garage.css" />
-  <script type="module" src="/src/main.js"></script>
+  <link rel="stylesheet" href="/src/styles.css?v=20261117" />
+  <link rel="stylesheet" href="/src/garage.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261117" />
+  <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -33,39 +37,83 @@
           <span class="nav-icon" aria-hidden="true"></span>
           <span class="nav-label">작업 가이드</span>
         </button>
-        <button type="button" class="nav-item" aria-label="찜 목록" data-action="favorites" aria-haspopup="dialog">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">찜 목록</span>
-          <span class="nav-badge" id="favNavBadge" hidden>0</span>
+        <button type="button" class="nav-item nav-ai-trigger" id="headerAiOpen" aria-label="AI 농농이 열기">
+          <span class="nav-ai-dot" aria-hidden="true"></span>
+          <span class="nav-label">AI 농농이</span>
         </button>
-        <button type="button" class="nav-item" aria-label="대여 요청" data-view="requests">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">대여 요청</span>
-        </button>
-        <button type="button" class="nav-item" aria-label="내 기계 관리" data-view="owner">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">내 기계 관리</span>
-          <span id="ownerBadge" class="nav-badge" hidden>0</span>
-        </button>
-        <button type="button" class="nav-item" aria-label="모아농 브랜드 소개" data-view="about">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">모아농?</span>
-        </button>
-        <button type="button" class="nav-item" data-view="garage" aria-label="내 농기계·호환"><span class="nav-label">내 농기계·호환</span></button>
+        <div class="mypage-dropdown">
+          <button type="button" class="nav-item mypage-trigger" id="myPageButton" aria-expanded="false" aria-controls="myPageMenu" aria-haspopup="true">
+            <span class="nav-label">마이페이지</span>
+            <span class="mypage-dot" id="myPageNotifDot" hidden aria-hidden="true"></span>
+            <span class="mypage-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="mypage-menu" id="myPageMenu" role="region" aria-label="마이페이지 메뉴" hidden>
+            <div class="mypage-menu-grid">
+              <div class="mypage-group">
+                <div class="mypage-group-title">관심 · 대여 관리</div>
+                <button type="button" class="mypage-menu-item" aria-label="찜 목록" data-action="favorites" aria-haspopup="dialog">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">찜 목록</span>
+                    <span class="nav-badge" id="favNavBadge" hidden>0</span>
+                  </span>
+                  <span class="mypage-item-desc">저장한 농기계 모아보기</span>
+                </button>
+                <button type="button" class="mypage-menu-item" aria-label="대여 요청" data-view="requests">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">대여 요청</span>
+                  </span>
+                  <span class="mypage-item-desc">보낸 요청 · 예약 현황</span>
+                </button>
+              </div>
+              <div class="mypage-group">
+                <div class="mypage-group-title">내 농기계 · 매물</div>
+                <button type="button" class="mypage-menu-item" aria-label="내 기계 관리" data-view="owner">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">내 기계 관리</span>
+                    <span id="ownerBadge" class="nav-badge" hidden>0</span>
+                  </span>
+                  <span class="mypage-item-desc">매물 등록 및 대여 승인</span>
+                </button>
+                <button type="button" class="mypage-menu-item" aria-label="내 농기계·호환" data-view="garage">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">내 농기계·호환</span>
+                  </span>
+                  <span class="mypage-item-desc">보유 기종 · 작업기 호환</span>
+                </button>
+              </div>
+              <div class="mypage-group">
+                <div class="mypage-group-title">서비스 안내</div>
+                <button type="button" class="mypage-menu-item" aria-label="모아농 브랜드 소개" data-view="about">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">모아농?</span>
+                  </span>
+                  <span class="mypage-item-desc">초보 농부를 위한 모아농 소개</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </nav>
 
       <div class="topbar-left">
-          <div class="region-pill">
-            <span class="region-pin" aria-hidden="true"></span>
-            <label for="regionSelect" class="region-label">내 동네</label>
-            <select id="regionSelect" aria-label="내 동네 선택">
-              <option value="영양읍">영양읍</option>
-              <option value="청기면">청기면</option>
-              <option value="입암면">입암면</option>
-              <option value="수비면">수비면</option>
-            </select>
-            <span class="region-arrow" aria-hidden="true">▾</span>
-          </div>
+          <button
+            type="button"
+            class="region-picker-trigger"
+            id="regionPickerBtn"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            aria-controls="regionPickerDialog"
+            aria-label="내 동네 지역 선택"
+          >
+            <span id="regionPickerLabel">📍 경상북도 영양군 · 영양읍</span>
+            <span class="region-picker-caret" aria-hidden="true">▾</span>
+          </button>
+          <select id="regionSelect" aria-hidden="true" tabindex="-1" hidden>
+            <option value="영양읍">영양읍</option>
+            <option value="청기면">청기면</option>
+            <option value="입암면">입암면</option>
+            <option value="수비면">수비면</option>
+          </select>
           <button type="button" class="login-button" id="loginButton">로그인</button>
       </div>
     </header>
@@ -504,6 +552,8 @@
       </div>
     </div>
 
+    <div class="ai-context-bar" id="aiContextBar" hidden></div>
+
     <div class="ai-scroll" id="aiScroll" tabindex="0" role="region" aria-label="농농이 상담 내용">
       <div class="ai-messages" id="aiMessages" role="log" aria-live="polite">
         <div class="ai-welcome">
@@ -515,13 +565,7 @@
         </div>
       </div>
 
-      <div class="prompt-suggestions" id="aiStarters" role="group" aria-label="작업 예시를 입력창에 넣기">
-        <button type="button" data-prompt="고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.">고추밭 두둑 만들기</button>
-        <button type="button" data-prompt="배추밭에 비닐 씌우는 기계를 빌리고 싶어요.">배추밭 비닐 씌우기</button>
-        <button type="button" data-prompt="벼를 수확할 기계를 사고 싶어요.">벼 수확기 구매</button>
-        <button type="button" data-prompt="감자 캐는 기계를 빌리고 싶어요.">감자 캐는 기계 대여</button>
-        <button type="button" data-prompt="제 트랙터를 팔고 싶어요.">내 기계 팔기</button>
-      </div>
+      <div class="ai-quick-builder" id="aiStarters" role="region" aria-label="농농이 초기 조건 설정"></div>
     </div>
 
     <div class="ai-photo-preview" id="aiPhotoPreview" hidden>
@@ -531,7 +575,9 @@
     </div>
     <form id="aiForm" class="ai-form">
       <input type="file" id="aiPhotoInput" accept="image/jpeg,image/png,image/webp" hidden />
+      <input type="file" id="aiCameraInput" accept="image/jpeg,image/png,image/webp" capture="environment" hidden />
       <button type="button" class="ai-photo-btn" id="aiPhotoButton" aria-label="기계 사진 올리기" title="기계 사진 올리기">사진</button>
+      <button type="button" class="ai-photo-btn ai-camera-btn" id="aiCameraButton" aria-label="카메라로 기계 사진 찍기" title="카메라로 기계 사진 찍기"><span aria-hidden="true">📷</span><span class="ai-camera-label">카메라</span></button>
       <button type="button" class="button button-secondary ai-mic-btn" id="aiMicButton" aria-label="말로 질문하기" aria-pressed="false" aria-describedby="aiVoiceStatus"><span class="ai-mic-icon" aria-hidden="true">🎤</span><span class="ai-mic-label">말하기</span></button>
       <input id="aiInput" maxlength="500" placeholder="예: 고추밭 300평에 두둑을 만들 기계를 빌리고 싶어요" aria-label="AI에게 작업 설명" />
       <button type="submit" class="button button-primary ai-send-btn" aria-label="질문 보내기">전송</button>
@@ -709,6 +755,24 @@
     <section class="form-dialog" role="dialog" aria-modal="true" aria-labelledby="formTitle">
       <button type="button" class="icon-button detail-close" id="closeForm" aria-label="창 닫기">✕</button>
       <div id="formContent"></div>
+    </section>
+  </div>
+
+  <!-- 전국 지역 선택 모달 -->
+  <div class="dialog-backdrop" id="regionPickerDialog" hidden>
+    <section class="region-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="regionPickerTitle">
+      <div class="region-picker-head">
+        <h2 id="regionPickerTitle">내 동네 · 지역 선택</h2>
+        <button type="button" class="region-picker-close" id="closeRegionPicker" aria-label="지역 선택 닫기">✕</button>
+      </div>
+      <div class="region-picker-gps-bar">
+        <button type="button" class="region-gps-btn" id="regionGpsBtn">📍 내 위치로 자동 설정 (GPS)</button>
+        <span class="region-gps-hint" id="regionGpsHint">현재 위치 기준 가까운 농기계와 날씨를 확인해요</span>
+      </div>
+      <div class="region-picker-body">
+        <div class="region-step-col region-step-provinces" id="regionProvinceList" aria-label="1단계 시·도 선택"></div>
+        <div class="region-step-col region-step-cities" id="regionCityArea" aria-label="2단계 시·군·구 선택"></div>
+      </div>
     </section>
   </div>
 

@@ -10,7 +10,6 @@ import sharp from "sharp";
 import accountHandler from "../api/account.js";
 import agentHandler from "../api/agent.js";
 import voiceHandler from "../api/voice.js";
-import nongnongHandler from "../api/nongnong.js";
 import conversationsHandler from "../api/conversations.js";
 import listingsHandler from "../api/listings.js";
 import meHandler from "../api/me.js";
@@ -18,6 +17,7 @@ import photosHandler from "../api/photos.js";
 import recommendHandler from "../api/recommend.js";
 import requestsHandler from "../api/requests.js";
 import { resetAuthCache } from "../server/account-auth.js";
+import { saveDraftPhoto } from "../server/listing-drafts.js";
 import { recommend } from "../server/agent.js";
 import { getConversationMessages, sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
@@ -41,8 +41,11 @@ import {
   rejectRentalRequest,
 } from "../server/rentals.js";
 import { checkRateLimit, enforceRateLimit } from "../server/rate-limit.js";
-import { listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
+import { getPhotoObject, listPhotoObjects, newListingPhotoKey, putPhotoObject, reconcilePhotos } from "../server/storage.js";
 import { addOwnedMachine } from "../server/user-data.js";
+import { CROPS, OPERATIONS, MACHINE_TYPES } from "../src/data/farm-machines.js";
+import { MACHINE_SPECIFICATIONS } from "../src/data/machine-specifications.js";
+import { buildMockListings } from "../server/listing-seed.js";
 
 function shiftDate(isoDate, deltaDays) {
   const d = new Date(`${isoDate}T12:00:00Z`);
@@ -123,7 +126,6 @@ before(async () => {
     ["/api/recommend", recommendHandler],
     ["/api/agent", agentHandler],
     ["/api/voice", voiceHandler],
-    ["/api/nongnong", nongnongHandler],
     ["/api/me", meHandler],
     ["/api/requests", requestsHandler],
     ["/api/conversations", conversationsHandler],
@@ -174,13 +176,24 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
   );
 
   const migRes = await runMigrations({ env: "test", pool });
-  assert.deepEqual(migRes.applied, ["0001_initial_schema.sql", "0002_rate_limits_and_rental_bounds.sql", "0003_agent_core.sql"]);
+  assert.deepEqual(migRes.applied, [
+    "0001_initial_schema.sql",
+    "0002_rate_limits_and_rental_bounds.sql",
+    "0003_agent_core.sql",
+    "0004_catalog_reference.sql",
+    "0005_delegated_chat.sql",
+    "0006_insurance_consults.sql",
+  ]);
 
   const info = await inspectDatabase({ pool });
   assert.equal(info.environment, "test");
   assert.equal(info.userIdType, "text");
   assert.equal(info.btreeGistInstalled, true);
   assert.equal(info.writesFrozen, false);
+  assert.equal(info.counts.crop_catalog, CROPS.length);
+  assert.equal(info.counts.operation_catalog, OPERATIONS.length);
+  assert.equal(info.counts.machine_type_catalog, MACHINE_TYPES.length);
+  assert.equal(info.counts.machine_model_specs, MACHINE_SPECIFICATIONS.length);
 
   // Tampered migration checksum must be rejected
   const badMigrationsDir = join(tempDir, "bad-migrations");
@@ -206,14 +219,15 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
     await prodPool.end();
   }
 
-  // Seed test DB and confirm 100 demo items in PostgreSQL + live recommend uses PG
+  const expectedMockCount = buildMockListings().length;
+  // Seed test DB and confirm all demo items in PostgreSQL + live recommend uses PG
   const seedRes = await seedDemoListings({ env: "test", pool });
-  assert.equal(seedRes.inserted, 100);
+  assert.equal(seedRes.inserted, expectedMockCount);
 
   const rec = await recommend("고추 두둑 대여", { maxPrice: 70000 }, { pool });
   assert.ok(rec.listingIds.length > 0);
   const pgListings = await fetchListings({ pool });
-  assert.equal(pgListings.length, 100);
+  assert.equal(pgListings.length, expectedMockCount);
 });
 
 test("[PGlite 로컬 엔진] 2. 회원가입 및 A/B/C 계정 세션, write-freeze 503 차단 및 복구", async () => {
@@ -227,7 +241,7 @@ test("[PGlite 로컬 엔진] 2. 회원가입 및 A/B/C 계정 세션, write-free
     // Reads remain available
     const getListings = await apiReq(baseUrl, "/api/listings");
     assert.equal(getListings.status, 200);
-    assert.equal(getListings.body.listings.length, 100);
+    assert.equal(getListings.body.listings.length, buildMockListings().length);
 
     const getSess = await apiReq(baseUrl, "/api/account?action=session", { cookie: userA.cookie });
     assert.equal(getSess.status, 200);
@@ -916,6 +930,40 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
     const chat = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "고추 두둑 빌릴래요" } });
     assert.equal(chat.status, 200);
     assert.equal(chat.body.mode, "unavailable");
+
+    // 사진만 보내도(질문 없음) 400이 아니다
+    const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 10, g: 120, b: 60 } } }).png().toBuffer();
+    const photoOnly = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "", image: `data:image/png;base64,${png.toString("base64")}` } });
+    assert.equal(photoOnly.status, 200, JSON.stringify(photoOnly.body));
+    assert.equal(photoOnly.body.mode, "unavailable");
+
+    // HEIC 등 지원하지 않는 사진은 친절한 400
+    const heic = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "이거 뭐예요", image: "data:image/heic;base64,AAAAGGZ0eXBoZWlj" } });
+    assert.equal(heic.status, 400);
+    assert.equal(heic.body.code, "INVALID_PHOTO");
+    assert.match(heic.body.error, /JPG·PNG·WebP/);
+
+    // 사진도 질문도 없으면 400
+    const empty = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "" } });
+    assert.equal(empty.status, 400);
+
+    // [리뷰] 사진 디코딩보다 호출 제한을 먼저 검사한다(디코딩 비용을 횟수에 넣음)
+    const prevLimit = { ENABLE_RATE_LIMIT: process.env.ENABLE_RATE_LIMIT, RECOMMEND_LIMIT_PER_MINUTE: process.env.RECOMMEND_LIMIT_PER_MINUTE };
+    process.env.ENABLE_RATE_LIMIT = "1";
+    process.env.RECOMMEND_LIMIT_PER_MINUTE = "1";
+    try {
+      const statuses = [];
+      for (let i = 0; i < 4; i += 1) {
+        const res = await apiReq(baseUrl, "/api/agent", { method: "POST", json: { message: "x", image: "data:image/heic;base64,AAAAGGZ0eXBoZWlj" } });
+        statuses.push(res.status);
+      }
+      assert.ok(statuses.includes(429), `호출 제한이 사진 검사보다 먼저여야 함: ${statuses}`);
+    } finally {
+      for (const [k, v] of Object.entries(prevLimit)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   } finally {
     for (const [k, v] of Object.entries(prevKeys)) if (v !== undefined) process.env[k] = v;
   }
@@ -969,7 +1017,7 @@ test("[PGlite 로컬 엔진] 8. 농농이 에이전트: 승인한 대여 요청�
   assert.equal(selfRental.body.code, "SELF_RENTAL_FORBIDDEN");
 });
 
-test("[PGlite 로컬 엔진] 9. 농농이 음성 인식: 기능 확인, WAV 검증, 공급자 없음 503, 호출 제한", async (t) => {
+test("[PGlite 로컬 엔진] 11. 농농이 음성 인식: 기능 확인, WAV 검증, 공급자 없음 503, 호출 제한", async (t) => {
   const keys = ["VOICE_STT_PROVIDER", "OPENAI_API_KEY", "ZAI_API_KEY", "ENABLE_RATE_LIMIT", "VOICE_LIMIT_PER_MINUTE"];
   const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   t.after(() => {
@@ -1033,51 +1081,96 @@ test("[PGlite 로컬 엔진] 9. 농농이 음성 인식: 기능 확인, WAV 검�
   assert.ok(statuses.includes(429), `호출 제한: ${statuses}`);
 });
 
-test("[PGlite 로컬 엔진] 10. 농농 음성 승인 카드: 화면 승인 버튼으로만, 쓰기 작업만, 로그인 사용자로 처리", async () => {
+test("[PGlite 로컬 엔진] 9. 초안 사진 저장과 draftPhotoKey 등록", async () => {
+  const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg().toBuffer();
+  const dataUrl = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+
+  const draft = await saveDraftPhoto(userB.user, dataUrl);
+  assert.match(draft.listingId, /^[0-9a-f-]{36}$/);
+  assert.ok(draft.photoKey.startsWith(`listings/${draft.listingId}/`));
+  assert.equal(draft.photoUrl, `/api/photos?key=${encodeURIComponent(draft.photoKey)}`);
+  assert.ok(await getPhotoObject(draft.photoKey), "초안 사진이 저장소에 있어야 한다");
+
   const today = kstToday();
-  const start = shiftDate(today, 20);
-  const end = shiftDate(today, 21);
-  const listingId = randomUUID();
-  const created = await createListing(userA.user, {
-    id: listingId,
-    type: "rent",
-    modelId: "asia-amc900",
-    title: "음성 승인 테스트 관리기",
-    region: "청기면",
+  const fields = {
+    type: "sale", modelId: "asia-amc900", title: "농농이 초안 관리기", region: "청기면",
+    cropIds: ["pepper"], operations: ["ridge"], price: 1200000, areaMin: 200, areaMax: 1000,
+    condition: "good", inspectedAt: today, description: "농농이가 쓴 소개글",
+  };
+
+  const created = await createListing(userB.user, { id: draft.listingId, ...fields, draftPhotoKey: draft.photoKey }, { pool });
+  assert.equal(created.status, 201);
+  assert.equal(created.listing.photoKey, draft.photoKey);
+  const objects = (await listPhotoObjects()).filter((obj) => obj.key.startsWith(`listings/${draft.listingId}/`));
+  assert.equal(objects.length, 1, "새로 업로드하지 않고 초안 키를 그대로 쓴다");
+
+  await assert.rejects(
+    () => createListing(userB.user, { id: randomUUID(), ...fields, draftPhotoKey: draft.photoKey }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
+  const otherId = randomUUID();
+  await assert.rejects(
+    () => createListing(userB.user, { id: otherId, ...fields, draftPhotoKey: `listings/${otherId}/${randomUUID()}.webp` }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
+  await assert.rejects(() => saveDraftPhoto(null, dataUrl), (err) => err.status === 401);
+});
+
+test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매물 등록 실행", async () => {
+  const today = kstToday();
+  const createdSale = await createListing(userA.user, {
+    id: randomUUID(),
+    type: "sale",
+    title: "원탭 구매 테스트 트랙터",
+    brand: "대동",
+    machineType: "tractor",
     cropIds: ["pepper"],
-    operations: ["ridge"],
-    price: 45000,
-    areaMin: 200,
-    areaMax: 1000,
+    operations: ["till"],
+    price: 5200000,
+    region: "영양읍",
+    areaMin: 300,
+    areaMax: 2000,
     condition: "good",
     inspectedAt: today,
   }, { pool });
-  assert.equal(created.status, 201);
-  const action = { tool: "create_rental_request", args: { listingId, start, end } };
+  assert.equal(createdSale.status, 201);
+  const targetSaleId = createdSale.listing.id;
 
-  // 읽기 도구나 이상한 형식은 승인 경로로 처리하지 않는다
-  const notWrite = await apiReq(baseUrl, "/api/nongnong", { method: "POST", cookie: userB.cookie, json: { confirmAction: { tool: "search_listings", args: {} } } });
-  assert.equal(notWrite.status, 400);
-  const badArgs = await apiReq(baseUrl, "/api/nongnong", { method: "POST", cookie: userB.cookie, json: { confirmAction: { tool: "create_rental_request", args: "x" } } });
-  assert.equal(badArgs.status, 400);
+  const buyReqId = randomUUID();
+  const buyRes = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: {
+      action: "execute",
+      requestId: buyReqId,
+      pendingAction: { type: "purchase_request", listingId: targetSaleId },
+    },
+  });
+  assert.equal(buyRes.status, 200, JSON.stringify(buyRes.body));
+  assert.equal(buyRes.body.outcome, "completed");
+  assert.equal(buyRes.body.reservation.kind, "purchase");
+  assert.equal(buyRes.body.reservation.listingId, targetSaleId);
 
-  // 로그인하지 않으면 처리하지 않고 이유를 알려 준다
-  const anonymous = await apiReq(baseUrl, "/api/nongnong", { method: "POST", json: { confirmAction: action } });
-  assert.equal(anonymous.status, 200);
-  assert.equal(anonymous.body.failed, true);
-  assert.match(anonymous.body.reply, /로그인/);
-
-  // 승인 버튼을 누르면 모델 없이 그대로 대여 요청을 만든다(AI 키가 없어도)
-  const prevKey = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  try {
-    const done = await apiReq(baseUrl, "/api/nongnong", { method: "POST", cookie: userB.cookie, json: { confirmAction: action } });
-    assert.equal(done.status, 200, JSON.stringify(done.body));
-    assert.equal(done.body.reservation.kind, "rental");
-    assert.match(done.body.reply, /대여 요청을 보냈어요/);
-  } finally {
-    if (prevKey !== undefined) process.env.OPENAI_API_KEY = prevKey;
-  }
-  const { outgoing } = await listRequestsForUser(userB.user.id, { pool });
-  assert.ok(outgoing.some((item) => item.listingId === listingId && item.start === start));
+  const listReqId = randomUUID();
+  const listRes = await apiReq(baseUrl, "/api/agent", {
+    method: "POST",
+    cookie: userB.cookie,
+    json: {
+      action: "execute",
+      requestId: listReqId,
+      pendingAction: {
+        type: "create_listing",
+        listingType: "sale",
+        machineType: "cultivator",
+        title: "원탭 등록 관리기",
+        price: 1550000,
+        region: "청기면",
+        description: "연식: 2021년식",
+      },
+    },
+  });
+  assert.equal(listRes.status, 200, JSON.stringify(listRes.body));
+  assert.equal(listRes.body.outcome, "completed");
+  assert.equal(listRes.body.createdListing.title, "원탭 등록 관리기");
+  assert.equal(listRes.body.listing.type, "sale");
 });

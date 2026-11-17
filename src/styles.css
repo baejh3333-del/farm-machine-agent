@@ -2080,6 +2080,67 @@ img {
   margin-top: 8px;
 }
 
+.manual-spec-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.manual-spec-fields[hidden],
+.model-spec-summary[hidden] {
+  display: none;
+}
+
+.model-spec-summary {
+  background: #f4f9f5;
+  border: 1.5px solid #cfe3d4;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.model-spec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.model-spec-head strong {
+  font-size: 0.95rem;
+  color: var(--text-strong);
+}
+
+.model-spec-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.model-spec-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  font-size: 0.8125rem;
+  color: var(--text-body);
+}
+
+.model-spec-facts strong {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.model-spec-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 .chat-log {
   height: 280px;
   overflow: auto;
@@ -3975,6 +4036,203 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-photo-preview button { margin-left: auto; border: 0; background: none; text-decoration: underline; cursor: pointer; }
 .chat-bubble .ai-chat-photo { display: block; max-width: 160px; border-radius: 10px; margin-top: 6px; }
 
+/* 농농이 사진 상담 카드 (수리센터·판매/대여 초안·출처) */
+.ai-centers { margin-top: 12px; display: grid; gap: 8px; }
+.ai-center-card { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border, #e5e5e5); border-radius: 12px; background: #fff; }
+.ai-center-card small { font-size: 0.75rem; line-height: 1.5; color: var(--text-muted); }
+.ai-card-action { min-height: 44px; display: inline-flex; align-items: center; padding: 0 14px; font-size: 0.875rem; text-decoration: none; }
+.ai-draft-photo { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; }
+.ai-draft-title { font-weight: 700; font-size: 0.9375rem; }
+.ai-draft-desc { margin: 0; font-size: 0.8125rem; line-height: 1.6; white-space: pre-wrap; }
+.ai-sources { margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); }
+.ai-sources a { color: inherit; }
+.ai-confirm-actions .button { min-height: 44px; }
+.draft-photo-preview { display: flex; align-items: center; gap: 10px; }
+.draft-photo-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; }
+.draft-photo-preview small { font-size: 0.8125rem; color: var(--text-muted); }
+
+/* 농농 상단 화면 컨텍스트 바 */
+.ai-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #f4faf5;
+  border-bottom: 1px solid #d7e8dc;
+  font-size: 0.75rem;
+}
+.ai-context-bar[hidden] { display: none; }
+.ai-context-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #cce5d6;
+  color: #1f4d32;
+  font-weight: 600;
+}
+.ai-context-action {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ai-context-action:hover { background: var(--primary-dark, #21653c); }
+
+/* 추천 매물 카드 원탭 실행 레이아웃 */
+.ai-rec-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #dbe2dc);
+  border-radius: 12px;
+  background: #ffffff;
+}
+.ai-rec-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ai-rec-card-actions .button {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.8125rem;
+}
+
+/* 인라인 날짜·기간 빠른 선택기 */
+.ai-date-picker {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cce5d6;
+  border-radius: 12px;
+  background: #f7fbf8;
+  display: grid;
+  gap: 8px;
+}
+.ai-date-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ai-date-preset-btn {
+  min-height: 34px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #9ccab0;
+  background: #ffffff;
+  color: #1f4d32;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ai-date-preset-btn:hover { background: #eaf5ee; }
+.ai-date-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ai-date-inputs input[type="date"] {
+  flex: 1 1 115px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong, #c5d1c7);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.8125rem;
+  background: #ffffff;
+}
+.ai-date-inputs .button {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.8125rem;
+}
+
+/* 초기 화면 원탭 조건 선택 빌더 */
+.ai-quick-builder {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-top: 8px;
+  border: 1px solid #d7e8dc;
+  border-radius: 14px;
+  background: #f8fcf9;
+}
+.ai-quick-builder[hidden] { display: none; }
+.ai-qb-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.ai-qb-tab {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid #cce0d2;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #2c4133;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ai-qb-tab.is-active {
+  border-color: var(--primary);
+  background: var(--primary-light, #e6f4eb);
+  color: var(--primary-dark, #1f5c38);
+}
+.ai-qb-section { display: grid; gap: 8px; }
+.ai-qb-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #466050;
+}
+.ai-qb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ai-qb-chip {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid #c9dcd0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #273c2f;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ai-qb-chip.is-selected {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+}
+.ai-qb-date-row[hidden] { display: none; }
+.ai-qb-go {
+  width: 100%;
+  min-height: 40px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.ai-qb-examples {
+  padding-top: 4px;
+  border-top: 1px dashed #d7e8dc;
+}
+
 /* 농농이 음성 대화 (2026-11): 큰 마이크 버튼, 상태 글, 답변 듣기 버튼 */
 .ai-mic-btn { flex: none; min-width: 64px; min-height: 48px; padding: 0 12px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1.1; }
 .ai-mic-icon { font-size: 1.25rem; }
@@ -3995,3 +4253,10 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-speech .ai-speech-stop { display: none; }
 .ai-speech.is-speaking .ai-speech-stop { display: inline-flex; }
 .ai-voice-warning { font-weight: 700; color: #8a3b00; }
+
+/* 음성 버튼까지 들어가 입력칸이 눌리지 않도록: 입력칸·전송을 윗줄, 사진·카메라·말하기·조건 버튼을 아랫줄로 */
+.ai-form { flex-wrap: wrap; row-gap: 8px; }
+.ai-form #aiInput { order: -2; flex: 1 1 calc(100% - 84px); }
+.ai-form .ai-send-btn { order: -1; }
+.ai-form .ai-mic-btn { flex: 1 1 auto; flex-direction: row; gap: 6px; }
+.ai-panel.is-expanded .ai-form #aiInput { flex-basis: calc(100% - 84px); }

@@ -23,11 +23,28 @@ const defaults = {
   viewMode: "list",
   transaction: "rent",
   region: "영양읍",
+  userCoords: null,
   sort: "distance",
   selectedCrop: "all",
   filters: blankFilters(),
   aiSummaries: {},
 };
+
+function sanitizeUserCoords(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const lat = Number(raw.lat);
+  const lng = Number(raw.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const coords = {
+    lat,
+    lng,
+    source: typeof raw.source === "string" && raw.source ? raw.source : "gps",
+  };
+  if (Number.isFinite(Number(raw.accuracy))) {
+    coords.accuracy = Number(raw.accuracy);
+  }
+  return coords;
+}
 
 export let state;
 try {
@@ -37,6 +54,7 @@ try {
     viewMode: saved.viewMode === "map" ? "map" : defaults.viewMode,
     transaction: saved.transaction === "sale" ? "sale" : defaults.transaction,
     region: typeof saved.region === "string" ? saved.region : defaults.region,
+    userCoords: sanitizeUserCoords(saved.userCoords),
     sort: typeof saved.sort === "string" ? saved.sort : defaults.sort,
     selectedCrop: typeof saved.selectedCrop === "string" ? saved.selectedCrop : defaults.selectedCrop,
     filters: { ...blankFilters(), ...(saved.filters || {}) },
@@ -78,7 +96,7 @@ export const runtime = {
   weatherExpanded: false,
   selectedForecastDate: "",
   mapConfig: null,
-  userCoords: null,
+  userCoords: state.userCoords || null,
   selectedMapListingId: "",
 };
 
@@ -187,8 +205,10 @@ export function persist(onUpdateBadges) {
       UI_PREFS_KEY,
       JSON.stringify({
         view: state.view,
+        viewMode: state.viewMode,
         transaction: state.transaction,
         region: state.region,
+        userCoords: state.userCoords,
         sort: state.sort,
         selectedCrop: state.selectedCrop,
         filters: state.filters,

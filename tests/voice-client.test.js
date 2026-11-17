@@ -259,6 +259,8 @@ function makeLive(overrides = {}) {
     onClientDelegation: async (a) => { calls.delegations.push(a); return { spokenSummary: "요약", thinkingContext: "맥락" }; },
     audioElement: overrides.audioElement === undefined ? makeAudio() : overrides.audioElement,
     closeTimeoutMs: 50,
+    // 가짜 이벤트는 사이에 침묵 없이 바로 이어 오므로, 기본은 "말 끝남" 판정을 바로 한다. 문제1 테스트만 따로 준다.
+    userQuietMs: 0,
     ...overrides,
   });
   const emit = (e) => listeners.message({ data: JSON.stringify(e) });
@@ -655,6 +657,7 @@ test("gpt-live full-duplex: 말 끊기(barge-in), 발화 종료 후 듣기 복�
     voice: "marin",
     history: [{ role: "user", content: "고추밭 500평이에요" }],
     speakingIdleMs: 30,
+    userQuietMs: 0,
     onTurnCommitted: (turn) => committed.push(turn),
   });
   await live.start();
@@ -790,4 +793,63 @@ test("gpt-live 마이크 트랙이 끊기면 세션을 정리하고 치명적 �
   assert.match(errors[0].error.message, /마이크 연결이 끊어졌어요/);
   assert.equal(live.state, "idle");
   assert.equal(track.stopped, true);
+});
+
+test("문제1: 음성 시작 시 농농이가 정해진 인사를 바로 먼저 보낸다", async () => {
+  const { live, emit, sent } = makeLive({ history: [] });
+  await live.start();
+  emit({ type: "session.started" });
+  const greeting = sent.find((m) => m.type === "session.commentary.append");
+  assert.ok(greeting, "session.started 직후 인사 commentary가 있어야 한다");
+  assert.match(greeting.content, /안녕하세요, 농농이에요\. 대여, 구매, 판매 중에 어떤 걸 도와드릴까요\?/);
+});
+
+test("문제1: 사용자가 먼저 말하고 있으면 인사로 끊지 않는다", async () => {
+  const { live, emit, sent } = makeLive({ history: [], userQuietMs: 200 });
+  await live.start();
+  emit({ type: "session.input_transcript.delta", delta: "저기 트랙터" });
+  emit({ type: "session.started" });
+  assert.equal(sent.filter((m) => m.type === "session.commentary.append").length, 0);
+});
+
+test("문제1: 위임 결과가 사용자가 말하는 중에 오면 말이 끝날 때까지 미뤘다가 보낸다", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { live, emit, sent } = makeLive({
+    userQuietMs: 60,
+    onClientDelegation: async () => { await gate; return { spokenSummary: "청기면 매물 2개가 있어요." }; },
+  });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "고구마 캐는 기계" });
+  emit({ type: "session.delegation.created", delegation: { id: "dq", target: "client" } });
+  await new Promise((r) => setTimeout(r, 70));
+  // 사용자가 다시 말하기 시작한 순간 결과가 도착한다.
+  emit({ type: "session.input_transcript.delta", delta: "그리고 청기면이요" });
+  release();
+  await new Promise((r) => setTimeout(r, 5));
+  const result = () => sent.filter((m) => m.type === "session.commentary.append" && m.delegation_id === "dq");
+  assert.equal(result().length, 0, "사용자가 말하는 중에는 결과를 말하지 않는다");
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal(result().length, 1, "말이 끝난 뒤에 결과를 말한다");
+});
+
+test("문제1: 농농이 말하는 중 사용자가 끼어들면 소리를 즉시 끄고, 사용자가 말하는 동안 나머지 발화를 버린다", async () => {
+  const audio = makeAudio();
+  const committed = [];
+  const { live, emit } = makeLive({ audioElement: audio, userQuietMs: 60, onTurnCommitted: (t) => committed.push(t) });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.output_transcript.delta", delta: "청기면 매물은 " });
+  assert.equal(live.state, "speaking");
+  emit({ type: "session.input_transcript.delta", delta: "잠깐만" });
+  assert.equal(audio.muted, true, "끼어들면 농농이 음성을 바로 끈다");
+  assert.equal(live.state, "listening");
+  emit({ type: "session.output_transcript.delta", delta: "320만원이에요." });
+  assert.equal(live.state, "listening", "사용자가 말하는 동안에는 말하지 않는다");
+  assert.deepEqual(committed, [{ role: "assistant", text: "청기면 매물은", interrupted: true }]);
+  await new Promise((r) => setTimeout(r, 80));
+  emit({ type: "session.output_transcript.delta", delta: "네, 말씀하세요." });
+  assert.equal(audio.muted, false, "사용자 말이 끝난 뒤의 새 답변은 다시 들린다");
+  assert.equal(live.state, "speaking");
 });

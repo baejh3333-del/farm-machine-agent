@@ -401,6 +401,10 @@ test("voice panel: voice switching keeps conversation memory and delegation send
     await page.evaluate(() => {
       window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "금요일은 비가 와서 월요일이 좋아요." });
       window.voiceTest.channel.emit({ type: "session.input_transcript.delta", delta: "고마워요" });
+    });
+    // 사용자가 말을 마친 뒤(침묵 구간이 지난 뒤)에야 농농이가 답한다. 말하는 도중의 발화는 버린다.
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
       window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "천만에요, 월요일에" });
     });
 

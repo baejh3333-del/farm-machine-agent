@@ -4,6 +4,7 @@ import { DEFAULT_OPENAI_LIVE_MODEL, resolveOpenAiLiveVoice, VoiceError } from ".
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_TIMEOUT_MS = 20_000;
+export const GREETING_TEXT = "안녕하세요, 농농이에요. 대여, 구매, 판매 중에 어떤 걸 도와드릴까요?";
 const MAX_SDP_LENGTH = 65_536;
 const MAX_SEED_HISTORY = 12;
 // session.input은 렌더링 기준 8,192토큰(기본값)으로 제한된다. 한국어는 글자당 토큰이 많아
@@ -81,10 +82,10 @@ export function buildGptLiveInstructions({ region = "영양읍", uiContext = nul
     "- When a requested date, listing, or operation is NOT possible, explain clearly WHY it cannot be done (e.g., already reserved, rain/wind forecast, tractor horsepower/implement mismatch, area mismatch) and immediately suggest WHEN or WHAT alternative works based on prior context and backend results.",
     "",
     "Backchannel policy:",
-    'Use moderate, warm Korean backchannels like "네", "아, 그러시군요", "알겠습니다" while listening so the user knows you are following without interrupting their train of thought.',
+    "Do not backchannel. Never say \"네\", \"아, 그러시군요\" or anything else while the user is still speaking. Never start speaking until the user has clearly finished their turn.",
     "",
     "Interruption policy:",
-    "When the user interrupts or starts speaking while you are talking, stop speaking right away and listen until they finish before responding.",
+    "When the user starts speaking while you are talking, stop immediately and listen until they finish. Do not resume the interrupted sentence; answer the new utterance instead. If a backend result arrives while the user is talking, hold it and say it only after they finish.",
     "",
     "Delegation policy:",
     "Backend tools:",
@@ -219,8 +220,8 @@ function buildSessionPayload({ model, voice, region, uiContext, history, sdp, st
   if (!state.dropInput) {
     const activeHistory = state.dropHistory ? [] : history;
     const developerNote = activeHistory.length
-      ? "앞선 대화 내용과 조건을 그대로 기억한 상태에서 이어서 자연스럽게 응대해 주세요. 목소리가 바뀌었거나 재연결된 경우 짧게 인사한 뒤 바로 이어서 말씀해 주세요."
-      : "한국어로 짧고 친근하게 인사하며 어떤 농사일이나 농기계를 찾으시는지 여쭤보고, 말씀을 기다려 주세요.";
+      ? "앞선 대화 내용과 조건을 그대로 기억한 상태에서 이어서 응대해 주세요. 재연결됐다면 한 문장으로 짧게 인사하고 이어서 말씀해 주세요."
+      : `세션이 열리면 기다리지 말고 바로 먼저 "${GREETING_TEXT}"라고 한 번만 인사한 뒤, 사용자의 말을 기다려 주세요.`;
     session.input = [
       {
         type: "message",

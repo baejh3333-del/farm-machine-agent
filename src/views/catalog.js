@@ -15,10 +15,6 @@ function setTransaction(type) {
   $("saleTab").classList.toggle("active", type === "sale");
   $("rentTab").setAttribute("aria-pressed", String(type === "rent"));
   $("saleTab").setAttribute("aria-pressed", String(type === "sale"));
-  $("marketSubtitle").textContent =
-    type === "rent"
-      ? "필요한 날만 합리적으로 빌려 쓰세요. 날짜와 평수를 고르면 더 정확해져요."
-      : "오래 쓸 내 농기계를 찾아보세요. 점검 상태와 예산을 비교할 수 있어요.";
   const quickDateBox = $("quickDateBox");
   if (quickDateBox) {
     quickDateBox.classList.toggle("disabled-field", type === "sale");

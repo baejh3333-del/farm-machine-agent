@@ -1,6 +1,7 @@
 import { CROP_BY_ID, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
 import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
+import { isAffirmative } from "./affirm.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
 
@@ -110,6 +111,8 @@ function inferFollowUpChoices(reply, result) {
 
 function wantsDatePicker(reply, result) {
   if (result.pendingAction || result.reservation || result.createdListing || result.updatedListing) return false;
+  // 서버가 날짜가 없어 대여 추천을 멈춘 턴이면 답변 문구와 관계없이 날짜 선택기를 띄운다.
+  if (result.askDate) return true;
   return /(?:언제|날짜|기간|며칠|시작일|반납일).*?(?:빌리|대여|필요|원하|알려|골라|말씀|정해|[?？])/.test(String(reply || ""));
 }
 
@@ -516,6 +519,9 @@ export function createAiPanel({
 }) {
   let recommendationPending = false;
   let agentHistory = [];
+  // 직전에 보여준 매물 순서(1번, 2번…)와 화면에 떠 있는 확인 카드. 채팅만으로 예약할 때 다음 요청에 함께 보낸다.
+  let lastShownListingIds = [];
+  let openConfirmation = null;
   let agentSessionId = null;
   let selectedLiveVoice = "noeul";
   let agentPhoto = null;
@@ -1025,6 +1031,16 @@ export function createAiPanel({
       ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
       ...(quickOwnedNote ? { ownedMachineNote: quickOwnedNote } : {}),
       ...(fullDelegationEnabled ? { fullDelegation: true } : {}),
+      ...(lastShownListingIds.length ? { lastShownListings: lastShownListingIds.map((id, index) => ({ no: index + 1, id })) } : {}),
+      ...(openConfirmation?.card.isConnected
+        ? {
+            pendingConfirmation: {
+              type: openConfirmation.action.type,
+              listingId: openConfirmation.action.listingId,
+              ...(openConfirmation.action.start ? { start: openConfirmation.action.start, end: openConfirmation.action.end || openConfirmation.action.start } : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -1642,8 +1658,15 @@ export function createAiPanel({
       approve.disabled = busy;
       cancel.disabled = busy;
     };
+    if (action.type === "rental_request" || action.type === "purchase_request") {
+      openConfirmation = { action, approve, card };
+    }
+    const forget = () => {
+      if (openConfirmation?.card === card) openConfirmation = null;
+    };
 
     cancel.addEventListener("click", () => {
+      forget();
       card.dataset.state = "cancelled";
       actions.remove();
       rememberAgentTurn({ role: "user", content: "요청은 보내지 않을게요." });
@@ -1663,6 +1686,7 @@ export function createAiPanel({
           approve.textContent = "요청을 보내는 중…";
         },
         onDone: (outcome) => {
+          forget();
           card.dataset.state = outcome;
           actions.remove();
         },
@@ -2065,6 +2089,10 @@ export function createAiPanel({
     const listingIds = result.reservation || result.createdListing || result.updatedListing
       ? []
       : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
+    if (listingIds.length) lastShownListingIds = listingIds.slice(0, 5);
+    if (result.reservation) lastShownListingIds = [];
+    // 새 답이 오면 이전 확인 카드는 "방금 물어본 것"이 아니므로 채팅 "네"로 실행하지 않는다(버튼은 그대로 쓸 수 있다).
+    openConfirmation = null;
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
     if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
@@ -2800,6 +2828,20 @@ export function createAiPanel({
         performReset();
         return;
       }
+      // 확인 카드가 떠 있을 때 채팅으로 "네/예약해줘"라고 하면, 카드에 담긴 매물·날짜 그대로 버튼과 똑같이 실행한다.
+      // 말로 한 "네"는 잘못 들렸을 수 있어 음성 입력은 제외한다.
+      const confirmation = openConfirmation;
+      if (
+        !sendingPhoto
+        && inputMode !== "voice"
+        && confirmation?.card.isConnected
+        && !confirmation.approve.disabled
+        && isAffirmative(message)
+      ) {
+        rememberAgentTurn({ role: "user", content: message });
+        confirmation.approve.click();
+        return;
+      }
       pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
       pending.classList.add("is-thinking");
       const wave = document.createElement("span");
@@ -2891,6 +2933,8 @@ export function createAiPanel({
     stopLiveVoice({ silent: true });
     stopFallbackVoice();
     agentHistory = [];
+    lastShownListingIds = [];
+    openConfirmation = null;
     agentSessionId = null;
     insuranceOffer = null;
     insuranceAsked = false;

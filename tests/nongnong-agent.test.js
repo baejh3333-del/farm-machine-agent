@@ -123,7 +123,7 @@ test("읽기 전용 검색은 바로 실행하고 결과를 모델에 돌려준 
     { content: [{ type: "tool_use", id: "t1", name: "search_listings", input: { cropId: "pepper", operations: ["ridge"], transaction: "rent" } }] },
     { content: [{ type: "text", text: "고추 두둑 작업에 맞는 매물을 찾았어요." }] },
   ]);
-  const result = await runAgentTurn("고추 두둑 장비 빌릴래요", {}, { listings: LISTINGS, call, today: TODAY });
+  const result = await runAgentTurn("고추 두둑 장비 11월 20일에 빌릴래요", {}, { listings: LISTINGS, call, today: TODAY });
   assert.equal(calls.length, 2);
   const toolResult = calls[1].messages.at(-1).content[0];
   assert.equal(toolResult.type, "tool_result");
@@ -278,7 +278,7 @@ test("OpenAI로 에이전트를 돌려도 검색 → 답변 흐름이 같다", a
     }
     return Response.json({ choices: [{ message: { content: "고추 두둑 매물을 찾았어요." } }] });
   });
-  const result = await runAgentTurn("고추 두둑 빌릴래요", {}, { listings: LISTINGS, today: TODAY });
+  const result = await runAgentTurn("고추 두둑 내일 빌릴래요", {}, { listings: LISTINGS, today: TODAY });
   assert.equal(bodies.length, 2);
   const toolMessage = bodies[1].messages.at(-1);
   assert.equal(toolMessage.role, "tool");
@@ -789,14 +789,24 @@ test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능
   assert.match(r3.createdListing.number, /^L-[0-9A-F]{8}$/);
 });
 
-test("[통합 오케스트레이터] 모델이 첫 턴 검색 없이 되물어도 작물·작업 언급 시 서버가 매물을 즉시 보강한다", async (t) => {
+test("[통합 오케스트레이터] 모델이 검색 없이 되물어도 대여 날짜가 정해졌으면 서버가 그 기간 매물로 보강한다", async (t) => {
   withKey(t, "test");
   const { call } = scripted([
-    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 면적과 날짜를 알려주시겠어요?" }] },
+    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 면적을 알려주시겠어요?" }] },
   ]);
-  const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
+  const result = await runAgentTurn("고추밭에 두둑을 만들려고 11월 20일에 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
   assert.equal(result.mode, "agent");
   assert.ok(result.listingIds.length > 0 && result.listingIds.length <= 3);
+  assert.deepEqual(result.searchDates, { start: "2026-11-20", end: "2026-11-20" });
+});
+
+test("[통합 오케스트레이터] 대여 날짜가 없으면 서버가 자동 추천하지 않는다", async (t) => {
+  withKey(t, "test");
+  const { call } = scripted([
+    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 언제 빌리실 건가요?" }] },
+  ]);
+  const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.listingIds, []);
 });
 
 test("cleanUiContext는 ownedMachines·selectedOwnedModelId·favoriteIds를 검증·정제한다", () => {

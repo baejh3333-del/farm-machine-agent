@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { rentalDays } from "../src/data/compatibility.js";
 import { CROPS, CROP_BY_ID, MACHINE_BY_ID, MACHINE_TYPES, OPERATIONS, OPERATION_BY_ID, REGION_COORDS } from "../src/data/farm-machines.js";
 import { NONGNONG_INSTRUCTIONS } from "./nongnong-prompt.js";
+import { isAffirmative } from "../src/ai/affirm.js";
 
 export const MAX_HISTORY = 16;
 export const MAX_MESSAGE_CHARS = 600;
@@ -16,25 +17,8 @@ const REGIONS = Object.keys(REGION_COORDS);
 
 // ───────────────────────── 긍정 판단 ─────────────────────────
 
-const AFFIRMATIVE = [
-  /^(?:네+|넵|예+|응+|웅|어+|그래(?:요)?|좋아(?:요)?|좋습니다|ㅇㅇ+|ㅇㅋ+|오케이|ok(?:ay)?|콜|맞아(?:요)?|부탁(?:해요|드려요|합니다))$/i,
-  /(?:그걸로|그거로|이걸로|이거로|그것으로|이것으로)\s*(?:해|할게|예약|올려|진행|부탁)/,
-  /(?:예약|신청|진행|등록|올려)\s*(?:해\s*)?(?:줘|주세요|줄래|주실래요|드려요|부탁|해요|할게요|합니다|하자|할래요)/,
-  /(?:그거|그걸|이거|이걸)\s*(?:할게요|할게|할래요|살게요|빌릴게요)/,
-  /^\d+\s*번(?:\s*(?:으로|로))?\s*(?:해\s*(?:줘|주세요)|할게요|예약|좋아요|진행)?/,
-];
-const NEGATIVE_OR_UNSURE = /(?:아니|안\s*돼|안돼|싫|별로|비싸|다른\s*(?:거|것)|글쎄|생각해\s*볼|모르겠|잠깐|잠시만|말고|취소)/;
-
-export function isAffirmative(text) {
-  const raw = String(text || "").trim();
-  if (!raw) return false;
-  if (/[?？]\s*$/.test(raw)) return false;
-  const normalized = raw.replace(/[.!~…,\s]+$/g, "").replace(/^[\s,]+/, "").trim();
-  if (!normalized || NEGATIVE_OR_UNSURE.test(normalized)) return false;
-  if (/^(?:음+|흠+|어\.{2,})/.test(normalized)) return false;
-  const lead = normalized.replace(/^(?:네|예|응|좋아요|ㅇㅇ|오케이)[,\s]+/, "");
-  return AFFIRMATIVE.some((pattern) => pattern.test(normalized) || pattern.test(lead));
-}
+// 긍정 판단 규칙은 화면과 함께 쓰도록 src/ai/affirm.js에 둔다.
+export { isAffirmative };
 
 // ───────────────────────── 형식 도우미 ─────────────────────────
 

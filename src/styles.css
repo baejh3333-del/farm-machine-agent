@@ -4545,3 +4545,67 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding-top: 4px;
   border-top: 1px dashed #d7e8dc;
 }
+
+/* 마이페이지 > 내 계정: 교육이수증 칸 */
+.edu-cert {
+  margin: 0 0 16px;
+  padding: 18px 22px;
+}
+.edu-cert-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.edu-cert-check {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px dashed #c3cdc7;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.edu-cert.is-done .edu-cert-check {
+  background: var(--primary);
+  border: 2px solid var(--primary);
+  color: #ffffff;
+}
+.edu-cert-info {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.edu-cert-info h2 {
+  margin: 0 0 4px;
+  font-size: 1.0625rem;
+}
+.edu-cert-info p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #5f6b65;
+}
+.edu-cert.is-done .edu-cert-info p {
+  color: var(--primary);
+  font-weight: 600;
+}
+.edu-cert-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.edu-cert-preview {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.edu-cert-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  object-fit: contain;
+}

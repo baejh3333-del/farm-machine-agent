@@ -387,6 +387,24 @@
               <button type="button" class="button button-secondary button-sm" id="accountLogoutButton">로그아웃</button>
             </div>
           </div>
+          <section class="panel edu-cert" id="eduCertPanel" aria-labelledby="eduCertTitle">
+            <div class="edu-cert-row">
+              <span class="edu-cert-check" id="eduCertCheck" role="img" aria-label="교육이수증 미등록"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <div class="edu-cert-info">
+                <h2 id="eduCertTitle">교육이수증</h2>
+                <p id="eduCertStatus">농기계 안전교육 이수증 사진을 올리면 체크 표시가 돼요.</p>
+              </div>
+              <div class="edu-cert-actions">
+                <button type="button" class="button button-secondary button-sm" id="eduCertViewButton" aria-controls="eduCertPreviewWrap" aria-expanded="false" hidden>보기</button>
+                <button type="button" class="button button-primary button-sm" id="eduCertUploadButton">사진 올리기</button>
+                <button type="button" class="button button-secondary button-sm" id="eduCertDeleteButton" hidden>삭제</button>
+                <input type="file" id="eduCertInput" accept="image/jpeg,image/png,image/webp" hidden />
+              </div>
+            </div>
+            <div class="edu-cert-preview" id="eduCertPreviewWrap" hidden>
+              <img id="eduCertPreview" alt="내가 올린 교육이수증 사진" />
+            </div>
+          </section>
           <div class="owner-stats" id="ownerStats"></div>
 
           <div class="owner-columns">

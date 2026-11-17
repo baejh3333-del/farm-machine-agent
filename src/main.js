@@ -17,6 +17,7 @@ import {
 } from "./core/motion.js";
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
+import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { createAiPanel } from "./ai/panel.js";
 import { refreshWeatherAndMapConfig } from "./views/map-weather.js";
 
@@ -98,6 +99,7 @@ async function loadCatalog({ quiet = false } = {}) {
 async function refreshAuthenticatedData({ includeRequests = true, includeConversations = true } = {}) {
   if (!isLoggedIn()) {
     resetAccountRuntimeState();
+    renderEducationCertificate();
     runtime.ownedMachines = [];
     runtime.selectedOwnedMachineId = "";
     runtime.garage?.resetToGuest();
@@ -119,6 +121,7 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     runtime.ownedMachines = Array.isArray(meData?.ownedMachines) ? meData.ownedMachines : [];
     runtime.selectedOwnedMachineId = typeof meData?.selectedOwnedMachineId === "string" ? meData.selectedOwnedMachineId : "";
     runtime.garage?.setExternalOwned(runtime.ownedMachines, runtime.selectedOwnedMachineId);
+    setEducationCertificateStatus(meData?.educationCertificate);
 
     if (reqData) {
       runtime.incomingRequests = Array.isArray(reqData.incoming) ? reqData.incoming : [];
@@ -657,6 +660,7 @@ function bindEvents() {
     setView("browse");
   });
   initLoginForm();
+  initEducationCertificate();
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
     if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = state.filters.date ? addDays(state.filters.date, 1) : "";

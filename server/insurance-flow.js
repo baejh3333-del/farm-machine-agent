@@ -152,20 +152,34 @@ export function buildInsuranceRecommendation({ kind, listing, machineType, offic
 
 /** 상담 신청을 남긴다. 같은 사람·상품·매물의 접수 중인 신청이 있으면 그것을 돌려준다. */
 export async function createInsuranceConsult(user, { productId, officeId, listingId = null, kind = null, region = "" }, { pool = getPool() } = {}) {
-  const existing = await pool.query(
+  const normalizedRegion = shortText(region, 40);
+  const selectExisting = () => pool.query(
     `SELECT id FROM insurance_consult_requests
      WHERE user_id = $1 AND product_id = $2 AND listing_id IS NOT DISTINCT FROM $3 AND status = 'requested'
      LIMIT 1`,
     [user.id, productId, listingId],
   );
-  if (existing.rows.length) return { id: String(existing.rows[0].id), idempotent: true };
-  const id = randomUUID();
-  await pool.query(
-    `INSERT INTO insurance_consult_requests (id, user_id, product_id, office_id, listing_id, reservation_kind, region)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [id, user.id, productId, officeId, listingId, kind, shortText(region, 40)],
-  );
-  return { id, idempotent: false };
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const id = randomUUID();
+    const inserted = await pool.query(
+      `INSERT INTO insurance_consult_requests (id, user_id, product_id, office_id, listing_id, reservation_kind, region)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [id, user.id, productId, officeId, listingId, kind, normalizedRegion],
+    );
+    if (inserted.rows.length) {
+      return { id: String(inserted.rows[0].id), idempotent: false };
+    }
+
+    const existing = await selectExisting();
+    if (existing.rows.length) {
+      return { id: String(existing.rows[0].id), idempotent: true };
+    }
+  }
+
+  throw new Error("INSURANCE_CONSULT_CONFLICT");
 }
 
 /**

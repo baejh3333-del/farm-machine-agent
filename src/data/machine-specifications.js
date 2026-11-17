@@ -10808,9 +10808,15 @@ export function getSpecificationDefaults(specOrMachineType) {
 
 export function applyModelSpecification(listing, index = 0) {
   const models = MACHINE_SPECIFICATIONS.filter((model) => model.machineType === listing.machineType);
-  const model = models[index % models.length];
+  const explicitModel =
+    listing.modelId && Object.hasOwn(SPEC_BY_ID, listing.modelId) ? SPEC_BY_ID[listing.modelId] : null;
+  const model =
+    explicitModel && explicitModel.machineType === listing.machineType
+      ? explicitModel
+      : models[index % models.length];
   if (!model) return listing;
   const label = model.role === "implement" ? "작업기 단품 · 동력 본체 별도" : model.role === "powerUnit" ? "본체 · 부착 작업기 별도 확인" : "독립 구동 본체";
+  const spotPrefix = listing.farmSpotLabel ? `${listing.farmSpotLabel} 보유 장비로 ` : "";
   return {
     ...listing,
     modelId: model.id,
@@ -10819,7 +10825,7 @@ export function applyModelSpecification(listing, index = 0) {
     specification: model,
     title: `${model.brand} ${model.model} · ${listing.region}`,
     included: label,
-    description: `실제 ${model.model}의 공개 사양을 참조한 가상 매물입니다. 가격·점검일·예약·작업 면적은 시연용입니다. ${label}.`,
+    description: `${spotPrefix}실제 ${model.model}의 공개 사양을 참조한 가상 매물입니다. 가격·점검일·예약·작업 면적은 시연용입니다. ${label}.`,
     summary: `${model.brand} ${model.model}. ${model.facts[0][1]}. ${label}.`,
     demo: true,
   };

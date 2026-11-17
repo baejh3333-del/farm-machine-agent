@@ -33,6 +33,10 @@
           <span class="nav-icon" aria-hidden="true"></span>
           <span class="nav-label">매물 찾기</span>
         </button>
+        <button type="button" class="nav-item" aria-label="동네 지도" data-view="map">
+          <span class="nav-icon" aria-hidden="true"></span>
+          <span class="nav-label">지도</span>
+        </button>
         <button type="button" class="nav-item" aria-label="작업 가이드" data-view="guide">
           <span class="nav-icon" aria-hidden="true"></span>
           <span class="nav-label">작업 가이드</span>
@@ -100,10 +104,12 @@
             aria-controls="regionPickerDialog"
             aria-label="내 동네 지역 선택"
           >
-            <span id="regionPickerLabel">📍 경상북도 영양군 · 영양읍</span>
+            <span id="regionPickerLabel">강원특별자치도 홍천군 · 홍천 비발디파크</span>
             <span class="region-picker-caret" aria-hidden="true">▾</span>
           </button>
           <select id="regionSelect" aria-hidden="true" tabindex="-1" hidden>
+            <option value="홍천 비발디파크">홍천 비발디파크</option>
+            <option value="서면 팔봉리">서면 팔봉리</option>
             <option value="영양읍">영양읍</option>
             <option value="청기면">청기면</option>
             <option value="입암면">입암면</option>
@@ -116,6 +122,7 @@
     <div class="page-shell" id="top">
       <main class="main-content">
         <div id="garageView" hidden></div>
+        <section id="mapView" class="socar-map-view" hidden aria-label="내 주변 농기계 지도"></section>
         <!-- 홈: 메인 배너 + 빠른 검색 -->
         <div id="homeView">
           <section class="banner-carousel" id="bannerCarousel" aria-roledescription="carousel" aria-label="메인 배너">

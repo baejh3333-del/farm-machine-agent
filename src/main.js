@@ -18,7 +18,7 @@ import {
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
 import { createAiPanel } from "./ai/panel.js";
-import { refreshWeatherAndMapConfig } from "./views/map-weather.js";
+import { refreshWeatherAndMapConfig, renderHeaderMapView, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
 initFontScale();
 
@@ -85,10 +85,12 @@ async function loadCatalog({ quiet = false } = {}) {
     if (epoch !== runtime.authEpoch) return;
     if (!Array.isArray(data.listings)) throw new Error("잘못된 매물 응답");
     runtime.catalog = data.listings;
+    ensureHongcheonRandomListing({ randomize: true });
     runtime.catalogState = "ready";
   } catch (error) {
     if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
     if (!quiet) console.error(error);
+    ensureHongcheonRandomListing({ randomize: false });
     runtime.catalogState = "error";
   }
   renderAll();
@@ -253,7 +255,7 @@ function updateBadges() {
   }
 }
 
-const viewIds = { garage: "garageView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
+const viewIds = { garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
 const MY_PAGE_VIEWS = new Set(["requests", "owner", "ownerLoginRequired", "garage", "about"]);
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
@@ -293,6 +295,12 @@ function setView(view) {
     if (isLoggedIn()) refreshAuthenticatedData();
   }
   if (view === "garage") runtime.garage?.refresh();
+  if (view === "map") {
+    renderHeaderMapView({
+      onOpenDetail: (id) => catalogViews.openDetail(id),
+      onRent: (id) => txViews.rentalForm(id),
+    });
+  }
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
   scrollSpyPausedUntil = Date.now() + 1000;
   if (view === "browse") $("market").scrollIntoView({ behavior: "smooth" });
@@ -327,6 +335,12 @@ function renderAll() {
   catalogViews.renderListings();
   txViews.renderBuyerRequests();
   updateBadges();
+  if (state.view === "map") {
+    renderHeaderMapView({
+      onOpenDetail: (id) => catalogViews.openDetail(id),
+      onRent: (id) => txViews.rentalForm(id),
+    });
+  }
   aiPanel.refreshContextBar?.();
 }
 

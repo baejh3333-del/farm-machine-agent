@@ -4633,3 +4633,383 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding-top: 4px;
   border-top: 1px dashed #d7e8dc;
 }
+
+/* =========================================
+   상단 메뉴 지도 뷰 (당근마켓 · 쏘카 스타일)
+   ========================================= */
+.socar-map-view {
+  margin-top: 12px;
+}
+
+.socar-map-stage {
+  position: relative;
+  height: clamp(540px, 74vh, 760px);
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid var(--line, #ded5c6);
+  background: #edf3ee;
+  box-shadow: 0 20px 44px rgba(16, 48, 36, 0.12);
+}
+
+.socar-map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.socar-map-loading {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--forest, #174233);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.socar-floating-top {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.socar-loc-pill,
+.socar-top-actions {
+  pointer-events: auto;
+}
+
+.socar-loc-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(23, 66, 51, 0.12);
+  box-shadow: 0 8px 24px rgba(16, 48, 36, 0.12);
+}
+
+.socar-loc-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff6f0f;
+  box-shadow: 0 0 0 4px rgba(255, 111, 15, 0.2);
+  flex: none;
+}
+
+.socar-loc-copy {
+  display: grid;
+  gap: 1px;
+}
+
+.socar-loc-copy strong {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--text-strong, #162a22);
+}
+
+.socar-loc-copy span {
+  font-size: 0.75rem;
+  color: var(--text-muted, #5e7468);
+}
+
+.socar-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.socar-pill-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 66, 51, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-strong, #162a22);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(16, 48, 36, 0.1);
+  transition: transform 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.socar-pill-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(16, 48, 36, 0.15);
+}
+
+.socar-random-btn {
+  background: #ff6f0f;
+  border-color: #ff6f0f;
+  color: #ffffff;
+}
+
+.socar-random-btn:hover {
+  background: #ea5e00;
+}
+
+.socar-my-pin {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.socar-my-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0078ff;
+  border: 3px solid #ffffff;
+  box-shadow: 0 3px 10px rgba(0, 120, 255, 0.45);
+  z-index: 2;
+}
+
+.socar-my-pulse {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 120, 255, 0.22);
+  animation: socarPulse 2.2s ease-out infinite;
+}
+
+@keyframes socarPulse {
+  0% { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.socar-my-badge {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #103024;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgba(16, 48, 36, 0.24);
+}
+
+.socar-price-pin {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  background: #174233;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(16, 48, 36, 0.26);
+  transition: transform 0.16s ease, background-color 0.16s ease;
+}
+
+.socar-price-pin:hover,
+.socar-price-pin.is-active {
+  background: #ff6f0f;
+  transform: scale(1.06);
+  z-index: 10;
+}
+
+.socar-pin-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.socar-pin-tail {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+}
+
+.socar-visual-fallback {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.socar-fallback-grid {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.socar-fallback-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.socar-tile-note {
+  position: absolute;
+  top: 72px;
+  right: 16px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(23, 66, 51, 0.12);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted, #5e7468);
+}
+
+.socar-floating-card {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 12;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(23, 66, 51, 0.12);
+  box-shadow: 0 18px 40px rgba(16, 48, 36, 0.18);
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.socar-floating-card.is-updated {
+  animation: weatherCardIn 280ms var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.socar-card-media {
+  position: relative;
+  width: 128px;
+  height: 108px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #eff5f0;
+}
+
+.socar-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.socar-card-dist {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(16, 48, 36, 0.88);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.socar-card-body {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.socar-card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.socar-farm-pill,
+.socar-machine-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f3f6f4;
+  color: var(--forest, #174233);
+}
+
+.socar-card-title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text-strong, #162a22);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.socar-card-addr {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted, #5e7468);
+}
+
+.socar-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.socar-card-price strong {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #ff6f0f;
+}
+
+.socar-card-price small {
+  font-size: 0.78rem;
+  color: var(--text-muted, #5e7468);
+  margin-left: 2px;
+}
+
+.socar-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .socar-map-stage {
+    height: 580px;
+  }
+
+  .socar-floating-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .socar-card-media {
+    width: 100%;
+    height: 120px;
+  }
+}

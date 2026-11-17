@@ -18,6 +18,7 @@ import {
 import { validateAndReencodeImage } from "../server/images.js";
 import { createInsuranceConsult, handleInsuranceTurn, INSURANCE_ASK, insuranceOfferFor } from "../server/insurance-flow.js";
 import { fetchListings } from "../server/listings-db.js";
+import { scheduleWaitUntil } from "../server/wait-until.js";
 import { createListing, updateListing } from "../server/listings-service.js";
 import {
   cleanSavedDraft,
@@ -206,12 +207,7 @@ const agentApi = handle(["POST"], async (request) => {
       }
       if (persistPromises.length) {
         const persistTask = Promise.allSettled(persistPromises);
-        const vf = process.env.VERCEL ? await import("@vercel/functions").catch(() => null) : null;
-        if (typeof vf?.waitUntil === "function") {
-          vf.waitUntil(persistTask);
-        } else {
-          await persistTask;
-        }
+        await scheduleWaitUntil(persistTask, { awaitFallback: true });
       }
     }
 

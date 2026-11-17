@@ -61,6 +61,7 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
    - 날짜가 아직 없으면 날짜 없이 검색해 후보를 먼저 보여 준 뒤, "어느 날짜에 빌리실지 골라 바로 예약해 보세요"처럼 1줄로 안내한다.
    - **다시 검색하지 않기**: search_listings는 처음 추천할 때, 사용자가 다시·다른 매물 추천을 요청할 때, 조건(작물·작업·지역·가격·대여/구매)이 바뀔 때만 호출한다. 그 밖의 답변(질문에 답하기, 날짜·가격 확인, 구매·예약 진행)에서는 [최근 보여 준 매물]을 그대로 쓰고 다시 검색하지 않는다.
    - search_listings에는 [이미 받은 정보]의 목적(대여 rent/구매 sale), 작물, 지역, 예산을 빠짐없이 넣는다. 조건에서 벗어난 매물은 추천하지 않는다.
+   - 검색 결과에 regionFallback이 있으면 "입암면에는 지금 거래 가능한 고구마 수확기가 없어요."처럼 그 지역에 없는 이유를 한 문장으로 먼저 말하고, 이어서 가장 가까운 지역의 조건에 맞는 매물을 추천한다.
 3. 부족한 정보가 있어 선택을 받아야 할 때는(예: 작물·기종·작업이 전혀 없는 경우) 한 번에 **가장 필요한 질문 1개만** 간결하게 묻고, 선택지가 있으면 offer_choices 도구(missingField, allowCustom, skippable 포함)로 원탭 선택 버튼을 제공한다. 여러 질문을 한꺼번에 쏟아내지 않고, 모르는 값을 임의로 채우지 않는다(작물을 모르면 고추로 가정하지 않는다).
 4. **대여/구매 전 맞춤 확인 & 유연한 답변**:
    - 사용자가 "우리 농장에 사용 가능한지?", "내 농기계와 호환되는지?", "몇 평에 맞는지?"처럼 호환성·면적 적합성을 물으면 즉시 check_farm_compatibility 도구를 호출해 매물의 areaMin~areaMax(1평≈3.3㎡), 포함 작업기(included), 사용자 보유 농기계(ownedMachines / selectedOwnedModelId)와의 연결 호환성을 정확히 확인해 자연스럽게 설명한다.
@@ -552,6 +553,17 @@ function listingView(item) {
   };
 }
 
+/** "고구마 수확기 판매 매물"처럼 사용자가 찾는 대상을 짧게 부른다. */
+function describeSearchTarget({ cropId, operations = [], machineType, transaction }) {
+  const crop = CROP_BY_ID[cropId]?.name || "";
+  let machine = MACHINE_BY_ID[machineType]?.label?.replace(/\s*\(.*\)$/, "") || "";
+  // "땅속작물·마늘·양파 수확기"처럼 여러 작물을 묶은 이름은 작물과 함께 부를 때 끝말("수확기")만 쓴다.
+  if (crop && machine.includes("·")) machine = machine.split(/\s+/).at(-1);
+  const work = !machine && operations.length ? `${OPERATION_BY_ID[operations[0]]?.label || ""} 기계` : "";
+  const target = [crop, machine || work].filter(Boolean).join(" ") || "농기계";
+  return `${target} ${transaction === "sale" ? "판매" : "대여"} 매물`;
+}
+
 export function searchListingsTool(input, listings, { region, userId } = {}) {
   const operations = (Array.isArray(input?.operations) ? input.operations : []).filter((id) => Object.hasOwn(OPERATION_BY_ID, id));
   const cropId = Object.hasOwn(CROP_BY_ID, input?.cropId) ? input.cropId : null;
@@ -561,7 +573,9 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   }
   const start = DATE.test(input?.start || "") ? input.start : "";
   const end = start && DATE.test(input?.end || "") && input.end >= start ? input.end : start;
-  const effectiveRegion = cleanRegion(input?.region) || region;
+  // 사용자가 말한 지역(input.region)은 꼭 지킬 조건이고, 화면 기준 지역(region)은 거리 정렬 기준이다.
+  const requestedRegion = cleanRegion(input?.region);
+  const effectiveRegion = requestedRegion || region;
   const scoped = Array.isArray(listings) ? listings.filter((item) => !userId || item.ownerId !== userId) : [];
   const context = {
     cropIds: cropId ? [cropId] : [],
@@ -575,16 +589,40 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
     region: effectiveRegion,
   };
   const selection = selectMatchingListings("", context, scoped);
-  const results = selection.candidates.slice(0, 3).map(listingView);
+  const what = describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction });
+  let candidates = selection.candidates;
+  let regionFallback = null;
+  if (requestedRegion) {
+    const inRegion = candidates.filter((item) => item.region === requestedRegion);
+    if (inRegion.length) {
+      candidates = inRegion;
+    } else if (candidates.length) {
+      // 그 지역에 없으면 이유를 말하고, 가까운 지역의 조건에 맞는 매물을 거리순으로 보여 준다.
+      regionFallback = {
+        requestedRegion,
+        nearestRegion: candidates[0].region,
+        reason: `${requestedRegion}에는 지금 거래 가능한 ${what}이 없어요.`,
+      };
+    }
+  }
+  const results = candidates.slice(0, 3).map(listingView);
+  const order = "순서대로 1번, 2번, 3번이다.";
+  let note;
+  if (!results.length) {
+    note = `${requestedRegion ? `${requestedRegion}을 포함해 ` : ""}지금 거래 가능한 ${what}이 없다. 왜 없는지 한 문장으로 말하고(예: 판매 완료·예약 중이거나 등록된 매물이 없음), 조건을 넓히거나 다른 작업·기종을 제안한다.`;
+  } else if (regionFallback) {
+    note = `${regionFallback.reason} 이 문장을 먼저 짧게 말한 뒤, 가장 가까운 ${regionFallback.nearestRegion} 등 가까운 지역의 조건에 맞는 매물을 거리순으로 추천한다. ${order}`;
+  } else {
+    note = context.transaction === "rent"
+      ? `${order} 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다.`
+      : order;
+  }
   return {
     count: results.length,
     ...(start ? { start, end } : {}),
+    ...(regionFallback ? { regionFallback } : {}),
     results,
-    note: results.length
-      ? (context.transaction === "rent"
-        ? "순서대로 1번, 2번, 3번이다. 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다."
-        : "순서대로 1번, 2번, 3번이다.")
-      : "조건에 맞는 매물이 없다. 조건을 넓히거나 다른 작업을 제안한다.",
+    note,
   };
 }
 
@@ -1202,7 +1240,7 @@ const TRANSACTION_IN_TEXT = (text) => (/(?:사(?:고\s*싶|려|려구|려고|ㄹ
 const FRESH_CARDS_REQUEST = /다시|다른|더\s*보|또\s*있|추천|찾아|보여|목록|카드|뭐\s*있|어떤\s*(?:거|게|것)|있어\?|있나|알아봐/;
 
 /** 모델이 빠뜨리거나 잘못 넣은 검색 조건을 대화에서 이미 받은 정보로 채운다(조건에 안 맞는 매물 추천 방지). */
-export function applyKnownFactsToSearch(input, { facts = {}, sell = false, text = "" } = {}) {
+export function applyKnownFactsToSearch(input, { facts = {}, sell = false, spokenRegion = null, text = "" } = {}) {
   const next = { ...(input && typeof input === "object" ? input : {}) };
   const spoken = TRANSACTION_IN_TEXT(String(text || ""));
   if (spoken) next.transaction = spoken;
@@ -1210,7 +1248,7 @@ export function applyKnownFactsToSearch(input, { facts = {}, sell = false, text 
   if (!Object.hasOwn(CROP_BY_ID, next.cropId) && Array.isArray(facts.cropIds) && facts.cropIds.length === 1 && Object.hasOwn(CROP_BY_ID, facts.cropIds[0])) {
     next.cropId = facts.cropIds[0];
   }
-  if (!cleanRegion(next.region) && typeof facts.region === "string" && Object.hasOwn(REGION_COORDS, facts.region)) next.region = facts.region;
+  if (!cleanRegion(next.region) && typeof spokenRegion === "string" && Object.hasOwn(REGION_COORDS, spokenRegion)) next.region = spokenRegion;
   if (!(Number.isSafeInteger(next.maxPrice) && next.maxPrice > 0) && Number.isSafeInteger(facts.maxPrice) && facts.maxPrice > 0
     && facts.transaction === next.transaction) {
     next.maxPrice = facts.maxPrice;
@@ -1291,6 +1329,7 @@ export function collectKnownFacts({ history = [], text = "", sessionSlots = null
   const facts = { ...(sessionSlots && typeof sessionSlots === "object" && !Array.isArray(sessionSlots) ? sessionSlots : {}) };
   Object.assign(facts, extractLearnedSlots({ uiCtx }));
   let sell = false;
+  let spokenRegion = null; // 사용자가 직접 말한 지역(화면 기본 지역과 구분)
   const userTexts = (Array.isArray(history) ? history : [])
     .filter((item) => item?.role === "user" && typeof item.content === "string")
     .map((item) => item.content);
@@ -1298,10 +1337,11 @@ export function collectKnownFacts({ history = [], text = "", sessionSlots = null
   for (const said of userTexts) {
     const learned = extractLearnedSlots({ text: said });
     Object.assign(facts, learned);
+    if (learned.region) spokenRegion = learned.region;
     if (SELL_INTENT.test(said)) sell = true;
     else if (learned.transaction) sell = false;
   }
-  return { facts, sell };
+  return { facts, sell, spokenRegion };
 }
 
 export function summarizeKnownFacts(input = {}) {

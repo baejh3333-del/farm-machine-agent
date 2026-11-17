@@ -261,3 +261,42 @@ test("문제5: 확인 대기 작업 실행 중 연결 오류가 나면 무한 �
   assert.equal(await runConfirmedAction({ message: "고민해볼게", pending, user: USER, requestId: "r1", run }), null);
   assert.equal(await runConfirmedAction({ message: "네", pending, user: null, requestId: "r1", run }), null);
 });
+
+// ───────── 문제 6 ─────────
+
+test("문제6: 말한 지역에 조건에 맞는 매물이 있으면 그 지역 매물만 보여 준다", () => {
+  const result = searchListingsTool({ cropId: "sweetPotato", operations: [], machineType: "rootHarvester", transaction: "rent", region: "청기면" }, LISTINGS, { region: "영양읍" });
+  assert.ok(result.count > 0);
+  assert.ok(result.results.every((item) => item.region === "청기면"));
+  assert.equal(result.regionFallback, undefined);
+});
+
+test("문제6: 말한 지역에 없으면 이유를 짧게 설명하고 가장 가까운 지역의 조건에 맞는 매물을 추천한다", () => {
+  const noIpam = LISTINGS.filter((item) => !(item.region === "입암면" && item.cropIds.includes("sweetPotato")));
+  const result = searchListingsTool({ cropId: "sweetPotato", operations: [], machineType: "rootHarvester", transaction: "rent", region: "입암면" }, noIpam, { region: "영양읍" });
+  assert.equal(result.regionFallback.reason, "입암면에는 지금 거래 가능한 고구마 수확기 대여 매물이 없어요.");
+  assert.ok(result.count > 0);
+  for (const item of result.results) {
+    const original = noIpam.find(({ id }) => id === item.id);
+    assert.equal(original.type, "rent");
+    assert.ok(original.cropIds.includes("sweetPotato"));
+    assert.notEqual(original.region, "입암면");
+  }
+  assert.equal(result.results[0].region, result.regionFallback.nearestRegion);
+  assert.match(result.note, /이 문장을 먼저 짧게 말한 뒤, 가장 가까운/);
+});
+
+test("문제6: 판매 완료·예약 중이라 그 지역에 거래 가능한 매물이 없을 때도 가까운 지역으로 넘어간다", () => {
+  const blocked = LISTINGS.map((item) => (item.region === "입암면" && item.cropIds.includes("sweetPotato") ? { ...item, status: "dealing" } : item));
+  const result = searchListingsTool({ cropId: "sweetPotato", operations: [], machineType: "rootHarvester", transaction: "sale", region: "입암면" }, blocked, { region: "영양읍" });
+  assert.match(result.regionFallback.reason, /^입암면에는 지금 거래 가능한 고구마 수확기 판매 매물이 없어요\.$/);
+  assert.ok(result.results.every((item) => item.region !== "입암면"));
+});
+
+test("문제6: 화면 기본 지역은 강제 조건이 아니고, 사용자가 말한 지역만 검색 조건으로 채운다", () => {
+  const known = collectKnownFacts({ history: [{ role: "user", content: "고구마 캐는 기계 빌리고 싶어" }], text: "입암면으로 찾아줘", uiCtx: { region: "영양읍" } });
+  assert.equal(known.spokenRegion, "입암면");
+  assert.equal(applyKnownFactsToSearch({ transaction: "rent" }, { ...known, text: "입암면으로 찾아줘" }).region, "입암면");
+  const screenOnly = collectKnownFacts({ history: [], text: "고구마 수확기 찾아줘", uiCtx: { region: "영양읍" } });
+  assert.equal(applyKnownFactsToSearch({ transaction: "rent" }, { ...screenOnly, text: "고구마 수확기 찾아줘" }).region, undefined);
+});

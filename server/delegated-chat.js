@@ -4,6 +4,7 @@ import { callLLM, llmEnabled } from "./llm.js";
 import { fetchListingById } from "./listings-db.js";
 import { checkFarmCompatibilityTool } from "./nongnong-agent.js";
 import { formatIsoDate, requireUuid } from "./validate.js";
+import { scheduleWaitUntil } from "./wait-until.js";
 import { getWeatherAndMapConfig } from "./weather.js";
 import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
 
@@ -1294,7 +1295,7 @@ export async function runDelegatedChatReply({
     }, pool);
 
     if (outcome?.action === "replied" && outcome.nextTargetRole && typeof onScheduleNext === "function") {
-      onScheduleNext({
+      await onScheduleNext({
         conversationId: cleanConvId,
         triggerSeq: outcome.seq,
         targetRole: outcome.nextTargetRole,
@@ -1311,14 +1312,11 @@ export async function runDelegatedChatReply({
 }
 
 export async function scheduleDelegatedReply(params) {
-  const vf = await import("@vercel/functions").catch(() => null);
   const task = Promise.resolve()
     .then(() =>
       runDelegatedChatReply({
         ...params,
-        onScheduleNext: (nextParams) => {
-          void scheduleDelegatedReply(nextParams);
-        },
+        onScheduleNext: (nextParams) => scheduleDelegatedReply(nextParams),
       })
     )
     .catch((error) => {
@@ -1330,8 +1328,6 @@ export async function scheduleDelegatedReply(params) {
       return null;
     });
 
-  if (typeof vf?.waitUntil === "function") {
-    vf.waitUntil(task);
-  }
+  await scheduleWaitUntil(task);
   return { task };
 }

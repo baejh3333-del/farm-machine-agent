@@ -17,7 +17,7 @@ export async function askRecommendation(message, context) {
 // insuranceOffer: 예약 뒤 보험 추천 흐름의 진행 상태, insuranceAsked: 이 대화에서 이미 물었는지.
 export async function askAgent(
   message,
-  { history = [], region, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation } = {},
+  { history = [], region, inputMode = "text", delegationId = null, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation } = {},
 ) {
   const mergedUiContext = uiContext || fullDelegation
     ? { ...(uiContext || {}), ...(fullDelegation ? { fullDelegation: true } : {}) }
@@ -30,6 +30,8 @@ export async function askAgent(
       message,
       history,
       region,
+      inputMode: inputMode === "voice" ? "voice" : "text",
+      ...(delegationId ? { delegationId } : {}),
       ...(mergedUiContext ? { uiContext: mergedUiContext } : {}),
       ...(image ? { image } : {}),
       ...(savedDraft ? { savedDraft } : {}),
@@ -67,4 +69,13 @@ export async function fetchWeatherForecast({ region = "영양읍", date, endDate
   } catch {
     return null;
   }
+}
+
+// gpt-live-1 WebRTC 세션을 만든다. 브라우저 SDP offer를 서버가 OpenAI에 중계하고 answer SDP를 돌려준다.
+export async function createLiveVoiceSession({ sdp, region, history = [] }) {
+  return apiFetch("/api/voice", {
+    method: "POST",
+    timeoutMs: 20000,
+    json: { action: "live_session", sdp, region, history },
+  });
 }

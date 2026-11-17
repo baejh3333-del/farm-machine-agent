@@ -624,6 +624,16 @@
         </div>
         <button type="button" id="aiPhotoRemove" aria-label="사진 빼기">✕</button>
       </div>
+      <div class="ai-voice-live-bar" id="aiVoiceLiveBar" data-voice-state="idle" hidden>
+        <div class="ai-voice-live-info">
+          <span class="ai-voice-wave" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          <span class="ai-voice-live-status" id="aiVoiceLiveStatus">농농이와 실시간 음성 대화 중 (듣는 중…)</span>
+        </div>
+        <div class="ai-voice-live-actions">
+          <button type="button" class="ai-voice-bar-btn" id="aiVoiceMuteBtn" aria-pressed="false">🔇 마이크 끄기</button>
+          <button type="button" class="ai-voice-bar-btn is-stop" id="aiVoiceStopBtn">⏹ 음성 대화 끝내기</button>
+        </div>
+      </div>
       <form id="aiForm" class="ai-form ai-composer-card">
         <input type="file" id="aiPhotoInput" accept="image/jpeg,image/png,image/webp" hidden />
         <input type="file" id="aiCameraInput" accept="image/jpeg,image/png,image/webp" capture="environment" hidden />
@@ -636,19 +646,32 @@
         </div>
         <div class="ai-composer-toolbar" role="toolbar" aria-label="입력 도구">
           <div class="ai-composer-tools-left">
-            <button type="button" class="ai-tool-btn ai-camera-btn" id="aiCameraButton" aria-label="카메라로 기계 사진 찍기" title="카메라 촬영">
-              <span aria-hidden="true">📷</span><span class="ai-camera-label">카메라 촬영</span>
+            <div class="ai-plus-wrap" id="aiPlusWrap">
+              <button type="button" class="ai-plus-btn" id="aiPlusButton" aria-controls="aiPlusMenu" aria-expanded="false" aria-label="사진 및 작물·기종 도구 열기" title="사진·카메라·작물 선택">
+                <span aria-hidden="true">+</span>
+              </button>
+              <div class="ai-plus-menu" id="aiPlusMenu" role="menu" aria-label="추가 입력 도구" hidden>
+                <button type="button" class="ai-plus-menu-item ai-photo-btn" id="aiPhotoButton" role="menuitem" aria-label="기계 사진 올리기">
+                  <span aria-hidden="true">🖼️</span><span>사진</span>
+                </button>
+                <button type="button" class="ai-plus-menu-item ai-camera-btn" id="aiCameraButton" role="menuitem" aria-label="카메라로 기계 사진 찍기">
+                  <span aria-hidden="true">📷</span><span>카메라</span>
+                </button>
+                <button type="button" class="ai-plus-menu-item ai-picker-inline-btn" data-ai-picker-toggle="inline" role="menuitem" aria-expanded="false" aria-controls="aiPickerDrawer">
+                  <span aria-hidden="true">🌾</span><span>작물·기종</span>
+                </button>
+              </div>
+            </div>
+            <button type="button" class="ai-tool-btn ai-live-voice-btn" id="aiLiveVoiceButton" aria-pressed="false" aria-label="실시간 음성 대화" title="농농이와 실시간 음성 대화">
+              <span aria-hidden="true">🎙️</span><span>실시간 음성 대화</span>
             </button>
-            <button type="button" class="ai-tool-btn ai-photo-btn" id="aiPhotoButton" aria-label="기계 사진 올리기" title="이미지 첨부">
-              <span aria-hidden="true">🖼️</span><span>이미지 첨부</span>
-            </button>
-            <button type="button" class="ai-tool-btn ai-picker-inline-btn" data-ai-picker-toggle="inline" aria-expanded="false" aria-controls="aiPickerDrawer" title="작물·기종 선택">
-              <span aria-hidden="true">🌾</span><span>작물·기종 선택</span>
+            <button type="button" class="ai-tool-btn ai-mic-btn" id="aiMicButton" aria-pressed="false" aria-label="음성으로 질문하기" title="말로 질문하기" hidden>
+              <span aria-hidden="true">🎙️</span><span>음성 입력</span>
             </button>
           </div>
           <button type="button" class="ai-delegation-toggle" id="aiFullDelegationToggle" aria-pressed="false" title="조건 맞으면 부재중에도 자동 협상·진행">
             <span aria-hidden="true">🤖</span>
-            <span>거래 전담 자동화</span>
+            <span>거래 전담</span>
             <span class="ai-toggle-state" id="aiDelegationState">OFF</span>
           </button>
         </div>

@@ -146,3 +146,21 @@ test("흐름: 상담 연결을 거절하면 가입처만 알려 주고 끝낸다
   assert.equal(consults.length, 0);
   assert.equal(await handleInsuranceTurn("네", null, { user, deps: d }), null);
 });
+
+test("추천할 때 보험사 상담 전화·사이트 카드를 함께 준다 (등록된 공식 정보만)", async () => {
+  const { deps: d } = deps();
+  const rec = await handleInsuranceTurn("네", { stage: "ask", kind: "purchase", listingId: "sale-trac", machineType: "tractor" }, { user, region: "영양읍", deps: d });
+  const [machinery, safety, office] = rec.insuranceContacts;
+  assert.equal(machinery.name, "NH농협손해보험 · 농기계종합보험");
+  assert.equal(machinery.phone, "1644-9000");
+  assert.equal(machinery.url, "https://www.nhfire.co.kr");
+  assert.equal(safety.name, "NH농협생명 · 농업인안전보험");
+  assert.equal(safety.phone, "1544-4000");
+  assert.equal(safety.url, "https://www.nhlife.co.kr");
+  assert.equal(office.name, "영양농협");
+  assert.equal(office.phone, null, "확인 안 된 번호는 만들지 않는다");
+  assert.ok(rec.sources.some((source) => /1644-9000/.test(source.title)));
+
+  const rental = await handleInsuranceTurn("네", { stage: "ask", kind: "rental", listingId: "rent-1" }, { user, region: "입암면", deps: d });
+  assert.deepEqual(rental.insuranceContacts.map((card) => card.phone), ["1544-4000", null]);
+});

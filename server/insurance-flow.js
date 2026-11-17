@@ -84,6 +84,32 @@ function productBlock(product, office) {
   ].join("\n");
 }
 
+/**
+ * 추천한 보험의 상담 연락처 카드. 수리센터 카드와 같은 모양으로 화면에 전화·사이트 버튼을 보여 준다.
+ * 번호와 사이트는 등록된 공식 정보만 쓰고, 없으면 버튼을 만들지 않는다.
+ */
+export function insuranceContactsFor(products, office) {
+  const cards = products.filter(Boolean).map((product) => ({
+    id: product.id,
+    name: `${product.insurer} · ${product.name.replace(/\s*\(정책보험\)$/, "")}`,
+    services: "보험 상담·가입 안내 (보험사 고객센터)",
+    phone: product.contact?.phone || null,
+    url: product.contact?.url || null,
+    checkedAt: product.contact?.checkedAt || product.checkedAt,
+  }));
+  if (office) {
+    cards.push({
+      id: office.id,
+      name: office.name,
+      services: `가까운 가입처 · ${office.address}`,
+      phone: office.phone || null,
+      url: office.url || null,
+      checkedAt: office.checkedAt,
+    });
+  }
+  return cards.filter((card) => card.phone || card.url || card.id === office?.id);
+}
+
 /** 등록된 보험 정보로만 추천 글을 만든다. 보험료는 말하지 않는다. */
 export function buildInsuranceRecommendation({ kind, listing, machineType, office }) {
   const machinery = PRODUCT_BY_ID["farm-machinery-comprehensive"];
@@ -117,7 +143,10 @@ export function buildInsuranceRecommendation({ kind, listing, machineType, offic
   return {
     text: lines.join("\n\n"),
     productId: primary.id,
-    sources: [primary, alternative, office].filter(Boolean).map((item) => item.source).filter(Boolean),
+    contacts: insuranceContactsFor([primary, alternative], office),
+    sources: [primary, alternative, office].filter(Boolean)
+      .flatMap((item) => [item.source, item.contact?.source])
+      .filter(Boolean),
   };
 }
 
@@ -165,6 +194,7 @@ export async function handleInsuranceTurn(message, rawOffer, { user, region, dep
       listingIds: [],
       choices: ["네, 연결해 주세요", "아니요"],
       sources: recommendation.sources,
+      insuranceContacts: recommendation.contacts,
       insuranceOffer: { ...offer, stage: "offer_consult", productId: recommendation.productId, officeId: office.id },
     };
   }

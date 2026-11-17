@@ -1179,13 +1179,25 @@ export async function runAgentTurn(message, context = {}, options = {}) {
   }
 }
 
+// 마이크로 말한 질문에만 더하는 지시. 음성 인식 결과는 틀릴 수 있고, 답변은 소리로도 읽힌다.
+const VOICE_GUIDE = `## 음성으로 들어온 질문
+- 이 질문은 음성 인식으로 받아 적은 글이다. 사용자가 확인했지만 잘못 들린 낱말이 남아 있을 수 있다.
+- 경상도·전라도·충청도 등 사투리를 존중한다. 사투리를 고치라고 하거나 흉내 내지 말고, 뜻을 알아듣고 표준어 존댓말로 답한다.
+- 날짜, 기간, 가격, 면적, 작업, 지역, 농기계 이름이 모호하거나 문장이 어색하면 추측하지 말고 한 번에 한두 가지만 쉬운 말로 되묻는다. 고를 수 있으면 offer_choices로 선택지를 준다.
+- 숫자, 날짜, 금액, 농기계 이름은 답하거나 도구를 쓰기 전에 "~로 들었어요. 맞으세요?"처럼 되읽어 확인한다.
+- 대여 예약·구매 신청·매물 등록·수정·거래 전담 위임은 말로 "네"라고 해도 바로 처리되지 않는다. 도구를 부르면 화면에 확인 카드가 뜨고, 사용자가 화면의 버튼을 눌러야 처리된다. 처리됐다고 말하지 말고, 내용을 짧게 되읽은 뒤 화면의 버튼을 눌러 달라고 안내한다.
+- 답변은 소리로도 읽힌다. 짧은 문장 2~4개로 쓰고, 표·기호·이모지·괄호 설명은 쓰지 않는다. 날짜는 "11월 20일", 금액은 "4만 5천 원"처럼 읽기 쉽게 쓴다.`;
+
 async function runTurn(
   message,
-  { history = [], region, uiContext, image, user, savedDraft, farmProfile, sessionId, sessionSlots } = {},
+  { history = [], region, uiContext, image, user, savedDraft, farmProfile, sessionId, sessionSlots, inputMode = "text" } = {},
   { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices, deps = null } = {},
   signal,
 ) {
   const text = String(message || "").trim();
+  const voice = inputMode === "voice";
+  // 말로 한 "네"는 잘못 들렸을 수 있으므로 쓰기 작업의 승인으로 보지 않는다(화면 확인 카드·버튼으로만 처리).
+  const spokenApproval = !voice && isAffirmative(text);
   let resolvedFarmProfile = farmProfile && typeof farmProfile === "object" ? farmProfile : null;
   if (!resolvedFarmProfile && user?.id) {
     if (typeof deps?.loadFarmProfile === "function") {
@@ -1211,7 +1223,7 @@ async function runTurn(
     : fetchListings({ pool, viewerId: user?.id ?? null })));
   if (uiCtx.viewingListingId && !catalog) await loadCatalog();
 
-  const system = `${SYSTEM_PROMPT}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}`;
+  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}`;
   const selectedTools = selectToolsForTurn({
     text,
     hasImage: Boolean(image?.base64),
@@ -1345,7 +1357,7 @@ async function runTurn(
         const prop = proposeRentalTool(block.input, await loadCatalog(), today);
         if (!prop.ok) {
           output = { ok: false, error: prop.reason, ...(prop.bookedRanges ? { bookedRanges: prop.bookedRanges } : {}) };
-        } else if (user && isAffirmative(text) && deps?.createRentalRequest && !writeDone) {
+        } else if (user && spokenApproval && deps?.createRentalRequest && !writeDone) {
           try {
             await deps.beforeWrite?.("create_rental_request");
             const id = randomUUID();
@@ -1398,7 +1410,7 @@ async function runTurn(
           output = { ok: false, error: "지금 구매 신청을 받을 수 없는 판매 매물입니다." };
         } else if (user && item.ownerId === user.id) {
           output = { ok: false, error: "본인이 등록한 매물에는 구매 신청을 보낼 수 없습니다." };
-        } else if (user && isAffirmative(text) && deps?.sendPurchaseMessage && !writeDone) {
+        } else if (user && spokenApproval && deps?.sendPurchaseMessage && !writeDone) {
           try {
             await deps.beforeWrite?.("create_purchase_request");
             const id = randomUUID();
@@ -1504,7 +1516,7 @@ async function runTurn(
         const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: out.photoSummary, catalog: await loadCatalog() });
         if (resolved.price === null || !Number.isSafeInteger(resolved.price)) {
           output = { ok: false, error: "가격을 정해야 등록할 수 있어요. 희망 가격을 물어보세요." };
-        } else if (user && isAffirmative(text) && deps?.createListing && !writeDone) {
+        } else if (user && spokenApproval && deps?.createListing && !writeDone) {
           try {
             await deps.beforeWrite?.("create_listing");
             const id = draft?.listingId || randomUUID();
@@ -1568,7 +1580,9 @@ async function runTurn(
       } else if (block.name === "update_listing") {
         if (!user) {
           output = { error: "LOGIN_REQUIRED", message: "로그인 후에 매물을 수정할 수 있어요." };
-        } else if (!isAffirmative(text)) {
+        } else if (voice) {
+          output = { error: "VOICE_CONFIRMATION_REQUIRED", message: "말로 받은 수정 요청은 바로 처리하지 않습니다. 바뀔 내용을 짧게 되읽어 주고, 맞으면 입력칸에 '네'라고 적어 보내거나 [내 기계 관리]에서 고치도록 안내하세요." };
+        } else if (!spokenApproval) {
           output = { error: "CONFIRMATION_REQUIRED", message: "바뀔 내용을 먼저 보여 주고 사용자 확인을 받은 뒤 수정해 주세요." };
         } else if (writeDone || !deps?.updateListing || !deps?.fetchOwnListings) {
           output = { error: "지금은 매물을 수정할 수 없습니다." };
@@ -1679,7 +1693,7 @@ async function runTurn(
             operations: Array.isArray(uiCtx.operations) ? [...uiCtx.operations] : [],
             ownedModelId: uiCtx.selectedOwnedModelId || uiCtx.ownedMachines?.[0]?.modelId || null,
           };
-          if (user && isAffirmative(text) && deps?.delegateTransaction && !writeDone) {
+          if (user && spokenApproval && deps?.delegateTransaction && !writeDone) {
             try {
               await deps.beforeWrite?.("delegate_transaction");
               const requestId = randomUUID();

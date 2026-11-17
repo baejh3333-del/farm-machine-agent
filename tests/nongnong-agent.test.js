@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   checkFarmCompatibilityTool,
   cleanUiContext,
+  isRepairRequest,
   proposeRentalTool,
   runAgentTurn,
   sanitizeHistory,
@@ -981,4 +982,36 @@ test("toggle_favorite와 open_listing_chat은 favoriteAction과 chatTarget을 �
   const ownChatRes = await runAgentTurn("내 매물에 채팅 열어줘", { user: USER }, { listings: [ownListing], call: ownChatFlow.call, today: TODAY });
   assert.equal(ownChatFlow.calls[1].messages.at(-1).content[0].is_error, true);
   assert.equal(ownChatRes.chatTarget, undefined);
+});
+
+test("고장 문의: 수리 의도를 코드로 판단한다 (팔기·등록은 제외)", () => {
+  for (const yes of ["트랙터 시동이 안 걸려요", "관리기가 작동을 안 해요", "엔진에서 연기가 나요", "고장났어요", "이앙기 수리하고 싶어요", "기름이 새요"]) assert.equal(isRepairRequest(yes), true, yes);
+  for (const no of ["트랙터 빌리고 싶어요", "고장난 관리기 팔고 싶어요", "고추밭 두둑 기계 추천해 줘", "보험 알려 줘"]) assert.equal(isRepairRequest(no), false, no);
+});
+
+test("고장 문의: 매물 검색을 막고, 설정한 지역 기준 가까운 수리센터 3곳을 붙인다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [
+      { type: "tool_use", id: "s1", name: "search_listings", input: { machineType: "tractor", transaction: "rent" } },
+      { type: "tool_use", id: "g1", name: "get_repair_guide", input: { machineType: "tractor", symptom: "noStart" } },
+    ] },
+    { content: [{ type: "text", text: "연료부터 확인해 보세요. 아래 가까운 수리센터 3곳에 연락해 보세요." }] },
+  ]);
+  const result = await runAgentTurn("트랙터 시동이 안 걸려요", { region: "청기면" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  const blocked = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.match(blocked.error, /매물을 추천하지 않습니다/);
+  assert.match(calls[0].system, /고장·수리 문의다/);
+  assert.deepEqual(result.listingIds, []);
+  assert.equal(result.repairCenters.length, 3);
+  assert.equal(result.repairCenters[0].id, "yeongyang-rental-office");
+  assert.ok(Number.isFinite(result.repairCenters[0].distanceKm));
+});
+
+test("고장 문의: 모델이 수리센터 도구를 안 불러도 수리센터 3곳은 붙는다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([{ content: [{ type: "text", text: "연료와 배터리를 확인해 보세요." }] }]);
+  const result = await runAgentTurn("관리기가 작동을 안 해요", { region: "영양읍" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  assert.equal(result.repairCenters.length, 3);
+  assert.deepEqual(result.listingIds, []);
 });

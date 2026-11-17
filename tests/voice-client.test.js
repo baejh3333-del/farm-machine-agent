@@ -71,7 +71,7 @@ test("읽어 줄 글에서 이모지·기호·링크를 빼고 금액·날짜를
   assert.match(text, /11월 22일/);
 });
 
-test("대여 승인 카드를 음성 요약으로 바꾸고, 실행은 버튼으로만 한다고 말한다", () => {
+test("대여 확인 카드를 음성 요약으로 바꾸고, \"네\"라고 하면 바로 신청한다고 말한다", () => {
   const summary = rentalSummaryForSpeech({
     title: "아세아텍 AMC-900 · 영양읍", region: "영양읍", start: "2026-11-20", end: "2026-11-22", days: 3, dailyPrice: 45000, totalPrice: 135000,
   });
@@ -79,7 +79,8 @@ test("대여 승인 카드를 음성 요약으로 바꾸고, 실행은 버튼으
   assert.match(summary, /11월 20일부터 11월 22일까지 3일/);
   assert.match(summary, /하루 4만 5천 원/);
   assert.match(summary, /모두 13만 5천 원/);
-  assert.match(summary, /승인 버튼/);
+  assert.match(summary, /"네"라고 말씀해 주세요\. 바로 신청해 드릴게요\./);
+  assert.doesNotMatch(summary, /승인 버튼|말로는 승인되지/);
 });
 
 test("음성 설정은 기본값(말했을 때만 자동 재생, 조금 느리게)을 쓰고 저장소가 없어도 깨지지 않는다", () => {
@@ -97,7 +98,7 @@ test("음성 설정은 기본값(말했을 때만 자동 재생, 조금 느리�
   assert.doesNotThrow(() => saveVoiceSettings({ autoplay: "off", rate: 1 }, throwing));
 });
 
-test("농농 승인 카드 요약: 날짜·요일·금액을 풀어 읽고, 말로는 승인되지 않는다고 알려 준다", () => {
+test("농농 확인 카드 요약: 날짜·요일·금액을 풀어 읽고, \"네\"라고 하면 바로 진행한다고 알려 준다", () => {
   const spoken = actionSummaryForSpeech({
     title: "대여 예약 확인",
     rows: [
@@ -108,7 +109,7 @@ test("농농 승인 카드 요약: 날짜·요일·금액을 풀어 읽고, 말�
   });
   assert.equal(
     spoken,
-    "대여 예약 내용이에요. 기계, 대동 트랙터 RX. 기간, 11월 17일 화요일부터 11월 18일 수요일, 2일. 내야 하는 돈, 18만 원 (하루 9만 원). 내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.",
+    "대여 예약 내용이에요. 기계, 대동 트랙터 RX. 기간, 11월 17일 화요일부터 11월 18일 수요일, 2일. 내야 하는 돈, 18만 원 (하루 9만 원). 맞으면 \"네\"라고 말씀해 주세요. 바로 진행해 드릴게요.",
   );
   assert.equal(textForSpeech("(3일) 11월 1일(일)"), "(3일) 11월 1일 일요일");
 });

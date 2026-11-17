@@ -72,8 +72,11 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
    - 찜하기·예약·구매 전에 판매자/소유자에게 먼저 물어보고 싶어 하거나 "채팅으로 물어볼래요", "판매자한테 연락할래요"라고 하면 open_listing_chat 도구를 호출해 1:1 채팅 창을 열어 준다(필요하면 prefillMessage에 짧은 첫 인사/질문을 담아 준다).
    - 사용자가 특정 매물의 거래(문의·일정 조율·가격/조건 협의·예약 진행)를 농농이에게 전담·자동 위임해 달라고 하면 delegate_transaction 도구를 호출한다.
 6. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
-   - 사용자가 "예약해줘", "네", "그걸로 해 주세요", "올려 주세요"처럼 분명히 긍정·실행 의사를 밝혔고 필수 조건(매물 ID, 시작일/반납일 등)이 모두 정해졌으면 create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다.
-   - 아직 확정 전이거나 날짜/조건 확인용 카드를 먼저 띄워야 할 때는 propose_rental_request 또는 prepare_listing_draft를 호출한다.
+   - 사용자가 "구매해줘", "예약해줘", "판매글 올려줘", "응 해줘", "네"처럼 분명히 실행을 요청했고 필수 조건(매물 ID, 대여 시작일/반납일, 판매 가격 등)이 모두 정해졌으면 **확인 질문 없이** create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다. 음성으로 들어온 요청도 똑같이 처리한다.
+   - 확인은 최대 한 번만 한다. 요청이 아직 분명하지 않을 때만 "청기면 DRGH-1400, 320만원으로 구매 신청할까요?"처럼 한 문장으로 묻고, 사용자가 "네"라고 하면 바로 실행한다. 같은 확인을 두 번 하지 않는다.
+   - 사용자에게 화면 버튼을 직접 누르라고 하지 않는다. "잠시 후 진행할게요", "기다려 주세요"라고 말하고 끝내지 말고, 같은 응답 안에서 도구를 호출해 결과(신청 번호 또는 실패 이유)를 바로 알려 준다.
+   - 필수 조건이 빠졌을 때(대여 날짜 없음 등)만 그 한 가지를 묻는다. 날짜·조건 확인용 카드를 먼저 띄워야 할 때는 propose_rental_request 또는 prepare_listing_draft를 호출한다.
+   - 매물 이름은 글자를 띄우지 않고 그대로 쓴다(예: "DRGH-1400", "D R G H" 금지).
    - 완료되면 도구 결과의 예약·등록 번호와 요약을 안내하고, 결제는 사용자가 [대여 요청] 메뉴나 판매자 채팅에서 직접 한다고 알려 준다.
    - **교육이수증 안내**: 트랙터·굴착기·관리기·이앙기·콤바인·SS기·고소작업차·파쇄기 등 농기계 대여를 추천하거나 예약을 안내할 때는 **"+ 교육이수증 필요"**(임대사업소·안전교육 대상 기종 여부에 따라 안전교육 이수증이 필요할 수 있으므로 대여 전 확인 필요) 안내를 함께 포함한다.
    - 삭제는 지원하지 않는다. 취소·변경은 [대여 요청]·[내 기계 관리] 메뉴에서 직접 하도록 안내한다.
@@ -1217,6 +1220,14 @@ export function shouldShowCards(listingIds, { shownListingIds = [], text = "" } 
   return Object.keys(changed).length > 0;
 }
 
+/** 모델 답변에 섞이는 "D R G H-1400" 같은 띄어 쓴 영문 기종명과 앞 쉼표를 정리한다. */
+export function tidyReply(text) {
+  if (typeof text !== "string") return text;
+  return text
+    .replace(/^[\s,.;:·…]+/, "")
+    .replace(/\b(?:[A-Z] ){1,}[A-Z](?=\b|[-\d])/g, (match) => match.replace(/ /g, ""));
+}
+
 const SELL_INTENT = /팔(?:고\s*싶|려|래|겠|아\s*줘)|판매\s*(?:하|할|글|등록)|내놓|빌려\s*주(?:고|려|기)/;
 
 /**
@@ -1297,7 +1308,7 @@ const VOICE_GUIDE = `## 음성으로 들어온 질문
 - 경상도·전라도·충청도 등 사투리를 존중한다. 사투리를 고치라고 하거나 흉내 내지 말고, 뜻을 알아듣고 표준어 존댓말로 답한다.
 - 날짜, 기간, 가격, 면적, 작업, 지역, 농기계 이름이 모호하거나 문장이 어색하면 추측하지 말고 한 번에 한두 가지만 쉬운 말로 되묻는다. 고를 수 있으면 offer_choices로 선택지를 준다.
 - 숫자·날짜·금액·농기계 이름이 애매하게 들렸을 때만 "~로 들었어요. 맞으세요?"처럼 한 번 되읽어 확인한다. 분명한 말은 되묻지 않는다.
-- 대여 예약·구매 신청·매물 등록·수정·거래 전담 위임은 말로 "네"라고 해도 바로 처리되지 않는다. 도구를 부르면 화면에 확인 카드가 뜨고, 사용자가 화면의 버튼을 눌러야 처리된다. 처리됐다고 말하지 말고, 내용을 짧게 되읽은 뒤 화면의 버튼을 눌러 달라고 안내한다.
+- 대여 예약·구매 신청·매물 등록·수정은 말로 "구매해줘", "응 해줘", "네"라고 하면 글로 쓴 것과 똑같이 바로 도구를 호출해 처리한다. 화면 버튼을 누르라고 하지 않는다. 확인이 필요하면 한 번만 짧게 묻는다.
 - 답변은 소리로도 읽힌다. 짧은 문장 2~4개로 쓰고, 표·기호·이모지·괄호 설명은 쓰지 않는다. 날짜는 "11월 20일", 금액은 "4만 5천 원"처럼 읽기 쉽게 쓴다.`;
 
 async function runTurn(
@@ -1308,8 +1319,8 @@ async function runTurn(
 ) {
   const text = String(message || "").trim();
   const voice = inputMode === "voice";
-  // 말로 한 "네"는 잘못 들렸을 수 있으므로 쓰기 작업의 승인으로 보지 않는다(화면 확인 카드·버튼으로만 처리).
-  const spokenApproval = !voice && isAffirmative(text);
+  // "구매해줘"·"네"처럼 분명한 실행 요청이면 글·음성 모두 바로 실행한다(확인은 최대 한 번).
+  const spokenApproval = isAffirmative(text);
   let resolvedFarmProfile = farmProfile && typeof farmProfile === "object" ? farmProfile : null;
   // farmProfile === null은 호출한 쪽이 이미 조회했지만 없었다는 뜻이다. 같은 조회를 다시 하지 않는다.
   if (!resolvedFarmProfile && farmProfile !== null && user?.id) {
@@ -1362,7 +1373,7 @@ async function runTurn(
   const finish = async (reply, extra = {}) => {
     const learnedSlots = extractLearnedSlots({ text, uiCtx, toolCalls });
     out.learnedSlots = learnedSlots;
-    const result = { mode: "agent", reply, listingIds: out.listingIds, learnedSlots, ...extra };
+    const result = { mode: "agent", reply: tidyReply(reply), listingIds: out.listingIds, learnedSlots, ...extra };
     for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget", "delegatedTransaction"]) {
       if (out[key]) result[key] = out[key];
     }
@@ -1699,8 +1710,6 @@ async function runTurn(
       } else if (block.name === "update_listing") {
         if (!user) {
           output = { error: "LOGIN_REQUIRED", message: "로그인 후에 매물을 수정할 수 있어요." };
-        } else if (voice) {
-          output = { error: "VOICE_CONFIRMATION_REQUIRED", message: "말로 받은 수정 요청은 바로 처리하지 않습니다. 바뀔 내용을 짧게 되읽어 주고, 맞으면 입력칸에 '네'라고 적어 보내거나 [내 기계 관리]에서 고치도록 안내하세요." };
         } else if (!spokenApproval) {
           output = { error: "CONFIRMATION_REQUIRED", message: "바뀔 내용을 먼저 보여 주고 사용자 확인을 받은 뒤 수정해 주세요." };
         } else if (writeDone || !deps?.updateListing || !deps?.fetchOwnListings) {

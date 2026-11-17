@@ -6,7 +6,7 @@
 // onError(error, { fatal, source }): fatal이면 세션은 이미 정리 중이고(source: "start"|"connection"),
 // fatal이 아니면 대화는 계속된다(source: "delegation"|"event"|"audio").
 import { createLiveVoiceSession } from "./recommend-agent.js";
-import { joinSpokenText } from "./spoken-text.js";
+import { joinSpokenText, tidySpokenText } from "./spoken-text.js";
 
 export const GREETING_TEXT = "안녕하세요, 농농이에요. 대여, 구매, 판매 중에 어떤 걸 도와드릴까요?";
 // 연결되자마자 농농이가 먼저 말하게 한다. 사용자가 이미 말하고 있으면 인사를 건너뛴다(말 끊기 방지).
@@ -173,7 +173,7 @@ export function createGptLiveController({
 
   function flushAssistantTurn({ interrupted = false } = {}) {
     clearSpeakingTimer();
-    const text = assistantText.trim();
+    const text = tidySpokenText(assistantText);
     assistantText = "";
     if (text) onTurnCommitted({ role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) });
   }

@@ -3,7 +3,7 @@ import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
-import { isUnclearUtterance, joinSpokenText } from "./spoken-text.js";
+import { isUnclearUtterance, joinSpokenText, tidySpokenText } from "./spoken-text.js";
 
 const MACHINE_LABELS = {
   cultivator: "관리기",
@@ -2370,7 +2370,7 @@ export function createAiPanel({
       if (bubble) {
         bubble.classList.remove("is-live-transcript");
         if (!isUser) {
-          const finalText = bubble.textContent || "";
+          const finalText = tidySpokenText(bubble.textContent || "");
           if (finalText.trim()) {
             bubble.replaceChildren(renderMarkdownElement(finalText));
           }
@@ -2469,15 +2469,8 @@ export function createAiPanel({
     renderAgentEffects(bubble, result, { reply, includeFollowUp: false });
     scrollAiToEnd();
 
-    let spokenSummary = reply;
-    if (
-      result?.pendingAction?.type === "rental_request"
-      || result?.pendingAction?.type === "purchase_request"
-      || result?.pendingAction?.type === "delegate_transaction"
-      || result?.pendingAction?.type === "create_listing"
-    ) {
-      spokenSummary += " 화면에 승인 카드를 띄워 드렸어요. 내용을 확인하신 뒤 초록색 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.";
-    }
+    // 답변을 그대로 읽게 한다. 실행은 말로 요청하면 서버가 바로 처리하므로 버튼을 누르라고 덧붙이지 않는다.
+    const spokenSummary = tidySpokenText(reply);
     const thinkingContext = buildDelegationThinkingContext(result, listingIds);
     return { spokenSummary, ...(thinkingContext ? { thinkingContext } : {}), result };
   }

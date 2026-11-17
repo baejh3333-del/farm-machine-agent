@@ -2,10 +2,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { applyKnownFactsToSearch, collectKnownFacts, runAgentTurn, searchListingsTool, shouldShowCards, summarizeKnownFacts } from "../server/nongnong-agent.js";
+import { applyKnownFactsToSearch, collectKnownFacts, runAgentTurn, searchListingsTool, shouldShowCards, summarizeKnownFacts, tidyReply } from "../server/nongnong-agent.js";
+import { isAffirmative } from "../server/nongnong.js";
 import { buildMockListings } from "../server/listing-seed.js";
 import { buildGptLiveInstructions } from "../server/gpt-live.js";
-import { isUnclearUtterance, joinSpokenText } from "../src/ai/spoken-text.js";
+import { isUnclearUtterance, joinSpokenText, tidySpokenText } from "../src/ai/spoken-text.js";
 
 const LISTINGS = buildMockListings();
 const TODAY = "2026-11-16";
@@ -151,4 +152,52 @@ test("문제3: 카드를 보여 준 뒤에는 작물 이름만 나와도 자동 
     uiContext: { region: "청기면", shownListingIds: ["x1", "x2"] },
   }, { listings: LISTINGS, call, today: TODAY });
   assert.deepEqual(result.listingIds, []);
+});
+
+// ───────── 문제 4 ─────────
+
+const USER = { id: "11111111-1111-4111-8111-111111111111", name: "농부" };
+const SALE = LISTINGS.find((item) => item.type === "sale" && item.status === "open" && item.condition !== "repair");
+
+test("문제4: 실제 사례의 실행 요청(사투리 포함)은 한 번에 승인으로 본다", () => {
+  for (const yes of ["네", "응 해줘", "확인은 했는데 내가 지금 손을 못 써서 너가 바로 구매해줘", "구매해줘", "바로 사 줘",
+    "대여 예약해 주이소", "판매글 올려줘", "하모", "그려유", "야", "그라제", "네 살게예", "빌릴게유"]) {
+    assert.equal(isAffirmative(yes), true, yes);
+  }
+  for (const no of ["구매할까 고민중이야", "구매는 안 돼", "구매해줘?", "검사해줘", "빌려주고 싶어", "다른 거요"]) {
+    assert.equal(isAffirmative(no), false, no);
+  }
+});
+
+test("문제4: 음성으로 '너가 바로 구매해줘'라고 하면 확인 카드 없이 같은 턴에서 구매 신청을 끝낸다", async (t) => {
+  withKey(t);
+  const sent = [];
+  const deps = { beforeWrite: async () => {}, sendPurchaseMessage: async (_u, payload) => { sent.push(payload); return { conversation: { id: "c1" } }; } };
+  const { call, calls } = scripted([
+    toolUse("create_purchase_request", { listingId: SALE.id }),
+    textReply("청기면 매물 구매 신청을 완료했어요."),
+  ]);
+  const result = await runAgentTurn("확인은 했는데 내가 지금 손을 못 써서 너가 바로 구매해줘", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].listingId, SALE.id);
+  assert.equal(result.reservation.kind, "purchase");
+  assert.match(result.reservation.number, /^P-/);
+  assert.equal(result.pendingAction, undefined);
+  assert.doesNotMatch(calls[0].system, /버튼을 눌러야 처리된다/);
+  assert.match(calls[0].system, /확인은 최대 한 번만/);
+  assert.match(calls[0].system, /화면 버튼을 직접 누르라고 하지 않는다/);
+});
+
+test("문제4: 답변·음성 전사의 띄어 쓴 기종명과 앞 쉼표를 정리한다", () => {
+  assert.equal(tidyReply("청기면 D R G H-1400은 320만원이에요."), "청기면 DRGH-1400은 320만원이에요.");
+  assert.equal(tidyReply(", 네 알겠어요"), "네 알겠어요");
+  assert.equal(tidySpokenText("두루기계통상 D R G H-1400이요.네, 맞아요"), "두루기계통상 DRGH-1400이요. 네, 맞아요");
+});
+
+test("문제4: 실시간 음성 지시문은 분명한 요청을 바로 실행하고 버튼을 누르라고 하지 않게 한다", () => {
+  const text = buildGptLiveInstructions({ region: "청기면" });
+  assert.match(text, /Transaction policy:/);
+  assert.match(text, /확인 없이 바로 <\|SpawnThinking\|>로 실행/);
+  assert.doesNotMatch(text, /음성만으로 무단 실행 금지/);
+  assert.match(text, /DRGH-1400/);
 });

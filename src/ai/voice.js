@@ -106,22 +106,22 @@ export function textForSpeech(text) {
     .trim();
 }
 
-/** 대여 승인 카드를 소리로 요약한다. 말로는 승인되지 않는다는 것도 알려 준다. */
+/** 대여 확인 카드를 소리로 요약하고, "네"라고 하면 바로 신청한다고 알려 준다. */
 export function rentalSummaryForSpeech(action) {
   const title = String(action?.title || "선택하신").replace(/\s*·\s*/g, " ");
   const region = action?.region && !title.includes(action.region) ? ` ${action.region}` : "";
   return [
     `${title}${region} 매물을 ${monthDay(action?.start)}부터 ${monthDay(action?.end)}까지 ${action?.days}일 빌리는 요청이에요.`,
     `대여료는 하루 ${koreanWon(action?.dailyPrice)}, 모두 ${koreanWon(action?.totalPrice)}이에요.`,
-    "내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.",
+    "맞으면 \"네\"라고 말씀해 주세요. 바로 신청해 드릴게요.",
   ].join(" ");
 }
 
-/** 농농 승인 카드(제목과 항목 줄)를 소리로 요약한다. 말로는 승인되지 않는다는 것도 알려 준다. */
+/** 농농 확인 카드(제목과 항목 줄)를 소리로 요약하고, "네"라고 하면 바로 진행한다고 알려 준다. */
 export function actionSummaryForSpeech(pending) {
   const title = String(pending?.title || "요청").replace(/\s*확인$/, "");
   const rows = (Array.isArray(pending?.rows) ? pending.rows : []).map(([label, value]) => `${label}, ${textForSpeech(value)}.`);
-  return [`${title} 내용이에요.`, ...rows, "내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요."].join(" ");
+  return [`${title} 내용이에요.`, ...rows, "맞으면 \"네\"라고 말씀해 주세요. 바로 진행해 드릴게요."].join(" ");
 }
 
 export function loadVoiceSettings(storage = globalThis.localStorage) {

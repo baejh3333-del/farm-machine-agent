@@ -896,9 +896,6 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
           </div>
         </div>
         <div class="socar-top-actions">
-          <button type="button" class="socar-pill-btn socar-random-btn" id="socarRandomizeBtn">
-            주변 농가 매물 랜덤 돌리기
-          </button>
           <button type="button" class="socar-pill-btn socar-recenter-btn" id="socarRecenterBtn">
             내 위치 중심
           </button>
@@ -968,12 +965,6 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
   resolveKakaoAddress(origin.lat, origin.lng, fallbackOriginAddr).then((addr) => {
     const el = $("socarOriginAddr");
     if (el && addr) el.textContent = addr;
-  });
-
-  $("socarRandomizeBtn")?.addEventListener("click", () => {
-    const nextListing = ensureHongcheonRandomListing({ randomize: true });
-    toast(`주변 농가 랜덤 매물: ${MACHINE_BY_ID[nextListing.machineType]?.label || nextListing.title}`);
-    renderHeaderMapView({ onOpenDetail, onRent });
   });
 
   const canvasEl = $("socarMapCanvas");

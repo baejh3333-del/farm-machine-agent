@@ -142,8 +142,20 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
   }
 }
 
+function closeAiPanel({ returnFocus = true } = {}) {
+  const panel = $("aiPanel");
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  if ($("aiBackdrop")) $("aiBackdrop").hidden = true;
+  panel.classList.remove("is-entering");
+  document.body.classList.remove("ai-open", "ai-fullscreen");
+  $("aiLauncher")?.setAttribute("aria-expanded", "false");
+  if (returnFocus) $("aiLauncher")?.focus({ preventScroll: true });
+}
+
 function savePendingIntentAndRedirectLogin(intent, notice = "로그인 후 이어서 진행할 수 있어요.") {
   runtime.pendingIntent = intent;
+  closeAiPanel({ returnFocus: false });
   hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
   hideDialog($("formBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
   toast(notice);
@@ -262,6 +274,7 @@ function markNav(view) {
 }
 
 function setView(view) {
+  closeAiPanel({ returnFocus: false });
   if (!Object.hasOwn(viewIds, view)) view = "home";
   if (view === "owner" && !isLoggedIn()) view = "ownerLoginRequired";
   state.view = view;
@@ -974,18 +987,17 @@ function bindEvents() {
     setMyPageOpen(false);
     aiPanel.openAiPanel();
   });
+  for (const id of ["filterBackdrop", "detailBackdrop", "formBackdrop", "regionPickerDialog"]) {
+    const el = $(id);
+    if (el) el.style.zIndex = "1300";
+  }
+  if ($("toast")) $("toast").style.zIndex = "1350";
   $("aiLauncher").addEventListener("click", aiPanel.openAiPanel);
   $("aiExpand").addEventListener("click", aiPanel.toggleAiPanelSize);
   window.visualViewport?.addEventListener("resize", aiPanel.syncAiViewport);
   window.visualViewport?.addEventListener("scroll", aiPanel.syncAiViewport);
-  const closeAiPanel = ({ returnFocus = true } = {}) => {
-    if ($("aiPanel").hidden) return;
-    $("aiPanel").hidden = true;
-    document.body.classList.remove("ai-open");
-    $("aiLauncher").setAttribute("aria-expanded", "false");
-    if (returnFocus) $("aiLauncher").focus({ preventScroll: true });
-  };
   $("aiClose").addEventListener("click", () => closeAiPanel());
+  $("aiBackdrop")?.addEventListener("click", () => closeAiPanel({ returnFocus: false }));
   // 농농 상담창 밖의 화면을 누르면 상담창을 자동으로 닫는다
   // (상담창에서 연 매물 상세·필터 창 안을 누를 때는 닫지 않는다)
   document.addEventListener("pointerdown", (event) => {
@@ -1002,9 +1014,10 @@ function bindEvents() {
   $("aiForm").addEventListener("submit", aiPanel.sendAiQuestion);
   $("aiReset").addEventListener("click", aiPanel.resetAiPanel);
 
-  document.querySelectorAll("[data-prompt]").forEach((button) =>
-    button.addEventListener("click", () => aiPanel.submitPrompt(button.dataset.prompt))
-  );
+  document.querySelectorAll("[data-prompt]").forEach((button) => {
+    if (button.closest("#aiPanel")) return;
+    button.addEventListener("click", () => aiPanel.submitPrompt(button.dataset.prompt));
+  });
 
   document.querySelector('[data-action="favorites"]').addEventListener("click", catalogViews.openFavoritesModal);
 }
@@ -1111,6 +1124,8 @@ function initLoginForm() {
         listingId: intent.listingId,
         conversationId: intent.conversationId,
         draftBody: intent.draftBody || "",
+        ...(intent.aiMode ? { aiMode: intent.aiMode } : {}),
+        ...(intent.aiPolicy ? { aiPolicy: intent.aiPolicy } : {}),
       });
       return true;
     }

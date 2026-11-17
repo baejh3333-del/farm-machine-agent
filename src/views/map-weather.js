@@ -123,7 +123,7 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
   host.innerHTML = `
     <div class="rwb-top-row">
       <div class="rwb-main">
-        <span class="rwb-icon" aria-hidden="true">${icon}</span>
+        <span class="rwb-icon" data-weather-icon="${escapeHtml(w.icon || "sun")}" aria-hidden="true">${icon}</span>
         <div class="rwb-copy">
           <div class="rwb-title-row">
             <strong>${escapeHtml(w.region)} ${isSelectedDate ? escapeHtml(targetDate) : "오늘"} 작업 날씨 · ${escapeHtml(w.summary)}</strong>
@@ -155,7 +155,7 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
       <div class="rwb-detail-panel" id="weatherDetailPanel">
         <div class="rwb-days-strip" role="tablist" aria-label="날짜별 날씨 예보">
           ${days
-            .map((d) => {
+            .map((d, idx) => {
               const dIcon = WEATHER_ICONS[d.icon] || "🌤️";
               const isSelected = d.date === activeDay.date;
               const dTone = d.suitability === "caution" ? "is-caution" : d.suitability === "wind" ? "is-wind" : "is-good";
@@ -166,9 +166,10 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
                   aria-selected="${isSelected ? "true" : "false"}"
                   class="rwb-day-card ${dTone}${isSelected ? " is-active" : ""}"
                   data-forecast-date="${escapeHtml(d.date)}"
+                  style="--stagger-i: ${Math.min(idx, 12)}"
                 >
                   <span class="rwb-day-label">${escapeHtml(formatShortDateLabel(d.date))}</span>
-                  <span class="rwb-day-icon" aria-hidden="true">${dIcon}</span>
+                  <span class="rwb-day-icon" data-weather-icon="${escapeHtml(d.icon || "sun")}" aria-hidden="true">${dIcon}</span>
                   <strong class="rwb-day-temp">${Number.isFinite(d.tempMin) ? `${d.tempMin}°` : "-"} / ${Number.isFinite(d.tempMax) ? `${d.tempMax}°` : "-"}</strong>
                   <span class="rwb-day-meta">강수 ${Number(d.pop) || 0}% · ${escapeHtml(suitabilityLabel(d.suitability))}</span>
                   ${!d.inShortTermRange ? `<span class="rwb-day-range-note">참고 예보</span>` : ""}
@@ -194,10 +195,10 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
               ? `<div class="rwb-slots-grid" aria-label="시간대별 예보">
                   ${activeDay.slots
                     .map(
-                      (s) => `
-                    <div class="rwb-slot-card">
+                      (s, idx) => `
+                    <div class="rwb-slot-card" style="--stagger-i: ${Math.min(idx, 12)}">
                       <span class="rwb-slot-time">${escapeHtml(s.timeLabel)}</span>
-                      <span class="rwb-slot-icon" aria-hidden="true">${WEATHER_ICONS[s.icon] || "🌤️"}</span>
+                      <span class="rwb-slot-icon" data-weather-icon="${escapeHtml(s.icon || "sun")}" aria-hidden="true">${WEATHER_ICONS[s.icon] || "🌤️"}</span>
                       <strong class="rwb-slot-temp">${Number.isFinite(s.temp) ? `${s.temp}°C` : "-"}</strong>
                       <span class="rwb-slot-meta">강수 ${Number(s.pop) || 0}%</span>
                       <span class="rwb-slot-meta">${Number(s.windSpeed) || 0}m/s</span>
@@ -212,8 +213,8 @@ export function renderWeatherBanner({ onSelectDate } = {}) {
               ? `<div class="rwb-work-tips">
                   ${activeDay.workTips
                     .map(
-                      (tip) => `
-                    <span class="rwb-work-pill is-${escapeHtml(tip.status)}">
+                      (tip, idx) => `
+                    <span class="rwb-work-pill is-${escapeHtml(tip.status)}" style="--stagger-i: ${Math.min(idx, 12)}">
                       <strong>${escapeHtml(tip.label)}</strong> · ${escapeHtml(tip.note)}
                     </span>`
                     )
@@ -267,7 +268,7 @@ export function weatherDetailNote() {
   return `
     <div class="detail-weather-note ${toneClass}">
       <div class="dwn-top">
-        <span aria-hidden="true">${icon}</span>
+        <span class="dwn-icon" data-weather-icon="${escapeHtml(w.icon || "sun")}" aria-hidden="true">${icon}</span>
         <div>
           <strong>${escapeHtml(w.region)} (${escapeHtml(w.date)}) · ${escapeHtml(w.summary)} · 강수확률 ${Number(w.pop) || 0}% · 풍속 ${Number(w.windSpeed) || 0}m/s</strong>
           <p>${escapeHtml(w.advice)}</p>
@@ -278,10 +279,10 @@ export function weatherDetailNote() {
           ? `<div class="dwn-mini-strip" aria-label="가까운 날짜 예보">
               ${upcoming
                 .map(
-                  (d) => `
-                <span class="dwn-mini-day is-${d.suitability === "caution" ? "caution" : d.suitability === "wind" ? "wind" : "good"}">
+                  (d, idx) => `
+                <span class="dwn-mini-day is-${d.suitability === "caution" ? "caution" : d.suitability === "wind" ? "wind" : "good"}" style="--stagger-i: ${Math.min(idx, 12)}">
                   <span>${escapeHtml(formatShortDateLabel(d.date))}</span>
-                  <span>${WEATHER_ICONS[d.icon] || "🌤️"} ${Number.isFinite(d.tempMin) ? `${d.tempMin}°~${d.tempMax}°` : ""}</span>
+                  <span><span class="dwn-mini-icon" data-weather-icon="${escapeHtml(d.icon || "sun")}" aria-hidden="true">${WEATHER_ICONS[d.icon] || "🌤️"}</span> ${Number.isFinite(d.tempMin) ? `${d.tempMin}°~${d.tempMax}°` : ""}</span>
                   <span>강수 ${Number(d.pop) || 0}%</span>
                 </span>`
                 )
@@ -344,11 +345,12 @@ export async function renderBookingWeatherPanel(container, { region, start, end 
         </p>
         <div class="rbw-days">
           ${days
-            .map((d) => {
+            .map((d, idx) => {
               const dIcon = WEATHER_ICONS[d.icon] || "🌤️";
+              const staggerStyle = `style="--stagger-i: ${Math.min(idx, 12)}"`;
               if (!d.inShortTermRange) {
                 return `
-                  <div class="rbw-day-row is-out-of-range">
+                  <div class="rbw-day-row is-out-of-range" ${staggerStyle}>
                     <div class="rbw-day-date">
                       <strong>${escapeHtml(formatShortDateLabel(d.date))}</strong>
                       <span class="rbw-pill-muted">예보 범위 외</span>
@@ -361,13 +363,13 @@ export async function renderBookingWeatherPanel(container, { region, start, end 
               }
               const tone = d.suitability === "caution" ? "is-caution" : d.suitability === "wind" ? "is-wind" : "is-good";
               return `
-                <div class="rbw-day-row ${tone}">
+                <div class="rbw-day-row ${tone}" ${staggerStyle}>
                   <div class="rbw-day-date">
                     <strong>${escapeHtml(formatShortDateLabel(d.date))}</strong>
                     <span class="rbw-pill-${tone}">${escapeHtml(suitabilityLabel(d.suitability))}</span>
                   </div>
                   <div class="rbw-day-info">
-                    <span aria-hidden="true">${dIcon}</span>
+                    <span class="rbw-day-icon" data-weather-icon="${escapeHtml(d.icon || "sun")}" aria-hidden="true">${dIcon}</span>
                     <strong>${escapeHtml(d.summary)}</strong>
                     <span>${Number.isFinite(d.tempMin) ? `${d.tempMin}°~${d.tempMax}°C` : ""}</span>
                     <span>강수 ${Number(d.pop) || 0}%</span>
@@ -446,6 +448,9 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail, onRetry,
         </div>
         <button type="button" class="button button-primary" id="mapOpenDetailBtn">상세 보기</button>
       `;
+      cardEl.classList.remove("is-updated");
+      void cardEl.offsetWidth;
+      cardEl.classList.add("is-updated");
       $("mapOpenDetailBtn")?.addEventListener("click", () => onOpenDetail?.(item.id));
     };
 

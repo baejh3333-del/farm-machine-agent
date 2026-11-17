@@ -64,6 +64,27 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 
 `npm run db:inspect`는 데이터를 변경하지 않고 `pendingMigrations`, `checksumMismatches`, `unknownMigrations`, `unvalidatedConstraints`와 상담 테이블 건수를 표시합니다. 미검증 제약은 기존 데이터 검사 후 별도 변경으로 검증해야 합니다. `0003` 테이블 생성만으로 AI 상담 이력 저장이 구현되지는 않습니다.
 
+## 농농이 음성 대화 (`gpt-live-1` 실시간 음성 + STT/TTS 폴백)
+
+`OPENAI_API_KEY`가 설정되면 `/api/voice`(`POST` `action: "live_session"`)가 OpenAI `gpt-live-1` WebRTC 세션을 생성해 전이중(Full-Duplex) 한국어 실시간 음성 대화를 제공합니다. 기본 음성은 한국어 자연 음성 `noeul`입니다.
+
+- **실시간 음성 세션 (`server/gpt-live.js`)**: 브라우저가 만든 WebRTC SDP Offer를 서버가 `POST https://api.openai.com/v1/live/sessions`로 교환하며, 백엔드 조회·예약·거래 전담이 필요할 때는 `<|SpawnThinking|>` 기반 클라이언트 위임(`delegation: { type: "client" }`)으로 `/api/agent`(`inputMode: "voice"`)를 호출합니다.
+- **음성 → 글 폴백 (`server/voice.js`)**: 실시간 WebRTC를 쓸 수 없는 환경에서는 `/api/voice`가 16kHz 모노 16비트 PCM WAV(최대 30초, 1MB)를 OpenAI `gpt-4o-mini-transcribe` 또는 Z.ai `glm-asr-2512`로 인식합니다. 키가 없으면 브라우저 음성 인식(`ko-KR`)으로 전환합니다.
+- **안전 가드**: 음성 차례(`inputMode: "voice"`)에서는 말로 한 "네"를 승인으로 보지 않으며, 대여·구매·매물 등록·거래 전담 등 상태를 바꾸는 작업은 반드시 화면 승인 카드를 눌러야 실행됩니다.
+
+**환경 변수(모두 선택)**
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `OPENAI_LIVE_MODEL` | `gpt-live-1` | 실시간 WebRTC 음성 모델 |
+| `OPENAI_LIVE_VOICE` | `noeul` | 실시간 음성 출력 목소리 |
+| `VOICE_STT_PROVIDER` | (비움) | 비우면 OpenAI 키가 있을 때 OpenAI. `zai`, `openai`, `none`(서버 인식 끄기) |
+| `OPENAI_STT_MODEL` | `gpt-4o-mini-transcribe` | OpenAI STT 폴백 모델 |
+| `ZAI_ASR_MODEL` | `glm-asr-2512` | Z.ai ASR 폴백 모델 |
+| `VOICE_LIMIT_PER_MINUTE` / `VOICE_LIMIT_PER_DAY` / `VOICE_GLOBAL_LIMIT_PER_DAY` | 10 / 100 / 3000 | 음성 API 호출 제한(IP 기준, 전체 하루) |
+
+마이크는 **HTTPS**(또는 localhost)에서만 동작합니다. Vercel 무료 플랜의 함수 개수(12개) 제한 때문에 `/api/voice`는 따로 함수를 두지 않고 `vercel.json` rewrites로 `/api/agent?route=voice`에 넘깁니다(처리 코드: `server/voice-api.js`).
+
 ## 호출 제한과 DB 타임아웃
 
 - `/api/recommend`와 `/api/agent` 대화는 AI 비용을 막기 위해 같은 한도를 쓰며 IP당 분당 15회·하루 150회, 서비스 전체 하루 3,000회로 제한합니다. `RECOMMEND_LIMIT_PER_MINUTE`, `RECOMMEND_LIMIT_PER_DAY`, `RECOMMEND_GLOBAL_LIMIT_PER_DAY`로 바꿀 수 있고 0이면 해당 제한을 끕니다. 횟수를 확인할 수 없으면 AI를 호출하지 않고 `503`을 돌려줍니다.
@@ -79,6 +100,7 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 - `server/listings-db.js`, `server/listing-seed.js`: PostgreSQL 매물 조회와 데모 데이터
 - `api/listings.js`: 매물 조회 API
 - `src/ai/recommend-agent.js`: 화면과 추천 API 연결
+- `server/gpt-live.js`, `server/voice.js`, `server/voice-api.js`: `gpt-live-1` WebRTC 세션 생성, WAV STT 폴백, `/api/voice` 처리(배포에서는 `api/agent.js`가 넘겨받음)
 - `server/agent.js`: 서버 추천 후보 선정과 AI 호출
 - `server/llm.js`: AI 호출(Z.ai·Claude 공급자 선택과 형식 변환)
 - `server/nongnong-agent.js`: 농농이 도구 호출 에이전트(질문·검색·대여 제안, 승인 후 실행·상태 확인)

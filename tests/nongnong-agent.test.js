@@ -15,6 +15,7 @@ import { askLLMJson, callLLM, fromOpenAiResponse, llmProvider, toOpenAiMessages 
 const LISTINGS = buildMockListings();
 const TODAY = "2026-11-16";
 const rentable = LISTINGS.find((item) => item.type === "rent" && item.status === "open" && item.condition !== "repair" && !item.booked.length);
+const saleItem = LISTINGS.find((item) => item.type === "sale" && item.status === "open");
 const forSale = LISTINGS.find((item) => item.type === "sale");
 
 const AI_ENV = ["AI_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL", "ZAI_API_KEY", "ZAI_MODEL", "ZAI_VISION_MODEL", "ZAI_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
@@ -597,6 +598,82 @@ test("시간 초과 뒤 늦은 모델 응답으로 후속 도구 호출을 시�
   release({ content: [{ type: "tool_use", id: "late", name: "search_listings", input: { cropId: "pepper", operations: ["ridge"] } }] });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(calls, 1);
+});
+
+test("음성으로 들어온 질문이면 되묻기·되읽기 지시를 더하고, 글 입력에는 더하지 않는다", async (t) => {
+  withKey(t, "test");
+  const voice = scripted([{ content: [{ type: "text", text: "고추밭 두둑 작업 말씀이시지요?" }] }]);
+  await runAgentTurn("고추밭 두둑 맹글 기계 빌리고 싶어예", { inputMode: "voice" }, { listings: LISTINGS, call: voice.call, today: TODAY });
+  assert.match(voice.calls[0].system, /음성 인식/);
+  assert.match(voice.calls[0].system, /사투리/);
+  assert.match(voice.calls[0].system, /되읽/);
+  const typed = scripted([{ content: [{ type: "text", text: "네" }] }]);
+  await runAgentTurn("고추 두둑", {}, { listings: LISTINGS, call: typed.call, today: TODAY });
+  assert.doesNotMatch(typed.calls[0].system, /음성 인식/);
+});
+
+test("음성: 로그인 상태에서 말로 \"네\"라고 해도 대여 예약은 바로 만들지 않고 확인 카드로 넘긴다", async (t) => {
+  withKey(t, "test");
+  let wrote = false;
+  const deps = { beforeWrite: async () => {}, createRentalRequest: async () => { wrote = true; return { request: {} }; } };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
+    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
+  ]);
+  const result = await runAgentTurn("네 예약해 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(wrote, false);
+  assert.equal(result.reservation, undefined);
+  assert.equal(result.pendingAction.type, "rental_request");
+  assert.equal(result.pendingAction.listingId, rentable.id);
+});
+
+test("음성: 말로 \"네\"라고 해도 구매 신청·매물 등록·수정은 바로 처리하지 않는다", async (t) => {
+  withKey(t, "test");
+  const writes = [];
+  const deps = {
+    beforeWrite: async () => {},
+    sendPurchaseMessage: async () => { writes.push("purchase"); return {}; },
+    createListing: async () => { writes.push("listing"); return { listing: { id: "x" } }; },
+    updateListing: async () => { writes.push("update"); return {}; },
+    fetchOwnListings: async () => [{ ...rentable, ownerId: USER.id }],
+  };
+  const purchase = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "create_purchase_request", input: { listingId: saleItem.id } }] },
+    { content: [{ type: "text", text: "확인 버튼을 눌러 주세요." }] },
+  ]);
+  const bought = await runAgentTurn("네 살게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: purchase.call, today: TODAY, deps });
+  assert.equal(bought.pendingAction.type, "purchase_request");
+
+  const listing = scripted([
+    { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "tractor", title: "트랙터 빌려드려요", price: 80000, region: "영양읍" } }] },
+    { content: [{ type: "text", text: "초안을 확인해 주세요." }] },
+  ]);
+  const drafted = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
+  assert.equal(drafted.createdListing, undefined);
+  assert.ok(drafted.listingDraft);
+
+  const update = scripted([
+    { content: [{ type: "tool_use", id: "u1", name: "update_listing", input: { listingId: rentable.id, price: 10000 } }] },
+    { content: [{ type: "text", text: "바뀔 내용을 확인해 주세요." }] },
+  ]);
+  await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
+  assert.match(JSON.stringify(update.calls[1].messages.at(-1).content), /VOICE_CONFIRMATION_REQUIRED/);
+  assert.deepEqual(writes, []);
+});
+
+test("음성: 말로 \"네\"라고 해도 거래 전담 위임은 자동 실행하지 않고 확인 카드로 넘긴다", async (t) => {
+  withKey(t, "test");
+  let executed = false;
+  const deps = { beforeWrite: async () => {}, delegateTransaction: async () => { executed = true; return { delegatedTransaction: {} }; } };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "delegate_transaction", input: { listingId: saleItem.id } }] },
+    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
+  ]);
+  const result = await runAgentTurn("네 맡길게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
+  assert.equal(executed, false);
+  assert.equal(result.delegatedTransaction, undefined);
+  assert.equal(result.pendingAction.type, "delegate_transaction");
+  assert.equal(result.pendingAction.listingId, saleItem.id);
 });
 
 test("OpenAI로 사진 상담을 하면 같은 모델에 image_url을 보내고 웹 검색 표시는 보내지 않는다", async (t) => {

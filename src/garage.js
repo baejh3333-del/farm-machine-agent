@@ -81,11 +81,39 @@ export function createGarage({
   function refreshOwned() {
     refreshNote();
     $("ownedCount").textContent = `${owned.length}대`;
-    $("ownedMachines").innerHTML = owned.length ? owned.map((item) => {
-      const model = SPEC_BY_ID[item.modelId];
-      if (!model) return "";
-      return `<article class="owned-machine ${item.id === selectedId ? "is-selected" : ""}"><div class="owned-machine-icon" aria-hidden="true">🚜</div><div><strong>${esc(item.name || model.model)}</strong><p>${esc(model.brand)} ${esc(model.model)}</p><small>${esc(model.facts.find(([label]) => /마력|출력/.test(label))?.[1] || model.connection.label)}</small><div class="owned-actions"><button type="button" data-owned-select="${esc(item.id)}" aria-pressed="${item.id === selectedId}"${busy ? " disabled" : ""}>${item.id === selectedId ? "✓ 기준 기계" : "기준으로 선택"}</button><button type="button" data-owned-remove="${esc(item.id)}" aria-label="${esc(item.name || model.model)} 삭제"${busy ? " disabled" : ""}>삭제</button></div></div></article>`;
-    }).join("") : `<div class="garage-empty"><strong>아직 등록한 기계가 없어요</strong><p>트랙터나 관리기를 등록하면<br>호환 이유를 함께 확인할 수 있어요.</p></div>`;
+    const host = $("ownedMachines");
+    const validOwned = owned.filter((item) => Boolean(SPEC_BY_ID[item.modelId]));
+    const existingCards = [...host.querySelectorAll(".owned-machine[data-owned-card-id]")];
+    const sameList =
+      validOwned.length > 0 &&
+      existingCards.length === validOwned.length &&
+      existingCards.every((el, idx) => el.dataset.ownedCardId === validOwned[idx].id);
+
+    if (sameList) {
+      existingCards.forEach((cardEl, idx) => {
+        const item = validOwned[idx];
+        const isSelected = item.id === selectedId;
+        cardEl.classList.toggle("is-selected", isSelected);
+        const selectBtn = cardEl.querySelector("[data-owned-select]");
+        const removeBtn = cardEl.querySelector("[data-owned-remove]");
+        if (selectBtn) {
+          selectBtn.setAttribute("aria-pressed", String(isSelected));
+          selectBtn.textContent = isSelected ? "✓ 기준 기계" : "기준으로 선택";
+          selectBtn.disabled = busy;
+        }
+        if (removeBtn) {
+          removeBtn.disabled = busy;
+        }
+      });
+    } else {
+      host.innerHTML = validOwned.length ? validOwned.map((item) => {
+        const model = SPEC_BY_ID[item.modelId];
+        return `<article class="owned-machine ${item.id === selectedId ? "is-selected" : ""}" data-owned-card-id="${esc(item.id)}"><div class="owned-machine-icon" aria-hidden="true">🚜</div><div><strong>${esc(item.name || model.model)}</strong><p>${esc(model.brand)} ${esc(model.model)}</p><small>${esc(model.facts.find(([label]) => /마력|출력/.test(label))?.[1] || model.connection.label)}</small><div class="owned-actions"><button type="button" data-owned-select="${esc(item.id)}" aria-pressed="${item.id === selectedId}"${busy ? " disabled" : ""}>${item.id === selectedId ? "✓ 기준 기계" : "기준으로 선택"}</button><button type="button" data-owned-remove="${esc(item.id)}" aria-label="${esc(item.name || model.model)} 삭제"${busy ? " disabled" : ""}>삭제</button></div></div></article>`;
+      }).join("") : `<div class="garage-empty"><strong>아직 등록한 기계가 없어요</strong><p>트랙터나 관리기를 등록하면<br>호환 이유를 함께 확인할 수 있어요.</p></div>`;
+      host.querySelectorAll(".owned-machine").forEach((cardEl, index) => {
+        cardEl.style.setProperty("--stagger-i", String(Math.min(index, 12)));
+      });
+    }
     refreshMode();
   }
 
@@ -109,6 +137,11 @@ export function createGarage({
       const machines = power ? [power, implement] : [implement];
       return `<article class="compat-result">${compatibilityBadge(verdict)}<h3>${power ? `${esc(power.model)} <span>+</span> ` : ""}${esc(implement.model)}</h3><p class="compat-reason">${esc(verdict.reason)}</p><div class="compat-machines">${machines.map((item) => `<div><span>${item === power ? "본체" : "작업기"}</span><strong>${esc(item.brand)} ${esc(item.model)}</strong><small>${esc(item.region)} · ${esc(item.pickup)} · ${money(item.price)}/일</small><div class="compat-item-actions"><button type="button" data-garage-detail="${esc(item.id)}">사양·상세 보기 ↗</button>${verdict.status === "compatible" ? `<button type="button" data-garage-rent="${esc(item.id)}">대여 요청</button>` : ""}</div></div>`).join("")}</div><div class="compat-total"><span>${days}일 총 대여료<small>하루 ${money(dailyPrice)} · 운반비 별도</small></span><strong>${money(totalPrice)}</strong></div>${power ? '<p class="garage-note">두 매물에 각각 요청하고 승인을 받아야 해요. 세트 예약이 한 번에 확정되지는 않아요.</p>' : ""}</article>`;
     }).join("");
+    $("compatResults")
+      .querySelectorAll(".compat-result")
+      .forEach((cardEl, index) => {
+        cardEl.style.setProperty("--stagger-i", String(Math.min(index, 12)));
+      });
   }
 
   $("ownedModel").addEventListener("change", () => { draftOwnedId = null; });

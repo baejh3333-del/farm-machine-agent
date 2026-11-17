@@ -6,5 +6,8 @@
   "functions": {
     "api/agent.js": { "maxDuration": 60 },
     "api/agent-chat-reply.js": { "maxDuration": 60 }
-  }
+  },
+  "rewrites": [
+    { "source": "/api/voice", "destination": "/api/agent?route=voice" }
+  ]
 }

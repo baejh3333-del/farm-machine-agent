@@ -1,6 +1,6 @@
 import { CROPS, CROP_BY_ID, MACHINE_TYPES, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
 import { activeFavorites } from "../core/store.js";
-import { $, addDays, areaLabel, money, today, toast } from "../core/utils.js";
+import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
 
@@ -16,6 +16,60 @@ const MACHINE_LABELS = {
   potatoHarvester: "감자 굴취기",
   carrier: "운반차",
 };
+const MACHINE_FALLBACK_IMAGE = {
+  cultivator: "./src/images/machines/cultivator.jpg",
+  tiller: "./src/images/machines/cultivator.jpg",
+  ridingCultivator: "./src/images/machines/cultivator.jpg",
+  mower: "./src/images/machines/cultivator.jpg",
+  shredder: "./src/images/machines/cultivator.jpg",
+  tractor: "./src/images/machines/tractor.jpg",
+  rotavator: "./src/images/machines/tractor.jpg",
+  plow: "./src/images/machines/tractor.jpg",
+  spreader: "./src/images/machines/tractor.jpg",
+  loader: "./src/images/machines/tractor.jpg",
+  baler: "./src/images/machines/tractor.jpg",
+  excavator: "./src/images/machines/tractor.jpg",
+  ridgeMulcher: "./src/images/machines/ridgeMulcher.jpg",
+  ridger: "./src/images/machines/ridgeMulcher.jpg",
+  transplanter: "./src/images/machines/transplanter.jpg",
+  ricePlanter: "./src/images/machines/ricePlanter.jpg",
+  sprayer: "./src/images/machines/sprayer.jpg",
+  speedSprayer: "./src/images/machines/sprayer.jpg",
+  agriDrone: "./src/images/machines/sprayer.jpg",
+  potatoPlanter: "./src/images/machines/potatoPlanter.jpg",
+  garlicOnionPlanter: "./src/images/machines/potatoPlanter.jpg",
+  seeder: "./src/images/machines/potatoPlanter.jpg",
+  combine: "./src/images/machines/combine.jpg",
+  thresher: "./src/images/machines/combine.jpg",
+  dryer: "./src/images/machines/combine.jpg",
+  sorter: "./src/images/machines/combine.jpg",
+  forageHarvester: "./src/images/machines/combine.jpg",
+  potatoHarvester: "./src/images/machines/potatoHarvester.jpg",
+  rootHarvester: "./src/images/machines/potatoHarvester.jpg",
+  carrier: "./src/images/machines/carrier.jpg",
+  aerialLift: "./src/images/machines/carrier.jpg",
+};
+
+function resolveListingImage(item) {
+  return (
+    item?.photoUrl
+    || item?.imageUrl
+    || item?.image
+    || getListingPhotoSrc(item)
+    || MACHINE_FALLBACK_IMAGE[item?.machineType]
+    || (item?.machineType ? machineImage(item.machineType) : "")
+    || "./src/nongnong.png"
+  );
+}
+
+function formatCompatibilitySummary(item) {
+  if (!item) return "";
+  if (item.included) return `포함 작업기: ${item.included}`;
+  const spec = item.specification;
+  if (spec?.implementMount) return `부착 호환: ${spec.implementMount}`;
+  if (Number.isFinite(Number(spec?.ptoHp))) return `PTO 출력 ${spec.ptoHp}마력`;
+  return item.summary || "";
+}
 const CONFIDENCE_LABELS = { high: "높음", medium: "보통", low: "낮음" };
 const MAX_AGENT_HISTORY = 12;
 const AGENT_RESET_RE = /^(?:새 상담(?: 시작)?|처음부터 다시(?: 할래요?)?|대화 초기화)[.!?\s]*$/;
@@ -164,23 +218,15 @@ export async function openCameraCapture({ fallbackInput = null, triggerButton = 
     if (closed) return;
     closed = true;
     stopStream();
-    document.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("pagehide", onPageHide);
     backdrop.remove();
     if (activeCameraCleanup === closeModal) activeCameraCleanup = null;
     if (restoreFocus && triggerButton?.isConnected) triggerButton.focus();
   };
 
-  const onKeyDown = (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeModal();
-    }
-  };
   const onPageHide = () => closeModal({ restoreFocus: false });
 
   activeCameraCleanup = closeModal;
-  document.addEventListener("keydown", onKeyDown);
   window.addEventListener("pagehide", onPageHide);
   backdrop.addEventListener("click", (event) => {
     if (event.target === backdrop) closeModal();
@@ -293,12 +339,182 @@ export function createAiPanel({
   let agentHistory = [];
   let agentPhoto = null;
   let photoIsNew = false;
+  let photoLabel = "첨부한 기계 사진";
   let lastPhotoDataUrl = null;
   let savedDraft = null;
   let quickOwnedNote = "";
   let setupExpanded = false;
   let pickerOpen = false;
+  let plusMenuOpen = false;
+  let fullDelegationEnabled = false;
+  let aiLayoutMode = "fullscreen";
+  let enterAnimTimer = null;
+  let reflowAnimTimer = null;
+  let dragDepth = 0;
+  let sessionGeneration = 0;
+  let liveVoiceGeneration = 0;
+  let liveVoiceStarting = false;
+  let fallbackVoiceGeneration = 0;
+  let fallbackVoiceStarting = false;
+  let liveController = null;
+  let liveModulePromise = null;
+  let voiceModulePromise = null;
+  let voiceCapability = null;
+  let fallbackVoiceInput = null;
+  let fallbackVoiceUsed = false;
+  let pendingInputMode = "text";
+  let liveUserBubble = null;
+  let liveAssistantBubble = null;
+  const renderedDelegationIds = new Set();
   const aiDefaultPlaceholder = $("aiInput").placeholder;
+
+  function setPlusMenuOpen(nextOpen) {
+    plusMenuOpen = Boolean(nextOpen);
+    const menu = $("aiPlusMenu");
+    const btn = $("aiPlusButton");
+    if (menu) menu.hidden = !plusMenuOpen;
+    if (btn) {
+      btn.setAttribute("aria-expanded", String(plusMenuOpen));
+      btn.classList.toggle("is-open", plusMenuOpen);
+    }
+  }
+
+  $("aiPlusButton")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setPlusMenuOpen(!plusMenuOpen);
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!plusMenuOpen) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("#aiPlusWrap")) return;
+    setPlusMenuOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.isComposing) return;
+    if (plusMenuOpen) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setPlusMenuOpen(false);
+      $("aiPlusButton")?.focus();
+      return;
+    }
+    if (pickerOpen) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setPickerOpen(false);
+      return;
+    }
+    if (activeCameraCleanup) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      activeCameraCleanup();
+    }
+  }, true);
+
+  function applyWelcomeStagger() {
+    document.querySelectorAll("#aiWelcomeHero .ai-capability-card").forEach((card, index) => {
+      card.style.setProperty("--stagger-i", String(index));
+    });
+  }
+
+  function triggerCardReflow(container = $("aiMessages")) {
+    if (!container) return;
+    const rails = [...container.querySelectorAll(".ai-result-cards")];
+    if (!rails.length) return;
+    clearTimeout(reflowAnimTimer);
+    for (const rail of rails) {
+      rail.querySelectorAll(".ai-rec-card").forEach((card, idx) => {
+        card.style.setProperty("--stagger-i", String(Math.min(idx, 10)));
+      });
+      rail.classList.remove("is-reflowing");
+      void rail.offsetWidth;
+      rail.classList.add("is-reflowing");
+    }
+    reflowAnimTimer = setTimeout(() => {
+      for (const rail of rails) rail.classList.remove("is-reflowing");
+    }, 760);
+  }
+
+  applyWelcomeStagger();
+
+  function setFullDelegation(nextEnabled) {
+    fullDelegationEnabled = Boolean(nextEnabled);
+    const toggle = $("aiFullDelegationToggle");
+    const stateLabel = $("aiDelegationState");
+    const banner = $("aiDelegationBanner");
+    if (toggle) {
+      toggle.setAttribute("aria-pressed", String(fullDelegationEnabled));
+      toggle.classList.toggle("is-active", fullDelegationEnabled);
+    }
+    if (stateLabel) stateLabel.textContent = fullDelegationEnabled ? "ON" : "OFF";
+    if (banner) banner.hidden = !fullDelegationEnabled;
+  }
+
+  $("aiFullDelegationToggle")?.addEventListener("click", () => {
+    setFullDelegation(!fullDelegationEnabled);
+  });
+
+  function setAiLayoutMode(mode, { animate = false, reflow = false } = {}) {
+    const nextMode = mode === "docked" ? "docked" : "fullscreen";
+    const modeChanged = aiLayoutMode !== nextMode;
+    aiLayoutMode = nextMode;
+    const isFullscreen = nextMode === "fullscreen";
+    const panel = $("aiPanel");
+    if (!panel) return;
+    panel.dataset.layoutMode = nextMode;
+    panel.classList.toggle("is-fullscreen", isFullscreen);
+    panel.classList.toggle("is-expanded", isFullscreen);
+    document.body.classList.toggle("ai-fullscreen", isFullscreen && !panel.hidden);
+    const backdrop = $("aiBackdrop");
+    if (backdrop) backdrop.hidden = panel.hidden || !isFullscreen;
+
+    const expandBtn = $("aiExpand");
+    if (expandBtn) {
+      expandBtn.setAttribute("aria-pressed", String(isFullscreen));
+      expandBtn.title = isFullscreen ? "우측 화면으로 보기" : "전체화면으로 보기";
+      expandBtn.setAttribute("aria-label", expandBtn.title);
+      if (expandBtn.firstElementChild) expandBtn.firstElementChild.textContent = isFullscreen ? "⤡" : "⤢";
+    }
+
+    document.querySelectorAll("[data-ai-layout]").forEach((btn) => {
+      const active = btn.dataset.aiLayout === nextMode;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+
+    if (animate) {
+      clearTimeout(enterAnimTimer);
+      panel.classList.remove("is-entering");
+      void panel.offsetWidth;
+      panel.classList.add("is-entering");
+      const finishEnter = (event) => {
+        if (event && event.target !== panel) return;
+        panel.removeEventListener("animationend", finishEnter);
+        clearTimeout(enterAnimTimer);
+        enterAnimTimer = setTimeout(() => {
+          panel.classList.remove("is-entering");
+        }, 320);
+      };
+      panel.addEventListener("animationend", finishEnter);
+      enterAnimTimer = setTimeout(() => {
+        panel.removeEventListener("animationend", finishEnter);
+        panel.classList.remove("is-entering");
+      }, 740);
+    }
+
+    if (modeChanged || reflow) {
+      triggerCardReflow();
+    }
+    syncAiViewport();
+  }
+
+  document.querySelectorAll("[data-ai-layout]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setAiLayoutMode(btn.dataset.aiLayout, { reflow: true });
+    });
+  });
 
   function checkIsFavorite(id) {
     if (typeof isFavorite === "function") return Boolean(isFavorite(id));
@@ -434,10 +650,15 @@ export function createAiPanel({
     machineSec.append(machineLabel, machineChips);
 
     drawer.append(cropSec, machineSec);
-    panel.insertBefore(drawer, anchor);
+    const dock = document.querySelector(".ai-composer-dock");
+    if (dock) {
+      panel.insertBefore(drawer, dock);
+    } else if (anchor.parentNode) {
+      anchor.parentNode.insertBefore(drawer, anchor);
+    }
 
     const form = $("aiForm");
-    if (form && !form.querySelector("[data-ai-picker-toggle]")) {
+    if (form && !form.querySelector('[data-ai-picker-toggle="inline"]')) {
       const inlineBtn = document.createElement("button");
       inlineBtn.type = "button";
       inlineBtn.className = "ai-picker-inline-btn";
@@ -445,11 +666,18 @@ export function createAiPanel({
       inlineBtn.setAttribute("aria-expanded", "false");
       inlineBtn.setAttribute("aria-controls", "aiPickerDrawer");
       inlineBtn.textContent = "작물·기종";
-      inlineBtn.addEventListener("click", () => setPickerOpen(!pickerOpen));
       const input = $("aiInput");
       if (input) form.insertBefore(inlineBtn, input);
       else form.append(inlineBtn);
     }
+    document.querySelectorAll('[data-ai-picker-toggle="inline"]').forEach((btn) => {
+      if (btn.dataset.boundPicker) return;
+      btn.dataset.boundPicker = "1";
+      btn.addEventListener("click", () => {
+        setPlusMenuOpen(false);
+        setPickerOpen(!pickerOpen);
+      });
+    });
 
     return drawer;
   }
@@ -579,11 +807,14 @@ export function createAiPanel({
     if (!preview) return;
     preview.hidden = !agentPhoto || !photoIsNew;
     if (agentPhoto) $("aiPhotoThumb").src = agentPhoto;
+    const labelEl = $("aiPhotoLabel");
+    if (labelEl) labelEl.textContent = photoLabel || "첨부한 기계 사진";
   }
 
   function clearPhoto() {
     agentPhoto = null;
     photoIsNew = false;
+    photoLabel = "첨부한 기계 사진";
     const input = $("aiPhotoInput");
     if (input) input.value = "";
     const cameraInput = $("aiCameraInput");
@@ -591,36 +822,92 @@ export function createAiPanel({
     showPhotoPreview();
   }
 
-  function applySelectedPhotoDataUrl(dataUrl) {
+  function applySelectedPhotoDataUrl(dataUrl, label = "첨부한 기계 사진") {
+    muteLiveVoiceForPhoto();
     agentPhoto = dataUrl;
     photoIsNew = true;
+    photoLabel = label;
     savedDraft = null;
     showPhotoPreview();
     $("aiInput")?.focus();
   }
 
-  async function handlePhotoFileInput(inputEl) {
-    const file = inputEl?.files?.[0];
+  async function handlePhotoFile(file, labelOverride) {
     if (!file) return;
+    muteLiveVoiceForPhoto();
     try {
-      applySelectedPhotoDataUrl(await shrinkPhoto(file));
+      applySelectedPhotoDataUrl(await shrinkPhoto(file), labelOverride || file.name || "첨부한 기계 사진");
     } catch (error) {
       clearPhoto();
       toast(error.message);
     }
   }
 
-  $("aiPhotoButton")?.addEventListener("click", () => $("aiPhotoInput")?.click());
+  async function handlePhotoFileInput(inputEl) {
+    const file = inputEl?.files?.[0];
+    if (!file) return;
+    await handlePhotoFile(file);
+  }
+
+  $("aiPhotoButton")?.addEventListener("click", () => {
+    setPlusMenuOpen(false);
+    $("aiPhotoInput")?.click();
+  });
   $("aiPhotoInput")?.addEventListener("change", () => handlePhotoFileInput($("aiPhotoInput")));
   $("aiCameraButton")?.addEventListener("click", () => {
+    setPlusMenuOpen(false);
+    muteLiveVoiceForPhoto();
     openCameraCapture({
       fallbackInput: $("aiCameraInput"),
       triggerButton: $("aiCameraButton"),
-      onCapture: applySelectedPhotoDataUrl,
+      onCapture: (dataUrl) => applySelectedPhotoDataUrl(dataUrl, "카메라로 찍은 사진"),
     });
   });
   $("aiCameraInput")?.addEventListener("change", () => handlePhotoFileInput($("aiCameraInput")));
   $("aiPhotoRemove")?.addEventListener("click", clearPhoto);
+
+  // 클립보드 이미지 붙여넣기 지원
+  $("aiInput")?.addEventListener("paste", async (event) => {
+    const items = [...(event.clipboardData?.items || [])];
+    const imageItem = items.find((it) => it.kind === "file" && it.type?.startsWith("image/"));
+    const file = imageItem?.getAsFile() || [...(event.clipboardData?.files || [])].find((f) => f.type?.startsWith("image/"));
+    if (!file) return;
+    event.preventDefault();
+    await handlePhotoFile(file, "붙여넣은 기계 사진");
+  });
+
+  // 패널 전체 이미지 드래그 앤 드롭 지원
+  const aiPanelEl = $("aiPanel");
+  const setDropOverlayVisible = (visible) => {
+    const overlay = $("aiDropOverlay");
+    if (overlay) overlay.hidden = !visible;
+    aiPanelEl?.classList.toggle("is-drag-over", visible);
+  };
+  aiPanelEl?.addEventListener("dragenter", (event) => {
+    if (![...(event.dataTransfer?.types || [])].includes("Files")) return;
+    event.preventDefault();
+    dragDepth += 1;
+    setDropOverlayVisible(true);
+  });
+  aiPanelEl?.addEventListener("dragover", (event) => {
+    if (![...(event.dataTransfer?.types || [])].includes("Files")) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  });
+  aiPanelEl?.addEventListener("dragleave", (event) => {
+    if (![...(event.dataTransfer?.types || [])].includes("Files")) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setDropOverlayVisible(false);
+  });
+  aiPanelEl?.addEventListener("drop", async (event) => {
+    const files = [...(event.dataTransfer?.files || [])];
+    dragDepth = 0;
+    setDropOverlayVisible(false);
+    const imageFile = files.find((f) => f.type?.startsWith("image/"));
+    if (!imageFile) return;
+    event.preventDefault();
+    await handlePhotoFile(imageFile);
+  });
 
   function scrollAiToEnd() {
     const scroll = $("aiScroll");
@@ -676,7 +963,47 @@ export function createAiPanel({
       ...(selectedOwnedModelId ? { selectedOwnedModelId } : {}),
       ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
       ...(quickOwnedNote ? { ownedMachineNote: quickOwnedNote } : {}),
+      ...(fullDelegationEnabled ? { fullDelegation: true } : {}),
     };
+  }
+
+  function renderDelegatedTransactionBox(bubble, delegated) {
+    if (!delegated) return;
+    const box = document.createElement("div");
+    box.className = "ai-rec-overview ai-delegation-card";
+    const rows = [
+      ["전담 매물", delegated.title],
+      ["지역", delegated.region],
+      delegated.start
+        ? ["희망 일정", `${formatReservationDate(delegated.start)}${delegated.end && delegated.end !== delegated.start ? ` ~ ${formatReservationDate(delegated.end)}` : ""}`]
+        : null,
+      Number.isFinite(Number(delegated.maxBudget)) ? ["희망 예산", money(Number(delegated.maxBudget))] : null,
+      ["전담 상태", delegated.statusLabel || "부재중 자동 협상·응대 활성화"],
+    ].filter((row) => row && row[1]);
+    for (const [label, value] of rows) {
+      const row = document.createElement("div");
+      row.className = "ai-rec-row";
+      const labelNode = document.createElement("strong");
+      labelNode.textContent = `${label}:`;
+      row.append(labelNode, document.createTextNode(` ${value}`));
+      box.append(row);
+    }
+    const policy = delegated.aiPolicy || delegated.policy;
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "ai-rec-card-btn ai-delegation-open-btn";
+    go.textContent = "거래 채팅방에서 전담 진행 보기 ›";
+    go.addEventListener("click", () => {
+      handleOpenChat({
+        listingId: delegated.listingId || null,
+        conversationId: delegated.conversationId || null,
+        aiMode: delegated.mode || "autonomous",
+        ...(policy ? { aiPolicy: policy } : {}),
+      });
+    });
+    box.append(go);
+    bubble.append(box);
+    refreshAuthenticatedData?.({ includeRequests: true, includeConversations: true }).catch(() => {});
   }
 
   function renderReservationBox(bubble, done) {
@@ -724,13 +1051,16 @@ export function createAiPanel({
   }
 
   async function executeOneTapAction({ pendingAction, requestId = crypto.randomUUID(), triggerButton, onBusy, onDone, onError }) {
+    const gen = sessionGeneration;
     onBusy?.();
     if (triggerButton) triggerButton.disabled = true;
     try {
       const result = await executeAgentAction(pendingAction, requestId, { insuranceAsked });
+      if (gen !== sessionGeneration) return;
       if (result?.outcome === "completed") {
         const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
         if (result.reservation) renderReservationBox(bubble, result.reservation);
+        if (result.delegatedTransaction) renderDelegatedTransactionBox(bubble, result.delegatedTransaction);
         appendInsuranceAsk(result);
         if (result.createdListing) {
           savedDraft = null;
@@ -739,15 +1069,28 @@ export function createAiPanel({
         }
         rememberAgentTurn({ role: "assistant", content: result.message });
         await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+        if (gen !== sessionGeneration) return;
+        if (isLiveVoiceActive()) {
+          liveController.notifyUiEvent(
+            `사용자가 화면의 승인 버튼을 눌러 작업을 완료했습니다: ${result.message || "요청 완료"}. 따뜻하게 축하하고 다음 안내를 해 주세요.`,
+          );
+        }
         onDone?.("completed", result);
       } else if (result?.outcome === "partial") {
         appendAiMessage(`⚠️ ${result.message}`, "assistant");
         rememberAgentTurn({ role: "assistant", content: result.message });
         await Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+        if (gen !== sessionGeneration) return;
+        if (isLiveVoiceActive()) {
+          liveController.notifyUiEvent(`화면 작업 처리 결과 일부 확인이 필요합니다: ${result.message || ""}`);
+        }
         onDone?.("partial", result);
       } else {
         const msg = `❌ 처리하지 못했어요. ${result?.message || ""}`.trim();
         appendAiMessage(msg, "assistant");
+        if (isLiveVoiceActive()) {
+          liveController.notifyUiEvent(`화면 작업 처리에 실패했습니다: ${result?.message || ""}`);
+        }
         onDone?.("failed", result);
       }
       scrollAiToEnd();
@@ -760,7 +1103,9 @@ export function createAiPanel({
       if (error?.status === 401) {
         const loginMsg = pendingAction.type === "create_listing"
           ? "🔒 매물 등록은 로그인한 뒤 할 수 있어요. 로그인하면 입력한 초안으로 이어서 등록해요."
-          : "🔒 예약·신청은 로그인한 뒤 보낼 수 있어요. 로그인하면 바로 이어서 진행해요.";
+          : pendingAction.type === "delegate_transaction"
+            ? "🔒 거래 전담은 로그인한 뒤 맡길 수 있어요. 로그인하면 바로 이어서 진행해요."
+            : "🔒 예약·신청은 로그인한 뒤 보낼 수 있어요. 로그인하면 바로 이어서 진행해요.";
         appendAiMessage(loginMsg, "assistant");
         onDone?.("login", null);
         if (pendingAction.type === "rental_request") {
@@ -772,6 +1117,11 @@ export function createAiPanel({
           savePendingIntentAndRedirectLogin?.(
             { type: "chat", listingId: pendingAction.listingId, draftBody: "구매 신청을 희망합니다." },
             "로그인 후 구매 신청을 이어서 보낼 수 있어요.",
+          );
+        } else if (pendingAction.type === "delegate_transaction") {
+          savePendingIntentAndRedirectLogin?.(
+            { type: "chat", listingId: pendingAction.listingId, draftBody: "조건 확인 후 부재중 거래 전담을 시작합니다.", aiMode: "autonomous" },
+            "로그인 후 거래 전담을 이어서 시작할 수 있어요.",
           );
         } else if (pendingAction.type === "create_listing") {
           const formDraft = { ...pendingAction, type: pendingAction.listingType || "rent" };
@@ -944,6 +1294,50 @@ export function createAiPanel({
     });
   }
 
+  function startFullDelegationAction(item, activeDates = null, triggerButton = null) {
+    const start = activeDates?.start || state.filters?.date || null;
+    const end = activeDates?.end || state.filters?.dateEnd || start || null;
+    rememberAgentTurn({ role: "user", content: `'${item.title}' 거래 전담 맡기기` });
+    return executeOneTapAction({
+      pendingAction: {
+        type: "delegate_transaction",
+        listingId: item.id,
+        title: item.title,
+        region: item.region,
+        start,
+        end,
+        maxBudget: state.filters?.maxPrice || item.price,
+        areaPyeong: state.filters?.areaPyeong || null,
+        cropIds: state.filters?.cropIds || [],
+        operations: state.filters?.operations || [],
+        ownedModelId: getGarageInfo().selectedOwnedModelId || null,
+        fullDelegation: true,
+      },
+      triggerButton,
+      onBusy: () => {
+        if (triggerButton) triggerButton.textContent = "전담 설정 중…";
+      },
+      onDone: (outcome) => {
+        if (!triggerButton) return;
+        if (outcome === "completed") {
+          triggerButton.textContent = "🤖 전담 진행중";
+        } else {
+          triggerButton.disabled = false;
+          triggerButton.textContent = "🤖 거래 전담";
+        }
+      },
+      onError: (kind) => {
+        if (triggerButton) {
+          triggerButton.disabled = false;
+          triggerButton.textContent = "🤖 거래 전담";
+        }
+        if (kind !== "aborted") {
+          appendAiMessage("거래 전담을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.", "assistant");
+        }
+      },
+    });
+  }
+
   function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
@@ -959,22 +1353,60 @@ export function createAiPanel({
     }
 
     if (listingIds.length) {
+      bubble.classList.add("has-results");
       const results = document.createElement("div");
       results.className = "ai-result";
-      const titleEl = document.createElement("div");
-      titleEl.className = "ai-result-title";
-      titleEl.textContent = "농농이가 찾은 맞춤 매물";
-      results.append(titleEl);
+      const titleRow = document.createElement("div");
+      titleRow.className = "ai-result-title";
+      const titleLabel = document.createElement("span");
+      titleLabel.textContent = `농농이가 찾은 맞춤 매물 (${listingIds.length}건)`;
+      const railHint = document.createElement("span");
+      railHint.className = "ai-result-rail-hint";
+      railHint.textContent = "좌우로 넘겨 비교 ›";
+      titleRow.append(titleLabel, railHint);
+      results.append(titleRow);
+
+      const cardsRail = document.createElement("div");
+      cardsRail.className = "ai-result-cards is-reflowing";
 
       const effectiveStart = searchDates?.start || state.filters?.date || "";
       const effectiveEnd = searchDates?.end || state.filters?.dateEnd || effectiveStart;
       const activeDates = effectiveStart ? { start: effectiveStart, end: effectiveEnd } : null;
 
+      let cardIndex = 0;
       listingIds.forEach((id) => {
         const item = listingById(id);
         if (!item) return;
         const card = document.createElement("div");
         card.className = "ai-rec-card";
+        card.style.setProperty("--stagger-i", String(Math.min(cardIndex, 10)));
+        cardIndex += 1;
+
+        const media = document.createElement("div");
+        media.className = "ai-rec-card-media";
+        const img = document.createElement("img");
+        img.className = "ai-rec-card-img";
+        img.loading = "lazy";
+        img.alt = item.title || "농기계 이미지";
+        img.src = resolveListingImage(item);
+        img.addEventListener("error", () => {
+          if (img.dataset.fallbackApplied) return;
+          img.dataset.fallbackApplied = "1";
+          img.src = "./src/nongnong.png";
+        });
+        const badges = document.createElement("div");
+        badges.className = "ai-rec-card-badges";
+        const txBadge = document.createElement("span");
+        txBadge.className = `ai-rec-badge-tx is-${item.type === "sale" ? "sale" : "rent"}`;
+        txBadge.textContent = item.type === "sale" ? "판매" : "대여";
+        badges.append(txBadge);
+        if (item.region) {
+          const regionBadge = document.createElement("span");
+          regionBadge.className = "ai-rec-badge-region";
+          regionBadge.textContent = item.region;
+          badges.append(regionBadge);
+        }
+        media.append(img, badges);
 
         const info = document.createElement("div");
         info.className = "ai-rec-info";
@@ -985,6 +1417,13 @@ export function createAiPanel({
         const infoSub = document.createElement("small");
         infoSub.textContent = `${areaLabel(item.areaMin, item.areaMax)} · ${item.pickup || "인수 방법 문의"}`;
         info.append(infoTitle, infoMeta, infoSub);
+        const compatSummary = formatCompatibilitySummary(item);
+        if (compatSummary) {
+          const infoCompat = document.createElement("small");
+          infoCompat.className = "ai-rec-compat";
+          infoCompat.textContent = compatSummary;
+          info.append(infoCompat);
+        }
 
         const actions = document.createElement("div");
         actions.className = "ai-rec-card-actions";
@@ -1027,12 +1466,22 @@ export function createAiPanel({
           }
           quickBtn.addEventListener("click", () => startOneTapListingAction(item, activeDates, null, quickBtn));
           actions.append(quickBtn);
+
+          const delegateBtn = document.createElement("button");
+          delegateBtn.type = "button";
+          delegateBtn.className = "button button-secondary ai-rec-delegate-btn";
+          delegateBtn.dataset.aiDelegate = item.id;
+          delegateBtn.textContent = "🤖 거래 전담";
+          delegateBtn.addEventListener("click", () => startFullDelegationAction(item, activeDates, delegateBtn));
+          actions.append(delegateBtn);
         }
 
-        card.append(info, actions);
-        results.append(card);
+        card.append(media, info, actions);
+        cardsRail.append(card);
       });
+      results.append(cardsRail);
       bubble.append(results);
+      setTimeout(() => cardsRail.classList.remove("is-reflowing"), 760);
     }
     $("aiMessages").append(bubble);
     scrollAiToEnd();
@@ -1060,26 +1509,38 @@ export function createAiPanel({
   function appendConfirmation(bubble, action) {
     const requestId = crypto.randomUUID();
     const isPurchase = action.type === "purchase_request";
+    const isDelegation = action.type === "delegate_transaction";
     const card = document.createElement("div");
     card.className = "ai-confirm";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
-    title.textContent = isPurchase ? "구매 신청 확인" : "대여 요청 확인";
+    title.textContent = isDelegation
+      ? "🤖 부재중 거래 전담 확인"
+      : isPurchase
+        ? "구매 신청 확인"
+        : "대여 요청 확인";
     card.append(title);
-    const rows = isPurchase
+    const rows = isDelegation
       ? [
           ["매물", action.title],
           ["지역", action.region],
-          ["판매가", money(action.price)],
-          ["메모", action.note],
-        ]
-      : [
-          ["매물", action.title],
-          ["지역", action.region],
-          ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
-          ["대여료", `${money(action.dailyPrice)}/일 × ${action.days}일 = ${money(action.totalPrice)}`],
-          ["메모", action.note],
-        ];
+          action.start ? ["희망 일정", `${action.start}${action.end && action.end !== action.start ? ` ~ ${action.end}` : ""}`] : null,
+          Number.isFinite(Number(action.maxBudget)) ? ["희망 예산", money(Number(action.maxBudget))] : null,
+        ].filter(Boolean)
+      : isPurchase
+        ? [
+            ["매물", action.title],
+            ["지역", action.region],
+            ["판매가", money(action.price)],
+            ["메모", action.note],
+          ]
+        : [
+            ["매물", action.title],
+            ["지역", action.region],
+            ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
+            ["대여료", `${money(action.dailyPrice)}/일 × ${action.days}일 = ${money(action.totalPrice)}`],
+            ["메모", action.note],
+          ];
     for (const [label, value] of rows) {
       if (!value) continue;
       const row = document.createElement("div");
@@ -1091,15 +1552,17 @@ export function createAiPanel({
     }
     const notice = document.createElement("div");
     notice.className = "ai-rec-notice";
-    notice.textContent = isPurchase
-      ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
-      : "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+    notice.textContent = isDelegation
+      ? "승인하면 1:1 거래 채팅방에서 농농이 자동 협상·응대 모드가 시작돼요."
+      : isPurchase
+        ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
+        : "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
     const actions = document.createElement("div");
     actions.className = "ai-confirm-actions";
     const approve = document.createElement("button");
     approve.type = "button";
     approve.className = "button button-primary";
-    approve.textContent = "승인하고 요청 보내기";
+    approve.textContent = isDelegation ? "승인하고 전담 시작" : "승인하고 요청 보내기";
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.className = "button button-secondary";
@@ -1173,27 +1636,29 @@ export function createAiPanel({
     return link;
   }
 
-  function appendRepairCenters(bubble, centers) {
+  function appendContactCards(bubble, heading, items) {
+    const list = Array.isArray(items) ? items.slice(0, 5) : [];
+    if (!list.length) return;
     const wrap = document.createElement("div");
     wrap.className = "ai-centers";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
-    title.textContent = "🔧 수리·상담 연락처";
+    title.textContent = heading;
     wrap.append(title);
-    for (const center of centers.slice(0, 5)) {
+    for (const item of list) {
       const card = document.createElement("div");
       card.className = "ai-center-card";
       const name = document.createElement("strong");
-      name.textContent = center.name;
+      name.textContent = item.name || "";
       const services = document.createElement("small");
-      services.textContent = center.services || "";
+      services.textContent = item.services || "";
       const actions = document.createElement("div");
       actions.className = "ai-confirm-actions";
-      if (center.phone) actions.append(linkButton(`📞 ${center.phone}`, `tel:${center.phone.replace(/[^0-9]/g, "")}`));
-      if (center.url) actions.append(linkButton("🌐 사이트", center.url, true));
+      if (item.phone) actions.append(linkButton(`📞 ${item.phone}`, `tel:${String(item.phone).replace(/[^0-9]/g, "")}`));
+      if (item.url) actions.append(linkButton("🌐 사이트", item.url, true));
       const checked = document.createElement("small");
       checked.className = "ai-center-checked";
-      checked.textContent = `확인일 ${center.checkedAt || "-"}`;
+      checked.textContent = `확인일 ${item.checkedAt || "-"}`;
       card.append(name, services, actions, checked);
       wrap.append(card);
     }
@@ -1467,13 +1932,8 @@ export function createAiPanel({
     bubble.append(wrap);
   }
 
-  function renderAgentResult(message, result, { photo = false } = {}) {
-    const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
-    const summary = photoSummaryText(result.photoSummary);
-    rememberAgentTurn(
-      { role: "user", content: photo ? `[사진 첨부] ${message}`.trim() : message },
-      { role: "assistant", content: [reply, summary].filter(Boolean).join("\n") },
-    );
+  function renderAgentEffects(bubble, result, { reply = "", includeFollowUp = true } = {}) {
+    if (!bubble || !result) return;
     if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
       savedDraft = { listingId: result.listingDraft.listingId, photoKey: result.listingDraft.photoKey, photoUrl: result.listingDraft.photoUrl };
     }
@@ -1486,41 +1946,78 @@ export function createAiPanel({
         refreshAuthenticatedData?.({ includeRequests: false, includeConversations: false }).catch(() => {});
       }
     }
+    if (result.weatherInfo) renderWeatherInfoBar(bubble, result.weatherInfo);
+    if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
+    if (result.reservation) renderReservationBox(bubble, result.reservation);
+    if (result.delegatedTransaction) renderDelegatedTransactionBox(bubble, result.delegatedTransaction);
+    const listed = result.createdListing || result.updatedListing;
+    if (listed) renderCreatedListingButton(bubble, listed);
+    if (Array.isArray(result.repairCenters) && result.repairCenters.length) {
+      appendContactCards(bubble, "🔧 수리·상담 연락처", result.repairCenters);
+    }
+    if (Array.isArray(result.insuranceContacts) && result.insuranceContacts.length) {
+      appendContactCards(bubble, "🛡️ 보험 상담 연락처", result.insuranceContacts);
+    }
+    if (result.listingDraft) appendListingDraft(bubble, result.listingDraft);
+    if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
+
+    if (includeFollowUp) {
+      if (result.planQuestion) {
+        renderPlanQuestionCard(bubble, result.planQuestion);
+      } else {
+        const choices = inferFollowUpChoices(reply, result);
+        if (choices.length) appendChoices(bubble, choices);
+      }
+      if (wantsDatePicker(reply, result)) {
+        appendDateQuickPicker(bubble, {
+          defaultStart: state.filters?.date || "",
+          defaultEnd: state.filters?.dateEnd || "",
+          onApply: (pickedStart, pickedEnd) => {
+            $("aiInput").value = `${pickedStart}부터 ${pickedEnd}까지로 해주세요.`;
+            $("aiForm").requestSubmit();
+          },
+        });
+      }
+    }
+    if (
+      result.pendingAction?.type === "rental_request"
+      || result.pendingAction?.type === "purchase_request"
+      || result.pendingAction?.type === "delegate_transaction"
+    ) {
+      appendConfirmation(bubble, result.pendingAction);
+    }
+    appendInsuranceAsk(result);
+  }
+
+  function renderAgentResult(message, result, { photo = false } = {}) {
+    const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
+    const summary = photoSummaryText(result.photoSummary);
+    rememberAgentTurn(
+      { role: "user", content: photo ? `[사진 첨부] ${message}`.trim() : message },
+      { role: "assistant", content: [reply, summary].filter(Boolean).join("\n") },
+    );
     const listingIds = result.reservation || result.createdListing || result.updatedListing
       ? []
       : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
-    if (result.weatherInfo) renderWeatherInfoBar(bubble, result.weatherInfo);
-    if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
-    if (result.reservation) renderReservationBox(bubble, result.reservation);
-    const listed = result.createdListing || result.updatedListing;
-    if (listed) renderCreatedListingButton(bubble, listed);
-    if (Array.isArray(result.repairCenters) && result.repairCenters.length) appendRepairCenters(bubble, result.repairCenters);
-    if (result.listingDraft) appendListingDraft(bubble, result.listingDraft);
-    if (Array.isArray(result.sources) && result.sources.length) appendSources(bubble, result.sources);
-
-    if (result.planQuestion) {
-      renderPlanQuestionCard(bubble, result.planQuestion);
-    } else {
-      const choices = inferFollowUpChoices(reply, result);
-      if (choices.length) appendChoices(bubble, choices);
-    }
-    if (wantsDatePicker(reply, result)) {
-      appendDateQuickPicker(bubble, {
-        defaultStart: state.filters?.date || "",
-        defaultEnd: state.filters?.dateEnd || "",
-        onApply: (pickedStart, pickedEnd) => {
-          $("aiInput").value = `${pickedStart}부터 ${pickedEnd}까지로 해주세요.`;
-          $("aiForm").requestSubmit();
-        },
-      });
-    }
-    if (result.pendingAction?.type === "rental_request" || result.pendingAction?.type === "purchase_request") {
-      appendConfirmation(bubble, result.pendingAction);
-    }
-    appendInsuranceAsk(result);
+    renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
     $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
+    if (fallbackVoiceUsed) {
+      fallbackVoiceUsed = false;
+      const ttsGen = sessionGeneration;
+      const fbGen = fallbackVoiceGeneration;
+      loadVoiceModule()
+        .then(async (mod) => {
+          if (ttsGen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+          if (!mod?.speak) return;
+          await mod.prepareSpeech?.();
+          if (ttsGen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+          const settings = mod.loadVoiceSettings?.() || {};
+          if (settings.autoplay !== "off") mod.speak(reply, { rate: settings.rate });
+        })
+        .catch(() => {});
+    }
   }
 
   function refreshContextBar() {
@@ -1558,6 +2055,502 @@ export function createAiPanel({
     }
   }
 
+  const initialWelcomeHtml = $("aiWelcomeHero")?.outerHTML || "";
+
+  $("aiMessages")?.addEventListener("click", (event) => {
+    const capCard = event.target.closest(".ai-capability-card");
+    if (!capCard) return;
+    if (capCard.dataset.aiPhotoTrigger === "true") {
+      if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
+      const bubble = appendAiMessage(
+        "농기계 사진을 올려주시면 기종·고장 의심 부위·적정 시세까지 바로 분석해 드려요! 카메라로 찍거나 이미지를 첨부해 보세요.",
+        "assistant",
+      );
+      const ctaWrap = document.createElement("div");
+      ctaWrap.className = "ai-chat-cta-wrap";
+      const camBtn = document.createElement("button");
+      camBtn.type = "button";
+      camBtn.className = "ai-chat-cta-btn";
+      camBtn.textContent = "📷 카메라로 촬영하기";
+      camBtn.addEventListener("click", () => $("aiCameraButton")?.click());
+      const fileBtn = document.createElement("button");
+      fileBtn.type = "button";
+      fileBtn.className = "ai-chat-cta-btn";
+      fileBtn.textContent = "🖼️ 사진 파일 첨부하기";
+      fileBtn.addEventListener("click", () => $("aiPhotoButton")?.click());
+      ctaWrap.append(camBtn, fileBtn);
+      bubble.append(ctaWrap);
+      scrollAiToEnd();
+      return;
+    }
+    if (capCard.dataset.aiEnableDelegation === "true") {
+      setFullDelegation(true);
+    }
+    if (capCard.dataset.prompt) {
+      submitPrompt(capCard.dataset.prompt);
+    }
+  });
+
+  let voiceAudioEl = null;
+
+  function ensureVoiceAudioElement() {
+    if (voiceAudioEl) return voiceAudioEl;
+    const el = document.createElement("audio");
+    el.autoplay = true;
+    el.hidden = true;
+    $("aiPanel")?.append(el);
+    voiceAudioEl = el;
+    return el;
+  }
+
+  function loadLiveModule() {
+    if (!liveModulePromise) liveModulePromise = import("./gpt-live.js").catch(() => null);
+    return liveModulePromise;
+  }
+
+  function loadVoiceModule() {
+    if (!voiceModulePromise) voiceModulePromise = import("./voice.js").catch(() => null);
+    return voiceModulePromise;
+  }
+
+  function isLiveVoiceActive() {
+    return Boolean(liveController && liveController.state !== "idle" && liveController.state !== "closed");
+  }
+
+  async function ensureVoiceCapability() {
+    if (voiceCapability) return voiceCapability;
+    const voiceMod = await loadVoiceModule();
+    const support = voiceMod?.voiceSupport?.() || { record: false, recognize: false, speak: false };
+    const webrtcSupported = Boolean(globalThis.RTCPeerConnection && globalThis.navigator?.mediaDevices?.getUserMedia);
+    let serverCap = { liveAvailable: false, serverStt: false };
+    try {
+      const res = await fetch("/api/voice", { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && typeof json === "object") serverCap = { ...serverCap, ...json };
+      }
+    } catch {
+      // ignore capability probe errors and fall back cleanly
+    }
+    const cap = {
+      ...support,
+      ...serverCap,
+      liveAvailable: Boolean(serverCap.liveAvailable && webrtcSupported),
+    };
+    voiceCapability = cap;
+    const liveBtn = $("aiLiveVoiceButton");
+    const micBtn = $("aiMicButton");
+    if (liveBtn && micBtn) {
+      liveBtn.hidden = !cap.liveAvailable;
+      micBtn.hidden = Boolean(cap.liveAvailable);
+    }
+    return cap;
+  }
+
+  function syncLiveMuteButton(muted) {
+    const muteBtn = $("aiVoiceMuteBtn");
+    if (!muteBtn) return;
+    const isMuted = Boolean(muted);
+    muteBtn.setAttribute("aria-pressed", String(isMuted));
+    muteBtn.classList.toggle("is-muted", isMuted);
+    muteBtn.textContent = isMuted ? "🎙️ 마이크 켜기" : "🔇 마이크 끄기";
+  }
+
+  const LIVE_STATUS_TEXT = {
+    connecting: "농농이와 실시간 음성 대화를 연결하는 중…",
+    listening: "농농이와 실시간 음성 대화 중 (듣는 중…)",
+    thinking: "농농이가 매물·날씨를 확인하는 중…",
+    speaking: "농농이가 말하는 중…",
+    muted: "마이크가 꺼져 있어요 (눌러서 다시 켜기)",
+    idle: "농농이와 실시간 음성 대화 중 (듣는 중…)",
+    closed: "농농이와 실시간 음성 대화 중 (듣는 중…)",
+  };
+
+  function syncLiveVoiceBar(voiceState = "idle") {
+    const bar = $("aiVoiceLiveBar");
+    const statusEl = $("aiVoiceLiveStatus");
+    const liveBtn = $("aiLiveVoiceButton");
+    const active = voiceState !== "idle" && voiceState !== "closed";
+    if (bar) {
+      bar.hidden = !active;
+      bar.dataset.voiceState = voiceState;
+    }
+    if (statusEl) {
+      statusEl.textContent = LIVE_STATUS_TEXT[voiceState] || LIVE_STATUS_TEXT.listening;
+    }
+    if (liveBtn) {
+      liveBtn.setAttribute("aria-pressed", String(active));
+      liveBtn.classList.toggle("is-active", active);
+    }
+  }
+
+  function appendOrUpdateTranscriptBubble(role, delta, meta = {}) {
+    if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
+    const starters = $("aiStarters");
+    if (starters) starters.hidden = true;
+    const isUser = role === "user";
+    let bubble = isUser ? liveUserBubble : liveAssistantBubble;
+    const textChunk = typeof delta === "string" ? delta : "";
+    if (!bubble && textChunk) {
+      bubble = appendAiMessage(textChunk, isUser ? "user" : "assistant");
+      bubble.classList.add("is-live-transcript");
+      if (isUser) liveUserBubble = bubble;
+      else liveAssistantBubble = bubble;
+    } else if (bubble && textChunk) {
+      let textNode = bubble.querySelector(".ai-live-transcript-text");
+      if (!textNode) {
+        textNode = document.createElement("span");
+        textNode.className = "ai-live-transcript-text";
+        textNode.textContent = bubble.textContent || "";
+        bubble.textContent = "";
+        bubble.append(textNode);
+      }
+      textNode.textContent += textChunk;
+      scrollAiToEnd();
+    }
+    if (meta?.done || meta?.final) {
+      if (bubble) bubble.classList.remove("is-live-transcript");
+      if (isUser) liveUserBubble = null;
+      else liveAssistantBubble = null;
+    }
+  }
+
+  async function handleClientDelegation(payload, gen, liveGen) {
+    if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+    const delegationId = payload?.delegationId || payload?.id || "";
+    const userText = String(payload?.userText || payload?.transcript || payload?.message || "").trim();
+    if (!userText) return { spokenSummary: "무슨 작업이나 농기계를 찾으시는지 다시 말씀해 주세요." };
+    if (delegationId && renderedDelegationIds.has(delegationId)) {
+      return null;
+    }
+    if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
+    if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+
+    const uiContext = collectUiContext();
+    const result = await askAgent(userText, {
+      history: agentHistory,
+      region: uiContext.region,
+      uiContext,
+      inputMode: "voice",
+      delegationId: delegationId || undefined,
+      savedDraft,
+      insuranceOffer,
+      insuranceAsked,
+      fullDelegation: fullDelegationEnabled,
+    });
+    if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+    if (delegationId) renderedDelegationIds.add(delegationId);
+
+    const reply = typeof result?.reply === "string" && result.reply.trim()
+      ? result.reply.trim()
+      : "말씀하신 내용을 확인했어요.";
+    if (!result?.insuranceAsk) trackInsurance(result);
+    rememberAgentTurn(
+      { role: "user", content: userText },
+      { role: "assistant", content: reply },
+    );
+
+    const listingIds = result?.reservation || result?.createdListing || result?.updatedListing
+      ? []
+      : (Array.isArray(result?.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
+    const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result?.searchDates || null });
+    renderAgentEffects(bubble, result, { reply, includeFollowUp: false });
+    scrollAiToEnd();
+
+    let spokenSummary = reply;
+    if (
+      result?.pendingAction?.type === "rental_request"
+      || result?.pendingAction?.type === "purchase_request"
+      || result?.pendingAction?.type === "delegate_transaction"
+      || result?.pendingAction?.type === "create_listing"
+    ) {
+      spokenSummary += " 화면에 승인 카드를 띄워 드렸어요. 내용을 확인하신 뒤 초록색 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.";
+    }
+    return { spokenSummary, result };
+  }
+
+  function muteLiveVoiceForPhoto() {
+    if (isLiveVoiceActive() && !liveController.muted) {
+      liveController.setMuted(true);
+      syncLiveMuteButton(true);
+      syncLiveVoiceBar("muted");
+    }
+  }
+
+  async function stopLiveVoice({ silent = false } = {}) {
+    liveVoiceGeneration += 1;
+    liveVoiceStarting = false;
+    const controller = liveController;
+    liveController = null;
+    liveUserBubble = null;
+    liveAssistantBubble = null;
+    syncLiveMuteButton(false);
+    syncLiveVoiceBar("idle");
+    if (controller) {
+      try {
+        await controller.stop();
+      } catch (error) {
+        if (!silent) toast(error?.message || "음성 대화를 종료했어요.");
+      }
+    }
+  }
+
+  async function startLiveVoice() {
+    if (isLiveVoiceActive() || liveVoiceStarting) {
+      await stopLiveVoice();
+      return;
+    }
+    stopFallbackVoice();
+    liveVoiceStarting = true;
+    const gen = sessionGeneration;
+    const liveGen = liveVoiceGeneration;
+    try {
+      const cap = await ensureVoiceCapability();
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      if (!cap.liveAvailable) {
+        liveVoiceStarting = false;
+        await toggleFallbackVoice();
+        return;
+      }
+      const liveMod = await loadLiveModule();
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      if (typeof liveMod?.createGptLiveController !== "function") {
+        liveVoiceStarting = false;
+        await toggleFallbackVoice();
+        return;
+      }
+      const uiContext = collectUiContext();
+      syncLiveMuteButton(false);
+      syncLiveVoiceBar("connecting");
+      const controller = liveMod.createGptLiveController({
+        region: uiContext.region,
+        history: agentHistory,
+        audioElement: ensureVoiceAudioElement(),
+        onState: (nextState) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          const resolvedState = nextState === "listening" && controller.muted ? "muted" : (nextState || "listening");
+          syncLiveVoiceBar(resolvedState);
+          if (nextState === "listening") {
+            if (liveUserBubble) {
+              liveUserBubble.classList.remove("is-live-transcript");
+              liveUserBubble = null;
+            }
+            if (liveAssistantBubble) {
+              liveAssistantBubble.classList.remove("is-live-transcript");
+              liveAssistantBubble = null;
+            }
+          }
+          if (nextState === "closed" || nextState === "idle") {
+            if (liveController === controller) liveController = null;
+          }
+        },
+        onUserTranscriptDelta: (payload) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          appendOrUpdateTranscriptBubble("user", payload?.delta || "");
+        },
+        onAssistantTranscriptDelta: (payload) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          appendOrUpdateTranscriptBubble("assistant", payload?.delta || "");
+        },
+        onClientDelegation: (payload) => handleClientDelegation(payload, gen, liveGen),
+        onError: (error) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          toast(error?.message || "실시간 음성 연결에 문제가 생겼어요.");
+          stopLiveVoice({ silent: true });
+        },
+      });
+      liveController = controller;
+      await controller.start();
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) {
+        await controller.stop().catch(() => {});
+      }
+    } catch (error) {
+      if (gen === sessionGeneration && liveGen === liveVoiceGeneration) {
+        liveController = null;
+        syncLiveVoiceBar("idle");
+        toast(error?.message || "실시간 음성 대화를 시작하지 못했어요.");
+      }
+    } finally {
+      if (liveGen === liveVoiceGeneration) liveVoiceStarting = false;
+    }
+  }
+
+  function stopFallbackVoice() {
+    fallbackVoiceGeneration += 1;
+    fallbackVoiceStarting = false;
+    fallbackVoiceUsed = false;
+    pendingInputMode = "text";
+    const active = fallbackVoiceInput;
+    fallbackVoiceInput = null;
+    const micBtn = $("aiMicButton");
+    if (micBtn) {
+      micBtn.setAttribute("aria-pressed", "false");
+      micBtn.classList.remove("is-active");
+    }
+    if ($("aiInput") && $("aiInput").placeholder !== aiDefaultPlaceholder) {
+      $("aiInput").placeholder = aiDefaultPlaceholder;
+    }
+    if (active) {
+      try { active.cancel?.(); } catch { /* ignore */ }
+    }
+    loadVoiceModule().then((mod) => mod?.stopSpeaking?.()).catch(() => {});
+  }
+
+  async function toggleFallbackVoice() {
+    const micBtn = $("aiMicButton");
+    const resetMicUi = () => {
+      if (micBtn) {
+        micBtn.setAttribute("aria-pressed", "false");
+        micBtn.classList.remove("is-active");
+      }
+      if ($("aiInput")) $("aiInput").placeholder = aiDefaultPlaceholder;
+    };
+    if (fallbackVoiceInput) {
+      const gen = sessionGeneration;
+      const fbGen = fallbackVoiceGeneration;
+      const current = fallbackVoiceInput;
+      fallbackVoiceInput = null;
+      resetMicUi();
+      try {
+        const result = await current.stop?.();
+        if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+        let recognizedText = "";
+        if (typeof result === "string") {
+          recognizedText = result;
+        } else if (result?.base64) {
+          if ($("aiInput")) $("aiInput").placeholder = "말씀하신 내용을 옮겨 적고 있어요…";
+          const res = await fetch("/api/voice", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ audio: result.base64 }),
+          });
+          if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+          const data = await res.json().catch(() => ({}));
+          if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+          if (!res.ok) throw new Error(data?.message || "음성 인식에 실패했어요.");
+          recognizedText = data?.text || "";
+        }
+        if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+        if ($("aiInput")) $("aiInput").placeholder = aiDefaultPlaceholder;
+        const trimmed = String(recognizedText || "").trim();
+        if (trimmed) {
+          fallbackVoiceUsed = true;
+          pendingInputMode = "voice";
+          submitPrompt(trimmed);
+        }
+      } catch (error) {
+        if (gen === sessionGeneration && fbGen === fallbackVoiceGeneration) {
+          resetMicUi();
+          toast(error?.message || "음성 인식에 실패했어요.");
+        }
+      }
+      return;
+    }
+    if (fallbackVoiceStarting) {
+      stopFallbackVoice();
+      return;
+    }
+    fallbackVoiceStarting = true;
+    const gen = sessionGeneration;
+    const fbGen = fallbackVoiceGeneration;
+    try {
+      const voiceMod = await loadVoiceModule();
+      const cap = await ensureVoiceCapability();
+      if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+      const canServerStt = Boolean(cap.serverStt && typeof voiceMod?.startRecording === "function" && cap.record);
+      const canBrowserStt = Boolean(typeof voiceMod?.startBrowserRecognition === "function" && cap.recognize);
+      if (!canServerStt && !canBrowserStt) {
+        toast("이 브라우저에서는 음성 입력을 사용할 수 없어요.");
+        return;
+      }
+      voiceMod.primeSpeech?.();
+      if (micBtn) {
+        micBtn.setAttribute("aria-pressed", "true");
+        micBtn.classList.add("is-active");
+      }
+      if (canServerStt) {
+        if ($("aiInput")) $("aiInput").placeholder = "듣고 있어요… 다시 누르면 전송돼요";
+        const recorder = await voiceMod.startRecording({
+          onTick: (left) => {
+            if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+            if ($("aiInput")) $("aiInput").placeholder = `듣고 있어요 (${left}초) · 다시 누르면 전송`;
+          },
+          onLimit: () => {
+            if (gen === sessionGeneration && fbGen === fallbackVoiceGeneration && fallbackVoiceInput) toggleFallbackVoice();
+          },
+        });
+        if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) {
+          try { recorder?.cancel?.(); } catch { /* ignore */ }
+          return;
+        }
+        fallbackVoiceInput = recorder;
+      } else {
+        if ($("aiInput")) $("aiInput").placeholder = "듣고 있어요… 다시 누르면 전송돼요";
+        const recognition = voiceMod.startBrowserRecognition({
+          onInterim: (text) => {
+            if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+            if (text && $("aiInput")) $("aiInput").placeholder = text;
+          },
+          onLimit: () => {
+            if (gen === sessionGeneration && fbGen === fallbackVoiceGeneration && fallbackVoiceInput) toggleFallbackVoice();
+          },
+          onFailure: (error) => {
+            if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
+            fallbackVoiceInput = null;
+            resetMicUi();
+            toast(error?.message || "음성 인식에 실패했어요.");
+          },
+        });
+        if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) {
+          try { recognition?.cancel?.(); } catch { /* ignore */ }
+          return;
+        }
+        fallbackVoiceInput = recognition;
+      }
+    } catch (error) {
+      if (gen === sessionGeneration && fbGen === fallbackVoiceGeneration) {
+        fallbackVoiceInput = null;
+        resetMicUi();
+        toast(error?.message || "음성 입력을 시작하지 못했어요.");
+      }
+    } finally {
+      if (fbGen === fallbackVoiceGeneration) fallbackVoiceStarting = false;
+    }
+  }
+
+  $("aiLiveVoiceButton")?.addEventListener("click", () => {
+    startLiveVoice();
+  });
+  $("aiMicButton")?.addEventListener("click", () => {
+    toggleFallbackVoice();
+  });
+  $("aiVoiceMuteBtn")?.addEventListener("click", () => {
+    if (!isLiveVoiceActive()) return;
+    const nextMuted = !liveController.muted;
+    liveController.setMuted(nextMuted);
+    syncLiveMuteButton(nextMuted);
+    syncLiveVoiceBar(nextMuted ? "muted" : "listening");
+  });
+  $("aiVoiceStopBtn")?.addEventListener("click", () => {
+    stopLiveVoice();
+  });
+
+  if (aiPanelEl && typeof MutationObserver === "function") {
+    let wasPanelHidden = aiPanelEl.hidden;
+    const panelObserver = new MutationObserver(() => {
+      const isNowHidden = aiPanelEl.hidden;
+      if (!wasPanelHidden && isNowHidden) {
+        sessionGeneration += 1;
+        setPlusMenuOpen(false);
+        setPickerOpen(false);
+        stopLiveVoice({ silent: true });
+        stopFallbackVoice();
+      }
+      wasPanelHidden = isNowHidden;
+    });
+    panelObserver.observe(aiPanelEl, { attributes: true, attributeFilter: ["hidden"] });
+  }
+
   async function sendAiQuestion(event) {
     event.preventDefault();
     const sendingPhoto = photoIsNew && agentPhoto ? agentPhoto : null;
@@ -1566,12 +2559,17 @@ export function createAiPanel({
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
     if (sendingPhoto) lastPhotoDataUrl = sendingPhoto;
 
+    const gen = sessionGeneration;
+    const inputMode = pendingInputMode;
+    pendingInputMode = "text";
     recommendationPending = true;
     const submit = $("aiForm").querySelector('[type="submit"]');
     submit.disabled = true;
     $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
+    if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
     $("aiStarters").hidden = true;
+    setPlusMenuOpen(false);
     setPickerOpen(false);
     $("aiMessages").querySelectorAll(".ai-follow-up, .ai-date-picker, .ai-plan-card").forEach((el) => el.remove());
     appendAiMessage(message, "user", [], sendingPhoto);
@@ -1583,17 +2581,27 @@ export function createAiPanel({
         return;
       }
       pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
+      pending.classList.add("is-thinking");
+      const wave = document.createElement("span");
+      wave.className = "ai-thinking-wave";
+      wave.setAttribute("aria-hidden", "true");
+      wave.innerHTML = "<span></span><span></span><span></span><span></span>";
+      pending.prepend(wave);
       if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
+      if (gen !== sessionGeneration) return;
       const uiContext = collectUiContext();
       const agentResult = await askAgent(message, {
         history: agentHistory,
         region: uiContext.region,
+        inputMode,
         uiContext,
         image: sendingPhoto || undefined,
         savedDraft,
         insuranceOffer,
         insuranceAsked,
+        fullDelegation: fullDelegationEnabled,
       });
+      if (gen !== sessionGeneration) return;
       pending.remove();
       pending = undefined;
       if (agentResult?.mode === "agent") {
@@ -1609,6 +2617,7 @@ export function createAiPanel({
       appendAiMessage("AI 상담을 호출할 수 없습니다. 잠시 후 다시 시도해 주세요.", "assistant");
       $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
     } catch (error) {
+      if (gen !== sessionGeneration) return;
       console.error("AI 상담 호출 실패", error);
       appendAiMessage(error?.message || "AI 상담을 호출할 수 없습니다. 잠시 후 다시 시도해 주세요.", "assistant");
       $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
@@ -1628,39 +2637,59 @@ export function createAiPanel({
   }
 
   function openAiPanel() {
-    $("aiPanel").hidden = false;
+    const panel = $("aiPanel");
+    const wasHidden = panel.hidden;
+    panel.hidden = false;
     document.body.classList.add("ai-open");
     $("aiLauncher").setAttribute("aria-expanded", "true");
+    applyWelcomeStagger();
+    if (wasHidden) {
+      setAiLayoutMode("fullscreen", { animate: true });
+    } else {
+      setAiLayoutMode(aiLayoutMode, { animate: false });
+    }
     if (!$("aiStarters")?.hidden) renderStarterBar();
     refreshContextBar();
     syncAiViewport();
+    ensureVoiceCapability().catch(() => {});
     $("aiClose").focus({ preventScroll: true });
   }
 
   function toggleAiPanelSize() {
-    const button = $("aiExpand");
-    const expanded = $("aiPanel").classList.toggle("is-expanded");
-    button.setAttribute("aria-pressed", String(expanded));
-    button.title = expanded ? "채팅창 원래 크기로" : "채팅창 확대";
-    button.firstElementChild.textContent = expanded ? "⤡" : "⤢";
+    setAiLayoutMode(aiLayoutMode === "fullscreen" ? "docked" : "fullscreen", { reflow: true });
   }
 
   function performReset() {
+    sessionGeneration += 1;
+    renderedDelegationIds.clear();
+    liveUserBubble = null;
+    liveAssistantBubble = null;
+    fallbackVoiceUsed = false;
+    pendingInputMode = "text";
+    stopLiveVoice({ silent: true });
+    stopFallbackVoice();
     agentHistory = [];
     insuranceOffer = null;
     insuranceAsked = false;
     savedDraft = null;
     lastPhotoDataUrl = null;
     setupExpanded = false;
+    setFullDelegation(false);
+    setPlusMenuOpen(false);
     setPickerOpen(false);
     renderStarterBar();
     clearPhoto();
-    $("aiMessages").replaceChildren();
+    if (initialWelcomeHtml) {
+      $("aiMessages").innerHTML = initialWelcomeHtml;
+      applyWelcomeStagger();
+    } else {
+      $("aiMessages").replaceChildren();
+      appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 한 줄로 말씀하시면 필요한 조건만 차례로 여쭤볼게요.", "assistant");
+    }
     $("aiStarters").hidden = false;
     $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     refreshContextBar();
-    appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 한 줄로 말씀하시면 필요한 조건만 차례로 여쭤볼게요.", "assistant");
     $("aiInput").focus();
   }
 
@@ -1681,6 +2710,7 @@ export function createAiPanel({
     syncAiViewport,
     openAiPanel,
     toggleAiPanelSize,
+    setAiLayoutMode,
     resetAiPanel,
     submitPrompt,
     refreshContextBar,

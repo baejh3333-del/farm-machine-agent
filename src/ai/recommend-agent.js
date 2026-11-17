@@ -15,7 +15,13 @@ export async function askRecommendation(message, context) {
 
 // 농농 통합 에이전트(/api/agent). 서버에 AI 키가 없으면 { mode: "unavailable" }를 받는다.
 // insuranceOffer: 예약 뒤 보험 추천 흐름의 진행 상태, insuranceAsked: 이 대화에서 이미 물었는지.
-export async function askAgent(message, { history = [], region, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false } = {}) {
+export async function askAgent(
+  message,
+  { history = [], region, inputMode = "text", delegationId = null, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation } = {},
+) {
+  const mergedUiContext = uiContext || fullDelegation
+    ? { ...(uiContext || {}), ...(fullDelegation ? { fullDelegation: true } : {}) }
+    : undefined;
   const result = await apiFetch("/api/agent", {
     method: "POST",
     timeoutMs: image ? 50000 : 30000,
@@ -24,7 +30,9 @@ export async function askAgent(message, { history = [], region, uiContext, image
       message,
       history,
       region,
-      ...(uiContext ? { uiContext } : {}),
+      inputMode: inputMode === "voice" ? "voice" : "text",
+      ...(delegationId ? { delegationId } : {}),
+      ...(mergedUiContext ? { uiContext: mergedUiContext } : {}),
       ...(image ? { image } : {}),
       ...(savedDraft ? { savedDraft } : {}),
       ...(insuranceOffer ? { insuranceOffer } : {}),
@@ -35,12 +43,17 @@ export async function askAgent(message, { history = [], region, uiContext, image
   return result;
 }
 
-// 사용자가 원탭 또는 확인 카드로 승인한 작업(대여 요청·구매 신청·매물 등록)을 서버에 실행을 맡긴다.
+// 사용자가 원탭 또는 확인 카드로 승인한 작업(대여 요청·구매 신청·매물 등록·거래 전담)을 서버에 실행을 맡긴다.
 export async function executeAgentAction(pendingAction, requestId, { insuranceAsked = false } = {}) {
   return apiFetch("/api/agent", {
     method: "POST",
     json: { action: "execute", pendingAction, requestId, insuranceAsked },
   });
+}
+
+// 부재중 거래 전담 위임을 서버에 요청한다.
+export async function delegateTransactionAction(pendingAction, requestId = crypto.randomUUID(), options = {}) {
+  return executeAgentAction({ ...pendingAction, type: "delegate_transaction", fullDelegation: true }, requestId, options);
 }
 
 // 날짜 선택 시 기상 예보를 확인한다. 오프라인·오류 시 fail-open으로 null을 반환한다.
@@ -56,4 +69,13 @@ export async function fetchWeatherForecast({ region = "영양읍", date, endDate
   } catch {
     return null;
   }
+}
+
+// gpt-live-1 WebRTC 세션을 만든다. 브라우저 SDP offer를 서버가 OpenAI에 중계하고 answer SDP를 돌려준다.
+export async function createLiveVoiceSession({ sdp, region, history = [] }) {
+  return apiFetch("/api/voice", {
+    method: "POST",
+    timeoutMs: 20000,
+    json: { action: "live_session", sdp, region, history },
+  });
 }

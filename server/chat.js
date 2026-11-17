@@ -13,6 +13,19 @@ function toIsoOrNull(value) {
 }
 
 function toConversationDto(row, lastMessage = null) {
+  const aiPausedReason = row.ai_paused_reason ?? null;
+  const aiDraftJson = row.ai_draft_json ?? null;
+  const waitingForUser = Boolean(
+    (typeof aiPausedReason === "string" && aiPausedReason.startsWith("escalated:")) ||
+    aiDraftJson?.waitingForUser
+  );
+  const escalationSummary =
+    typeof aiDraftJson?.summaryForUser === "string" && aiDraftJson.summaryForUser
+      ? aiDraftJson.summaryForUser
+      : (typeof aiPausedReason === "string" && aiPausedReason.startsWith("escalated:") && lastMessage?.sender_kind === "system"
+        ? lastMessage.body
+        : null);
+
   return {
     id: String(row.id),
     listingId: row.listing_id,
@@ -29,9 +42,11 @@ function toConversationDto(row, lastMessage = null) {
     buyerAiPolicy: row.buyer_ai_policy && typeof row.buyer_ai_policy === "object" ? row.buyer_ai_policy : {},
     ownerAiPolicy: row.owner_ai_policy && typeof row.owner_ai_policy === "object" ? row.owner_ai_policy : {},
     aiConsecutiveTurns: Number(row.ai_consecutive_turns ?? 0),
-    aiPausedReason: row.ai_paused_reason ?? null,
+    aiPausedReason,
     aiLastRunAt: toIsoOrNull(row.ai_last_run_at),
-    aiDraftJson: row.ai_draft_json ?? null,
+    aiDraftJson,
+    waitingForUser,
+    escalationSummary,
     lastMessage: lastMessage
       ? {
           id: String(lastMessage.id),
@@ -462,19 +477,79 @@ export async function getConversationMessages(
   };
 }
 
+function parseIsoDateOrNull(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const d = new Date(`${trimmed}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== trimmed) return null;
+  return trimmed;
+}
+
+function sanitizeStringArray(raw, maxItems = 20, maxLen = 40) {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(
+    raw
+      .filter((item) => typeof item === "string" && item.trim())
+      .map((item) => item.trim().slice(0, maxLen))
+  )].slice(0, maxItems);
+}
+
 function sanitizeAiPolicy(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const out = {};
+  const fullDelegation = typeof raw.fullDelegation === "boolean" ? raw.fullDelegation : false;
+  const autoExecuteTransaction = typeof raw.autoExecuteTransaction === "boolean"
+    ? raw.autoExecuteTransaction
+    : fullDelegation;
+  const targetStart = parseIsoDateOrNull(raw.targetStart);
+  let targetEnd = parseIsoDateOrNull(raw.targetEnd);
+  if (targetStart && targetEnd && targetEnd < targetStart) {
+    targetEnd = targetStart;
+  }
+
+  const out = {
+    fullDelegation,
+    autoExecuteTransaction,
+    intent: raw.intent === "rent" || raw.intent === "sale" ? raw.intent : null,
+    targetStart,
+    targetEnd,
+    maxBudget:
+      raw.maxBudget !== null && raw.maxBudget !== undefined && raw.maxBudget !== "" &&
+      Number.isFinite(Number(raw.maxBudget)) && Number(raw.maxBudget) >= 0
+        ? Math.trunc(Number(raw.maxBudget))
+        : null,
+    minPrice:
+      raw.minPrice !== null && raw.minPrice !== undefined && raw.minPrice !== "" &&
+      Number.isFinite(Number(raw.minPrice)) && Number(raw.minPrice) >= 0
+        ? Math.trunc(Number(raw.minPrice))
+        : null,
+    areaPyeong:
+      raw.areaPyeong !== null && raw.areaPyeong !== undefined && raw.areaPyeong !== "" &&
+      Number.isFinite(Number(raw.areaPyeong)) && Number(raw.areaPyeong) > 0
+        ? Number(raw.areaPyeong)
+        : null,
+    cropIds: sanitizeStringArray(raw.cropIds, 20, 40),
+    operations: sanitizeStringArray(raw.operations, 20, 40),
+    ownedModelId: typeof raw.ownedModelId === "string" && raw.ownedModelId.trim()
+      ? raw.ownedModelId.trim().slice(0, 80)
+      : null,
+    region: typeof raw.region === "string" && raw.region.trim()
+      ? raw.region.trim().slice(0, 40)
+      : null,
+    pickupPreference: typeof raw.pickupPreference === "string"
+      ? raw.pickupPreference.trim().slice(0, 120)
+      : "",
+    customRules: typeof raw.customRules === "string"
+      ? raw.customRules.trim().slice(0, 300)
+      : "",
+    maxConsecutiveAiTurns: fullDelegation ? 6 : 4,
+  };
+
   if (typeof raw.instructions === "string") {
     out.instructions = raw.instructions.trim().slice(0, 500);
   }
   if (typeof raw.allowNegotiation === "boolean") {
     out.allowNegotiation = raw.allowNegotiation;
-  }
-  if (raw.minPrice === null) {
-    out.minPrice = null;
-  } else if (raw.minPrice !== undefined && Number.isFinite(Number(raw.minPrice)) && Number(raw.minPrice) >= 0) {
-    out.minPrice = Math.trunc(Number(raw.minPrice));
   }
   if (typeof raw.allowDelivery === "boolean") {
     out.allowDelivery = raw.allowDelivery;
@@ -482,7 +557,7 @@ function sanitizeAiPolicy(raw) {
   if (typeof raw.preferredPickupWindow === "string") {
     out.preferredPickupWindow = raw.preferredPickupWindow.trim().slice(0, 60);
   }
-  if (raw.maxConsecutiveAiTurns !== undefined) {
+  if (raw.maxConsecutiveAiTurns !== undefined && raw.maxConsecutiveAiTurns !== null && raw.maxConsecutiveAiTurns !== "") {
     const turns = Number(raw.maxConsecutiveAiTurns);
     if (Number.isFinite(turns)) {
       out.maxConsecutiveAiTurns = Math.min(10, Math.max(1, Math.trunc(turns)));
@@ -491,14 +566,11 @@ function sanitizeAiPolicy(raw) {
   if (Array.isArray(raw.autoReplyOn)) {
     out.autoReplyOn = [...new Set(raw.autoReplyOn.filter((t) => typeof t === "string" && VALID_AUTO_REPLY_TOPICS.has(t)))];
   }
+  if (Array.isArray(raw.chips)) {
+    out.chips = sanitizeStringArray(raw.chips, 12, 40);
+  }
   if (typeof raw.desiredDate === "string") {
     out.desiredDate = raw.desiredDate.trim().slice(0, 30);
-  }
-  if (raw.areaPyeong !== undefined && Number.isFinite(Number(raw.areaPyeong)) && Number(raw.areaPyeong) > 0) {
-    out.areaPyeong = Math.trunc(Number(raw.areaPyeong));
-  }
-  if (typeof raw.ownedModelId === "string") {
-    out.ownedModelId = raw.ownedModelId.trim().slice(0, 80);
   }
   if (typeof raw.needDelivery === "boolean") {
     out.needDelivery = raw.needDelivery;

@@ -6,9 +6,9 @@
   gap: 7px;
   min-height: 40px;
   padding: 6px 14px;
-  border: 1px solid var(--line, #ded5c6);
+  border: 1px solid var(--line, #e3e6e0);
   border-radius: 14px;
-  background: var(--bg-surface, #fffcf6);
+  background: var(--bg-surface, #ffffff);
   color: var(--text-strong, #162a22);
   font-size: 0.875rem;
   font-weight: 700;
@@ -25,7 +25,7 @@
 .region-picker-trigger:hover,
 .region-picker-trigger:focus-visible {
   border-color: var(--primary, #345840);
-  background: var(--bg-warm, #faf5ec);
+  background: var(--bg-warm, #f7f8f5);
   box-shadow: var(--shadow-sm, 0 2px 8px rgba(22, 42, 34, 0.05));
   outline: none;
 }
@@ -67,9 +67,9 @@
   max-height: min(86vh, 660px);
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface, #fffcf6);
+  background: var(--bg-surface, #ffffff);
   border-radius: var(--radius-lg, 22px);
-  border: 1px solid var(--line, #ded5c6);
+  border: 1px solid var(--line, #e3e6e0);
   box-shadow: var(--shadow-lg, 0 20px 48px rgba(16, 48, 36, 0.14));
   overflow: hidden;
   animation: regionDialogIn var(--dur-normal, 280ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
@@ -95,8 +95,8 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 1px solid var(--line, #ded5c6);
-  background: var(--bg-surface, #fffcf6);
+  border: 1px solid var(--line, #e3e6e0);
+  background: var(--bg-surface, #ffffff);
   color: var(--text-body, #2c4237);
   font-size: 0.95rem;
   cursor: pointer;
@@ -109,7 +109,7 @@
 }
 
 .region-picker-close:hover {
-  background: var(--bg-subtle, #eee5d7);
+  background: var(--bg-subtle, #eceee9);
 }
 
 .region-picker-close:active {
@@ -118,7 +118,7 @@
 
 .region-picker-gps-bar {
   padding: 14px 22px;
-  background: var(--bg-warm, #faf5ec);
+  background: var(--bg-warm, #f7f8f5);
   border-bottom: 1px solid rgba(52, 88, 64, 0.12);
   display: flex;
   align-items: center;
@@ -135,7 +135,7 @@
   border: 0;
   border-radius: var(--radius-sm, 12px);
   background: var(--forest, #174233);
-  color: var(--bg-surface, #fffcf6);
+  color: var(--bg-surface, #ffffff);
   font-size: 0.90625rem;
   font-weight: 700;
   cursor: pointer;
@@ -205,7 +205,7 @@
 
 .region-step-provinces {
   border-right: 1px solid rgba(23, 66, 51, 0.08);
-  background: var(--bg-warm, #faf5ec);
+  background: var(--bg-warm, #f7f8f5);
   gap: 4px;
 }
 
@@ -256,7 +256,7 @@
 
 .region-prov-btn.is-active {
   background: var(--forest, #174233);
-  color: var(--bg-surface, #fffcf6);
+  color: var(--bg-surface, #ffffff);
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(23, 66, 51, 0.16);
 }
@@ -270,9 +270,9 @@
 
 .region-city-btn {
   padding: 10px 10px;
-  border: 1px solid var(--line, #ded5c6);
+  border: 1px solid var(--line, #e3e6e0);
   border-radius: 11px;
-  background: var(--bg-surface, #fffcf6);
+  background: var(--bg-surface, #ffffff);
   color: var(--text-strong, #162a22);
   font-size: 0.84375rem;
   font-weight: 600;
@@ -302,7 +302,7 @@
 
 .region-city-btn:hover {
   border-color: var(--primary, #345840);
-  background: var(--bg-warm, #faf5ec);
+  background: var(--bg-warm, #f7f8f5);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm, 0 2px 8px rgba(22, 42, 34, 0.06));
 }

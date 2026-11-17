@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f5efe4" />
+  <meta name="theme-color" content="#f3f4f1" />
   <meta name="description" content="초보 농부도 쉽게! 작물과 작업에 맞는 농기계를 가까운 곳에서 찾고 대여하거나 구매하세요." />
   <title>모아농기계 — 초보 농부도 쉬운 우리 동네 농기계 대여·구매</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/home.css?v=20261117" />
   <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
@@ -123,57 +124,92 @@
         <div id="garageView" hidden></div>
         <!-- 홈: 메인 배너 + 빠른 검색 -->
         <div id="homeView">
-          <section class="banner-carousel" id="bannerCarousel" aria-roledescription="carousel" aria-label="메인 배너">
-            <div class="banner-track" id="bannerTrack">
-              <div class="banner-slide banner-slide-1 is-active" role="group" aria-roledescription="slide" aria-label="1 / 3">
-                <span class="banner-bg" aria-hidden="true"></span>
-                <div class="banner-copy">
-                  <span class="banner-tag">초보 농부를 위한 농기계 대여</span>
-                  <h1 id="heroTitle" class="banner-title">농기계,<br />클릭 한 번으로</h1>
-                  <p>기계 이름 몰라도, 하려는 일만 알려주세요.</p>
-                  <div class="banner-actions">
-                    <button type="button" class="banner-cta" data-banner-view="browse">농기계 찾기</button>
-                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide">작업 가이드 보기</button>
-                  </div>
-                </div>
-              </div>
-              <div class="banner-slide banner-slide-2" role="group" aria-roledescription="slide" aria-label="2 / 3" aria-hidden="true">
-                <span class="banner-bg" aria-hidden="true"></span>
-                <div class="banner-copy">
-                  <span class="banner-tag">우리 동네 농기계</span>
-                  <h2 class="banner-title">멀리 갈 필요 없이,<br />가까운 곳에서</h2>
-                  <p>이웃 농가의 농기계를 바로 빌려요.</p>
-                  <div class="banner-actions">
-                    <button type="button" class="banner-cta" data-banner-view="browse" tabindex="-1">농기계 찾기</button>
-                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
-                  </div>
-                </div>
-              </div>
-              <div class="banner-slide banner-slide-3" role="group" aria-roledescription="slide" aria-label="3 / 3" aria-hidden="true">
-                <span class="banner-bg" aria-hidden="true"></span>
-                <div class="banner-copy">
-                  <span class="banner-tag">언제든 편하게</span>
-                  <h2 class="banner-title">시간 걱정 없이,<br />필요할 때</h2>
-                  <p>밤에도 주말에도 예약하고 문의하세요.</p>
-                  <div class="banner-actions">
-                    <button type="button" class="banner-cta" data-banner-view="browse" tabindex="-1">농기계 찾기</button>
-                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
-                  </div>
-                </div>
+          <section class="home-hero" id="bannerCarousel" aria-labelledby="heroTitle">
+            <div class="home-hero-copy">
+              <span class="home-kicker">초보 농부를 위한 농기계 대여·거래</span>
+              <h1 id="heroTitle" class="home-hero-title">농기계,<br /><strong>클릭 한 번으로.</strong></h1>
+              <p class="home-hero-sub">하려는 일만 고르면, 가까운 곳의 맞는 농기계를 바로 보여드려요.</p>
+              <div class="home-hero-actions">
+                <a href="#homeBooking" class="pill-cta pill-cta-dark" id="heroBookCta">농기계 예약하기 <span class="pill-cta-icon" aria-hidden="true">↗</span></a>
+                <button type="button" class="pill-cta pill-cta-light" data-view-target="about">서비스 알아보기 <span class="pill-cta-icon" aria-hidden="true">↗</span></button>
               </div>
             </div>
-            <div class="banner-controls">
-              <div class="banner-controls-inner">
-                <div class="banner-dots" role="group" aria-label="배너 선택">
-                  <button type="button" class="banner-dot active" data-slide="0" aria-label="1번 배너 보기" aria-current="true"></button>
-                  <button type="button" class="banner-dot" data-slide="1" aria-label="2번 배너 보기"></button>
-                  <button type="button" class="banner-dot" data-slide="2" aria-label="3번 배너 보기"></button>
+
+            <div class="home-hero-stage">
+              <div class="home-hero-photo" aria-hidden="true"></div>
+
+              <section class="home-booking" id="homeBooking" aria-label="농기계 예약과 추천">
+                <div class="hb-tabs" role="tablist" aria-label="거래 방식">
+                  <button type="button" class="hb-tab is-active" role="tab" id="hbTabRent" data-hb-tx="rent" aria-selected="true">농기계 대여</button>
+                  <button type="button" class="hb-tab" role="tab" id="hbTabSale" data-hb-tx="sale" aria-selected="false">중고 농기계 구매</button>
                 </div>
-                <span class="banner-counter"><strong id="bannerCounter">01</strong> / 03</span>
-                <button type="button" class="banner-arrow" id="bannerPrev" aria-label="이전 배너"><span aria-hidden="true">‹</span></button>
-                <button type="button" class="banner-arrow" id="bannerPause" aria-label="자동 넘김 멈추기" aria-pressed="false"><span class="banner-pause-icon" aria-hidden="true"></span></button>
-                <button type="button" class="banner-arrow" id="bannerNext" aria-label="다음 배너"><span aria-hidden="true">›</span></button>
-              </div>
+
+                <div class="hb-body">
+                  <form class="hb-form" id="hbForm" aria-label="조건 선택">
+                    <label class="hb-field">
+                      <span class="hb-label">작업 종류</span>
+                      <span class="hb-select-wrap">
+                        <select id="hbOperation" aria-label="작업 종류">
+                          <option value="">어떤 작업을 하세요?</option>
+                        </select>
+                      </span>
+                    </label>
+                    <label class="hb-field">
+                      <span class="hb-label">지역</span>
+                      <span class="hb-select-wrap">
+                        <select id="hbTown" aria-label="지역">
+                          <option value="">영양군 전체</option>
+                        </select>
+                      </span>
+                    </label>
+                    <div class="hb-field" id="hbDateField">
+                      <span class="hb-label" id="hbDateLabel">대여 기간</span>
+                      <div class="hb-dates" role="group" aria-labelledby="hbDateLabel">
+                        <label class="hb-date">
+                          <span class="hb-date-text" id="hbDateStartText">대여일</span>
+                          <input type="date" id="hbDateStart" aria-label="대여일" />
+                        </label>
+                        <span class="hb-date-arrow" aria-hidden="true">→</span>
+                        <label class="hb-date">
+                          <span class="hb-date-text" id="hbDateEndText">반납일</span>
+                          <input type="date" id="hbDateEnd" aria-label="반납일" />
+                        </label>
+                        <button type="button" class="hb-date-clear" id="hbDateClear" aria-label="날짜 지우기" hidden>×</button>
+                      </div>
+                    </div>
+                    <button type="submit" class="hb-submit" id="hbSubmit">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+                      <span>농기계 찾기</span>
+                    </button>
+                  </form>
+
+                  <div class="hb-results">
+                    <div class="hb-results-head">
+                      <div>
+                        <h2 class="hb-results-title" id="hbResultsTitle">추천 농기계</h2>
+                        <p class="hb-results-note" id="hbResultsNote" aria-live="polite"></p>
+                      </div>
+                      <button type="button" class="hb-see-all" id="hbSeeAll">전체보기 <span aria-hidden="true">→</span></button>
+                    </div>
+                    <div class="hb-cards" id="hbCards" aria-live="polite" aria-busy="true"></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="home-values" aria-label="모아농이 다른 점">
+            <div class="home-value">
+              <h3>가까운 곳에서</h3>
+              <p>우리 동네 이웃 농가의 농기계를 쉽게 찾고</p>
+            </div>
+            <div class="home-value">
+              <h3>합리적으로</h3>
+              <p>필요한 기간만큼 유연하게 빌리고</p>
+            </div>
+            <div class="home-value">
+              <h3>안전하게</h3>
+              <p>점검 기록을 확인하고 안심하고 거래해요</p>
             </div>
           </section>
 
@@ -181,7 +217,7 @@
 
         <!-- 매물 찾기: 홈 배너 바로 아래로 이어지는 영역 -->
         <div id="browseView">
-          <section class="search-dock" id="machineSearch" aria-label="농기계 빠른 검색">
+          <section class="search-dock" id="machineSearch" aria-label="농기계 빠른 검색" hidden>
               <div class="transaction-switch-large" role="group" aria-label="거래 방식 선택">
                 <button type="button" id="rentTab" class="tx-tab active" aria-pressed="true">
                   <span class="tx-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"></rect><path d="M3.5 9.5h17M8 3v4M16 3v4"></path><path d="M9 14.5l2 2 4-4"></path></svg></span>
@@ -223,14 +259,6 @@
                   </div>
                 </div>
 
-                <div class="qs-field qs-search-input">
-                  <span class="qs-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg></span>
-                  <div class="qs-content">
-                    <label for="searchInput">키워드 검색</label>
-                    <input id="searchInput" type="search" placeholder="작업이나 기계 검색 (예: 두둑, 멀칭, 관리기)" aria-label="농기계 검색" />
-                  </div>
-                </div>
-
                 <button type="button" class="button button-primary qs-submit" id="quickSearchBtn">
                   <span class="qs-submit-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg></span>
                   매물 보기
@@ -248,6 +276,14 @@
               </div>
 
               <div class="market-controls">
+                <div class="qs-field qs-search-input market-search">
+                    <span class="qs-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg></span>
+                    <div class="qs-content">
+                      <label for="searchInput">키워드 검색</label>
+                      <input id="searchInput" type="search" placeholder="작업이나 기계 검색 (예: 두둑, 멀칭, 관리기)" aria-label="농기계 검색" />
+                    </div>
+                  </div>
+
                 <div class="view-mode-switch" role="group" aria-label="보기 방식 선택">
                   <button type="button" class="view-mode-btn active" id="viewModeList" aria-pressed="true">목록 보기</button>
                   <button type="button" class="view-mode-btn" id="viewModeMap" aria-pressed="false">지도 보기</button>

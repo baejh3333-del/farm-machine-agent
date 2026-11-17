@@ -16,6 +16,7 @@ import {
   initBannerCarousel, initRevealOnScroll, trackHeaderHeight, initScrollMotion,
 } from "./core/motion.js";
 import { createCatalogViews } from "./views/catalog.js";
+import { createHomeBooking } from "./views/home-booking.js";
 import { createTransactionViews } from "./views/transactions.js";
 import { createAiPanel } from "./ai/panel.js";
 import { refreshWeatherAndMapConfig } from "./views/map-weather.js";
@@ -59,6 +60,14 @@ function getOwnedMachinesSnapshot() {
 
 const catalogViews = createCatalogViews(appDeps);
 const txViews = createTransactionViews(appDeps);
+const homeBooking = createHomeBooking({
+  machineVisual: (...args) => machineVisual(...args),
+  openDetail: (...args) => catalogViews.openDetail(...args),
+  setTransaction: (...args) => catalogViews.setTransaction(...args),
+  renderAll: (...args) => renderAll(...args),
+  setView: (...args) => setView(...args),
+  updateBadges: (...args) => updateBadges(...args),
+});
 const aiPanel = createAiPanel({
   state,
   runtime,
@@ -325,6 +334,7 @@ function renderAll() {
   catalogViews.renderQuickWizard();
   catalogViews.renderMachineCategoryBar();
   catalogViews.renderListings();
+  homeBooking.syncTransaction();
   txViews.renderBuyerRequests();
   updateBadges();
   aiPanel.refreshContextBar?.();

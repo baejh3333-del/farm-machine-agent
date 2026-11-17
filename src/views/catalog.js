@@ -326,6 +326,7 @@ function matches(item, filters) {
   if (filters.minPrice && item.price < Number(filters.minPrice)) return false;
   if (filters.maxPrice && item.price > Number(filters.maxPrice)) return false;
   if (filters.areaPyeong && (Number(filters.areaPyeong) * 3.305785 < item.areaMin || Number(filters.areaPyeong) * 3.305785 > item.areaMax)) return false;
+  if (filters.town && item.region !== filters.town) return false;
   if (filters.radius !== "all" && distanceKm(activeDistanceOrigin(), item.region, item.id) > Number(filters.radius)) return false;
   if (state.transaction === "rent" && filters.date && !available(item, filters.date, filters.dateEnd || filters.date)) return false;
   return true;
@@ -417,6 +418,7 @@ function buildFilterChips() {
   if (f.minPrice) chips.push({ group: "minPrice", value: "", label: `${money(f.minPrice)} 이상` });
   if (f.maxPrice) chips.push({ group: "maxPrice", value: "", label: `${money(f.maxPrice)} 이하` });
   if (f.areaPyeong) chips.push({ group: "areaPyeong", value: "", label: `밭 ${f.areaPyeong}평 기준` });
+  if (f.town) chips.push({ group: "town", value: "", label: `영양군 ${f.town}` });
   if (f.radius !== "all") chips.push({ group: "radius", value: "all", label: `${f.radius}km 이내` });
   if (f.date && state.transaction === "rent") chips.push({ group: "date", value: "", label: f.dateEnd ? ` ${f.date} ~ ${f.dateEnd}` : ` ${f.date}` });
   return chips.filter((c) => c.label);

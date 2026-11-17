@@ -14,6 +14,7 @@ export const blankFilters = () => ({
   maxPrice: "",
   areaPyeong: "",
   radius: "all",
+  town: "",
   date: "",
   dateEnd: "",
 });

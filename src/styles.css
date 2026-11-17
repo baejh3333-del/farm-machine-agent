@@ -2744,7 +2744,7 @@ img {
   padding: 22px;
   border: 1px solid rgba(222, 213, 198, 0.85);
   border-radius: 26px;
-  background: var(--surface-glass, rgba(255, 252, 246, 0.86));
+  background: var(--surface-glass, rgba(255, 255, 255, 0.86));
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 4px 12px rgba(22, 42, 34, 0.05), 0 20px 48px rgba(16, 48, 36, 0.12);
@@ -2754,7 +2754,7 @@ img {
               background-color var(--dur-fast, 160ms) var(--ease-in-out-soft, cubic-bezier(0.4, 0, 0.2, 1));
 }
 .search-dock:focus-within {
-  background: rgba(255, 252, 246, 0.96);
+  background: rgba(255, 255, 255, 0.96);
   border-color: rgba(45, 90, 63, 0.48);
   transform: translateY(-2px);
   box-shadow: 0 0 0 4px rgba(45, 90, 63, 0.12), 0 24px 56px rgba(16, 48, 36, 0.16);
@@ -2802,7 +2802,7 @@ img {
               transform var(--dur-fast, 160ms) var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
 }
 .qs-field:hover:not(.disabled-field) {
-  background: #fffcf6;
+  background: #ffffff;
   border-color: rgba(45, 90, 63, 0.22);
 }
 .qs-field:focus-within {

@@ -2001,7 +2001,7 @@ export function createAiPanel({
       : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
-    $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
+    if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
     if (fallbackVoiceUsed) {
       fallbackVoiceUsed = false;
@@ -2615,12 +2615,12 @@ export function createAiPanel({
         return;
       }
       appendAiMessage("AI 상담을 호출할 수 없습니다. 잠시 후 다시 시도해 주세요.", "assistant");
-      $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
+      if ($("aiModeLabel")) $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
     } catch (error) {
       if (gen !== sessionGeneration) return;
       console.error("AI 상담 호출 실패", error);
       appendAiMessage(error?.message || "AI 상담을 호출할 수 없습니다. 잠시 후 다시 시도해 주세요.", "assistant");
-      $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
+      if ($("aiModeLabel")) $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
     } finally {
       pending?.remove();
       recommendationPending = false;

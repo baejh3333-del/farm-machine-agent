@@ -582,7 +582,7 @@ body.ai-fullscreen .ai-launcher {
 
 .ai-capability-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   text-align: left;
   padding: 14px 16px;

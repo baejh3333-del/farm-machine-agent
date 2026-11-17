@@ -294,34 +294,36 @@ function chatForm(target) {
         </label>
         <div id="chatDelegationSummary" class="chat-delegation-summary" hidden></div>
       </div>
-      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel" ${requestedFullDelegation ? "" : "hidden"}>
-        <div class="delegated-policy-grid">
-          <label>희망 대여 시작일
-            <input id="chatPolicyTargetStart" type="date" min="${minToday}" value="${escapeHtml(filterStart)}">
-          </label>
-          <label>희망 반납일
-            <input id="chatPolicyTargetEnd" type="date" min="${escapeHtml(filterStart || minToday)}" value="${escapeHtml(filterEnd)}">
-          </label>
-          <label><span id="chatPolicyBudgetLabel">최대 예산 상한 (원)</span>
-            <input id="chatPolicyBudgetInput" type="number" min="0" step="1000" placeholder="예: 150000" value="${escapeHtml(filterBudget)}">
-          </label>
-          <label>내 작업 면적 (평)
-            <input id="chatPolicyAreaPyeong" type="number" min="1" step="1" placeholder="예: 500" value="${escapeHtml(filterArea)}">
-          </label>
-          <label class="delegated-policy-wide">인수/배달 조건 메모
-            <input id="chatPolicyPickupPreference" type="text" maxlength="120" placeholder="예: 직접 픽업 가능, 오전 9시 인수 희망">
-          </label>
-          <label class="chat-delegation-check delegated-policy-wide">
-            <input id="chatPolicyAllowNegotiation" type="checkbox">
-            <span>가격 협의 허용 (설정 예산/조건 범위 내에서 유연하게 조율)</span>
-          </label>
-        </div>
-        <div class="chat-ai-chips" role="group" aria-label="위임 조건 빠른 설정">
-          ${AI_POLICY_CHIPS.map((c) => `<button type="button" class="chat-ai-chip" data-policy-chip="${escapeHtml(c.id)}" aria-pressed="false">${escapeHtml(c.label)}</button>`).join("")}
-        </div>
-        <div class="chat-ai-instruction-row">
-          <input id="chatAiInstructions" type="text" maxlength="300" placeholder="추가 요청·주의사항 (예: 비 오는 날 제외, 로터리 작업기 필수)" aria-label="대리 응대 상세 지침">
-          <button type="button" id="chatAiSavePolicy" class="button button-primary button-sm">저장</button>
+      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel${requestedFullDelegation ? " is-open" : ""}" ${requestedFullDelegation ? "" : "hidden"}>
+        <div class="chat-ai-policy-inner">
+          <div class="delegated-policy-grid">
+            <label>희망 대여 시작일
+              <input id="chatPolicyTargetStart" type="date" min="${minToday}" value="${escapeHtml(filterStart)}">
+            </label>
+            <label>희망 반납일
+              <input id="chatPolicyTargetEnd" type="date" min="${escapeHtml(filterStart || minToday)}" value="${escapeHtml(filterEnd)}">
+            </label>
+            <label><span id="chatPolicyBudgetLabel">최대 예산 상한 (원)</span>
+              <input id="chatPolicyBudgetInput" type="number" min="0" step="1000" placeholder="예: 150000" value="${escapeHtml(filterBudget)}">
+            </label>
+            <label>내 작업 면적 (평)
+              <input id="chatPolicyAreaPyeong" type="number" min="1" step="1" placeholder="예: 500" value="${escapeHtml(filterArea)}">
+            </label>
+            <label class="delegated-policy-wide">인수/배달 조건 메모
+              <input id="chatPolicyPickupPreference" type="text" maxlength="120" placeholder="예: 직접 픽업 가능, 오전 9시 인수 희망">
+            </label>
+            <label class="chat-delegation-check delegated-policy-wide">
+              <input id="chatPolicyAllowNegotiation" type="checkbox">
+              <span>가격 협의 허용 (설정 예산/조건 범위 내에서 유연하게 조율)</span>
+            </label>
+          </div>
+          <div class="chat-ai-chips" role="group" aria-label="위임 조건 빠른 설정">
+            ${AI_POLICY_CHIPS.map((c) => `<button type="button" class="chat-ai-chip" data-policy-chip="${escapeHtml(c.id)}" aria-pressed="false">${escapeHtml(c.label)}</button>`).join("")}
+          </div>
+          <div class="chat-ai-instruction-row">
+            <input id="chatAiInstructions" type="text" maxlength="300" placeholder="추가 요청·주의사항 (예: 비 오는 날 제외, 로터리 작업기 필수)" aria-label="대리 응대 상세 지침">
+            <button type="button" id="chatAiSavePolicy" class="button button-primary button-sm">저장</button>
+          </div>
         </div>
       </div>
     </section>
@@ -339,6 +341,7 @@ function chatForm(target) {
 
   const epoch = runtime.authEpoch;
   const bySeq = new Map();
+  const renderedSeqs = new Set();
   let hasMoreOlder = false;
   let busy = false;
   let aiBusy = false;
@@ -735,17 +738,22 @@ function chatForm(target) {
       const sharedReason = !msg.escalationReason || msg.escalationReason === "rental_handoff" || msg.escalationReason === "both_ai_handoff" || msg.escalationReason === "transaction_completed";
       return sharedReason || msg.senderId === runtime.accountUser?.id;
     });
+    let enterIndex = 0;
     log.innerHTML = list.length
       ? list.map((msg) => {
+          const isNew = !keepScroll && !renderedSeqs.has(msg.seq);
+          renderedSeqs.add(msg.seq);
+          const staggerStyle = isNew ? ` style="--stagger-i:${Math.min(enterIndex++, 8)}"` : "";
+          const enterClass = isNew ? " is-entering" : "";
           if (msg.senderKind === "system") {
-            return `<div class="chat-line-system" role="note">
+            return `<div class="chat-line-system${enterClass}"${staggerStyle} role="note">
               <div>${escapeHtml(msg.body)}</div>
             </div>`;
           }
           const mine = msg.senderId === runtime.accountUser?.id;
           const isAiProxy = msg.senderKind === "ai_proxy";
           const aiBadge = isAiProxy ? `<span class="chat-ai-badge">🤖 AI 대신 답변</span>` : "";
-          return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}">
+          return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}${enterClass}"${staggerStyle}>
             <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}${aiBadge}</b>
             <div>${escapeHtml(msg.body)}</div>
           </div>`;
@@ -933,20 +941,35 @@ function chatForm(target) {
 
   syncAiControlUi();
 
+  let policyPanelOpen = requestedFullDelegation;
+  let policyCollapseTimer = null;
   const setPolicyPanelOpen = (open) => {
     const panel = $("chatAiPolicyPanel");
     if (!panel) return;
-    panel.hidden = !open;
-    $("chatAiPolicyToggle")?.setAttribute("aria-expanded", String(open));
+    policyPanelOpen = Boolean(open);
+    clearTimeout(policyCollapseTimer);
+    $("chatAiPolicyToggle")?.setAttribute("aria-expanded", String(policyPanelOpen));
     if ($("chatAiPolicyToggle")) {
-      $("chatAiPolicyToggle").textContent = open ? "위임 조건 ▴" : "위임 조건 ▾";
+      $("chatAiPolicyToggle").textContent = policyPanelOpen ? "위임 조건 ▴" : "위임 조건 ▾";
+    }
+    if (policyPanelOpen) {
+      panel.hidden = false;
+      void panel.offsetWidth;
+      panel.classList.add("is-open");
+    } else {
+      panel.classList.remove("is-open");
+      policyCollapseTimer = setTimeout(() => {
+        if (!policyPanelOpen && panel.isConnected) {
+          panel.hidden = true;
+        }
+      }, 280);
     }
   };
 
   $("chatAiPolicyToggle")?.addEventListener("click", () => {
     const panel = $("chatAiPolicyPanel");
     if (!panel) return;
-    setPolicyPanelOpen(panel.hidden);
+    setPolicyPanelOpen(!policyPanelOpen);
   });
 
   $("chatFullDelegationToggle")?.addEventListener("change", () => {

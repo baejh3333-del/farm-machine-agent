@@ -143,8 +143,52 @@ export const machineImage = (type) => {
   return `./src/images/machines/${resolved}.jpg`;
 };
 
+const AVAILABLE_PICTURE_ICONS = new Set([
+  "bulb",
+  "cabbage",
+  "calendar",
+  "envelope",
+  "good",
+  "handshake",
+  "heart-outline",
+  "heart",
+  "pepper",
+  "pickup",
+  "potato",
+  "repair",
+  "rice",
+  "search",
+  "sliders",
+  "sprout",
+]);
+
+const CROP_FALLBACK_EMOJI = {
+  soybean: "🥜",
+  corn: "🌽",
+  sweetPotato: "🍠",
+  barley: "🌾",
+  garlic: "🧄",
+  onion: "🧅",
+  radish: "🌱",
+  greenOnion: "🥬",
+  ginger: "🌿",
+  apple: "🍎",
+  pear: "🍐",
+  peach: "🍑",
+  grape: "🍇",
+  strawberry: "🍓",
+  tomato: "🍅",
+  sesame: "🌱",
+  redBean: "🥜",
+  millet: "🌾",
+};
+
 export function pictureIcon(name) {
-  return `<img class="picture-icon" src="./src/images/icons/${name}.jpg" alt="" width="32" height="32">`;
+  if (AVAILABLE_PICTURE_ICONS.has(name)) {
+    return `<img class="picture-icon" src="./src/images/icons/${name}.jpg" alt="" width="32" height="32">`;
+  }
+  const emoji = CROP_FALLBACK_EMOJI[name] || "🌱";
+  return `<span class="picture-icon picture-icon-emoji" aria-hidden="true">${emoji}</span>`;
 }
 
 export function favoriteIcon() {

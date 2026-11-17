@@ -6,6 +6,9 @@ import { state, runtime, blankFilters, persist, allListings, listingById, rented
 import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
 
 export function createCatalogViews(deps) {
+let lastPreviewCount = null;
+let previewCountRaf = 0;
+
 function setTransaction(type) {
   state.transaction = type;
   $("rentTab").classList.toggle("active", type === "rent");
@@ -77,6 +80,9 @@ function renderQuickWizard() {
     }),
   ].join("");
   $("quickStageList").innerHTML = stageHtml;
+  $("quickStageList")
+    .querySelectorAll(".stage-tab")
+    .forEach((el, index) => el.style.setProperty("--stagger-i", String(Math.min(index, 12))));
 
   // 세부 작업 버튼들 (선택된 단계가 있으면 해당 단계만, 없으면 전체 표시)
   const visibleOps = OPERATIONS.filter((op) =>
@@ -96,6 +102,9 @@ function renderQuickWizard() {
       `;
     })
     .join("");
+  $("quickOperationList")
+    .querySelectorAll(".op-chip")
+    .forEach((el, index) => el.style.setProperty("--stagger-i", String(Math.min(index, 12))));
 
   // 초보 농부 맞춤 콜아웃 업데이트
   const activeOpId = state.filters.operations[0];
@@ -286,6 +295,7 @@ function renderFilterOptions() {
 
 function openFilters() {
   runtime.draft = structuredClone(state.filters);
+  lastPreviewCount = null;
   renderFilterOptions();
   showDialog($("filterBackdrop"));
 }
@@ -339,7 +349,40 @@ function filteredListings(filters = state.filters) {
 
 function renderFilterPreview() {
   readDraftFields();
-  $("filterPreviewCount").textContent = `${filteredListings(runtime.draft).length}개`;
+  const target = filteredListings(runtime.draft).length;
+  const el = $("filterPreviewCount");
+  if (!el) return;
+
+  const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (previewCountRaf) cancelAnimationFrame(previewCountRaf);
+
+  if (reduceMotion || lastPreviewCount === null || lastPreviewCount === target || typeof requestAnimationFrame !== "function") {
+    lastPreviewCount = target;
+    el.textContent = `${target}개`;
+    return;
+  }
+
+  const start = lastPreviewCount;
+  const diff = target - start;
+  const duration = 220;
+  const startedAt = performance.now();
+  el.classList.remove("is-updating");
+  void el.offsetWidth;
+  el.classList.add("is-updating");
+
+  const step = (now) => {
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = `${Math.round(start + diff * eased)}개`;
+    if (progress < 1) {
+      previewCountRaf = requestAnimationFrame(step);
+    } else {
+      previewCountRaf = 0;
+      lastPreviewCount = target;
+      el.textContent = `${target}개`;
+    }
+  };
+  previewCountRaf = requestAnimationFrame(step);
 }
 
 function applyFilters() {
@@ -502,6 +545,12 @@ function renderListings() {
           <button type="button" class="button button-secondary" data-reset-all>전체 조건 초기화</button>
         </div>
       </div>`;
+
+  $("listingGrid")
+    .querySelectorAll(".listing-card")
+    .forEach((cardEl, index) => {
+      cardEl.style.setProperty("--stagger-i", String(Math.min(index, 12)));
+    });
 
   if (runtime.catalogState !== "ready") {
     const message = runtime.catalogState === "loading" ? "우리 동네 농기계 매물을 불러오는 중입니다…" : "데모 매물을 불러오지 못했습니다. 페이지를 새로고침해 주세요.";

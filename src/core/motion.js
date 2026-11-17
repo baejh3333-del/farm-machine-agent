@@ -1,5 +1,197 @@
 import { $ } from "./utils.js";
 
+const activeNumberRafs = new WeakMap();
+const trackedNumbers = new WeakMap();
+const suppressNumberObserver = new WeakSet();
+const observedStaggerNodes = new WeakSet();
+const observedViewNodes = new WeakSet();
+const observedCountNodes = new WeakSet();
+
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+function parseCountParts(text) {
+  const match = String(text ?? "").trim().match(/^([^\d-]*)(-?\d+(?:\.\d+)?)(.*)$/);
+  if (!match) return null;
+  const value = Number(match[2]);
+  if (!Number.isFinite(value)) return null;
+  return { prefix: match[1], value, suffix: match[3] };
+}
+
+/**
+ * Smoothly interpolates a numeric counter element using easeOutExpo.
+ */
+export function animateNumber(el, targetValue, { duration = 380, suffix = "", prefix = "" } = {}) {
+  if (!el) return;
+  const target = Number(targetValue);
+  if (!Number.isFinite(target)) return;
+
+  const prevRaf = activeNumberRafs.get(el);
+  if (prevRaf) {
+    cancelAnimationFrame(prevRaf);
+    activeNumberRafs.delete(el);
+  }
+
+  let start = trackedNumbers.get(el);
+  if (!Number.isFinite(start)) {
+    const parsed = parseCountParts(el.textContent);
+    start = parsed ? parsed.value : 0;
+  }
+
+  const isInt = Number.isInteger(target) && Number.isInteger(start);
+  const formatValue = (val) => (isInt ? String(Math.round(val)) : val.toFixed(1));
+  const writeText = (next) => {
+    suppressNumberObserver.add(el);
+    el.textContent = next;
+    queueMicrotask(() => suppressNumberObserver.delete(el));
+  };
+
+  if (prefersReducedMotion() || duration <= 0 || start === target) {
+    trackedNumbers.set(el, target);
+    const finalText = `${prefix}${formatValue(target)}${suffix}`;
+    if (el.textContent !== finalText) writeText(finalText);
+    return;
+  }
+
+  const startTime = performance.now();
+  const easeOutExpo = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+
+  const step = (now) => {
+    const t = Math.min(1, (now - startTime) / duration);
+    const current = start + (target - start) * easeOutExpo(t);
+    trackedNumbers.set(el, current);
+    writeText(`${prefix}${formatValue(current)}${suffix}`);
+    if (t < 1) {
+      activeNumberRafs.set(el, requestAnimationFrame(step));
+    } else {
+      trackedNumbers.set(el, target);
+      activeNumberRafs.delete(el);
+    }
+  };
+
+  trackedNumbers.set(el, start);
+  writeText(`${prefix}${formatValue(start)}${suffix}`);
+  activeNumberRafs.set(el, requestAnimationFrame(step));
+}
+
+/**
+ * Assigns --stagger-i and .stagger-enter to child items for cascading entrance.
+ */
+export function staggerElements(container, selector = ":scope > *", { stepMs = 35, maxIndex = 12 } = {}) {
+  if (!container) return [];
+  let items;
+  try {
+    items = [...container.querySelectorAll(selector)];
+  } catch {
+    items = [...container.children];
+  }
+  const reduceMotion = prefersReducedMotion();
+  items.forEach((el, index) => {
+    if (!(el instanceof Element)) return;
+    if (reduceMotion) {
+      el.classList.remove("stagger-enter");
+      el.style.removeProperty("--stagger-i");
+      el.style.removeProperty("--stagger-step");
+      return;
+    }
+    el.style.setProperty("--stagger-i", String(Math.min(index, maxIndex)));
+    el.style.setProperty("--stagger-step", `${stepMs}ms`);
+    if (el.classList.contains("stagger-enter")) {
+      el.classList.remove("stagger-enter");
+      requestAnimationFrame(() => el.classList.add("stagger-enter"));
+    } else {
+      el.classList.add("stagger-enter");
+    }
+  });
+  return items;
+}
+
+/**
+ * Plays shared-axis entrance animation when a view container becomes visible.
+ */
+export function choreographViewSwitch(viewEl) {
+  if (!viewEl) return;
+  if (prefersReducedMotion()) {
+    viewEl.classList.remove("view-transition-enter");
+    return;
+  }
+  viewEl.classList.remove("view-transition-enter");
+  void viewEl.offsetWidth;
+  viewEl.classList.add("view-transition-enter");
+  viewEl.addEventListener(
+    "animationend",
+    (event) => {
+      if (event.target === viewEl) {
+        viewEl.classList.remove("view-transition-enter");
+      }
+    },
+    { once: true }
+  );
+}
+
+function initAutoChoreography() {
+  if (typeof MutationObserver === "undefined" || typeof document === "undefined") return;
+
+  const staggerTargets = document.querySelectorAll(
+    "#listingGrid, #marketGrid, #guideContent, #quickOperationList, #garageView"
+  );
+  for (const container of staggerTargets) {
+    if (observedStaggerNodes.has(container)) continue;
+    observedStaggerNodes.add(container);
+    if (container.children.length > 0 && !container.hidden) {
+      staggerElements(container, ":scope > *", { stepMs: 35, maxIndex: 12 });
+    }
+    const observer = new MutationObserver((mutations) => {
+      const hasAddedElement = mutations.some((m) =>
+        [...m.addedNodes].some((node) => node.nodeType === Node.ELEMENT_NODE)
+      );
+      if (hasAddedElement) {
+        staggerElements(container, ":scope > *", { stepMs: 35, maxIndex: 12 });
+      }
+    });
+    observer.observe(container, { childList: true });
+  }
+
+  const viewTargets = document.querySelectorAll(
+    "[data-view], #homeView, #browseView, #guideView, #garageView, #requestsView, #ownerView, #ownerLoginRequiredView, #loginView, #aboutView"
+  );
+  for (const viewEl of viewTargets) {
+    if (viewEl.tagName === "BUTTON" || viewEl.tagName === "A") continue;
+    if (observedViewNodes.has(viewEl)) continue;
+    observedViewNodes.add(viewEl);
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "attributes" && m.attributeName === "hidden") {
+          if (m.oldValue !== null && !viewEl.hidden) {
+            choreographViewSwitch(viewEl);
+          }
+        }
+      }
+    });
+    observer.observe(viewEl, { attributes: true, attributeFilter: ["hidden"], attributeOldValue: true });
+  }
+
+  const previewCount = document.getElementById("filterPreviewCount");
+  if (previewCount && !observedCountNodes.has(previewCount)) {
+    observedCountNodes.add(previewCount);
+    const initial = parseCountParts(previewCount.textContent);
+    if (initial) trackedNumbers.set(previewCount, initial.value);
+    const observer = new MutationObserver(() => {
+      if (suppressNumberObserver.has(previewCount)) return;
+      const parsed = parseCountParts(previewCount.textContent);
+      if (!parsed) return;
+      if (trackedNumbers.get(previewCount) === parsed.value) return;
+      animateNumber(previewCount, parsed.value, {
+        duration: 380,
+        prefix: parsed.prefix,
+        suffix: parsed.suffix,
+      });
+    });
+    observer.observe(previewCount, { childList: true, characterData: true, subtree: true });
+  }
+}
+
 // 메인 배너: 4초마다 자동으로 다음 장, 멈춤/재생·이전/다음·점 선택
 export function initBannerCarousel(onBannerView) {
   const track = $("bannerTrack");
@@ -52,10 +244,10 @@ export function initBannerCarousel(onBannerView) {
 
 // 브랜드 소개(모아농?) 화면: 스크롤로 보일 때마다 구역이 아래에서 떠오르며 나타난다
 export function initRevealOnScroll() {
+  initAutoChoreography();
   const items = document.querySelectorAll(".reveal");
   if (!items.length) return;
-  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  if (reduceMotion || !("IntersectionObserver" in window)) {
+  if (prefersReducedMotion() || !("IntersectionObserver" in window)) {
     for (const el of items) el.classList.add("is-visible");
     return;
   }

@@ -356,8 +356,35 @@ export function createAiPanel({
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
   let enterAnimTimer = null;
+  let reflowAnimTimer = null;
   let dragDepth = 0;
   const aiDefaultPlaceholder = $("aiInput").placeholder;
+
+  function applyWelcomeStagger() {
+    document.querySelectorAll("#aiWelcomeHero .ai-capability-card").forEach((card, index) => {
+      card.style.setProperty("--stagger-i", String(index));
+    });
+  }
+
+  function triggerCardReflow(container = $("aiMessages")) {
+    if (!container) return;
+    const rails = [...container.querySelectorAll(".ai-result-cards")];
+    if (!rails.length) return;
+    clearTimeout(reflowAnimTimer);
+    for (const rail of rails) {
+      rail.querySelectorAll(".ai-rec-card").forEach((card, idx) => {
+        card.style.setProperty("--stagger-i", String(Math.min(idx, 10)));
+      });
+      rail.classList.remove("is-reflowing");
+      void rail.offsetWidth;
+      rail.classList.add("is-reflowing");
+    }
+    reflowAnimTimer = setTimeout(() => {
+      for (const rail of rails) rail.classList.remove("is-reflowing");
+    }, 760);
+  }
+
+  applyWelcomeStagger();
 
   function setFullDelegation(nextEnabled) {
     fullDelegationEnabled = Boolean(nextEnabled);
@@ -376,8 +403,9 @@ export function createAiPanel({
     setFullDelegation(!fullDelegationEnabled);
   });
 
-  function setAiLayoutMode(mode, { animate = false } = {}) {
+  function setAiLayoutMode(mode, { animate = false, reflow = false } = {}) {
     const nextMode = mode === "docked" ? "docked" : "fullscreen";
+    const modeChanged = aiLayoutMode !== nextMode;
     aiLayoutMode = nextMode;
     const isFullscreen = nextMode === "fullscreen";
     const panel = $("aiPanel");
@@ -408,19 +436,30 @@ export function createAiPanel({
       panel.classList.remove("is-entering");
       void panel.offsetWidth;
       panel.classList.add("is-entering");
-      const finishEnter = () => {
-        panel.classList.remove("is-entering");
+      const finishEnter = (event) => {
+        if (event && event.target !== panel) return;
+        panel.removeEventListener("animationend", finishEnter);
         clearTimeout(enterAnimTimer);
+        enterAnimTimer = setTimeout(() => {
+          panel.classList.remove("is-entering");
+        }, 320);
       };
-      panel.addEventListener("animationend", finishEnter, { once: true });
-      enterAnimTimer = setTimeout(finishEnter, 560);
+      panel.addEventListener("animationend", finishEnter);
+      enterAnimTimer = setTimeout(() => {
+        panel.removeEventListener("animationend", finishEnter);
+        panel.classList.remove("is-entering");
+      }, 740);
+    }
+
+    if (modeChanged || reflow) {
+      triggerCardReflow();
     }
     syncAiViewport();
   }
 
   document.querySelectorAll("[data-ai-layout]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      setAiLayoutMode(btn.dataset.aiLayout);
+      setAiLayoutMode(btn.dataset.aiLayout, { reflow: true });
     });
   });
 
@@ -1250,17 +1289,20 @@ export function createAiPanel({
       results.append(titleRow);
 
       const cardsRail = document.createElement("div");
-      cardsRail.className = "ai-result-cards";
+      cardsRail.className = "ai-result-cards is-reflowing";
 
       const effectiveStart = searchDates?.start || state.filters?.date || "";
       const effectiveEnd = searchDates?.end || state.filters?.dateEnd || effectiveStart;
       const activeDates = effectiveStart ? { start: effectiveStart, end: effectiveEnd } : null;
 
+      let cardIndex = 0;
       listingIds.forEach((id) => {
         const item = listingById(id);
         if (!item) return;
         const card = document.createElement("div");
         card.className = "ai-rec-card";
+        card.style.setProperty("--stagger-i", String(Math.min(cardIndex, 10)));
+        cardIndex += 1;
 
         const media = document.createElement("div");
         media.className = "ai-rec-card-media";
@@ -1361,6 +1403,7 @@ export function createAiPanel({
       });
       results.append(cardsRail);
       bubble.append(results);
+      setTimeout(() => cardsRail.classList.remove("is-reflowing"), 760);
     }
     $("aiMessages").append(bubble);
     scrollAiToEnd();
@@ -1967,6 +2010,12 @@ export function createAiPanel({
         return;
       }
       pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
+      pending.classList.add("is-thinking");
+      const wave = document.createElement("span");
+      wave.className = "ai-thinking-wave";
+      wave.setAttribute("aria-hidden", "true");
+      wave.innerHTML = "<span></span><span></span><span></span><span></span>";
+      pending.prepend(wave);
       if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
       const uiContext = collectUiContext();
       const agentResult = await askAgent(message, {
@@ -2017,6 +2066,7 @@ export function createAiPanel({
     panel.hidden = false;
     document.body.classList.add("ai-open");
     $("aiLauncher").setAttribute("aria-expanded", "true");
+    applyWelcomeStagger();
     if (wasHidden) {
       setAiLayoutMode("fullscreen", { animate: true });
     } else {
@@ -2029,7 +2079,7 @@ export function createAiPanel({
   }
 
   function toggleAiPanelSize() {
-    setAiLayoutMode(aiLayoutMode === "fullscreen" ? "docked" : "fullscreen");
+    setAiLayoutMode(aiLayoutMode === "fullscreen" ? "docked" : "fullscreen", { reflow: true });
   }
 
   function performReset() {
@@ -2045,6 +2095,7 @@ export function createAiPanel({
     clearPhoto();
     if (initialWelcomeHtml) {
       $("aiMessages").innerHTML = initialWelcomeHtml;
+      applyWelcomeStagger();
     } else {
       $("aiMessages").replaceChildren();
       appendAiMessage("어떤 작물에 어떤 작업을 하실 건가요? 한 줄로 말씀하시면 필요한 조건만 차례로 여쭤볼게요.", "assistant");

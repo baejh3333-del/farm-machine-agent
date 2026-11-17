@@ -6,12 +6,14 @@
 // onError(error, { fatal, source }): fatal이면 세션은 이미 정리 중이고(source: "start"|"connection"),
 // fatal이 아니면 대화는 계속된다(source: "delegation"|"event"|"audio").
 import { createLiveVoiceSession } from "./recommend-agent.js";
+import { joinSpokenText } from "./spoken-text.js";
 
 export const GREETING_TEXT = "안녕하세요, 농농이에요. 대여, 구매, 판매 중에 어떤 걸 도와드릴까요?";
 // 연결되자마자 농농이가 먼저 말하게 한다. 사용자가 이미 말하고 있으면 인사를 건너뛴다(말 끊기 방지).
 const GREETING = `지금 바로 첫 인사로 "${GREETING_TEXT}" 이 한 문장만 말하고, 사용자의 대답을 기다려 주세요.`;
 const CONTINUE_GREETING = "앞선 대화 내용과 조건을 기억한 상태에서, 한 문장으로 짧게 인사하고 이어서 도와드릴 점을 여쭤 주세요.";
-const PROGRESS = "모아농 매물과 기상·호환성 정보를 확인하고 있습니다.";
+// 사용자에게 읽어 주는 말이 아니라 모델에게 주는 진행 상황이다. "확인해볼게요" 같은 중간 안내를 매번 말하지 않게 한다.
+const PROGRESS = "백엔드 조회 중이다. 결과가 오기 전에는 '확인해볼게요', '잠시만요' 같은 중간 안내를 하지 말고 조용히 기다린다. 결과가 오면 결과만 짧게 말한다.";
 
 function abortError() {
   const error = new Error("gpt-live 연결이 취소되었습니다.");
@@ -306,7 +308,7 @@ export function createGptLiveController({
           setOutputSuppressed(s, false);
         }
         flushUserTurn();
-        assistantText += event.delta || "";
+        assistantText = joinSpokenText(assistantText, event.delta || "");
         if (state !== "thinking") setState("speaking");
         onAssistantTranscriptDelta({ delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms });
         scheduleSpeakingIdle(s);

@@ -128,9 +128,11 @@ const agentApi = handle(["POST"], async (request) => {
     const hasImage = typeof body.image === "string" && body.image.length > 0;
     if (message.length > 500 || (!message && !hasImage)) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
     // 호출 제한을 먼저 검사해 사진 디코딩 비용도 횟수에 넣는다.
+    // 호출 제한 검사와 로그인 확인은 서로 기다릴 필요가 없어 함께 실행한다(응답 시간 단축).
+    const userPromise = currentUser(request).catch(() => null);
     await enforceRateLimit(request, "recommend");
     const image = hasImage ? await preparePhoto(body.image) : undefined;
-    const user = await currentUser(request).catch(() => null);
+    const user = await userPromise;
     const [farmProfile, session] = user?.id
       ? await Promise.all([
           loadFarmProfile(user.id).catch(() => null),
@@ -180,7 +182,7 @@ const agentApi = handle(["POST"], async (request) => {
       uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
       image,
       user,
-      farmProfile,
+      farmProfile: user?.id ? (farmProfile ?? null) : undefined,
       sessionId: activeSessionId,
       sessionSlots: session?.slots,
       savedDraft: cleanSavedDraft(body.savedDraft),

@@ -3,6 +3,7 @@ import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
+import { isUnclearUtterance, joinSpokenText } from "./spoken-text.js";
 
 const MACHINE_LABELS = {
   cultivator: "관리기",
@@ -2343,8 +2344,8 @@ export function createAiPanel({
     const isUser = role === "user";
     let bubble = isUser ? liveUserBubble : liveAssistantBubble;
     const textChunk = typeof delta === "string" ? delta : "";
-    if (!bubble && textChunk) {
-      bubble = appendAiMessage(textChunk, isUser ? "user" : "assistant");
+    if (!bubble && textChunk && joinSpokenText("", textChunk)) {
+      bubble = appendAiMessage(joinSpokenText("", textChunk), isUser ? "user" : "assistant");
       bubble.classList.add("is-live-transcript");
       if (isUser) liveUserBubble = bubble;
       else liveAssistantBubble = bubble;
@@ -2357,7 +2358,7 @@ export function createAiPanel({
         bubble.textContent = "";
         bubble.append(textNode);
       }
-      textNode.textContent += textChunk;
+      textNode.textContent = joinSpokenText(textNode.textContent, textChunk);
       scrollAiToEnd();
     }
     if (meta?.done || meta?.final) {
@@ -2415,6 +2416,8 @@ export function createAiPanel({
     const delegationId = payload?.delegationId || payload?.id || "";
     const userText = String(payload?.userText || payload?.transcript || payload?.message || "").trim();
     if (!userText) return { spokenSummary: "무슨 작업이나 농기계를 찾으시는지 다시 말씀해 주세요." };
+    // 인식이 실패했거나 알아들을 수 없는 조각이면 대충 넘기지 않고 짧게 다시 묻는다(모델 호출도 아낀다).
+    if (isUnclearUtterance(userText)) return { spokenSummary: "죄송해요, 잘 못 들었어요. 한 번만 다시 말씀해 주시겠어요?" };
     if (delegationId && renderedDelegationIds.has(delegationId)) {
       return null;
     }
@@ -2654,10 +2657,12 @@ export function createAiPanel({
         if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
         if ($("aiInput")) $("aiInput").placeholder = aiDefaultPlaceholder;
         const trimmed = String(recognizedText || "").trim();
-        if (trimmed) {
+        if (trimmed && !isUnclearUtterance(trimmed)) {
           fallbackVoiceUsed = true;
           pendingInputMode = "voice";
           submitPrompt(trimmed);
+        } else {
+          toast("잘 못 들었어요. 마이크 버튼을 누르고 한 번만 다시 말씀해 주세요.");
         }
       } catch (error) {
         if (gen === sessionGeneration && fbGen === fallbackVoiceGeneration) {

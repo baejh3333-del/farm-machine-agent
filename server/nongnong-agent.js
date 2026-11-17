@@ -49,6 +49,12 @@ const won = (n) => `${Number(n).toLocaleString("ko-KR")}원`;
 
 const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모아농"의 통합 AI 도우미 '농농'이다. 초보 농부와 어르신도 이해하기 쉬운 짧고 친절한 한국어 존댓말로, 정해진 틀에 얽매이지 않고 사용자 질문 맥락에 맞춰 자연스럽게 답한다.
 
+## 대화 원칙 (가장 먼저 지킨다)
+- 답변은 짧고 핵심만: 보통 1~3문장. 인사말·맞장구·"잠시만요"·"확인해볼게요" 같은 중간 안내 문구를 붙이지 않는다.
+- [이미 받은 정보]에 있는 목적(대여·구매·판매), 작물, 작업, 지역, 면적, 날짜, 예산은 절대 다시 묻지 않는다. 바로 그 정보로 다음 단계를 진행한다.
+- [직전 농농 질문]과 같은 질문이나 같은 문장을 반복하지 않는다. 사용자가 그 질문에 답했으면 답을 받아들이고 다음으로 넘어간다.
+- 목록에 없는 작물·작업이라도 비슷한 작업(예: 고구마 심기 → 두둑·멀칭·정식, 고구마 캐기 → 굴취)으로 바로 찾아 준다.
+
 ## 일하는 순서
 1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/호환성/찜/채팅 문의/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물, 보유 농기계)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
 2. **첫 턴 즉시 추천 (매우 중요)**: 사용자가 작물(고추·벼·배추·감자), 작업(두둑·멀칭·로터리·수확 등), 또는 기종(관리기·트랙터·이앙기 등) 중 하나라도 언급하며 빌리기·사기·찾기를 요청하면, 면적·날짜·예산을 먼저 캐묻지 말고 **반드시 첫 턴에 즉시 search_listings 도구를 호출해 추천 매물 카드를 먼저 보여준다**.
@@ -1170,6 +1176,51 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
   return slots;
 }
 
+const SELL_INTENT = /팔(?:고\s*싶|려|래|겠|아\s*줘)|판매\s*(?:하|할|글|등록)|내놓|빌려\s*주(?:고|려|기)/;
+
+/**
+ * 대화 기록(사용자 말)·세션 슬롯·화면 조건에서 이미 받은 정보를 모아 모델이 다시 묻지 않게 한다.
+ * 반환: 시스템 프롬프트에 붙일 글(없으면 "").
+ */
+export function summarizeKnownFacts({ history = [], text = "", sessionSlots = null, uiCtx = {} } = {}) {
+  const facts = { ...(sessionSlots && typeof sessionSlots === "object" && !Array.isArray(sessionSlots) ? sessionSlots : {}) };
+  Object.assign(facts, extractLearnedSlots({ uiCtx }));
+  let sell = false;
+  const userTexts = (Array.isArray(history) ? history : [])
+    .filter((item) => item?.role === "user" && typeof item.content === "string")
+    .map((item) => item.content);
+  if (text) userTexts.push(String(text));
+  for (const said of userTexts) {
+    const learned = extractLearnedSlots({ text: said });
+    Object.assign(facts, learned);
+    if (SELL_INTENT.test(said)) sell = true;
+    else if (learned.transaction) sell = false;
+  }
+  const lines = [];
+  const purpose = sell ? "판매·빌려주기" : facts.transaction === "sale" ? "구매" : facts.transaction === "rent" ? "대여" : "";
+  if (purpose) lines.push(`- 목적: ${purpose}`);
+  const crops = (Array.isArray(facts.cropIds) ? facts.cropIds : []).filter((id) => Object.hasOwn(CROP_BY_ID, id));
+  if (crops.length) lines.push(`- 작물: ${crops.map((id) => `${CROP_BY_ID[id].name}(${id})`).join(", ")}`);
+  const ops = (Array.isArray(facts.operations) ? facts.operations : []).filter((id) => Object.hasOwn(OPERATION_BY_ID, id));
+  if (ops.length) lines.push(`- 작업: ${ops.map((id) => `${OPERATION_BY_ID[id].label}(${id})`).join(", ")}`);
+  if (facts.machineType && Object.hasOwn(MACHINE_BY_ID, facts.machineType)) {
+    lines.push(`- 기종: ${MACHINE_BY_ID[facts.machineType].label}(${facts.machineType})`);
+  }
+  if (typeof facts.region === "string" && facts.region) lines.push(`- 지역: ${facts.region.slice(0, 30)}`);
+  if (Number(facts.areaPyeong) > 0) lines.push(`- 면적: ${Math.trunc(Number(facts.areaPyeong))}평`);
+  if (typeof facts.start === "string" && DATE.test(facts.start)) {
+    lines.push(`- 기간: ${facts.start}${facts.end && facts.end !== facts.start ? ` ~ ${facts.end}` : ""}`);
+  }
+  if (Number.isSafeInteger(facts.maxPrice) && facts.maxPrice > 0) lines.push(`- 예산 상한: ${won(facts.maxPrice)}`);
+  const lastAssistant = [...(Array.isArray(history) ? history : [])].reverse()
+    .find((item) => item?.role === "assistant" && typeof item.content === "string")?.content || "";
+  const lastQuestion = lastAssistant.split(/(?<=[.!?。？！])\s+/).filter((part) => /[?？]\s*$/.test(part)).at(-1)?.trim().slice(0, 120) || "";
+  let out = "";
+  if (lines.length) out += `\n\n[이미 받은 정보 — 다시 묻지 말 것]\n${lines.join("\n")}`;
+  if (lastQuestion) out += `\n\n[직전 농농 질문 — 같은 질문 반복 금지]\n${lastQuestion}`;
+  return out;
+}
+
 /**
  * 한 번의 사용자 발화를 처리한다. AI 키(OPENAI_API_KEY / ANTHROPIC_API_KEY)가 없으면
  * { mode: "unavailable" }를 돌려준다.
@@ -1198,7 +1249,7 @@ const VOICE_GUIDE = `## 음성으로 들어온 질문
 - 이 질문은 음성 인식으로 받아 적은 글이다. 사용자가 확인했지만 잘못 들린 낱말이 남아 있을 수 있다.
 - 경상도·전라도·충청도 등 사투리를 존중한다. 사투리를 고치라고 하거나 흉내 내지 말고, 뜻을 알아듣고 표준어 존댓말로 답한다.
 - 날짜, 기간, 가격, 면적, 작업, 지역, 농기계 이름이 모호하거나 문장이 어색하면 추측하지 말고 한 번에 한두 가지만 쉬운 말로 되묻는다. 고를 수 있으면 offer_choices로 선택지를 준다.
-- 숫자, 날짜, 금액, 농기계 이름은 답하거나 도구를 쓰기 전에 "~로 들었어요. 맞으세요?"처럼 되읽어 확인한다.
+- 숫자·날짜·금액·농기계 이름이 애매하게 들렸을 때만 "~로 들었어요. 맞으세요?"처럼 한 번 되읽어 확인한다. 분명한 말은 되묻지 않는다.
 - 대여 예약·구매 신청·매물 등록·수정·거래 전담 위임은 말로 "네"라고 해도 바로 처리되지 않는다. 도구를 부르면 화면에 확인 카드가 뜨고, 사용자가 화면의 버튼을 눌러야 처리된다. 처리됐다고 말하지 말고, 내용을 짧게 되읽은 뒤 화면의 버튼을 눌러 달라고 안내한다.
 - 답변은 소리로도 읽힌다. 짧은 문장 2~4개로 쓰고, 표·기호·이모지·괄호 설명은 쓰지 않는다. 날짜는 "11월 20일", 금액은 "4만 5천 원"처럼 읽기 쉽게 쓴다.`;
 
@@ -1213,7 +1264,8 @@ async function runTurn(
   // 말로 한 "네"는 잘못 들렸을 수 있으므로 쓰기 작업의 승인으로 보지 않는다(화면 확인 카드·버튼으로만 처리).
   const spokenApproval = !voice && isAffirmative(text);
   let resolvedFarmProfile = farmProfile && typeof farmProfile === "object" ? farmProfile : null;
-  if (!resolvedFarmProfile && user?.id) {
+  // farmProfile === null은 호출한 쪽이 이미 조회했지만 없었다는 뜻이다. 같은 조회를 다시 하지 않는다.
+  if (!resolvedFarmProfile && farmProfile !== null && user?.id) {
     if (typeof deps?.loadFarmProfile === "function") {
       resolvedFarmProfile = await deps.loadFarmProfile(user.id).catch(() => null);
     } else if (pool) {
@@ -1237,7 +1289,8 @@ async function runTurn(
     : fetchListings({ pool, viewerId: user?.id ?? null })));
   if (uiCtx.viewingListingId && !catalog) await loadCatalog();
 
-  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}`;
+  const knownFacts = summarizeKnownFacts({ history, text, sessionSlots, uiCtx });
+  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}`;
   const selectedTools = selectToolsForTurn({
     text,
     hasImage: Boolean(image?.base64),
@@ -1288,7 +1341,8 @@ async function runTurn(
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (signal.aborted) return null;
-    const data = await call({ system, messages, tools, maxTokens: 1200, timeoutMs: image ? 25000 : 12000, signal });
+    // 음성 답변은 짧게 읽히므로 출력 토큰을 줄여 응답 시간을 줄인다.
+    const data = await call({ system, messages, tools, maxTokens: voice && !image ? 600 : 1200, timeoutMs: image ? 25000 : 12000, signal });
     if (signal.aborted) return null;
     if (!data) return image ? { error: "PHOTO_UNAVAILABLE" } : null;
     addSources(data.sources);

@@ -1,7 +1,229 @@
 import { MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
+import { applyModelSpecification } from "../data/machine-specifications.js";
 import { getRegionCoords } from "../data/korea-regions.js";
-import { $, escapeHtml, money, today, addDays, toast } from "../core/utils.js";
-import { state, runtime, apiFetch, persist } from "../core/store.js";
+import { $, escapeHtml, money, today, addDays, toast, getListingPhotoSrc, machineImage } from "../core/utils.js";
+import { state, runtime, apiFetch, persist, statusLabel, statusClass } from "../core/store.js";
+
+export const DEFAULT_KAKAO_JS_KEY = "1535434b57df672bac4c1ff9a9170589";
+export const DEFAULT_KAKAO_REST_KEY = "6df1354c0ce056eef6569a59e1ed90c8";
+
+export const VIVALDI_PARK_ORIGIN = {
+  lat: 37.6456,
+  lng: 127.6844,
+  name: "홍천 비발디파크",
+  address: "강원특별자치도 홍천군 서면 한치골길 262",
+};
+
+export const HONGCHEON_NEARBY_FARM = {
+  id: "hc-vivaldi-1",
+  region: "서면 팔봉리",
+  farmName: "홍천 팔봉산 해바라기 농가",
+  address: "강원특별자치도 홍천군 서면 팔봉리 712",
+  lat: 37.6538,
+  lng: 127.6942,
+};
+
+const HONGCHEON_RANDOM_PRESETS = [
+  {
+    machineType: "tractor",
+    brand: "대동",
+    title: "45마력 트랙터 · 로터리 포함",
+    cropIds: ["pepper", "cabbage", "potato", "rice"],
+    operations: ["till"],
+    areaMin: 1000,
+    areaMax: 18000,
+    price: 130000,
+    included: "로터리 작업기",
+    description: "홍천 비발디파크 인근 팔봉산 해바라기 농가에서 바로 빌릴 수 있는 중형 트랙터입니다.",
+    summary: "벼·고추·배추·감자 밭갈이에 적합한 45마력 트랙터입니다.",
+  },
+  {
+    machineType: "cultivator",
+    brand: "아세아",
+    title: "8마력 다목적 관리기 · 두둑·로터리",
+    cropIds: ["pepper", "cabbage", "potato"],
+    operations: ["till", "ridge"],
+    areaMin: 100,
+    areaMax: 3500,
+    price: 45000,
+    included: "로터리·두둑 작업기",
+    description: "초보 농부도 다루기 쉬운 홍천 팔봉산 농가 보유 관리기입니다.",
+    summary: "고추·배추·감자 소규모 밭의 흙갈이와 두둑 성형에 쓰는 관리기입니다.",
+  },
+  {
+    machineType: "ridgeMulcher",
+    brand: "아세아",
+    title: "두둑·비닐 멀칭 겸용 휴립피복기",
+    cropIds: ["pepper", "cabbage", "potato"],
+    operations: ["ridge", "mulch"],
+    areaMin: 300,
+    areaMax: 5000,
+    price: 65000,
+    included: "피복 롤러·배토판",
+    description: "두둑 성형과 비닐 피복을 한 번에 처리하는 팔봉산 농가 장비입니다.",
+    summary: "고추·배추·감자 밭 두둑과 멀칭 작업을 동시에 진행할 수 있습니다.",
+  },
+  {
+    machineType: "ricePlanter",
+    brand: "국제",
+    title: "6조식 승용 이앙기",
+    cropIds: ["rice"],
+    operations: ["ricePlant"],
+    areaMin: 1000,
+    areaMax: 12000,
+    price: 160000,
+    included: "예비 모판 받침",
+    description: "팔봉리 일대 논 작업에 투입되는 6조식 이앙기입니다.",
+    summary: "벼 모내기에 쓰는 6조식 이앙기로 현장 시동 확인 후 대여 가능합니다.",
+  },
+  {
+    machineType: "sprayer",
+    brand: "한일",
+    title: "이동식 동력 분무기 · 릴 호스 세트",
+    cropIds: ["pepper", "cabbage", "potato", "rice"],
+    operations: ["spray"],
+    areaMin: 100,
+    areaMax: 8000,
+    price: 35000,
+    included: "고압 호스·노즐",
+    description: "노지 밭과 하우스 병해충 방제에 유용한 이동식 동력 분무기입니다.",
+    summary: "고추·배추·감자 방제 작업용 동력 분무기입니다.",
+  },
+  {
+    machineType: "potatoHarvester",
+    brand: "태광",
+    title: "감자 굴취기 · 진동 선별형",
+    cropIds: ["potato"],
+    operations: ["potatoHarvest"],
+    areaMin: 400,
+    areaMax: 9000,
+    price: 85000,
+    included: "굴취날·진동 선별판",
+    description: "강원 홍천 밭 토질에 맞춰 세팅된 감자 수확 전용 굴취기입니다.",
+    summary: "감자 손상을 줄이며 빠르게 수확할 수 있는 진동 선별 굴취기입니다.",
+  },
+  {
+    machineType: "carrier",
+    brand: "대동",
+    title: "궤도형 동력 운반차 덤프",
+    cropIds: ["pepper", "cabbage", "potato", "rice"],
+    operations: ["transport"],
+    areaMin: 100,
+    areaMax: 18000,
+    price: 55000,
+    included: "적재함·경사로 판",
+    description: "경사진 강원도 밭에서도 안정적으로 수확물을 나르는 궤도 운반차입니다.",
+    summary: "경사지 수확물·자재 운반에 적합한 궤도형 동력 운반차입니다.",
+  },
+];
+
+const kakaoAddressCache = new Map();
+let lastRandomPresetIndex = -1;
+
+export async function resolveKakaoAddress(lat, lng, fallbackAddress = "") {
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+  if (!Number.isFinite(numLat) || !Number.isFinite(numLng)) return fallbackAddress;
+  const cacheKey = `${numLat.toFixed(5)},${numLng.toFixed(5)}`;
+  if (kakaoAddressCache.has(cacheKey)) return kakaoAddressCache.get(cacheKey);
+
+  const restKey = runtime.mapConfig?.kakaoRestApiKey || DEFAULT_KAKAO_REST_KEY;
+  if (!restKey) return fallbackAddress;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(
+      `https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${encodeURIComponent(numLng)}&y=${encodeURIComponent(numLat)}`,
+      {
+        headers: { Authorization: `KakaoAK ${restKey}` },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timer);
+    if (!res.ok) return fallbackAddress;
+    const data = await res.json();
+    const doc = data?.documents?.[0];
+    const resolved = doc?.road_address?.address_name || doc?.address?.address_name || fallbackAddress;
+    if (resolved) kakaoAddressCache.set(cacheKey, resolved);
+    return resolved || fallbackAddress;
+  } catch {
+    return fallbackAddress;
+  }
+}
+
+export function ensureHongcheonRandomListing({ randomize = false } = {}) {
+  const existing = Array.isArray(runtime.catalog)
+    ? runtime.catalog.find((item) => item.id === HONGCHEON_NEARBY_FARM.id)
+    : null;
+
+  if (existing && !randomize && existing.lat && existing.lng && existing.farmName) {
+    return existing;
+  }
+
+  let idx = lastRandomPresetIndex;
+  if (randomize || idx < 0) {
+    if (HONGCHEON_RANDOM_PRESETS.length > 1) {
+      let next = Math.floor(Math.random() * HONGCHEON_RANDOM_PRESETS.length);
+      if (next === lastRandomPresetIndex) {
+        next = (next + 1) % HONGCHEON_RANDOM_PRESETS.length;
+      }
+      idx = next;
+    } else {
+      idx = 0;
+    }
+    lastRandomPresetIndex = idx;
+  }
+
+  const preset = HONGCHEON_RANDOM_PRESETS[idx] || HONGCHEON_RANDOM_PRESETS[0];
+  const baseItem = {
+    id: HONGCHEON_NEARBY_FARM.id,
+    type: "rent",
+    title: `${preset.title} · ${HONGCHEON_NEARBY_FARM.farmName}`,
+    brand: preset.brand,
+    machineType: preset.machineType,
+    cropIds: [...preset.cropIds],
+    operations: [...preset.operations],
+    areaMin: preset.areaMin,
+    areaMax: preset.areaMax,
+    price: preset.price,
+    region: HONGCHEON_NEARBY_FARM.region,
+    farmName: HONGCHEON_NEARBY_FARM.farmName,
+    address: HONGCHEON_NEARBY_FARM.address,
+    lat: HONGCHEON_NEARBY_FARM.lat,
+    lng: HONGCHEON_NEARBY_FARM.lng,
+    condition: "good",
+    inspectedAt: "2026-11-10",
+    included: preset.included,
+    pickup: "홍천 비발디파크 인근 농가 직접 인수 · 운반 협의",
+    description: preset.description,
+    summary: preset.summary,
+    booked: [],
+    owner: false,
+    ownerName: HONGCHEON_NEARBY_FARM.farmName,
+    status: "open",
+  };
+
+  const withSpec = applyModelSpecification(baseItem, idx);
+  const listing = {
+    ...withSpec,
+    title: baseItem.title,
+    brand: preset.brand,
+    included: preset.included,
+    description: `${preset.description} (${withSpec.model ? `참조 모델: ${withSpec.brand} ${withSpec.model}` : "현장 점검 완료"})`,
+    summary: preset.summary,
+    farmName: HONGCHEON_NEARBY_FARM.farmName,
+    address: HONGCHEON_NEARBY_FARM.address,
+    lat: HONGCHEON_NEARBY_FARM.lat,
+    lng: HONGCHEON_NEARBY_FARM.lng,
+  };
+
+  if (!Array.isArray(runtime.catalog)) runtime.catalog = [];
+  const rest = runtime.catalog.filter((item) => item.id !== HONGCHEON_NEARBY_FARM.id);
+  runtime.catalog = [listing, ...rest];
+  runtime.selectedMapListingId = listing.id;
+  return listing;
+}
 
 const WEATHER_ICONS = {
   sun: "☀️",
@@ -42,10 +264,14 @@ function loadKakaoSdk(appKey) {
       if (window.kakao?.maps?.load) {
         window.kakao.maps.load(() => resolve(window.kakao.maps));
       } else {
+        kakaoSdkPromise = null;
         reject(new Error("Kakao Maps SDK load failed"));
       }
     };
-    script.onerror = () => reject(new Error("Kakao Maps SDK network error"));
+    script.onerror = () => {
+      kakaoSdkPromise = null;
+      reject(new Error("Kakao Maps SDK network error"));
+    };
     document.head.appendChild(script);
   });
   return kakaoSdkPromise;
@@ -551,13 +777,293 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
     refreshWeatherAndMapConfig({ onUpdate: () => onGpsUpdated?.() });
   };
 
-  if (runtime.mapConfig?.provider === "kakao" && runtime.mapConfig?.kakaoAppKey) {
-    renderKakaoMap(renderArea, items, runtime.mapConfig.kakaoAppKey, { onOpenDetail, onRetry, onSwitchToList });
+  const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
+  if (appKey) {
+    renderKakaoMap(renderArea, items, appKey, { onOpenDetail, onRetry, onSwitchToList });
   } else {
     renderMapError(
       renderArea,
       "지도 API 서버와 연결되지 않았습니다. 환경 설정을 확인하거나 잠시 후 다시 시도해 주세요.",
       { onRetry, onSwitchToList }
     );
+  }
+}
+
+function getHeaderMapNearbyItems(origin) {
+  const randomListing = ensureHongcheonRandomListing({ randomize: false });
+  const catalog = Array.isArray(runtime.catalog) && runtime.catalog.length ? runtime.catalog : [randomListing];
+  const nearby = catalog.filter(
+    (item) => item.status === "open" && distanceKm(origin, item, item.id) <= 30
+  );
+  if (nearby.length) return nearby;
+  return [randomListing];
+}
+
+function renderHeaderVisualFallback(canvasEl, origin, originLabel, items, selectedItem, onSelectItem) {
+  const originCoords = { lat: Number(origin.lat), lng: Number(origin.lng) };
+  const project = (lat, lng) => {
+    const dx = (Number(lng) - originCoords.lng) / 0.025;
+    const dy = (originCoords.lat - Number(lat)) / 0.02;
+    const x = Math.max(14, Math.min(86, 50 + dx * 42));
+    const y = Math.max(18, Math.min(78, 52 + dy * 42));
+    return { x, y };
+  };
+
+  canvasEl.innerHTML = `
+    <div class="socar-visual-fallback" role="region" aria-label="주변 농기계 위치 안내 지도">
+      <svg class="socar-fallback-grid" viewBox="0 0 800 480" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <pattern id="socarGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(23,66,51,0.06)" stroke-width="1" />
+          </pattern>
+        </defs>
+        <rect width="800" height="480" fill="#eef4ee" />
+        <rect width="800" height="480" fill="url(#socarGrid)" />
+        <path d="M-20,380 C160,330 290,260 440,210 C590,160 700,110 830,80" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
+        <path d="M90,-20 C170,130 280,220 420,275 C570,335 690,410 770,500" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" />
+        <path d="M40,120 Q280,175 490,90 T820,160" fill="none" stroke="#cfe6f5" stroke-width="18" stroke-linecap="round" opacity="0.7" />
+        <circle cx="400" cy="250" r="145" fill="rgba(255, 111, 15, 0.06)" stroke="rgba(255, 111, 15, 0.25)" stroke-dasharray="6 6" stroke-width="1.5" />
+      </svg>
+
+      <div class="socar-my-pin socar-fallback-pin" style="left:50%;top:52%" title="${escapeHtml(originLabel)}">
+        <span class="socar-my-pulse"></span>
+        <span class="socar-my-dot"></span>
+        <span class="socar-my-badge">내 위치 · ${escapeHtml(originLabel)}</span>
+      </div>
+
+      ${items
+        .map((item) => {
+          const c = listingCoords(item, item.id);
+          const pos = project(c.lat, c.lng);
+          const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
+          const active = item.id === selectedItem?.id;
+          return `
+            <button
+              type="button"
+              class="socar-price-pin socar-fallback-pin${active ? " is-active" : ""}"
+              style="left:${pos.x.toFixed(1)}%;top:${pos.y.toFixed(1)}%"
+              data-map-listing-id="${escapeHtml(item.id)}"
+            >
+              <span class="socar-pin-tag">${escapeHtml(machineLabel)}</span>
+              <strong>${money(item.price)}</strong>
+              <span class="socar-pin-tail" aria-hidden="true"></span>
+            </button>`;
+        })
+        .join("")}
+
+      <span class="socar-tile-note">실시간 위치 기반 주변 매물 뷰 · 홍천 비발디파크 반경 30km</span>
+    </div>
+  `;
+
+  canvasEl.querySelectorAll("[data-map-listing-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = items.find((i) => i.id === btn.dataset.mapListingId);
+      if (target) {
+        canvasEl.querySelectorAll("[data-map-listing-id]").forEach((el) => {
+          el.classList.toggle("is-active", el.dataset.mapListingId === target.id);
+        });
+        onSelectItem(target);
+      }
+    });
+  });
+}
+
+export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
+  const host = $("mapView");
+  if (!host) return;
+
+  const origin = activeOriginCoords();
+  const isVivaldiOrigin =
+    Math.abs(Number(origin.lat) - VIVALDI_PARK_ORIGIN.lat) < 0.02 &&
+    Math.abs(Number(origin.lng) - VIVALDI_PARK_ORIGIN.lng) < 0.02;
+  const originLabel = isVivaldiOrigin ? VIVALDI_PARK_ORIGIN.name : state.region || "내 위치";
+  const fallbackOriginAddr = isVivaldiOrigin ? VIVALDI_PARK_ORIGIN.address : `${originLabel} 중심`;
+
+  const items = getHeaderMapNearbyItems(origin);
+  let selectedItem =
+    items.find((i) => i.id === runtime.selectedMapListingId) ||
+    items[0];
+  if (selectedItem) runtime.selectedMapListingId = selectedItem.id;
+
+  host.innerHTML = `
+    <div class="socar-map-stage">
+      <div class="socar-floating-top">
+        <div class="socar-loc-pill">
+          <span class="socar-loc-dot" aria-hidden="true"></span>
+          <div class="socar-loc-copy">
+            <strong>내 위치 · ${escapeHtml(originLabel)}</strong>
+            <span id="socarOriginAddr">${escapeHtml(fallbackOriginAddr)}</span>
+          </div>
+        </div>
+        <div class="socar-top-actions">
+          <button type="button" class="socar-pill-btn socar-random-btn" id="socarRandomizeBtn">
+            주변 농가 매물 랜덤 돌리기
+          </button>
+          <button type="button" class="socar-pill-btn socar-recenter-btn" id="socarRecenterBtn">
+            내 위치 중심
+          </button>
+        </div>
+      </div>
+
+      <div id="socarMapCanvas" class="socar-map-canvas" aria-label="내 주변 농기계 지도">
+        <div class="socar-map-loading">홍천 비발디파크 주변 농기계 지도를 불러오는 중...</div>
+      </div>
+
+      <div class="socar-floating-card" id="socarFloatingCard" aria-live="polite"></div>
+    </div>
+  `;
+
+  const renderFloatingCard = (item) => {
+    const cardEl = $("socarFloatingCard");
+    if (!cardEl || !item) return;
+    const dist = distanceKm(origin, item, item.id);
+    const machine = MACHINE_BY_ID[item.machineType];
+    const photoSrc = getListingPhotoSrc(item) || machineImage(machine);
+    const farmName = item.farmName || `${item.region} 농가`;
+    const farmAddr = item.address || `${item.region} 인근`;
+    const sClass = statusClass(item);
+
+    cardEl.innerHTML = `
+      <div class="socar-card-media">
+        <img src="${escapeHtml(photoSrc)}" alt="${escapeHtml(item.title)}" />
+        <span class="socar-card-dist">내 위치에서 ${dist}km</span>
+      </div>
+      <div class="socar-card-body">
+        <div class="socar-card-tags">
+          <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
+          <span class="socar-farm-pill">${escapeHtml(farmName)}</span>
+          <span class="socar-machine-pill">${escapeHtml(machine?.label || "농기계")}</span>
+        </div>
+        <h3 class="socar-card-title">${escapeHtml(item.title)}</h3>
+        <p class="socar-card-addr" id="socarFarmAddr">${escapeHtml(farmAddr)}</p>
+        <div class="socar-card-bottom">
+          <div class="socar-card-price">
+            <strong>${money(item.price)}</strong>
+            <small>${item.type === "rent" ? "/ 1일 대여" : "중고 구매가"}</small>
+          </div>
+          <div class="socar-card-actions">
+            <button type="button" class="button button-secondary button-sm" id="socarDetailBtn">자세히 보기</button>
+            <button type="button" class="button button-primary button-sm" id="socarRentBtn">${item.type === "rent" ? "바로 대여 신청" : "문의하기"}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    cardEl.classList.remove("is-updated");
+    void cardEl.offsetWidth;
+    cardEl.classList.add("is-updated");
+
+    $("socarDetailBtn")?.addEventListener("click", () => onOpenDetail?.(item.id));
+    $("socarRentBtn")?.addEventListener("click", () => onRent?.(item.id));
+
+    const itemCoords = listingCoords(item, item.id);
+    resolveKakaoAddress(itemCoords.lat, itemCoords.lng, farmAddr).then((addr) => {
+      const addrEl = $("socarFarmAddr");
+      if (addrEl && addr) addrEl.textContent = addr;
+    });
+  };
+
+  renderFloatingCard(selectedItem);
+
+  resolveKakaoAddress(origin.lat, origin.lng, fallbackOriginAddr).then((addr) => {
+    const el = $("socarOriginAddr");
+    if (el && addr) el.textContent = addr;
+  });
+
+  $("socarRandomizeBtn")?.addEventListener("click", () => {
+    const nextListing = ensureHongcheonRandomListing({ randomize: true });
+    toast(`주변 농가 랜덤 매물: ${MACHINE_BY_ID[nextListing.machineType]?.label || nextListing.title}`);
+    renderHeaderMapView({ onOpenDetail, onRent });
+  });
+
+  const canvasEl = $("socarMapCanvas");
+  const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
+  let activeMap = null;
+  let originLatLng = null;
+
+  $("socarRecenterBtn")?.addEventListener("click", () => {
+    if (activeMap && originLatLng) {
+      activeMap.panTo(originLatLng);
+      toast(`${originLabel} 중심으로 이동했습니다.`);
+    } else {
+      state.region = VIVALDI_PARK_ORIGIN.name;
+      state.userCoords = { lat: VIVALDI_PARK_ORIGIN.lat, lng: VIVALDI_PARK_ORIGIN.lng, source: "default" };
+      runtime.userCoords = state.userCoords;
+      persist();
+      renderHeaderMapView({ onOpenDetail, onRent });
+    }
+  });
+
+  try {
+    const maps = await loadKakaoSdk(appKey);
+    if (!canvasEl || !$("socarMapCanvas")) return;
+    canvasEl.innerHTML = "";
+    originLatLng = new maps.LatLng(Number(origin.lat), Number(origin.lng));
+    activeMap = new maps.Map(canvasEl, {
+      center: originLatLng,
+      level: 5,
+    });
+
+    const bounds = new maps.LatLngBounds();
+    bounds.extend(originLatLng);
+
+    const myOverlayEl = document.createElement("div");
+    myOverlayEl.className = "socar-my-pin";
+    myOverlayEl.innerHTML = `
+      <span class="socar-my-pulse"></span>
+      <span class="socar-my-dot"></span>
+      <span class="socar-my-badge">내 위치 · ${escapeHtml(originLabel)}</span>
+    `;
+    new maps.CustomOverlay({
+      map: activeMap,
+      position: originLatLng,
+      content: myOverlayEl,
+      yAnchor: 0.5,
+      zIndex: 4,
+    });
+
+    const pinElements = new Map();
+    items.forEach((item) => {
+      const c = listingCoords(item, item.id);
+      const pos = new maps.LatLng(c.lat, c.lng);
+      bounds.extend(pos);
+      const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
+      const pinBtn = document.createElement("button");
+      pinBtn.type = "button";
+      pinBtn.className = `socar-price-pin${item.id === selectedItem?.id ? " is-active" : ""}`;
+      pinBtn.innerHTML = `
+        <span class="socar-pin-tag">${escapeHtml(machineLabel)}</span>
+        <strong>${money(item.price)}</strong>
+        <span class="socar-pin-tail" aria-hidden="true"></span>
+      `;
+      pinBtn.addEventListener("click", () => {
+        selectedItem = item;
+        runtime.selectedMapListingId = item.id;
+        pinElements.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
+        activeMap.panTo(pos);
+        renderFloatingCard(item);
+      });
+      pinElements.set(item.id, pinBtn);
+
+      new maps.CustomOverlay({
+        map: activeMap,
+        position: pos,
+        content: pinBtn,
+        yAnchor: 1.15,
+        zIndex: item.id === selectedItem?.id ? 6 : 5,
+      });
+    });
+
+    if (items.length > 0) {
+      activeMap.setBounds(bounds, 70, 60, 180, 60);
+    }
+  } catch {
+    if (canvasEl && $("socarMapCanvas")) {
+      renderHeaderVisualFallback(canvasEl, origin, originLabel, items, selectedItem, (chosen) => {
+        selectedItem = chosen;
+        runtime.selectedMapListingId = chosen.id;
+        renderFloatingCard(chosen);
+      });
+    }
   }
 }

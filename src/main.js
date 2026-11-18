@@ -1536,6 +1536,7 @@ dealsView.bind();
 {
   const initialDeals = parseDealsHash(location.hash);
   if (initialDeals) setView("deals", { ...initialDeals, fromHistory: true });
+  else if (new URLSearchParams(location.search).get("view") === "map") setView("map");
   else setView("home");
 }
 window.addEventListener("popstate", () => {

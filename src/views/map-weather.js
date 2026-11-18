@@ -3,6 +3,54 @@ import { applyModelSpecification } from "../data/machine-specifications.js";
 import { getRegionCoords } from "../data/korea-regions.js";
 import { $, escapeHtml, money, today, addDays, toast, getListingPhotoSrc, machineImage } from "../core/utils.js";
 import { state, runtime, apiFetch, persist, statusLabel, statusClass } from "../core/store.js";
+import publicRentalOffices from "../data/public-rental-offices.json" with { type: "json" };
+
+const PUBLIC_RENTAL_SOURCE = "https://www.data.go.kr/data/15017325/standard.do";
+let officeMapLibrary;
+let fallbackOfficeMap;
+
+function loadOfficeMapLibrary() {
+  officeMapLibrary ??= new Promise((resolve, reject) => {
+    const base = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet";
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = `${base}.css`;
+    const script = document.createElement("script");
+    script.src = `${base}.js`;
+    script.onload = () => resolve(window.L);
+    script.onerror = reject;
+    document.head.append(css, script);
+  }).catch((error) => {
+    officeMapLibrary = undefined;
+    throw error;
+  });
+  return officeMapLibrary;
+}
+const PUBLIC_RENTAL_SITES = [
+  ["경주시", "https://www.gyeongju.go.kr/agriculture/portal/page.do?menuId=10502"],
+  ["고양시", "https://www.goyang.go.kr/agr/agr05/agr05_1.jsp"],
+  ["이천시", "https://icheon.ncrs.co.kr/"],
+  ["제주특별자치도", "https://jeju.amlend.kr/aml/lend/list/lendSearch"],
+];
+
+function renderPublicOfficeCard(card, [name, phone, address, agency, lat, lng]) {
+  const site = PUBLIC_RENTAL_SITES.find(([region]) => address.split(" ").slice(0, 2).includes(region))?.[1];
+  const query = encodeURIComponent(`${address} ${agency} 농기계 임대 예약`);
+  const siteUrl = site || `https://search.naver.com/search.naver?query=${query}`;
+  const phoneNumber = phone.replace(/[^\d+]/g, "");
+  card.innerHTML = `
+    <div class="header-map-card-body">
+      <div class="header-map-card-tags"><span class="header-map-farm-pill">공공 임대사업소</span></div>
+      <h3 class="header-map-card-title">${escapeHtml(name)}</h3>
+      <p class="header-map-card-addr">${escapeHtml(address)}</p>
+      <p class="header-map-card-addr">${escapeHtml(agency)}${phoneNumber ? ` · <a href="tel:${phoneNumber}">${escapeHtml(phone)}</a>` : ""}</p>
+      <div class="header-map-card-actions">
+        <a class="button button-primary button-sm" href="${siteUrl}" target="_blank" rel="noopener">${site ? "공식 사이트" : "운영기관 사이트 검색"}</a>
+        <a class="button button-secondary button-sm" href="https://map.kakao.com/link/map/${encodeURIComponent(name)},${lat},${lng}" target="_blank" rel="noopener">카카오맵</a>
+        <a href="${PUBLIC_RENTAL_SOURCE}" target="_blank" rel="noopener">공공데이터 출처</a>
+      </div>
+    </div>`;
+}
 
 export const DEFAULT_KAKAO_JS_KEY = "1535434b57df672bac4c1ff9a9170589";
 export const DEFAULT_KAKAO_REST_KEY = "6df1354c0ce056eef6569a59e1ed90c8";
@@ -1051,6 +1099,8 @@ function renderHeaderVisualFallback(
 export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
   const host = $("mapView");
   if (!host) return;
+  fallbackOfficeMap?.remove();
+  fallbackOfficeMap = undefined;
 
   const origin = activeOriginCoords();
   const isVivaldiOrigin =
@@ -1079,6 +1129,9 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
           <button type="button" class="header-map-pill-btn header-map-all-btn" id="headerMapShowAllBtn">
             전체 ${allItems.length.toLocaleString()}건 보기
           </button>
+          <button type="button" class="header-map-pill-btn" id="socarPublicOfficesBtn">
+            전국 공공 임대소 ${publicRentalOffices.length}건
+          </button>
           <button type="button" class="header-map-pill-btn header-map-recenter-btn" id="headerMapRecenterBtn">
             내 위치 중심
           </button>
@@ -1092,8 +1145,27 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       <div class="header-map-floating-card" id="headerMapFloatingCard" aria-live="polite"${selectedItem ? "" : " hidden"}></div>
 
       <div class="header-map-cluster-sheet" id="headerMapClusterSheet" role="dialog" aria-modal="false" aria-label="통합 점 전체 매물 목록" hidden></div>
+      <dialog class="socar-public-office-dialog" id="socarPublicOfficesDialog" aria-labelledby="socarPublicOfficesTitle">
+        <form method="dialog">
+          <button type="submit" class="button button-secondary button-sm">닫기</button>
+        </form>
+        <h2 id="socarPublicOfficesTitle">전국 공공 임대소</h2>
+        <label for="socarPublicOfficesSearch">사업소명 또는 주소</label>
+        <input type="search" id="socarPublicOfficesSearch" autocomplete="off">
+        <div id="socarPublicOfficesResults"></div>
+      </dialog>
     </div>
   `;
+
+  const showPublicOffice = (office) => {
+    selectedItem = null;
+    runtime.selectedMapListingId = "";
+    closeClusterSheet();
+    $("headerMapStage").classList.add("has-floating-card");
+    const card = $("headerMapFloatingCard");
+    card.hidden = false;
+    renderPublicOfficeCard(card, office);
+  };
 
   const hideFloatingCard = () => {
     selectedItem = null;
@@ -1327,6 +1399,37 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
   let activeMap = null;
   let originLatLng = null;
   let fallbackController = null;
+  let pendingOffice;
+  let locateOffice = (office) => { pendingOffice = office; };
+  let fallbackMap;
+  const officeDialog = $("socarPublicOfficesDialog");
+  const officeSearch = $("socarPublicOfficesSearch");
+  const officeResults = $("socarPublicOfficesResults");
+  const renderOfficeResults = () => {
+    const terms = officeSearch.value.trim().split(/\s+/);
+    const results = publicRentalOffices.filter(([name, , address, agency]) =>
+      terms.every((term) => `${name} ${address} ${agency}`.includes(term)),
+    );
+    officeResults.replaceChildren(...results.map((office) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button button-secondary button-sm";
+      button.textContent = `${office[0]} · ${office[2]}`;
+      button.addEventListener("click", () => {
+        officeDialog.close();
+        locateOffice?.(office);
+        showPublicOffice(office);
+      });
+      return button;
+    }));
+    if (!results.length) officeResults.textContent = "검색 결과가 없습니다.";
+  };
+  officeSearch.addEventListener("input", renderOfficeResults);
+  $("socarPublicOfficesBtn").addEventListener("click", () => {
+    renderOfficeResults();
+    officeDialog.showModal();
+    officeSearch.focus();
+  });
 
   $("headerMapRecenterBtn")?.addEventListener("click", () => {
     closeClusterSheet();
@@ -1335,6 +1438,8 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       activeMap.setLevel(6);
       activeMap.panTo(originLatLng);
       toast(`${originLabel} 중심으로 이동했습니다.`);
+    } else if (fallbackMap) {
+      fallbackMap.panTo([origin.lat, origin.lng]);
     } else if (fallbackController) {
       fallbackController.resetView();
     } else {
@@ -1391,6 +1496,43 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     const activeOverlays = new Map();
     let cachedLevel = null;
     let cachedClusters = [];
+    const officeOverlays = new Map();
+    const officePositions = publicRentalOffices.map((office) => new maps.LatLng(office[4], office[5]));
+    locateOffice = (office) => {
+      pinElements.forEach((el) => el.classList.remove("is-active"));
+      activeMap.setLevel(4);
+      activeMap.panTo(officePositions[publicRentalOffices.indexOf(office)]);
+    };
+
+    const renderOfficePins = (viewport) => {
+      officePositions.forEach((position, index) => {
+        const existing = officeOverlays.get(index);
+        if (!viewport.contain(position)) {
+          existing?.setMap(null);
+          officeOverlays.delete(index);
+          return;
+        }
+        if (existing) return;
+        const office = publicRentalOffices[index];
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "header-map-price-pin socar-public-office-pin";
+        button.title = office[0];
+        button.setAttribute("aria-label", office[0]);
+        button.textContent = "임대";
+        button.addEventListener("click", () => {
+          pinElements.forEach((el) => el.classList.remove("is-active"));
+          activeMap.panTo(position);
+          showPublicOffice(office);
+        });
+        officeOverlays.set(index, new maps.CustomOverlay({
+          map: activeMap,
+          position,
+          content: button,
+          zIndex: 3,
+        }));
+      });
+    };
 
     const createClusterOverlay = (cl) => {
       const pos = new maps.LatLng(cl.lat, cl.lng);
@@ -1474,6 +1616,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       }
 
       const viewport = activeMap.getBounds?.();
+      if (viewport) renderOfficePins(viewport);
       const checkViewport = Boolean(viewport) && cachedClusters.length > 40;
 
       for (const cl of cachedClusters) {
@@ -1491,6 +1634,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       }
     };
 
+    if (pendingOffice) locateOffice(pendingOffice);
     syncOverlays(true);
     maps.event.addListener(activeMap, "click", hideFloatingCard);
     maps.event.addListener(activeMap, "zoom_changed", () => syncOverlays(true));
@@ -1503,7 +1647,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       activeMap.setLevel(Math.min(13, activeMap.getLevel() + 1), { animate: true });
     });
   } catch {
-    if (canvasEl && $("headerMapCanvas")) {
+    if (canvasEl && $("headerMapCanvas") === canvasEl) {
       fallbackController = renderHeaderVisualFallback(canvasEl, origin, originLabel, allItems, selectedItem, {
         initialLevel: 6,
         onSelectItem: (chosen) => {
@@ -1515,6 +1659,40 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
         onOpenClusterSheet: openClusterSheet,
         onRecenterReset: () => toast(`${originLabel} 중심으로 이동했습니다.`),
       });
+      locateOffice = async (office) => {
+        pendingOffice = office;
+        try {
+          const leaflet = await loadOfficeMapLibrary();
+          if (!canvasEl.isConnected || pendingOffice !== office) return;
+          if (!fallbackMap) {
+            canvasEl.replaceChildren();
+            fallbackMap = leaflet.map(canvasEl, { zoomControl: false });
+            fallbackOfficeMap = fallbackMap;
+            leaflet.control.zoom({ position: "bottomleft" }).addTo(fallbackMap);
+            leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              maxZoom: 19,
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            }).addTo(fallbackMap);
+            for (const record of publicRentalOffices) {
+              const marker = leaflet.circleMarker([record[4], record[5]], {
+                radius: 6,
+                color: "#fff",
+                weight: 2,
+                fillColor: "#1b598e",
+                fillOpacity: 1,
+              }).addTo(fallbackMap);
+              marker.on("click", () => {
+                showPublicOffice(record);
+                locateOffice(record);
+              });
+            }
+          }
+          fallbackMap.setView([office[4], office[5]], 14);
+        } catch {
+          if (canvasEl.isConnected) toast("지도 연결이 지연되고 있습니다. 사업소 카드의 카카오맵에서 위치를 확인할 수 있습니다.");
+        }
+      };
+      if (pendingOffice) locateOffice(pendingOffice);
     }
   }
 }

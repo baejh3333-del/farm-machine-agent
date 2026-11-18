@@ -11,7 +11,7 @@
 | 실패 원인 | `vercel.json`의 `*/5 * * * *` 크론. #50에서 들어왔다. Vercel 문서: "Hobby accounts are limited to cron jobs that run once per day. Cron expressions that would run more frequently will fail during deployment." Hobby 실행 시각 정밀도는 ±59분이다. | [Vercel Cron 사용 한도](https://vercel.com/docs/cron-jobs/usage-and-pricing) (문서 갱신 2026-07-15, 2026-11-18 확인) |
 | 운영 이후 추가된 마이그레이션 | `0008_education_certificates`, `0008_role_scoped_ai_state`, `0009_trade_offers`, `0010_delegation_jobs` 4개. `0010`도 포함된다. | `git diff 378950c origin/main -- server/migrations` |
 | 운영 DB 적용 여부 | **확인하지 못했다.** 이 작업 환경에는 운영 `DATABASE_URL`이나 Vercel CLI 권한이 없다. 위 4개는 미적용으로 보고 진행해야 한다. | 접근 불가 |
-| `CRON_SECRET` 설정 여부 | **확인하지 못했다.** 비어 있으면 크론 요청은 503으로 거부된다. | `api/delegation-jobs.js` |
+| `CRON_SECRET` 설정 여부 | **확인하지 못했다.** 비어 있으면 크론 요청은 503으로 거부된다. | `server/delegation-sweep-api.js` |
 
 ## 2. 코드 변경
 

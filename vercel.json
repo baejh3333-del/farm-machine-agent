@@ -6,13 +6,13 @@
   "functions": {
     "api/agent.js": { "maxDuration": 60 },
     "api/agent-chat-reply.js": { "maxDuration": 60 },
-    "api/conversations.js": { "maxDuration": 60 },
-    "api/delegation-jobs.js": { "maxDuration": 60 }
+    "api/conversations.js": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/delegation-jobs", "schedule": "0 19 * * *" }
   ],
   "rewrites": [
-    { "source": "/api/voice", "destination": "/api/agent?route=voice" }
+    { "source": "/api/voice", "destination": "/api/agent?route=voice" },
+    { "source": "/api/delegation-jobs", "destination": "/api/conversations?route=delegation-jobs" }
   ]
 }

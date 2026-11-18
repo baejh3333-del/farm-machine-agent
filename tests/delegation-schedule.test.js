@@ -1,7 +1,7 @@
 // P0 배포 준비: Hobby 호환 크론 + 트래픽 기반 대리 응대 스윕 + 마이그레이션 준비 상태 점검.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -93,6 +93,23 @@ test("S1. vercel.json 크론은 모두 Hobby 한도(하루 1회, 분·시 고정
     assert.equal(dom, "*");
     assert.equal(month, "*");
   }
+});
+
+test("S1b. 서버리스 함수는 Hobby 한도(배포당 12개) 이하이고, 크론·rewrite 대상이 실제 함수로 이어진다", () => {
+  const apiDir = new URL("../api/", import.meta.url);
+  const walk = (dir) =>
+    readdirSync(dir).flatMap((name) => {
+      const full = new URL(name, dir);
+      return statSync(full).isDirectory() ? walk(new URL(`${name}/`, dir)) : name.endsWith(".js") ? [name] : [];
+    });
+  const functions = walk(apiDir);
+  assert.ok(functions.length <= 12, `api/ 함수 ${functions.length}개: ${functions.join(", ")}`);
+  const config = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
+  for (const key of Object.keys(config.functions || {})) {
+    assert.ok(statSync(new URL(`../${key}`, import.meta.url)).isFile(), `functions 설정 대상 없음: ${key}`);
+  }
+  const rewrite = (config.rewrites || []).find((r) => r.source === "/api/delegation-jobs");
+  assert.equal(rewrite?.destination, "/api/conversations?route=delegation-jobs");
 });
 
 test("S2. acquireTick: 같은 창은 모든 인스턴스를 통틀어 한 번만, 다음 창에서 다시 열린다", async () => {

@@ -20,6 +20,7 @@ import { createTransactionViews } from "./views/transactions.js";
 import { createDealsView } from "./views/deals.js";
 import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
+import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
@@ -790,6 +791,11 @@ function bindEvents() {
   });
   initLoginForm();
   initEducationCertificate();
+  initAccountInitialSetup();
+  window.addEventListener(SETUP_CHANGED_EVENT, () => {
+    updateBadges();
+    renderAll();
+  });
   $("quickDateInput")?.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
     if (!state.filters.date || state.filters.dateEnd < state.filters.date) state.filters.dateEnd = state.filters.date ? addDays(state.filters.date, 1) : "";

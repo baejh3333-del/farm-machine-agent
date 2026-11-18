@@ -2062,7 +2062,11 @@ img {
 
 .detail-layout {
   display: grid;
-  grid-template-columns: 44% 56%;
+  grid-template-columns: minmax(0, 44%) minmax(0, 56%);
+}
+
+.detail-layout > * {
+  min-width: 0;
 }
 
 .detail-art-col {
@@ -2207,6 +2211,7 @@ img {
 
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 22px;
 }
@@ -2221,7 +2226,10 @@ img {
 }
 
 .detail-actions .button-primary {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
 }
 
 /* 폼/채팅/찜 모달 */
@@ -2501,9 +2509,11 @@ img {
 }
 
 @media (max-width: 900px) {
-  .owner-columns,
-  .detail-layout {
+  .owner-columns {
     grid-template-columns: 1fr;
+  }
+  .detail-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -469,7 +469,32 @@ export async function seedDemoListings({
           $14, $15, $16, $17, $18, $19,
           NULL, $20, true, $21
         )
-        ON CONFLICT (id) DO NOTHING`,
+        ON CONFLICT (id) DO UPDATE SET
+          model_id = EXCLUDED.model_id,
+          title = EXCLUDED.title,
+          brand = EXCLUDED.brand,
+          machine_type = EXCLUDED.machine_type,
+          crop_ids = EXCLUDED.crop_ids,
+          operations = EXCLUDED.operations,
+          area_min = EXCLUDED.area_min,
+          area_max = EXCLUDED.area_max,
+          price = EXCLUDED.price,
+          region = EXCLUDED.region,
+          condition = EXCLUDED.condition,
+          inspected_at = EXCLUDED.inspected_at,
+          included = EXCLUDED.included,
+          pickup = EXCLUDED.pickup,
+          description = EXCLUDED.description,
+          summary = EXCLUDED.summary,
+          sort_order = EXCLUDED.sort_order,
+          updated_at = now()
+        WHERE listings.is_demo = true
+          AND (
+            listings.pickup IS DISTINCT FROM EXCLUDED.pickup
+            OR listings.description IS DISTINCT FROM EXCLUDED.description
+            OR listings.model_id IS DISTINCT FROM EXCLUDED.model_id
+            OR listings.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+          )`,
         [
           item.id,
           ownerId,
@@ -536,8 +561,14 @@ export function ensureLocalDevReady() {
     const env = resolveExpectedEnv();
     await initEnvironment({ env, pool });
     await runMigrations({ env, pool });
-    const countRes = await pool.query("SELECT count(*)::int AS count FROM listings");
-    if (countRes.rows[0].count === 0 && process.env.MOA_SKIP_DEMO_SEED !== "1") {
+    const countRes = await pool.query("SELECT count(*)::int AS count FROM listings WHERE is_demo = true");
+    const legacyRes = await pool.query(
+      "SELECT 1 FROM listings WHERE is_demo = true AND pickup IN ('직접 인수', '운반 협의', '현장 확인 후 인수', '비발디파크 인근 농가 직접 인수') LIMIT 1"
+    );
+    if (
+      (countRes.rows[0].count < buildMockListings().length || legacyRes.rowCount > 0) &&
+      process.env.MOA_SKIP_DEMO_SEED !== "1"
+    ) {
       await seedDemoListings({ env, pool });
     }
   })().catch((error) => {

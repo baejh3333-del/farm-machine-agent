@@ -43,7 +43,10 @@ function deps() {
 }
 
 test("보험 답 판단: 긍정만 추천으로 넘어가고, 거절·애매·질문은 아니다", () => {
-  for (const yes of ["네", "네, 추천해 주세요", "추천해 주세요", "좋아요", "ㅇㅇ", "네, 연결해 주세요"]) assert.equal(classifyInsuranceReply(yes), "yes", yes);
+  for (const yes of ["네", "네, 추천해 주세요", "추천해 주세요", "좋아요", "ㅇㅇ", "네, 연결해 주세요",
+    "엉 연결해줘", "엉", "응응 연결해 줘", "넹", "넵 연결 부탁해요", "웅 추천해줘", "어 연결해줘", "그래 연결해",
+    "좋아요 연결해 주세요", "당연하지", "물론이죠", "그럼요 상담 연결해 주세요", "ㅇㅋ 연결해줘", "연결해줘",
+    "상담 연결해 주세요", "보험 추천해 줘", "해줘", "부탁해", "알겠어요"]) assert.equal(classifyInsuranceReply(yes), "yes", yes);
   for (const no of ["아니요", "괜찮아요", "됐어요", "넘어갈게요", "필요 없어요", "나중에요"]) assert.equal(classifyInsuranceReply(no), "no", no);
   for (const unclear of ["음…", "글쎄요", "보험료가 얼마예요?", "네?", "트랙터 하나 더 빌릴래요"]) assert.equal(classifyInsuranceReply(unclear), "unclear", unclear);
 });

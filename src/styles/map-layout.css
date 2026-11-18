@@ -1,0 +1,350 @@
+/* =========================================
+   지도 화면 레이아웃
+   [매물 목록] [지도] [농농이(우측 화면)]
+   - 목록 머리의 버튼을 누르면 목록이 접히고 지도가 넓어진다.
+   - 농농이를 우측 화면으로 켜면 지도가 그만큼 비켜 주고, 닫으면 다시 넓어진다.
+   ========================================= */
+.main-content:has(> #mapView:not([hidden])) {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.header-map-view {
+  --map-gap: 12px;
+  --map-ai-width: min(430px, calc(100vw - 24px));
+  margin-top: 0;
+  padding: var(--map-gap) 16px 16px;
+  transition: padding-right 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.header-map-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: var(--map-gap);
+  height: calc(100dvh - 72px - var(--map-gap) - 16px);
+  min-height: 520px;
+  transition: grid-template-columns 0.36s cubic-bezier(0.22, 1, 0.36, 1), gap 0.36s ease;
+}
+
+.header-map-layout .header-map-stage {
+  grid-column: 2;
+  grid-row: 1;
+  height: 100%;
+  min-width: 0;
+  box-shadow: none;
+}
+
+.header-map-layout .header-map-floating-top {
+  justify-content: flex-end;
+}
+
+/* ---- 왼쪽 매물 목록 ---- */
+.header-map-list {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #ffffff;
+  border: 1px solid var(--line, #e8e8e8);
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.header-map-list-head {
+  flex: none;
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid var(--line, #e8e8e8);
+}
+
+.header-map-list-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.header-map-list-title .header-map-loc-copy {
+  min-width: 0;
+}
+
+.header-map-list-title .header-map-loc-copy span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-map-list-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--line, #e8e8e8);
+  border-radius: 12px;
+  background: var(--bg-page, #f7f7f5);
+  color: var(--text-strong, #162a22);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.header-map-list-toggle:hover {
+  border-color: var(--forest, #174233);
+}
+
+.header-map-list-toggle svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(180deg);
+  transition: transform 0.3s ease;
+}
+
+.header-map-list-toggle[aria-expanded="false"] svg {
+  transform: none;
+}
+
+.header-map-list-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.header-map-list-body[hidden] {
+  display: none;
+}
+
+.header-map-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.header-map-list-item + .header-map-list-item {
+  position: relative;
+}
+
+.header-map-list-item + .header-map-list-item::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: var(--line, #e8e8e8);
+}
+
+.header-map-list-item:hover {
+  background: var(--bg-page, #f7f7f5);
+}
+
+.header-map-list-item.is-active {
+  background: #eef6f0;
+  border-color: var(--forest, #174233);
+}
+
+.header-map-list-item.is-active::before,
+.header-map-list-item.is-active + .header-map-list-item::before {
+  opacity: 0;
+}
+
+.header-map-list-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.header-map-list-item-title {
+  font-size: 0.95rem;
+  font-weight: 750;
+  line-height: 1.35;
+  color: var(--text-strong, #162a22);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.header-map-list-item-meta,
+.header-map-list-item-tag {
+  font-size: 0.78rem;
+  color: var(--text-muted, #5e7468);
+}
+
+.header-map-list-item-price {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--text-muted, #5e7468);
+}
+
+.header-map-list-item-price strong {
+  font-size: 0.95rem;
+  color: var(--text-strong, #162a22);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-map-list-item img {
+  width: 96px;
+  height: 80px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #edf3ee;
+}
+
+.header-map-list-more {
+  margin: 8px 4px 4px;
+  min-height: 44px;
+  border: 1px solid var(--line, #e8e8e8);
+  border-radius: 12px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.header-map-list-more:hover {
+  border-color: var(--forest, #174233);
+}
+
+.header-map-list-empty {
+  margin: 0;
+  padding: 32px 12px;
+  text-align: center;
+  color: var(--text-muted, #5e7468);
+  font-size: 0.9rem;
+}
+
+/* ---- 목록 접힘: 지도 위 막대만 남는다 ---- */
+.header-map-layout.is-list-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+  gap: 0;
+}
+
+.header-map-layout.is-list-collapsed .header-map-list {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  width: min(340px, calc(100% - 32px));
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(16, 48, 36, 0.16);
+}
+
+.header-map-layout.is-list-collapsed .header-map-list-head {
+  border-bottom: 0;
+}
+
+/* ---- 농농이를 우측 화면으로 켰을 때: 지도가 패널 자리만큼 비켜 준다 ---- */
+@media (min-width: 1024px) {
+  body.ai-docked .header-map-view {
+    padding-right: calc(var(--map-ai-width) + 12px + var(--map-gap));
+  }
+
+  /* 지도 화면에서는 패널이 상단 메뉴 아래, 지도와 같은 높이에 붙는다 */
+  body.ai-docked:has(#mapView:not([hidden])) #aiPanel[data-layout-mode="docked"] {
+    top: calc(72px + var(--map-gap, 12px));
+    bottom: 16px;
+    right: 16px;
+    height: auto;
+    max-height: none;
+    width: var(--map-ai-width, min(430px, calc(100vw - 24px)));
+    box-shadow: none;
+    border-color: var(--line, #e8e8e8);
+    border-radius: 24px;
+  }
+
+  body.ai-docked:has(#mapView:not([hidden])) .ai-launcher {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .header-map-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: calc(100dvh - 72px - 28px);
+  }
+
+  .header-map-layout .header-map-stage {
+    grid-column: 1;
+  }
+
+  .header-map-layout .header-map-list {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 20;
+    max-height: 55%;
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(16, 48, 36, 0.16);
+  }
+
+  .header-map-layout.is-list-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .header-map-layout.is-list-collapsed .header-map-list {
+    width: auto;
+    right: 12px;
+  }
+
+  .header-map-layout .header-map-floating-top {
+    top: auto;
+    bottom: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .header-map-view {
+    padding: 8px 8px 8px;
+  }
+
+  .header-map-layout {
+    height: calc(100dvh - 64px - 16px);
+  }
+
+  .header-map-list-item {
+    grid-template-columns: minmax(0, 1fr) 80px;
+  }
+
+  .header-map-list-item img {
+    width: 80px;
+    height: 68px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-map-view,
+  .header-map-layout,
+  .header-map-list-toggle svg {
+    transition: none;
+  }
+}

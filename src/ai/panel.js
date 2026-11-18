@@ -643,6 +643,8 @@ export function createAiPanel({
     panel.classList.toggle("is-fullscreen", isFullscreen);
     panel.classList.toggle("is-expanded", isFullscreen);
     document.body.classList.toggle("ai-fullscreen", isFullscreen && !panel.hidden);
+    // 지도 화면은 이 표시를 보고 우측 패널 자리만큼 지도를 좁힌다.
+    document.body.classList.toggle("ai-docked", !isFullscreen && !panel.hidden);
     const backdrop = $("aiBackdrop");
     if (backdrop) backdrop.hidden = panel.hidden || !isFullscreen;
 
@@ -3172,7 +3174,9 @@ export function createAiPanel({
     $("aiLauncher").setAttribute("aria-expanded", "true");
     applyWelcomeStagger();
     if (wasHidden) {
-      setAiLayoutMode("fullscreen", { animate: true });
+      // 지도를 보는 중이면 지도를 가리지 않게 우측 화면으로 연다.
+      const onMap = $("mapView") && !$("mapView").hidden;
+      setAiLayoutMode(onMap ? "docked" : "fullscreen", { animate: !onMap });
     } else {
       setAiLayoutMode(aiLayoutMode, { animate: false });
     }

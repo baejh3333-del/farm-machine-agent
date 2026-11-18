@@ -253,7 +253,7 @@ img {
 .region-pill select { border: 0; background: transparent; font-size: 0.875rem; font-weight: 750; cursor: pointer; }
 
 .main-content { padding: 30px 0 90px; }
-.main-content > :not(#browseView):not(#homeView),
+.main-content > :not(#browseView):not(#homeView):not(#mapView),
 .search-dock,
 .market-section {
   width: min(1400px, calc(100% - 2 * var(--gutter)));

@@ -1115,16 +1115,29 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     : null;
   if (!selectedItem) runtime.selectedMapListingId = "";
 
+  const listCollapsed = Boolean(runtime.headerMapListCollapsed);
   host.innerHTML = `
-    <div class="header-map-stage${selectedItem ? " has-floating-card" : ""}" id="headerMapStage">
-      <div class="header-map-floating-top">
-        <div class="header-map-loc-pill">
+    <div class="header-map-layout${listCollapsed ? " is-list-collapsed" : ""}" id="headerMapLayout">
+    <aside class="header-map-list" id="headerMapList" aria-label="지도 매물 목록">
+      <div class="header-map-list-head">
+        <div class="header-map-list-title">
           <span class="header-map-loc-dot" aria-hidden="true"></span>
           <div class="header-map-loc-copy">
             <strong>내 위치 · ${escapeHtml(originLabel)}</strong>
             <span id="headerMapOriginAddr">${escapeHtml(fallbackOriginAddr)}</span>
           </div>
         </div>
+        <button type="button" class="header-map-list-toggle" id="headerMapListToggle"
+          aria-controls="headerMapListBody" aria-expanded="${!listCollapsed}"
+          aria-label="${listCollapsed ? "매물 목록 펼치기" : "매물 목록 접고 지도 크게 보기"}">
+          <span class="header-map-list-count">가까운 매물 ${allItems.length.toLocaleString()}건</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+      </div>
+      <div class="header-map-list-body" id="headerMapListBody"${listCollapsed ? " hidden" : ""}></div>
+    </aside>
+    <div class="header-map-stage${selectedItem ? " has-floating-card" : ""}" id="headerMapStage">
+      <div class="header-map-floating-top">
         <div class="header-map-top-actions">
           <button type="button" class="header-map-pill-btn header-map-all-btn" id="headerMapShowAllBtn">
             전체 ${allItems.length.toLocaleString()}건 보기
@@ -1155,7 +1168,89 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
         <div id="socarPublicOfficesResults"></div>
       </dialog>
     </div>
+    </div>
   `;
+
+  // 왼쪽 매물 목록: 가까운 순으로 보여주고, 누르면 지도에서 해당 매물을 짚어 준다.
+  const LIST_PAGE = 30;
+  let listShown = LIST_PAGE;
+  let focusListing = (item) => {
+    selectedItem = item;
+    runtime.selectedMapListingId = item.id;
+    renderFloatingCard(item);
+  };
+  const renderListBody = () => {
+    const body = $("headerMapListBody");
+    if (!body) return;
+    if (!allItems.length) {
+      body.innerHTML = `<p class="header-map-list-empty">주변에 등록된 매물이 아직 없어요.</p>`;
+      return;
+    }
+    const rows = allItems.slice(0, listShown).map((item) => {
+      const machine = MACHINE_BY_ID[item.machineType];
+      const photoSrc = getListingPhotoSrc(item) || machineImage(machine);
+      const dist = distanceKm(origin, item, item.id);
+      const active = item.id === runtime.selectedMapListingId;
+      return `
+        <button type="button" class="header-map-list-item${active ? " is-active" : ""}" data-list-id="${escapeHtml(item.id)}" aria-pressed="${active}">
+          <span class="header-map-list-copy">
+            <span class="header-map-list-item-title">${escapeHtml(item.title)}</span>
+            <span class="header-map-list-item-meta">${escapeHtml(item.region || "")} · ${dist}km</span>
+            <span class="header-map-list-item-price"><strong>${money(item.price)}</strong>${item.type === "rent" ? " / 1일" : ""}</span>
+            <span class="header-map-list-item-tag">${escapeHtml(machine?.label || "농기계")} · ${item.type === "rent" ? "대여" : "판매"}</span>
+          </span>
+          <img src="${escapeHtml(photoSrc)}" alt="" loading="lazy" />
+        </button>`;
+    }).join("");
+    const more = allItems.length > listShown
+      ? `<button type="button" class="header-map-list-more" id="headerMapListMore">매물 더 보기 (${(allItems.length - listShown).toLocaleString()}건 남음)</button>`
+      : "";
+    body.innerHTML = rows + more;
+  };
+  const syncListActive = () => {
+    $("headerMapListBody")?.querySelectorAll("[data-list-id]").forEach((el) => {
+      const active = el.dataset.listId === runtime.selectedMapListingId;
+      el.classList.toggle("is-active", active);
+      el.setAttribute("aria-pressed", String(active));
+    });
+  };
+  // 지도에서 핀을 고르면 목록에서도 같은 매물을 보이게 한다(목록 밖이면 그만큼 더 펼친다).
+  const revealListRow = (id) => {
+    const index = allItems.findIndex((i) => i.id === id);
+    if (index < 0) return;
+    if (index >= listShown) {
+      listShown = Math.ceil((index + 1) / LIST_PAGE) * LIST_PAGE;
+      renderListBody();
+    }
+    const body = $("headerMapListBody");
+    const row = body?.querySelector(`[data-list-id="${CSS.escape(id)}"]`);
+    if (row && !body.hidden) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+  renderListBody();
+  $("headerMapListBody")?.addEventListener("click", (e) => {
+    if (e.target.closest("#headerMapListMore")) {
+      listShown += LIST_PAGE;
+      renderListBody();
+      return;
+    }
+    const row = e.target.closest("[data-list-id]");
+    if (!row) return;
+    const item = allItems.find((i) => i.id === row.dataset.listId);
+    if (!item) return;
+    closeClusterSheet();
+    focusListing(item);
+    syncListActive();
+  });
+  $("headerMapListToggle")?.addEventListener("click", () => {
+    const collapsed = !runtime.headerMapListCollapsed;
+    runtime.headerMapListCollapsed = collapsed;
+    $("headerMapLayout")?.classList.toggle("is-list-collapsed", collapsed);
+    const body = $("headerMapListBody");
+    if (body) body.hidden = collapsed;
+    const toggle = $("headerMapListToggle");
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", collapsed ? "매물 목록 펼치기" : "매물 목록 접고 지도 크게 보기");
+  });
 
   const showPublicOffice = (office) => {
     selectedItem = null;
@@ -1179,6 +1274,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     $("headerMapCanvas")?.querySelectorAll(".header-map-price-pin.is-active").forEach((el) => {
       el.classList.remove("is-active");
     });
+    syncListActive();
   };
 
   const renderFloatingCard = (item) => {
@@ -1477,6 +1573,36 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       level: 6,
     });
 
+    // 목록을 접거나 농농이 패널을 닫으면 지도 칸이 넓어진다. 카카오 지도는 크기 변화를 직접 알려 줘야 한다.
+    if (typeof ResizeObserver === "function") {
+      let relayoutFrame = 0;
+      const resizeObserver = new ResizeObserver(() => {
+        if (!canvasEl.isConnected) {
+          resizeObserver.disconnect();
+          return;
+        }
+        cancelAnimationFrame(relayoutFrame);
+        relayoutFrame = requestAnimationFrame(() => {
+          const center = activeMap.getCenter();
+          activeMap.relayout();
+          activeMap.setCenter(center);
+        });
+      });
+      resizeObserver.observe(canvasEl);
+    }
+
+    focusListing = (item) => {
+      const coords = listingCoords(item, item.id);
+      const pos = new maps.LatLng(coords.lat, coords.lng);
+      selectedItem = item;
+      runtime.selectedMapListingId = item.id;
+      if (activeMap.getLevel() > 5) activeMap.setLevel(5);
+      activeMap.panTo(pos);
+      syncOverlays(true);
+      pinElements.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
+      renderFloatingCard(item);
+    };
+
     const myOverlayEl = document.createElement("div");
     myOverlayEl.className = "header-map-my-pin";
     myOverlayEl.innerHTML = `
@@ -1555,6 +1681,8 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
           pinElements.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
           activeMap.panTo(pos);
           renderFloatingCard(item);
+          syncListActive();
+          revealListRow(item.id);
         });
         pinElements.set(item.id, pinBtn);
 
@@ -1655,6 +1783,8 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
           selectedItem = chosen;
           runtime.selectedMapListingId = chosen.id;
           renderFloatingCard(chosen);
+          syncListActive();
+          revealListRow(chosen.id);
         },
         onOpenClusterSheet: openClusterSheet,
         onRecenterReset: () => toast(`${originLabel} 중심으로 이동했습니다.`),

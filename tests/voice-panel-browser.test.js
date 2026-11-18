@@ -261,7 +261,8 @@ test("voice panel: live session 502 falls back to standard voice with one toast 
     await page.locator("#aiMicButton").click();
     await page.waitForFunction(() => Boolean(window.voiceTest.recognition));
     await page.locator("#aiMicButton").click();
-    await page.waitForFunction(() => document.body.textContent.includes("트랙터 매물을 찾았어요."));
+    // PR #42: 매물 카드가 붙은 답변은 설명 글 없이 추천 박스만 보인다.
+    await page.waitForFunction(() => Boolean(document.querySelector(".chat-bubble.assistant.has-results .ai-result")));
     assert.equal(requests.live.length, 1, "no further live session attempts");
     assert.equal(requests.agent[0].inputMode, "voice");
     assert.equal(requests.agent[0].message, "트랙터 찾아줘");

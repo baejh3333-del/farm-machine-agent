@@ -1249,12 +1249,6 @@ body.ai-fullscreen .ai-launcher {
   color: var(--forest, #111111);
 }
 
-.ai-result-rail-hint {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted, #6b6b6b);
-}
-
 .ai-result-cards {
   display: grid;
   grid-template-columns: 1fr;
@@ -1399,11 +1393,6 @@ body.ai-fullscreen .ai-launcher {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-#aiPanel:not(.is-fullscreen) .ai-result-rail-hint,
-#aiPanel[data-layout-mode="docked"] .ai-result-rail-hint {
-  display: none;
 }
 
 #aiPanel:not(.is-fullscreen) .ai-rec-card-media,

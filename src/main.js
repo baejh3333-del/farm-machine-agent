@@ -346,6 +346,7 @@ function setView(view, options = {}) {
   }
   if (view === "garage") runtime.garage?.refresh();
   if (view === "map") {
+    runtime.selectedMapListingId = "";
     renderHeaderMapView({
       onOpenDetail: (id) => catalogViews.openDetail(id),
       onRent: (id) => txViews.rentalForm(id),

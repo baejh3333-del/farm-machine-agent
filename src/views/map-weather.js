@@ -222,7 +222,6 @@ export function ensureHongcheonRandomListing({ randomize = false } = {}) {
   if (!Array.isArray(runtime.catalog)) runtime.catalog = [];
   const rest = runtime.catalog.filter((item) => item.id !== HONGCHEON_NEARBY_FARM.id);
   runtime.catalog = [listing, ...rest];
-  runtime.selectedMapListingId = listing.id;
   return listing;
 }
 
@@ -1061,13 +1060,13 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
   const fallbackOriginAddr = isVivaldiOrigin ? VIVALDI_PARK_ORIGIN.address : `${originLabel} 중심`;
 
   const allItems = getHeaderMapAllItems(origin);
-  let selectedItem =
-    allItems.find((i) => i.id === runtime.selectedMapListingId) ||
-    allItems[0];
-  if (selectedItem) runtime.selectedMapListingId = selectedItem.id;
+  let selectedItem = runtime.selectedMapListingId
+    ? allItems.find((i) => i.id === runtime.selectedMapListingId) || null
+    : null;
+  if (!selectedItem) runtime.selectedMapListingId = "";
 
   host.innerHTML = `
-    <div class="header-map-stage">
+    <div class="header-map-stage${selectedItem ? " has-floating-card" : ""}" id="headerMapStage">
       <div class="header-map-floating-top">
         <div class="header-map-loc-pill">
           <span class="header-map-loc-dot" aria-hidden="true"></span>
@@ -1090,15 +1089,30 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
         <div class="header-map-loading">농기계 지도를 불러오는 중...</div>
       </div>
 
-      <div class="header-map-floating-card" id="headerMapFloatingCard" aria-live="polite"></div>
+      <div class="header-map-floating-card" id="headerMapFloatingCard" aria-live="polite"${selectedItem ? "" : " hidden"}></div>
 
       <div class="header-map-cluster-sheet" id="headerMapClusterSheet" role="dialog" aria-modal="false" aria-label="통합 점 전체 매물 목록" hidden></div>
     </div>
   `;
 
+  const hideFloatingCard = () => {
+    selectedItem = null;
+    runtime.selectedMapListingId = "";
+    $("headerMapStage")?.classList.remove("has-floating-card");
+    const cardEl = $("headerMapFloatingCard");
+    if (cardEl) {
+      cardEl.hidden = true;
+      cardEl.innerHTML = "";
+    }
+    $("headerMapCanvas")?.querySelectorAll(".header-map-price-pin.is-active").forEach((el) => {
+      el.classList.remove("is-active");
+    });
+  };
+
   const renderFloatingCard = (item) => {
     const cardEl = $("headerMapFloatingCard");
     if (!cardEl || !item) return;
+    $("headerMapStage")?.classList.add("has-floating-card");
     cardEl.hidden = false;
     const dist = distanceKm(origin, item, item.id);
     const machine = MACHINE_BY_ID[item.machineType];
@@ -1108,6 +1122,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     const sClass = statusClass(item);
 
     cardEl.innerHTML = `
+      <button type="button" class="header-map-card-close" id="headerMapCardCloseBtn" aria-label="선택 매물 창 닫기">×</button>
       <div class="header-map-card-media">
         <img src="${escapeHtml(photoSrc)}" alt="${escapeHtml(item.title)}" />
         <span class="header-map-card-dist">내 위치에서 ${dist}km</span>
@@ -1137,6 +1152,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     void cardEl.offsetWidth;
     cardEl.classList.add("is-updated");
 
+    $("headerMapCardCloseBtn")?.addEventListener("click", hideFloatingCard);
     $("headerMapDetailBtn")?.addEventListener("click", () => onOpenDetail?.(item.id));
     $("headerMapRentBtn")?.addEventListener("click", () => onRent?.(item.id));
 
@@ -1285,7 +1301,11 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     });
   };
 
-  renderFloatingCard(selectedItem);
+  if (selectedItem) {
+    renderFloatingCard(selectedItem);
+  } else {
+    hideFloatingCard();
+  }
 
   resolveKakaoAddress(origin.lat, origin.lng, fallbackOriginAddr).then((addr) => {
     const el = $("headerMapOriginAddr");
@@ -1310,6 +1330,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
 
   $("headerMapRecenterBtn")?.addEventListener("click", () => {
     closeClusterSheet();
+    hideFloatingCard();
     if (activeMap && originLatLng) {
       activeMap.setLevel(6);
       activeMap.panTo(originLatLng);
@@ -1471,6 +1492,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     };
 
     syncOverlays(true);
+    maps.event.addListener(activeMap, "click", hideFloatingCard);
     maps.event.addListener(activeMap, "zoom_changed", () => syncOverlays(true));
     maps.event.addListener(activeMap, "idle", () => syncOverlays(false));
 

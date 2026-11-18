@@ -5,6 +5,7 @@ import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictu
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
 import { openCameraCapture, shrinkPhoto } from "../ai/panel.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
+import { senderState, SENDER_LABEL, roleOf, readSeqFor } from "../data/deals-model.js";
 
 export function createTransactionViews(deps) {
 function openForm(html) {
@@ -181,7 +182,7 @@ const ESCALATION_REASON_LABEL = {
 function formatPausedReason(reason) {
   if (!reason) return "";
   if (reason === "transaction_completed") {
-    return "농농이가 조건에 맞춰 거래(예약/구매신청)를 자동 접수했어요!";
+    return "농농이가 합의 조건으로 신청을 접수했어요. 상대 승인 전이며 거래 완료가 아니에요.";
   }
   if (reason === "max_turns_reached") {
     return "연속 AI 응답 상한에 도달해 대리 응대를 잠시 멈췄어요. 직접 답장하시면 대화가 이어집니다.";
@@ -194,7 +195,16 @@ function formatPausedReason(reason) {
     const label = ESCALATION_REASON_LABEL[code] || code || "추가 확인 필요";
     return `농농이가 확인이 필요해 답변을 멈췄어요 (사유: ${label}). 직접 답장하시면 대화가 이어집니다.`;
   }
-  return `농농이 대리 응대가 일시정지되었어요 (${reason}). 직접 답장하시면 대화가 이어집니다.`;
+  if (reason === "takeover") {
+    return "직접 진행 중이에요. '다시 맡기기'를 누르기 전까지 농농이는 자동으로 보내지 않아요.";
+  }
+  if (reason === "user_paused") {
+    return "농농이 자동 응대를 일시정지했어요. '다시 맡기기'를 누르면 이어서 응대해요.";
+  }
+  if (reason.startsWith("failed:")) {
+    return "농농이 답장 생성에 실패했어요. 거래 관리에서 재시도하거나 직접 답장해 주세요.";
+  }
+  return `농농이 대리 응대가 일시정지되었어요 (${reason}). '다시 맡기기'로 재개할 수 있어요.`;
 }
 
 function isWaitingForUserConv(conv) {
@@ -212,8 +222,11 @@ function renderConvAiBadges(conv, role) {
   const mode = role === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
   const policy = role === "buyer" ? conv.buyerAiPolicy : conv.ownerAiPolicy;
   const badges = [];
-  if (conv.aiPausedReason === "transaction_completed") {
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-done">✅ 자동 접수 완료</span>`);
+  const myPause = conv.myAiState ? conv.myAiState.pause : conv.aiPausedReason;
+  if (myPause === "transaction_completed") {
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-done">📨 신청 접수 · 승인 대기</span>`);
+  } else if (myPause === "takeover") {
+    badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">✋ 직접 진행 중</span>`);
   } else if (isWaitingForUserConv(conv)) {
     badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⏸️ 직접 답변 대기</span>`);
   } else if (conv.aiPausedReason) {
@@ -264,15 +277,17 @@ function chatForm(target) {
   const minToday = today();
   const filterStart = state.filters?.date >= minToday ? state.filters.date : "";
   const filterEnd = state.filters?.dateEnd >= filterStart ? state.filters.dateEnd : filterStart;
+  // 한도는 사용자가 직접 정한 값만 쓴다. 매물 정가로 몰래 채우지 않는다.
   const filterBudget = Number(state.filters?.maxPrice) > 0
     ? String(Math.trunc(Number(state.filters.maxPrice)))
-    : (item?.price != null && Number.isFinite(Number(item.price)) ? String(Math.trunc(Number(item.price))) : "");
+    : "";
   const filterArea = Number(state.filters?.areaPyeong) > 0 ? String(Number(state.filters.areaPyeong)) : "";
 
   openForm(`
     <span class="step-pill">1:1 농기계 채팅 문의</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
     <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
+    <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
     <section id="chatAiControlBar" class="chat-ai-bar" aria-label="농농이 대리 응대 설정">
       <div class="chat-ai-bar-head">
         <span class="chat-ai-title">🤖 농농이 대리 응대</span>
@@ -303,7 +318,7 @@ function chatForm(target) {
               <input id="chatPolicyTargetEnd" type="date" min="${escapeHtml(filterStart || minToday)}" value="${escapeHtml(filterEnd)}">
             </label>
             <label><span id="chatPolicyBudgetLabel">최대 예산 상한 (원)</span>
-              <input id="chatPolicyBudgetInput" type="number" min="0" step="1000" placeholder="예: 150000" value="${escapeHtml(filterBudget)}">
+              <input id="chatPolicyBudgetInput" type="number" min="0" step="1000" placeholder="예: 150000" value="${escapeHtml(item?.ownerId && item.ownerId === runtime.accountUser?.id ? "" : filterBudget)}">
             </label>
             <label>내 작업 면적 (평)
               <input id="chatPolicyAreaPyeong" type="number" min="1" step="1" placeholder="예: 500" value="${escapeHtml(filterArea)}">
@@ -376,8 +391,7 @@ function chatForm(target) {
     }
     const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
     const budgetVal = isBuyer ? p.maxBudget : (p.minPrice ?? p.maxBudget);
-    const activeListing = item || (currentConv?.listingId ? listingById(currentConv.listingId) : null);
-    const fallbackBudget = filterBudget || (activeListing?.price != null ? String(Math.trunc(Number(activeListing.price))) : "");
+    const fallbackBudget = isBuyer ? filterBudget : "";
     if ($("chatPolicyBudgetInput") && document.activeElement !== $("chatPolicyBudgetInput")) {
       if (budgetVal !== null && budgetVal !== undefined && budgetVal !== "") {
         $("chatPolicyBudgetInput").value = String(budgetVal);
@@ -530,10 +544,19 @@ function chatForm(target) {
     const pickupPreference = $("chatPolicyPickupPreference")?.value.trim().slice(0, 120) || "";
     const customText = $("chatAiInstructions")?.value.trim() || "";
     const fullDelegation = Boolean($("chatFullDelegationToggle")?.checked ?? fullDelegationEnabled);
+    // 거래 관리에서 설정한 목표가·운송비·필수 질문·명시적 신청 권한 등은 채팅 화면에 입력칸이 없으므로 그대로 보존한다.
+    const existingPolicy = currentConv
+      ? ((isBuyer ? currentConv.buyerAiPolicy : currentConv.ownerAiPolicy) || {})
+      : (initialPolicyOverride || {});
 
     return {
+      ...existingPolicy,
       fullDelegation,
-      autoExecuteTransaction: fullDelegation,
+      autoExecuteTransaction: isBuyer
+        ? (typeof existingPolicy.autoExecuteTransaction === "boolean" && !fullDelegation
+          ? existingPolicy.autoExecuteTransaction
+          : fullDelegation)
+        : false,
       intent: currentConv?.listingType || item?.type || (state.transaction === "sale" ? "sale" : "rent"),
       targetStart: startVal,
       targetEnd: endVal,
@@ -579,18 +602,19 @@ function chatForm(target) {
       banner.className = "delegated-complete-banner";
       banner.innerHTML = `
         <div class="delegated-banner-copy">
-          <strong>✅ 농농이가 사용자의 의도·예산·일정에 맞춰 거래를 자동 접수했어요!</strong>
+          <strong>📨 농농이가 합의 조건으로 신청을 접수했어요 (상대 승인 대기 · 거래 완료 아님)</strong>
           <small>${escapeHtml(detailText)}</small>
         </div>
         <div class="delegated-banner-actions">
-          <button type="button" id="chatGoRequestsBtn" class="button button-primary button-sm">대여 요청 내역 확인하기 ›</button>
+          <button type="button" id="chatGoRequestsBtn" class="button button-primary button-sm">거래 관리에서 신청 상태 보기 ›</button>
         </div>
       `;
       $("chatGoRequestsBtn")?.addEventListener("click", () => {
         stopChatPolling();
         hideDialog($("formBackdrop"));
         deps.refreshAuthenticatedData?.();
-        deps.setView?.("requests");
+        if (conversationId && deps.openDeal) deps.openDeal(conversationId);
+        else deps.setView?.("deals");
       });
       return;
     }
@@ -618,7 +642,7 @@ function chatForm(target) {
         </div>
         <div class="delegated-banner-actions">
           <button type="button" id="chatFillSuggestedReply" class="button button-primary button-sm">✍️ 내가 직접 답장하기</button>
-          <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 자동 응대 켜기</button>
+          <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 맡기기</button>
         </div>
       `;
       $("chatFillSuggestedReply")?.addEventListener("click", () => {
@@ -638,7 +662,7 @@ function chatForm(target) {
     banner.className = "chat-paused-banner";
     banner.innerHTML = `
       <span class="chat-paused-text">⚠️ ${escapeHtml(formatPausedReason(reason))}</span>
-      <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 자동 응대 켜기</button>
+      <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 맡기기</button>
     `;
     $("chatResumeAiBtn")?.addEventListener("click", () => {
       saveAiPolicy("autonomous", collectPolicy(), { resume: true });
@@ -749,9 +773,10 @@ function chatForm(target) {
               <div>${escapeHtml(msg.body)}</div>
             </div>`;
           }
-          const mine = msg.senderId === runtime.accountUser?.id;
+          const sstate = senderState(msg, { meId: runtime.accountUser?.id, myRole: roleOf(currentConv, runtime.accountUser?.id) });
+          const mine = sstate === "me_human" || sstate === "me_ai";
           const isAiProxy = msg.senderKind === "ai_proxy";
-          const aiBadge = isAiProxy ? `<span class="chat-ai-badge">🤖 AI 대신 답변</span>` : "";
+          const aiBadge = isAiProxy ? `<span class="chat-ai-badge" data-sender-state="${sstate}">🤖 ${escapeHtml(SENDER_LABEL[sstate])}</span>` : "";
           return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}${enterClass}"${staggerStyle}>
             <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}${aiBadge}</b>
             <div>${escapeHtml(msg.body)}</div>
@@ -775,6 +800,15 @@ function chatForm(target) {
     const peerLabel = isBuyer ? `소유 농가 ${conv.ownerName}` : `문의 농가 ${conv.buyerName}`;
     if ($("formTitle")) $("formTitle").textContent = `${conv.listingTitle || item?.title || "농기계"} · 1:1 대화`;
     if ($("chatSubtitle")) $("chatSubtitle").textContent = `${peerLabel}님과의 대화`;
+    const openDealBtn = $("chatOpenDeal");
+    if (openDealBtn && deps.openDeal && openDealBtn.hidden) {
+      openDealBtn.hidden = false;
+      openDealBtn.addEventListener("click", () => {
+        stopChatPolling();
+        hideDialog($("formBackdrop"));
+        deps.openDeal(conversationId);
+      });
+    }
     hydratePolicyFromConv(conv);
     renderPausedBanner(conv);
     renderDraftBar(conv);
@@ -885,6 +919,8 @@ function chatForm(target) {
       if (data.conversation) applyConvMetadata(data.conversation);
       hasMoreOlder = Boolean(data.hasMoreOlder);
       renderChat();
+      // 사용자가 직접 연 채팅에서 메시지가 화면에 그려진 뒤에만 읽음 처리한다(폴링은 읽음 처리하지 않음).
+      markVisibleMessagesRead();
       startPolling();
       if (pendingInitialAi) {
         const init = pendingInitialAi;
@@ -909,6 +945,26 @@ function chatForm(target) {
       if ($("chatLog")) {
         $("chatLog").innerHTML = `<div class="chat-empty">${escapeHtml(error?.message || "대화를 불러오지 못했습니다.")}</div>`;
       }
+    }
+  }
+
+  async function markVisibleMessagesRead() {
+    if (!conversationId || document.visibilityState !== "visible" || !$("chatLog")) return;
+    const meId = runtime.accountUser?.id;
+    const ctx = { meId, myRole: roleOf(currentConv, meId) };
+    const readSeq = readSeqFor(sortedMessages(), ctx, currentConv?.myLastReadSeq ?? 0);
+    if (readSeq === null) return;
+    try {
+      const res = await apiFetch("/api/conversations", {
+        method: "POST",
+        json: { action: "mark_read", conversationId, readSeq },
+      });
+      if (res?.conversation && currentConv && res.conversation.id === currentConv.id) {
+        currentConv = { ...currentConv, myLastReadSeq: res.conversation.myLastReadSeq, unreadCount: res.conversation.unreadCount };
+      }
+      deps.onConversationRead?.(conversationId, res?.conversation || null);
+    } catch {
+      // 읽음 처리 실패는 대화 이용을 막지 않는다(서버가 아직 mark_read를 지원하지 않는 경우 포함).
     }
   }
 
@@ -1140,6 +1196,7 @@ function renderBuyerRequests() {
 
   if (convEl) {
     const buyerConvs = runtime.userConversations.filter((c) => c.buyerId === runtime.accountUser?.id);
+    const dealsLink = `<div class="deals-crosslink"><span>농농이가 보낸 메시지·제안·확인할 일은 거래 관리에서 한눈에 볼 수 있어요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="buyer">거래 관리 열기 ›</button></div>`;
     convEl.innerHTML = buyerConvs.length
       ? buyerConvs.map((c) => `
         <div class="request-row">
@@ -1152,10 +1209,12 @@ function renderBuyerRequests() {
             <small>${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
           </div>
           <div class="owner-row-actions">
+            <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
             <button type="button" class="button button-primary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화 보기</button>
           </div>
         </div>`).join("")
       : `<div class="empty-panel">아직 시작한 채팅 문의가 없습니다.</div>`;
+    convEl.insertAdjacentHTML("afterbegin", dealsLink);
   }
 }
 
@@ -1234,6 +1293,7 @@ function renderOwner() {
           </select>
           <button type="button" class="button button-secondary button-sm" data-owner-detail="${escapeHtml(item.id)}">상세</button>
           <button type="button" class="button button-secondary button-sm" data-owner-edit="${escapeHtml(item.id)}">수정</button>
+          <button type="button" class="button button-secondary button-sm owner-inbound-btn" data-owner-inbound="${escapeHtml(item.id)}">🤖 문의 자동응대</button>
           <button type="button" class="button button-secondary button-sm" data-owner-remove="${escapeHtml(item.id)}">숨기기</button>
         </div>
       </div>`).join("")
@@ -1260,7 +1320,7 @@ function renderOwner() {
   if (ownerConvsEl) {
     const ownerConvs = runtime.userConversations.filter((c) => c.ownerId === runtime.accountUser?.id);
     ownerConvsEl.innerHTML = ownerConvs.length
-      ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div>` + ownerConvs.map((c) => `
+      ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div><div class="deals-crosslink"><span>농농이 응대 내역·받은 제안은 거래 관리에서 확인하세요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="owner">거래 관리 열기 ›</button></div>` + ownerConvs.map((c) => `
         <div class="request-row">
           <div class="owner-row-info">
             <div class="owner-row-badges">
@@ -1271,6 +1331,7 @@ function renderOwner() {
             <small>${c.lastMessage ? `"${escapeHtml(c.lastMessage.body)}"` : "새 대화"}</small>
           </div>
           <div class="owner-row-actions">
+            <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
             <button type="button" class="button button-secondary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화하기</button>
           </div>
         </div>`).join("")

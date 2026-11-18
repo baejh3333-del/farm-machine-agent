@@ -16,7 +16,7 @@ import {
 import { selectMatchingListings } from "../src/data/recommendation.js";
 import { checkModelCompatibility, SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { loadFarmProfile } from "./agent-session-store.js";
-import { sendMessage as sendChatMessage } from "./chat.js";
+import { sendMessage as sendChatMessage, updateConversationAiPolicy } from "./chat.js";
 import { getPool, kstToday } from "./db.js";
 import { HttpError } from "./http.js";
 import { saveDraftPhoto } from "./listing-drafts.js";
@@ -236,9 +236,13 @@ const TOOLS = [
         listingId: { type: "string", description: "전담 위임할 매물 ID" },
         start: { type: ["string", "null"], description: "희망 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "희망 반납일 YYYY-MM-DD" },
-        maxBudget: { type: ["integer", "null"], description: "최대 예산(원)" },
+        targetPrice: { type: ["integer", "null"], description: "사용자가 말한 목표 금액(원). 말하지 않았으면 null" },
+        maxBudget: { type: ["integer", "null"], description: "사용자가 말한 최대 예산 상한(원, 운송비 포함 총액 기준). 말하지 않았으면 null — 정가로 채우지 말 것" },
+        budgetUnit: { type: ["string", "null"], enum: [null, "total", "daily"], description: "목표가·예산의 단위. 대여 1일 기준이면 daily, 총액이면 total" },
         allowNegotiation: { type: ["boolean", "null"], description: "가격 협의 허용 여부" },
         pickupPreference: { type: ["string", "null"], description: "인수·배송 희망 조건" },
+        transportPayer: { type: ["string", "null"], enum: [null, "buyer", "owner", "none"], description: "운송비 부담 희망. 직접 인수면 none, 모르면 null" },
+        requiredQuestions: { type: ["array", "null"], items: { type: "string" }, description: "거래 전에 판매자에게 꼭 물어볼 질문(최대 8개)" },
         initialMessage: { type: ["string", "null"], description: "상대방에게 보낼 첫 대리 문의 메시지" },
         autoExecuteTransaction: { type: ["boolean", "null"], description: "조건 부합 시 대여/구매 예약까지 자동 접수 여부 (기본 true)" },
       },
@@ -1687,9 +1691,9 @@ async function runTurn(
           const endRaw = startRaw && typeof block.input?.end === "string" && DATE.test(block.input.end) && block.input.end >= startRaw
             ? block.input.end
             : startRaw;
-          const maxBudget = Number.isFinite(Number(block.input?.maxBudget)) && Number(block.input.maxBudget) > 0
-            ? Math.trunc(Number(block.input.maxBudget))
-            : item.price;
+          // 사용자가 말하지 않은 한도는 정가로 채우지 않는다(미설정 = 가격 결정은 사용자 확인).
+          const positiveInt = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.trunc(Number(v)) : null);
+          const maxBudget = positiveInt(block.input?.maxBudget);
           const delegationPayload = {
             type: "delegate_transaction",
             listingId: item.id,
@@ -1700,8 +1704,14 @@ async function runTurn(
             start: startRaw,
             end: endRaw,
             maxBudget,
+            targetPrice: positiveInt(block.input?.targetPrice),
+            budgetUnit: block.input?.budgetUnit === "daily" && item.type === "rent" ? "daily" : "total",
             allowNegotiation: Boolean(block.input?.allowNegotiation),
             pickupPreference: typeof block.input?.pickupPreference === "string" ? block.input.pickupPreference.trim().slice(0, 100) : "",
+            transportPayer: ["buyer", "owner", "none"].includes(block.input?.transportPayer) ? block.input.transportPayer : null,
+            requiredQuestions: Array.isArray(block.input?.requiredQuestions)
+              ? block.input.requiredQuestions.filter((q) => typeof q === "string" && q.trim()).map((q) => q.trim().slice(0, 80)).slice(0, 8)
+              : [],
             initialMessage: typeof block.input?.initialMessage === "string" ? block.input.initialMessage.trim().slice(0, 500) : "",
             autoExecuteTransaction: block.input?.autoExecuteTransaction !== false,
             areaPyeong: uiCtx.areaPyeong || null,
@@ -1993,15 +2003,22 @@ export async function executeDelegatedTransaction(
     ? action.end
     : targetStart;
 
+  const positiveInt = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.trunc(Number(v)) : null);
+  // 사용자가 승인한 위임 조건만 저장한다. 말하지 않은 한도는 정가로 채우지 않는다(null = 가격 결정은 사용자 확인).
   const policy = {
     fullDelegation: true,
     autoExecuteTransaction: action?.autoExecuteTransaction !== false,
     intent: item.type === "sale" ? "sale" : "rent",
     targetStart,
     targetEnd,
-    maxBudget: Number.isFinite(Number(action?.maxBudget)) && Number(action.maxBudget) > 0
-      ? Math.trunc(Number(action.maxBudget))
-      : item.price,
+    targetPrice: positiveInt(action?.targetPrice),
+    maxBudget: positiveInt(action?.maxBudget),
+    budgetUnit: action?.budgetUnit === "daily" && item.type === "rent" ? "daily" : "total",
+    transportPayer: ["buyer", "owner", "none"].includes(action?.transportPayer) ? action.transportPayer : null,
+    transportFee: null,
+    requiredQuestions: Array.isArray(action?.requiredQuestions)
+      ? action.requiredQuestions.filter((q) => typeof q === "string" && q.trim()).map((q) => q.trim().slice(0, 80)).slice(0, 8)
+      : [],
     allowNegotiation: Boolean(action?.allowNegotiation),
     areaPyeong: Number(action?.areaPyeong) > 0 ? Number(action.areaPyeong) : null,
     cropIds: Array.isArray(action?.cropIds) ? action.cropIds.slice(0, 6) : [],
@@ -2020,6 +2037,16 @@ export async function executeDelegatedTransaction(
   const rawInitial = typeof action?.initialMessage === "string" ? action.initialMessage.trim() : "";
   const initialBody = (rawInitial || defaultBody).slice(0, 500);
 
+  // 1) 대화방을 만들고(구매자 역할) 위임 정책을 먼저 저장한다: 정책 정제·버전 증가·명시적 재개는 chat.js가 담당.
+  //    첫 메시지보다 정책이 먼저 커밋되어야 상대 응답이 즉시 와도 내 AI가 올바른 정책으로 응대한다.
+  const saved = await updateConversationAiPolicy(
+    user,
+    { listingId: item.id, mode: "autonomous", policy, resume: true },
+    { pool },
+  );
+  const savedPolicy = saved?.conversation?.myAiState?.policy || saved?.conversation?.buyerAiPolicy || policy;
+
+  // 2) 첫 대리 문의를 실제로 발송한다(발송 성공 후에만 '연락했어요'로 안내).
   const sent = await sendChatMessage(
     user,
     { id: requestId || randomUUID(), listingId: item.id, body: initialBody },
@@ -2027,16 +2054,6 @@ export async function executeDelegatedTransaction(
   );
   const convId = sent.conversation.id;
   const msgSeq = sent.message.seq;
-
-  await pool.query(
-    `UPDATE conversations
-     SET buyer_ai_mode = 'autonomous',
-         buyer_ai_policy = $2::jsonb,
-         ai_paused_reason = NULL,
-         updated_at = now()
-     WHERE id = $1`,
-    [convId, JSON.stringify(policy)],
-  );
 
   if (!sent.idempotent) {
     const { scheduleDelegatedReply } = await import("./delegated-chat.js");
@@ -2059,8 +2076,9 @@ export async function executeDelegatedTransaction(
       type: item.type,
       mode: "autonomous",
       fullDelegation: true,
-      policy,
+      policy: savedPolicy,
+      firstMessageSeq: msgSeq,
     },
-    message: `'${item.title}' 거래를 농농이 전담 모드로 시작했어요! 상대방이 답장하면 예산·일정·농장 조건에 맞춰 제가 대신 조율하고, 제가 모르는 내용은 임의로 답하지 않고 바로 알려드릴게요.`,
+    message: `'${item.title}' 판매자에게 농농이가 첫 문의를 보냈어요. 상대방이 답하면 맡겨 주신 조건 안에서 대신 조율하고, 정하지 않은 가격·모르는 내용은 임의로 정하지 않고 바로 확인을 요청할게요. 신청은 양쪽이 같은 조건에 합의한 뒤에만 접수돼요.`,
   };
 }

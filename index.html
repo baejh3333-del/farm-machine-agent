@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/deals.css?v=20261118" />
   <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
@@ -45,6 +46,11 @@
           <span class="nav-ai-dot" aria-hidden="true"></span>
           <span class="nav-label">AI 농농이</span>
         </button>
+        <button type="button" class="nav-item nav-deals" aria-label="거래 관리" data-view="deals">
+          <span class="nav-label">거래 관리</span>
+          <span class="nav-badge nav-badge-alert" id="dealsNavBadge" hidden>0</span>
+          <span class="mypage-dot" id="dealsNavDot" hidden aria-label="안 읽은 메시지 있음"></span>
+        </button>
         <div class="mypage-dropdown" hidden>
           <button type="button" class="nav-item mypage-trigger" id="myPageButton" aria-expanded="false" aria-controls="myPageMenu" aria-haspopup="true">
             <span class="nav-label">마이페이지</span>
@@ -61,6 +67,12 @@
                     <span class="nav-badge" id="favNavBadge" hidden>0</span>
                   </span>
                   <span class="mypage-item-desc">저장한 농기계 모아보기</span>
+                </button>
+                <button type="button" class="mypage-menu-item" aria-label="거래 관리" data-view="deals">
+                  <span class="mypage-item-head">
+                    <span class="mypage-item-title">거래 관리</span>
+                  </span>
+                  <span class="mypage-item-desc">농농이 대리 거래 · 확인할 일</span>
                 </button>
                 <button type="button" class="mypage-menu-item" aria-label="대여 요청" data-view="requests">
                   <span class="mypage-item-head">
@@ -348,6 +360,18 @@
               </div>
             </div>
           </div>
+        </section>
+
+        <section id="dealsView" class="deals-view" aria-labelledby="dealsTitle" hidden>
+          <div class="deals-list-pane">
+            <header class="deals-head">
+              <h1 id="dealsTitle">거래 관리</h1>
+              <p>농농이가 대신 주고받은 메시지, 받은 제안, 내가 확인할 일을 채팅을 열지 않고 확인하세요.</p>
+            </header>
+            <div class="deals-filters" id="dealsFilters" role="group" aria-label="거래 필터"></div>
+            <div class="deals-list" id="dealsList" aria-live="polite"></div>
+          </div>
+          <div class="deals-detail" id="dealsDetail" hidden></div>
         </section>
 
         <section id="requestsView" class="panel buyer-requests" aria-labelledby="buyerRequestsTitle" hidden>

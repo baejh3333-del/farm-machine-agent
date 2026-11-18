@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <circle cx="48" cy="48" r="48" fill="#e4f2d1"/>
+  <!-- 감자 몸통 -->
+  <path d="M22 50c-3-14 6-28 22-31 13-3 27 2 32 13 5 10 1 25-8 33-9 9-24 12-35 6-7-4-10-12-11-21Z"
+        fill="#d9a35e" stroke="#8a5a2b" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- 하이라이트 -->
+  <path d="M33 28c5-4 12-5 17-4" fill="none" stroke="#f0cf96" stroke-width="3" stroke-linecap="round"/>
+  <!-- 감자 점(싹눈) -->
+  <circle cx="64" cy="31" r="1.6" fill="#a8743c"/>
+  <circle cx="30" cy="60" r="1.4" fill="#a8743c"/>
+  <circle cx="66" cy="62" r="1.8" fill="#a8743c"/>
+  <circle cx="44" cy="70" r="1.2" fill="#a8743c"/>
+  <!-- 눈 -->
+  <ellipse cx="40" cy="45" rx="3.6" ry="4.6" fill="#3a2414"/>
+  <ellipse cx="57" cy="45" rx="3.6" ry="4.6" fill="#3a2414"/>
+  <circle cx="41.3" cy="43.2" r="1.3" fill="#fff"/>
+  <circle cx="58.3" cy="43.2" r="1.3" fill="#fff"/>
+  <!-- 입 -->
+  <path d="M42 55c3 4 9 4 12 0" fill="none" stroke="#3a2414" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

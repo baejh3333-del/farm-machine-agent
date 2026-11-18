@@ -158,6 +158,7 @@ export function resetAccountRuntimeState() {
   runtime.approvableRequestCount = 0;
   runtime.userConversations = [];
   runtime.dismissGuestImport = false;
+  runtime.educationCertificate = null;
 }
 
 export async function apiFetch(url, options = {}) {

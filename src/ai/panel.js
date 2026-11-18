@@ -1466,10 +1466,11 @@ export function createAiPanel({
   function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
-    if (role === "assistant") {
-      const displayText = listingIds.length ? stripDuplicateMachineList(text, listingIds.length) : text;
-      bubble.append(renderMarkdownElement(displayText));
-    } else {
+    // 농농이가 매물을 추천할 때는 설명 글 없이 매물 추천 박스만 보여 준다(글은 대화 기록에만 남는다). (PR #42)
+    const cardsOnly = role === "assistant" && listingIds.length > 0;
+    if (role === "assistant" && !cardsOnly) {
+      bubble.append(renderMarkdownElement(text));
+    } else if (!cardsOnly) {
       const textNode = document.createElement("div");
       textNode.textContent = text;
       bubble.append(textNode);

@@ -2,6 +2,7 @@ import { closePool, describeDatabaseTarget } from "../server/db.js";
 import {
   initEnvironment,
   inspectDatabase,
+  migrationReadiness,
   runMigrations,
   seedDemoListings,
   setWritesFrozen,
@@ -39,7 +40,7 @@ async function main() {
 
   if (!command || command === "--help" || command === "-h") {
     console.log(
-      "Usage: node scripts/db-admin.mjs <inspect|init|migrate|seed|freeze|reconcile-photos> [--env <env>] [--on|--off] [--allow-production] [--min-age-minutes <n>]"
+      "Usage: node scripts/db-admin.mjs <inspect|check|init|migrate|seed|freeze|reconcile-photos> [--env <env>] [--on|--off] [--allow-production] [--min-age-minutes <n>]"
     );
     return;
   }
@@ -49,6 +50,15 @@ async function main() {
   if (command === "inspect") {
     const info = await inspectDatabase();
     console.log(JSON.stringify(info, null, 2));
+    return;
+  }
+
+  if (command === "check") {
+    // 배포 전 점검: 미적용·체크섬 불일치·알 수 없는 마이그레이션이 있으면 종료 코드 1. DB는 바꾸지 않는다.
+    const info = await inspectDatabase();
+    const report = migrationReadiness(info);
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.ready) process.exitCode = 1;
     return;
   }
 

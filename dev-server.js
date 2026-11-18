@@ -34,7 +34,7 @@ const apiRouteLoaders = new Map([
   ["/api/weather", () => import("./api/weather.js")],
   ["/api/voice", () => import("./server/voice-api.js")],
   ["/api/integrations", () => import("./api/integrations.js")],
-  ["/api/delegation-jobs", () => import("./api/delegation-jobs.js")],
+  ["/api/delegation-jobs", () => import("./server/delegation-sweep-api.js")],
 ]);
 
 /**

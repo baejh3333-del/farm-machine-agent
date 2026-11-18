@@ -12,6 +12,7 @@
     "db:accounts": "node --env-file-if-exists=.env.local scripts/migrate-accounts.mjs",
     "db:demo-account": "node --env-file-if-exists=.env.local scripts/create-demo-account.mjs",
     "db:inspect": "node --env-file-if-exists=.env.local scripts/db-admin.mjs inspect",
+    "db:check": "node --env-file-if-exists=.env.local scripts/db-admin.mjs check",
     "db:init": "node --env-file-if-exists=.env.local scripts/db-admin.mjs init",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/db-admin.mjs migrate",
     "db:seed": "node --env-file-if-exists=.env.local scripts/db-admin.mjs seed",

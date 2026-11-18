@@ -240,7 +240,7 @@ export const AI_STATUS_LABEL = {
   off: "농농이 꺼짐",
   copilot: "📝 초안만 작성",
   active: "🤖 농농이 응대 중",
-  full: "🤖 거래 전담 중",
+  full: "거래 전담 중",
   waiting: "⏸ 내 확인 대기",
   paused: "⏸ 일시정지",
   takeover: "✋ 직접 진행 중",

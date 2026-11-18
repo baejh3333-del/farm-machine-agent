@@ -22,6 +22,7 @@ import { recommend } from "../server/agent.js";
 import { getConversationMessages, sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
 import { classifyError } from "../server/http.js";
+import { createInsuranceConsult } from "../server/insurance-flow.js";
 import { fetchListings } from "../server/listings-db.js";
 import { createListing, updateListing } from "../server/listings-service.js";
 import {
@@ -188,6 +189,7 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
     "0008_role_scoped_ai_state.sql",
     "0009_trade_offers.sql",
     "0010_delegation_jobs.sql",
+    "0011_insurance_consult_repair_kind.sql",
   ]);
 
   const info = await inspectDatabase({ pool });
@@ -1181,4 +1183,16 @@ test("[PGlite 로컬 엔진] 11. 농농이 음성 인식: 기능 확인, WAV 검
     statuses.push((await apiReq(baseUrl, "/api/voice", { method: "POST", json: { audio: "not-base64-audio" } })).status);
   }
   assert.ok(statuses.includes(429), `호출 제한: ${statuses}`);
+});
+
+test("[PGlite 로컬 엔진] 수리센터 안내 뒤 보험 상담 신청(kind=repair)도 저장되고 중복은 멱등 처리된다", async () => {
+  const payload = { productId: "farm-machinery-comprehensive", officeId: "local-nh", listingId: null, kind: "repair", region: "영양읍" };
+  const first = await createInsuranceConsult(userA.user, payload, { pool });
+  assert.equal(first.idempotent, false);
+  const again = await createInsuranceConsult(userA.user, payload, { pool });
+  assert.equal(again.idempotent, true);
+  assert.equal(again.id, first.id);
+  const row = await pool.query("SELECT reservation_kind, office_id FROM insurance_consult_requests WHERE id = $1", [first.id]);
+  assert.equal(row.rows[0].reservation_kind, "repair");
+  assert.equal(row.rows[0].office_id, "local-nh");
 });

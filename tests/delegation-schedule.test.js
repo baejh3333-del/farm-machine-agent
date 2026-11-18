@@ -247,6 +247,7 @@ test("S8. 마지막 운영 배포 스키마(0001~0007, 레거시 데이터 포�
       "0008_role_scoped_ai_state.sql",
       "0009_trade_offers.sql",
       "0010_delegation_jobs.sql",
+      "0011_insurance_consult_repair_kind.sql",
     ]);
 
     // 레거시 공유 상태(일시정지·초안)와 기존 대여 신청이 있는 운영 데이터를 흉내 낸다.

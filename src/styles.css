@@ -4657,13 +4657,13 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 }
 
 /* =========================================
-   상단 메뉴 지도 뷰 (당근마켓 · 쏘카 스타일)
+   상단 메뉴 지도 뷰
    ========================================= */
-.socar-map-view {
+.header-map-view {
   margin-top: 12px;
 }
 
-.socar-map-stage {
+.header-map-stage {
   position: relative;
   height: clamp(540px, 74vh, 760px);
   border-radius: 24px;
@@ -4673,12 +4673,17 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   box-shadow: 0 20px 44px rgba(16, 48, 36, 0.12);
 }
 
-.socar-map-canvas {
+.header-map-canvas {
   width: 100%;
   height: 100%;
 }
 
-.socar-map-loading {
+.header-map-kakao-stage-box {
+  width: 100%;
+  height: 100%;
+}
+
+.header-map-loading {
   width: 100%;
   height: 100%;
   display: grid;
@@ -4688,7 +4693,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   font-size: 0.95rem;
 }
 
-.socar-floating-top {
+.header-map-floating-top {
   position: absolute;
   top: 16px;
   left: 16px;
@@ -4702,12 +4707,12 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   pointer-events: none;
 }
 
-.socar-loc-pill,
-.socar-top-actions {
+.header-map-loc-pill,
+.header-map-top-actions {
   pointer-events: auto;
 }
 
-.socar-loc-pill {
+.header-map-loc-pill {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -4719,7 +4724,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   box-shadow: 0 8px 24px rgba(16, 48, 36, 0.12);
 }
 
-.socar-loc-dot {
+.header-map-loc-dot {
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -4728,30 +4733,30 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   flex: none;
 }
 
-.socar-loc-copy {
+.header-map-loc-copy {
   display: grid;
   gap: 1px;
 }
 
-.socar-loc-copy strong {
+.header-map-loc-copy strong {
   font-size: 0.875rem;
   font-weight: 800;
   color: var(--text-strong, #162a22);
 }
 
-.socar-loc-copy span {
+.header-map-loc-copy span {
   font-size: 0.75rem;
   color: var(--text-muted, #5e7468);
 }
 
-.socar-top-actions {
+.header-map-top-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.socar-pill-btn {
+.header-map-pill-btn {
   min-height: 40px;
   padding: 0 14px;
   border-radius: 999px;
@@ -4766,29 +4771,39 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   transition: transform 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.socar-pill-btn:hover {
+.header-map-pill-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(16, 48, 36, 0.15);
 }
 
-.socar-random-btn {
+.header-map-all-btn {
+  background: var(--forest, #174233);
+  border-color: var(--forest, #174233);
+  color: #ffffff;
+}
+
+.header-map-all-btn:hover {
+  background: #1f5c45;
+}
+
+.header-map-random-btn {
   background: #ff6f0f;
   border-color: #ff6f0f;
   color: #ffffff;
 }
 
-.socar-random-btn:hover {
+.header-map-random-btn:hover {
   background: #ea5e00;
 }
 
-.socar-my-pin {
+.header-map-my-pin {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.socar-my-dot {
+.header-map-my-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -4798,21 +4813,21 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   z-index: 2;
 }
 
-.socar-my-pulse {
+.header-map-my-pulse {
   position: absolute;
   width: 44px;
   height: 44px;
   border-radius: 50%;
   background: rgba(0, 120, 255, 0.22);
-  animation: socarPulse 2.2s ease-out infinite;
+  animation: headerMapPulse 2.2s ease-out infinite;
 }
 
-@keyframes socarPulse {
+@keyframes headerMapPulse {
   0% { transform: scale(0.5); opacity: 0.9; }
   100% { transform: scale(1.45); opacity: 0; }
 }
 
-.socar-my-badge {
+.header-map-my-badge {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;
@@ -4827,7 +4842,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   box-shadow: 0 6px 14px rgba(16, 48, 36, 0.24);
 }
 
-.socar-price-pin {
+.header-map-price-pin {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -4844,14 +4859,14 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   transition: transform 0.16s ease, background-color 0.16s ease;
 }
 
-.socar-price-pin:hover,
-.socar-price-pin.is-active {
+.header-map-price-pin:hover,
+.header-map-price-pin.is-active {
   background: #ff6f0f;
   transform: scale(1.06);
   z-index: 10;
 }
 
-.socar-pin-tag {
+.header-map-pin-tag {
   font-size: 0.72rem;
   font-weight: 700;
   padding: 1px 6px;
@@ -4859,7 +4874,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   background: rgba(255, 255, 255, 0.2);
 }
 
-.socar-pin-tail {
+.header-map-pin-tail {
   position: absolute;
   left: 50%;
   bottom: -7px;
@@ -4871,25 +4886,25 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   border-bottom: 2px solid #ffffff;
 }
 
-.socar-visual-fallback {
+.header-map-visual-fallback {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
 }
 
-.socar-fallback-grid {
+.header-map-fallback-grid {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.socar-fallback-pin {
+.header-map-fallback-pin {
   position: absolute;
   transform: translate(-50%, -50%);
 }
 
-.socar-tile-note {
+.header-map-tile-note {
   position: absolute;
   top: 72px;
   right: 16px;
@@ -4902,7 +4917,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   color: var(--text-muted, #5e7468);
 }
 
-.socar-floating-card {
+.header-map-floating-card {
   position: absolute;
   left: 16px;
   right: 16px;
@@ -4922,11 +4937,11 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   align-items: center;
 }
 
-.socar-floating-card.is-updated {
+.header-map-floating-card.is-updated {
   animation: weatherCardIn 280ms var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1)) both;
 }
 
-.socar-card-media {
+.header-map-card-media {
   position: relative;
   width: 128px;
   height: 108px;
@@ -4935,14 +4950,14 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   background: #eff5f0;
 }
 
-.socar-card-media img {
+.header-map-card-media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.socar-card-dist {
+.header-map-card-dist {
   position: absolute;
   left: 6px;
   bottom: 6px;
@@ -4954,21 +4969,21 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   font-weight: 700;
 }
 
-.socar-card-body {
+.header-map-card-body {
   display: grid;
   gap: 5px;
   min-width: 0;
 }
 
-.socar-card-tags {
+.header-map-card-tags {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-.socar-farm-pill,
-.socar-machine-pill {
+.header-map-farm-pill,
+.header-map-machine-pill {
   font-size: 0.74rem;
   font-weight: 700;
   padding: 2px 8px;
@@ -4977,7 +4992,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   color: var(--forest, #174233);
 }
 
-.socar-card-title {
+.header-map-card-title {
   margin: 0;
   font-size: 1.02rem;
   font-weight: 800;
@@ -4987,13 +5002,13 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   text-overflow: ellipsis;
 }
 
-.socar-card-addr {
+.header-map-card-addr {
   margin: 0;
   font-size: 0.8rem;
   color: var(--text-muted, #5e7468);
 }
 
-.socar-card-bottom {
+.header-map-card-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5002,37 +5017,381 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   margin-top: 2px;
 }
 
-.socar-card-price strong {
+.header-map-card-price strong {
   font-size: 1.15rem;
   font-weight: 900;
   color: #ff6f0f;
 }
 
-.socar-card-price small {
+.header-map-card-price small {
   font-size: 0.78rem;
   color: var(--text-muted, #5e7468);
   margin-left: 2px;
 }
 
-.socar-card-actions {
+.header-map-card-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+.header-map-zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 160px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.header-map-zoom-badge {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(16, 48, 36, 0.9);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(16, 48, 36, 0.22);
+  white-space: nowrap;
+}
+
+.header-map-zoom-btn-group {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(23, 66, 51, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 20px rgba(16, 48, 36, 0.16);
+}
+
+.header-map-zoom-btn {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--forest, #174233);
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-map-zoom-btn + .header-map-zoom-btn {
+  border-top: 1px solid rgba(23, 66, 51, 0.12);
+}
+
+.header-map-zoom-btn:hover {
+  background: #eef5f0;
+}
+
+.header-map-cluster-dot {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 3px solid #ffffff;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(16, 48, 36, 0.28);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.header-map-cluster-dot.is-minor {
+  min-width: 48px;
+  height: 48px;
+  padding: 0 10px;
+  background: #1f5c45;
+  box-shadow: 0 0 0 5px rgba(31, 92, 69, 0.18), 0 10px 22px rgba(16, 48, 36, 0.25);
+}
+
+.header-map-cluster-dot.is-medium {
+  min-width: 58px;
+  height: 58px;
+  padding: 0 12px;
+  background: #174233;
+  box-shadow: 0 0 0 7px rgba(23, 66, 51, 0.2), 0 12px 26px rgba(16, 48, 36, 0.28);
+}
+
+.header-map-cluster-dot.is-major {
+  min-width: 68px;
+  height: 68px;
+  padding: 0 14px;
+  background: #ff6f0f;
+  box-shadow: 0 0 0 9px rgba(255, 111, 15, 0.24), 0 14px 30px rgba(255, 111, 15, 0.32);
+}
+
+.header-map-cluster-dot:hover {
+  transform: scale(1.08);
+  z-index: 14;
+}
+
+.header-map-cluster-count {
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.header-map-cluster-sub {
+  font-size: 0.65rem;
+  font-weight: 700;
+  opacity: 0.94;
+  white-space: nowrap;
+}
+
+.header-map-cluster-caption {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(23, 66, 51, 0.16);
+  color: var(--text-strong, #162a22);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 6px 14px rgba(16, 48, 36, 0.14);
+}
+
+.header-map-cluster-sheet {
+  position: absolute;
+  inset: 16px;
+  z-index: 20;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.99);
+  border: 1px solid rgba(23, 66, 51, 0.16);
+  box-shadow: 0 22px 48px rgba(16, 48, 36, 0.24);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header-map-cluster-sheet[hidden] {
+  display: none;
+}
+
+.header-map-cluster-sheet-head {
+  padding: 14px 18px;
+  background: #f7faf7;
+  border-bottom: 1px solid var(--line, #e1e8e2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-map-cluster-sheet-title-wrap {
+  display: grid;
+  gap: 2px;
+}
+
+.header-map-cluster-sheet-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-map-cluster-sheet-badges strong {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-strong, #162a22);
+}
+
+.header-map-cluster-sheet-title-wrap > span {
+  font-size: 0.78rem;
+  color: var(--text-muted, #5e7468);
+}
+
+.header-map-cluster-sheet-count {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #ff6f0f;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.header-map-cluster-sheet-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-map-cluster-sheet-filters {
+  padding: 10px 18px;
+  border-bottom: 1px solid #edf3ee;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #ffffff;
+}
+
+.header-map-cluster-search {
+  flex: 1 1 200px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid #d5e1d8;
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+.header-map-cluster-tx-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-map-tx-tab {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #d5e1d8;
+  background: #f5f8f6;
+  color: var(--text-strong, #162a22);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.header-map-tx-tab.is-active {
+  border-color: var(--forest, #174233);
+  background: var(--forest, #174233);
+  color: #ffffff;
+}
+
+.header-map-cluster-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-content: start;
+  background: #fbfdfb;
+}
+
+.header-map-cluster-item {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid #dfe9e1;
+  background: #ffffff;
+  display: grid;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(16, 48, 36, 0.05);
+}
+
+.header-map-cluster-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header-map-cluster-item-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.header-map-cluster-item-dist {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted, #5e7468);
+}
+
+.header-map-cluster-item-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: var(--text-strong, #162a22);
+}
+
+.header-map-cluster-item-spot {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, #5e7468);
+}
+
+.header-map-cluster-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid #f0f4f1;
+}
+
+.header-map-cluster-item-price strong {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #ff6f0f;
+}
+
+.header-map-cluster-item-price small {
+  font-size: 0.74rem;
+  color: var(--text-muted, #5e7468);
+  margin-left: 2px;
+}
+
+.header-map-cluster-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-map-cluster-empty,
+.header-map-cluster-more-note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 20px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-muted, #5e7468);
+}
+
 @media (max-width: 640px) {
-  .socar-map-stage {
+  .header-map-stage {
     height: 580px;
   }
 
-  .socar-floating-card {
+  .header-map-floating-card {
     grid-template-columns: 1fr;
     gap: 10px;
   }
 
-  .socar-card-media {
+  .header-map-card-media {
     width: 100%;
     height: 120px;
+  }
+
+  .header-map-zoom-controls {
+    bottom: 245px;
+    right: 12px;
+  }
+
+  .header-map-cluster-sheet {
+    inset: 10px;
   }
 }
 /* 가까운 수리센터 카드: 거리 표시 */

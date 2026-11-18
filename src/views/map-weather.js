@@ -1,4 +1,4 @@
-import { MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
+import { MACHINE_BY_ID, listingCoords, distanceKm, haversineKm } from "../data/farm-machines.js";
 import { applyModelSpecification } from "../data/machine-specifications.js";
 import { getRegionCoords } from "../data/korea-regions.js";
 import { $, escapeHtml, money, today, addDays, toast, getListingPhotoSrc, machineImage } from "../core/utils.js";
@@ -791,83 +791,264 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
   }
 }
 
-function getHeaderMapNearbyItems(origin) {
-  const randomListing = ensureHongcheonRandomListing({ randomize: false });
-  const catalog = Array.isArray(runtime.catalog) && runtime.catalog.length ? runtime.catalog : [randomListing];
-  const nearby = catalog.filter(
-    (item) => item.status === "open" && distanceKm(origin, item, item.id) <= 30
-  );
-  if (nearby.length) return nearby;
-  return [randomListing];
+export const HEADER_CLUSTER_STEPS = [
+  { maxLevel: 4, km: 0.18, label: "개별 농가 핀" },
+  { maxLevel: 5, km: 2.5, label: "반경 2.5km 통합" },
+  { maxLevel: 6, km: 7, label: "반경 7km 통합" },
+  { maxLevel: 7, km: 18, label: "반경 18km 통합" },
+  { maxLevel: 8, km: 38, label: "시·군 통합 (38km)" },
+  { maxLevel: 9, km: 75, label: "광역 통합 (75km)" },
+  { maxLevel: 10, km: 140, label: "도·권역 통합 (140km)" },
+  { maxLevel: 11, km: 240, label: "초광역 통합 (240km)" },
+  { maxLevel: 99, km: 1000, label: "전국 1개 점 통합" },
+];
+
+export function getClusterThresholdKm(zoomLevel) {
+  const lv = Number(zoomLevel) || 6;
+  const matched = HEADER_CLUSTER_STEPS.find((step) => lv <= step.maxLevel);
+  return matched || HEADER_CLUSTER_STEPS[HEADER_CLUSTER_STEPS.length - 1];
 }
 
-function renderHeaderVisualFallback(canvasEl, origin, originLabel, items, selectedItem, onSelectItem) {
+function getHeaderMapAllItems(origin) {
+  const randomListing = ensureHongcheonRandomListing({ randomize: false });
+  const catalog = Array.isArray(runtime.catalog) && runtime.catalog.length ? runtime.catalog : [randomListing];
+  const openItems = catalog.filter((item) => item.status === "open");
+  const list = openItems.length ? openItems : [randomListing];
+  return [...list].sort((a, b) => distanceKm(origin, a, a.id) - distanceKm(origin, b, b.id));
+}
+
+function buildClusterLabel(regionCounts, count) {
+  const entries = [...regionCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const topRegion = entries[0]?.[0] || "주변";
+  if (entries.length <= 1) return count > 1 ? `${topRegion} 일대` : topRegion;
+  return `${topRegion} 외 ${entries.length - 1}곳 통합`;
+}
+
+export function clusterListingsByZoom(items, zoomLevel, origin) {
+  const list = Array.isArray(items) ? items : [];
+  const entries = list.map((item) => {
+    const coords = listingCoords(item, item.id);
+    return {
+      item,
+      lat: coords.lat,
+      lng: coords.lng,
+      distKm: origin ? distanceKm(origin, item, item.id) : 0,
+    };
+  });
+  if (!entries.length) return [];
+
+  const step = getClusterThresholdKm(zoomLevel);
+  if (Number(zoomLevel) >= 12) {
+    let latSum = 0;
+    let lngSum = 0;
+    const regionCounts = new Map();
+    entries.forEach(({ item, lat, lng }) => {
+      latSum += lat;
+      lngSum += lng;
+      const r = item.region || "기타";
+      regionCounts.set(r, (regionCounts.get(r) || 0) + 1);
+    });
+    const sortedItems = entries.sort((a, b) => a.distKm - b.distKm).map((e) => e.item);
+    return [
+      {
+        id: "cluster-all-kr",
+        lat: latSum / entries.length,
+        lng: lngSum / entries.length,
+        count: sortedItems.length,
+        isAllCluster: true,
+        label: sortedItems.length > 1 ? "전국 통합 매물" : (sortedItems[0].region || "매물"),
+        items: sortedItems,
+        boundsPoints: entries.map((e) => ({ lat: e.lat, lng: e.lng })),
+      },
+    ];
+  }
+
+  const degLatBound = step.km / 110.574;
+  const degLngBound = step.km / 88.0;
+  const clusters = [];
+
+  for (const entry of entries) {
+    let nearestCluster = null;
+    let nearestDist = Infinity;
+
+    for (const cl of clusters) {
+      if (Math.abs(entry.lat - cl.lat) > degLatBound || Math.abs(entry.lng - cl.lng) > degLngBound) {
+        continue;
+      }
+      const d = haversineKm({ lat: entry.lat, lng: entry.lng }, { lat: cl.lat, lng: cl.lng });
+      if (d <= step.km && d < nearestDist) {
+        nearestDist = d;
+        nearestCluster = cl;
+      }
+    }
+
+    const rName = entry.item.region || "주변";
+    if (nearestCluster) {
+      const nextCount = nearestCluster.count + 1;
+      nearestCluster.lat = (nearestCluster.lat * nearestCluster.count + entry.lat) / nextCount;
+      nearestCluster.lng = (nearestCluster.lng * nearestCluster.count + entry.lng) / nextCount;
+      nearestCluster.count = nextCount;
+      nearestCluster.entries.push(entry);
+      nearestCluster.regionCounts.set(rName, (nearestCluster.regionCounts.get(rName) || 0) + 1);
+    } else {
+      const regionCounts = new Map();
+      regionCounts.set(rName, 1);
+      clusters.push({
+        id: `cl-${clusters.length + 1}`,
+        lat: entry.lat,
+        lng: entry.lng,
+        count: 1,
+        isAllCluster: false,
+        entries: [entry],
+        regionCounts,
+      });
+    }
+  }
+
+  return clusters.map((cl) => {
+    cl.entries.sort((a, b) => a.distKm - b.distKm);
+    return {
+      id: cl.id,
+      lat: cl.lat,
+      lng: cl.lng,
+      count: cl.count,
+      isAllCluster: cl.count === entries.length && entries.length > 1,
+      label: buildClusterLabel(cl.regionCounts, cl.count),
+      items: cl.entries.map((e) => e.item),
+      boundsPoints: cl.entries.map((e) => ({ lat: e.lat, lng: e.lng })),
+    };
+  });
+}
+
+function renderHeaderVisualFallback(
+  canvasEl,
+  origin,
+  originLabel,
+  allItems,
+  selectedItem,
+  { initialLevel = 6, onSelectItem, onOpenClusterSheet, onRecenterReset } = {}
+) {
+  let fallbackLevel = initialLevel;
   const originCoords = { lat: Number(origin.lat), lng: Number(origin.lng) };
-  const project = (lat, lng) => {
-    const dx = (Number(lng) - originCoords.lng) / 0.025;
-    const dy = (originCoords.lat - Number(lat)) / 0.02;
-    const x = Math.max(14, Math.min(86, 50 + dx * 42));
-    const y = Math.max(18, Math.min(78, 52 + dy * 42));
+
+  const projectAtLevel = (lat, lng, lv) => {
+    const centerLat = lv >= 9 ? 36.45 : originCoords.lat;
+    const centerLng = lv >= 9 ? 127.85 : originCoords.lng;
+    const span = Math.pow(1.9, Math.max(0, lv - 5)) * 0.14;
+    const x = Math.max(10, Math.min(90, 50 + ((Number(lng) - centerLng) / span) * 42));
+    const y = Math.max(18, Math.min(82, 52 - ((Number(lat) - centerLat) / (span * 0.68)) * 42));
     return { x, y };
   };
 
-  canvasEl.innerHTML = `
-    <div class="socar-visual-fallback" role="region" aria-label="주변 농기계 위치 안내 지도">
-      <svg class="socar-fallback-grid" viewBox="0 0 800 480" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <pattern id="socarGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(23,66,51,0.06)" stroke-width="1" />
-          </pattern>
-        </defs>
-        <rect width="800" height="480" fill="#eef4ee" />
-        <rect width="800" height="480" fill="url(#socarGrid)" />
-        <path d="M-20,380 C160,330 290,260 440,210 C590,160 700,110 830,80" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
-        <path d="M90,-20 C170,130 280,220 420,275 C570,335 690,410 770,500" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" />
-        <path d="M40,120 Q280,175 490,90 T820,160" fill="none" stroke="#cfe6f5" stroke-width="18" stroke-linecap="round" opacity="0.7" />
-        <circle cx="400" cy="250" r="145" fill="rgba(255, 111, 15, 0.06)" stroke="rgba(255, 111, 15, 0.25)" stroke-dasharray="6 6" stroke-width="1.5" />
-      </svg>
+  const paintFallback = () => {
+    const step = getClusterThresholdKm(fallbackLevel);
+    const clusters = clusterListingsByZoom(allItems, fallbackLevel, origin);
+    const originPos = projectAtLevel(originCoords.lat, originCoords.lng, fallbackLevel);
 
-      <div class="socar-my-pin socar-fallback-pin" style="left:50%;top:52%" title="${escapeHtml(originLabel)}">
-        <span class="socar-my-pulse"></span>
-        <span class="socar-my-dot"></span>
-        <span class="socar-my-badge">내 위치 · ${escapeHtml(originLabel)}</span>
+    canvasEl.innerHTML = `
+      <div class="header-map-visual-fallback" role="region" aria-label="주변 농기계 위치 안내 지도">
+        <svg class="header-map-fallback-grid" viewBox="0 0 800 480" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <pattern id="headerMapGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(23,66,51,0.06)" stroke-width="1" />
+            </pattern>
+          </defs>
+          <rect width="800" height="480" fill="#eef4ee" />
+          <rect width="800" height="480" fill="url(#headerMapGrid)" />
+          <path d="M-20,380 C160,330 290,260 440,210 C590,160 700,110 830,80" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
+          <path d="M90,-20 C170,130 280,220 420,275 C570,335 690,410 770,500" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" />
+          <path d="M40,120 Q280,175 490,90 T820,160" fill="none" stroke="#cfe6f5" stroke-width="18" stroke-linecap="round" opacity="0.7" />
+        </svg>
+
+        <div class="header-map-my-pin header-map-fallback-pin" style="left:${originPos.x.toFixed(1)}%;top:${originPos.y.toFixed(1)}%" title="${escapeHtml(originLabel)}">
+          <span class="header-map-my-pulse"></span>
+          <span class="header-map-my-dot"></span>
+          <span class="header-map-my-badge">내 위치 · ${escapeHtml(originLabel)}</span>
+        </div>
+
+        ${clusters
+          .map((cl, idx) => {
+            const pos = projectAtLevel(cl.lat, cl.lng, fallbackLevel);
+            if (cl.count === 1) {
+              const item = cl.items[0];
+              const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
+              const active = item.id === selectedItem?.id;
+              return `
+                <button
+                  type="button"
+                  class="header-map-price-pin header-map-fallback-pin${active ? " is-active" : ""}"
+                  style="left:${pos.x.toFixed(1)}%;top:${pos.y.toFixed(1)}%"
+                  data-cluster-index="${idx}"
+                >
+                  <span class="header-map-pin-tag">${escapeHtml(machineLabel)}</span>
+                  <strong>${money(item.price)}</strong>
+                  <span class="header-map-pin-tail" aria-hidden="true"></span>
+                </button>`;
+            }
+            const tierClass = cl.count >= 100 || cl.isAllCluster ? "is-major" : cl.count >= 20 ? "is-medium" : "is-minor";
+            return `
+              <button
+                type="button"
+                class="header-map-cluster-dot header-map-fallback-pin ${tierClass}"
+                style="left:${pos.x.toFixed(1)}%;top:${pos.y.toFixed(1)}%"
+                data-cluster-index="${idx}"
+                aria-label="${escapeHtml(cl.label)} ${cl.count}대 통합 매물 전체 보기"
+              >
+                <span class="header-map-cluster-count">${cl.count.toLocaleString()}</span>
+                <span class="header-map-cluster-sub">${cl.isAllCluster ? "전체 보기" : "대 통합"}</span>
+                <span class="header-map-cluster-caption">${escapeHtml(cl.label)}</span>
+              </button>`;
+          })
+          .join("")}
+
+        <div class="header-map-zoom-controls">
+          <span class="header-map-zoom-badge">Lv.${fallbackLevel} · ${escapeHtml(step.label)}</span>
+          <div class="header-map-zoom-btn-group" role="group" aria-label="지도 확대 축소">
+            <button type="button" class="header-map-zoom-btn" id="fallbackZoomIn" aria-label="지도 확대">+</button>
+            <button type="button" class="header-map-zoom-btn" id="fallbackZoomOut" aria-label="지도 축소">−</button>
+          </div>
+        </div>
       </div>
+    `;
 
-      ${items
-        .map((item) => {
-          const c = listingCoords(item, item.id);
-          const pos = project(c.lat, c.lng);
-          const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
-          const active = item.id === selectedItem?.id;
-          return `
-            <button
-              type="button"
-              class="socar-price-pin socar-fallback-pin${active ? " is-active" : ""}"
-              style="left:${pos.x.toFixed(1)}%;top:${pos.y.toFixed(1)}%"
-              data-map-listing-id="${escapeHtml(item.id)}"
-            >
-              <span class="socar-pin-tag">${escapeHtml(machineLabel)}</span>
-              <strong>${money(item.price)}</strong>
-              <span class="socar-pin-tail" aria-hidden="true"></span>
-            </button>`;
-        })
-        .join("")}
-
-      <span class="socar-tile-note">실시간 위치 기반 주변 매물 뷰 · 홍천 비발디파크 반경 30km</span>
-    </div>
-  `;
-
-  canvasEl.querySelectorAll("[data-map-listing-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = items.find((i) => i.id === btn.dataset.mapListingId);
-      if (target) {
-        canvasEl.querySelectorAll("[data-map-listing-id]").forEach((el) => {
-          el.classList.toggle("is-active", el.dataset.mapListingId === target.id);
+    canvasEl.querySelectorAll("[data-cluster-index]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cl = clusters[Number(btn.dataset.clusterIndex)];
+        if (!cl) return;
+        if (cl.count === 1) {
+          selectedItem = cl.items[0];
+          canvasEl.querySelectorAll("[data-cluster-index]").forEach((el) => {
+            const target = clusters[Number(el.dataset.clusterIndex)];
+            el.classList.toggle("is-active", target?.count === 1 && target.items[0].id === selectedItem.id);
+          });
+          onSelectItem?.(selectedItem);
+          return;
+        }
+        onOpenClusterSheet?.(cl, () => {
+          fallbackLevel = Math.max(4, fallbackLevel - 2);
+          paintFallback();
         });
-        onSelectItem(target);
-      }
+      });
     });
-  });
+
+    $("fallbackZoomIn")?.addEventListener("click", () => {
+      fallbackLevel = Math.max(4, fallbackLevel - 1);
+      paintFallback();
+    });
+    $("fallbackZoomOut")?.addEventListener("click", () => {
+      fallbackLevel = Math.min(12, fallbackLevel + 1);
+      paintFallback();
+    });
+  };
+
+  paintFallback();
+  return {
+    resetView() {
+      fallbackLevel = 6;
+      paintFallback();
+      onRecenterReset?.();
+    },
+  };
 }
 
 export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
@@ -881,40 +1062,46 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
   const originLabel = isVivaldiOrigin ? VIVALDI_PARK_ORIGIN.name : state.region || "내 위치";
   const fallbackOriginAddr = isVivaldiOrigin ? VIVALDI_PARK_ORIGIN.address : `${originLabel} 중심`;
 
-  const items = getHeaderMapNearbyItems(origin);
+  const allItems = getHeaderMapAllItems(origin);
   let selectedItem =
-    items.find((i) => i.id === runtime.selectedMapListingId) ||
-    items[0];
+    allItems.find((i) => i.id === runtime.selectedMapListingId) ||
+    allItems[0];
   if (selectedItem) runtime.selectedMapListingId = selectedItem.id;
 
   host.innerHTML = `
-    <div class="socar-map-stage">
-      <div class="socar-floating-top">
-        <div class="socar-loc-pill">
-          <span class="socar-loc-dot" aria-hidden="true"></span>
-          <div class="socar-loc-copy">
+    <div class="header-map-stage">
+      <div class="header-map-floating-top">
+        <div class="header-map-loc-pill">
+          <span class="header-map-loc-dot" aria-hidden="true"></span>
+          <div class="header-map-loc-copy">
             <strong>내 위치 · ${escapeHtml(originLabel)}</strong>
-            <span id="socarOriginAddr">${escapeHtml(fallbackOriginAddr)}</span>
+            <span id="headerMapOriginAddr">${escapeHtml(fallbackOriginAddr)}</span>
           </div>
         </div>
-        <div class="socar-top-actions">
-          <button type="button" class="socar-pill-btn socar-recenter-btn" id="socarRecenterBtn">
+        <div class="header-map-top-actions">
+          <button type="button" class="header-map-pill-btn header-map-all-btn" id="headerMapShowAllBtn">
+            전체 ${allItems.length.toLocaleString()}건 보기
+          </button>
+          <button type="button" class="header-map-pill-btn header-map-recenter-btn" id="headerMapRecenterBtn">
             내 위치 중심
           </button>
         </div>
       </div>
 
-      <div id="socarMapCanvas" class="socar-map-canvas" aria-label="내 주변 농기계 지도">
-        <div class="socar-map-loading">홍천 비발디파크 주변 농기계 지도를 불러오는 중...</div>
+      <div id="headerMapCanvas" class="header-map-canvas" aria-label="내 주변 농기계 지도">
+        <div class="header-map-loading">농기계 지도를 불러오는 중...</div>
       </div>
 
-      <div class="socar-floating-card" id="socarFloatingCard" aria-live="polite"></div>
+      <div class="header-map-floating-card" id="headerMapFloatingCard" aria-live="polite"></div>
+
+      <div class="header-map-cluster-sheet" id="headerMapClusterSheet" role="dialog" aria-modal="false" aria-label="통합 점 전체 매물 목록" hidden></div>
     </div>
   `;
 
   const renderFloatingCard = (item) => {
-    const cardEl = $("socarFloatingCard");
+    const cardEl = $("headerMapFloatingCard");
     if (!cardEl || !item) return;
+    cardEl.hidden = false;
     const dist = distanceKm(origin, item, item.id);
     const machine = MACHINE_BY_ID[item.machineType];
     const photoSrc = getListingPhotoSrc(item) || machineImage(machine);
@@ -923,26 +1110,26 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     const sClass = statusClass(item);
 
     cardEl.innerHTML = `
-      <div class="socar-card-media">
+      <div class="header-map-card-media">
         <img src="${escapeHtml(photoSrc)}" alt="${escapeHtml(item.title)}" />
-        <span class="socar-card-dist">내 위치에서 ${dist}km</span>
+        <span class="header-map-card-dist">내 위치에서 ${dist}km</span>
       </div>
-      <div class="socar-card-body">
-        <div class="socar-card-tags">
+      <div class="header-map-card-body">
+        <div class="header-map-card-tags">
           <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
-          <span class="socar-farm-pill">${escapeHtml(farmName)}</span>
-          <span class="socar-machine-pill">${escapeHtml(machine?.label || "농기계")}</span>
+          <span class="header-map-farm-pill">${escapeHtml(farmName)}</span>
+          <span class="header-map-machine-pill">${escapeHtml(machine?.label || "농기계")}</span>
         </div>
-        <h3 class="socar-card-title">${escapeHtml(item.title)}</h3>
-        <p class="socar-card-addr" id="socarFarmAddr">${escapeHtml(farmAddr)}</p>
-        <div class="socar-card-bottom">
-          <div class="socar-card-price">
+        <h3 class="header-map-card-title">${escapeHtml(item.title)}</h3>
+        <p class="header-map-card-addr" id="headerMapFarmAddr">${escapeHtml(farmAddr)}</p>
+        <div class="header-map-card-bottom">
+          <div class="header-map-card-price">
             <strong>${money(item.price)}</strong>
             <small>${item.type === "rent" ? "/ 1일 대여" : "중고 구매가"}</small>
           </div>
-          <div class="socar-card-actions">
-            <button type="button" class="button button-secondary button-sm" id="socarDetailBtn">자세히 보기</button>
-            <button type="button" class="button button-primary button-sm" id="socarRentBtn">${item.type === "rent" ? "바로 대여 신청" : "문의하기"}</button>
+          <div class="header-map-card-actions">
+            <button type="button" class="button button-secondary button-sm" id="headerMapDetailBtn">자세히 보기</button>
+            <button type="button" class="button button-primary button-sm" id="headerMapRentBtn">${item.type === "rent" ? "바로 대여 신청" : "문의하기"}</button>
           </div>
         </div>
       </div>
@@ -952,32 +1139,185 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     void cardEl.offsetWidth;
     cardEl.classList.add("is-updated");
 
-    $("socarDetailBtn")?.addEventListener("click", () => onOpenDetail?.(item.id));
-    $("socarRentBtn")?.addEventListener("click", () => onRent?.(item.id));
+    $("headerMapDetailBtn")?.addEventListener("click", () => onOpenDetail?.(item.id));
+    $("headerMapRentBtn")?.addEventListener("click", () => onRent?.(item.id));
 
     const itemCoords = listingCoords(item, item.id);
     resolveKakaoAddress(itemCoords.lat, itemCoords.lng, farmAddr).then((addr) => {
-      const addrEl = $("socarFarmAddr");
+      const addrEl = $("headerMapFarmAddr");
       if (addrEl && addr) addrEl.textContent = addr;
+    });
+  };
+
+  const closeClusterSheet = () => {
+    const sheetEl = $("headerMapClusterSheet");
+    if (!sheetEl) return;
+    sheetEl.hidden = true;
+    sheetEl.innerHTML = "";
+  };
+
+  const openClusterSheet = (cluster, onZoomArea) => {
+    const sheetEl = $("headerMapClusterSheet");
+    if (!sheetEl || !cluster) return;
+    let txFilter = "all";
+    let queryText = "";
+    let showAllRows = false;
+
+    sheetEl.hidden = false;
+    sheetEl.innerHTML = `
+      <div class="header-map-cluster-sheet-head">
+        <div class="header-map-cluster-sheet-title-wrap">
+          <div class="header-map-cluster-sheet-badges">
+            <span class="header-map-cluster-sheet-count">${cluster.count.toLocaleString()}대</span>
+            <strong>${escapeHtml(cluster.label)} 전체 매물</strong>
+          </div>
+          <span>클릭한 통합 점에 포함된 모든 매물(거리순)입니다.</span>
+        </div>
+        <div class="header-map-cluster-sheet-head-actions">
+          ${onZoomArea ? `<button type="button" class="button button-secondary button-sm" id="headerMapClusterZoomAreaBtn">이 구역 확대</button>` : ""}
+          <button type="button" class="button button-primary button-sm" id="headerMapClusterSheetCloseBtn">닫기</button>
+        </div>
+      </div>
+      <div class="header-map-cluster-sheet-filters">
+        <input type="search" id="headerMapClusterSearchInput" class="header-map-cluster-search" placeholder="기종·지역·농가명으로 검색" aria-label="통합 매물 검색" />
+        <div class="header-map-cluster-tx-tabs" role="group" aria-label="거래 유형 필터">
+          <button type="button" class="header-map-tx-tab is-active" data-cluster-tx="all">전체</button>
+          <button type="button" class="header-map-tx-tab" data-cluster-tx="rent">대여</button>
+          <button type="button" class="header-map-tx-tab" data-cluster-tx="sale">판매</button>
+        </div>
+      </div>
+      <div class="header-map-cluster-list" id="headerMapClusterList"></div>
+    `;
+
+    const paintSheetItems = () => {
+      const listEl = $("headerMapClusterList");
+      if (!listEl) return;
+      const q = queryText.trim().toLowerCase();
+      const filtered = cluster.items.filter((item) => {
+        if (txFilter !== "all" && item.type !== txFilter) return false;
+        if (q) {
+          const hay = `${item.title || ""} ${item.region || ""} ${item.farmSpotLabel || ""} ${item.farmName || ""} ${MACHINE_BY_ID[item.machineType]?.label || ""}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="header-map-cluster-empty">조건에 맞는 매물이 없습니다.</div>`;
+        return;
+      }
+
+      const initialLimit = 120;
+      const visible = showAllRows ? filtered : filtered.slice(0, initialLimit);
+      listEl.innerHTML =
+        visible
+          .map((item) => {
+            const machine = MACHINE_BY_ID[item.machineType];
+            const dist = distanceKm(origin, item, item.id);
+            const sClass = statusClass(item);
+            const spotLabel = item.farmSpotLabel || item.farmName || `${item.region || ""} 농가`;
+            return `
+              <article class="header-map-cluster-item">
+                <div class="header-map-cluster-item-top">
+                  <div class="header-map-cluster-item-tags">
+                    <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
+                    <span class="header-map-machine-pill">${escapeHtml(machine?.label || "농기계")}</span>
+                  </div>
+                  <span class="header-map-cluster-item-dist">${dist}km</span>
+                </div>
+                <h4 class="header-map-cluster-item-title">${escapeHtml(item.title)}</h4>
+                <p class="header-map-cluster-item-spot">${escapeHtml(spotLabel)}</p>
+                <div class="header-map-cluster-item-bottom">
+                  <div class="header-map-cluster-item-price">
+                    <strong>${money(item.price)}</strong>
+                    <small>${item.type === "rent" ? "/ 1일" : "중고 구매가"}</small>
+                  </div>
+                  <div class="header-map-cluster-item-actions">
+                    <button type="button" class="button button-secondary button-sm" data-cluster-detail="${escapeHtml(item.id)}">자세히</button>
+                    <button type="button" class="button button-primary button-sm" data-cluster-rent="${escapeHtml(item.id)}">${item.type === "rent" ? "대여" : "문의"}</button>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("") +
+        (!showAllRows && filtered.length > initialLimit
+          ? `<div class="header-map-cluster-more-note">
+              <span>상위 ${initialLimit}건 표시 중 (전체 ${filtered.length.toLocaleString()}건)</span>
+              <button type="button" class="button button-secondary button-sm" id="headerMapShowMoreBtn">나머지 ${(filtered.length - initialLimit).toLocaleString()}건 모두 표시</button>
+            </div>`
+          : "");
+
+      $("headerMapShowMoreBtn")?.addEventListener("click", () => {
+        showAllRows = true;
+        paintSheetItems();
+      });
+    };
+
+    paintSheetItems();
+
+    $("headerMapClusterSheetCloseBtn")?.addEventListener("click", closeClusterSheet);
+    $("headerMapClusterZoomAreaBtn")?.addEventListener("click", () => {
+      closeClusterSheet();
+      onZoomArea?.();
+    });
+    $("headerMapClusterSearchInput")?.addEventListener("input", (e) => {
+      queryText = e.target.value || "";
+      paintSheetItems();
+    });
+    sheetEl.querySelectorAll("[data-cluster-tx]").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        txFilter = tab.dataset.clusterTx || "all";
+        sheetEl.querySelectorAll("[data-cluster-tx]").forEach((t) => {
+          t.classList.toggle("is-active", t.dataset.clusterTx === txFilter);
+        });
+        paintSheetItems();
+      });
+    });
+    $("headerMapClusterList")?.addEventListener("click", (e) => {
+      const detailBtn = e.target.closest("[data-cluster-detail]");
+      if (detailBtn) {
+        onOpenDetail?.(detailBtn.dataset.clusterDetail);
+        return;
+      }
+      const rentBtn = e.target.closest("[data-cluster-rent]");
+      if (rentBtn) {
+        onRent?.(rentBtn.dataset.clusterRent);
+      }
     });
   };
 
   renderFloatingCard(selectedItem);
 
   resolveKakaoAddress(origin.lat, origin.lng, fallbackOriginAddr).then((addr) => {
-    const el = $("socarOriginAddr");
+    const el = $("headerMapOriginAddr");
     if (el && addr) el.textContent = addr;
   });
 
-  const canvasEl = $("socarMapCanvas");
+  $("headerMapShowAllBtn")?.addEventListener("click", () => {
+    openClusterSheet({
+      id: "cluster-all-button",
+      label: "전국 전체",
+      count: allItems.length,
+      items: allItems,
+      boundsPoints: [],
+    });
+  });
+
+  const canvasEl = $("headerMapCanvas");
   const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
   let activeMap = null;
   let originLatLng = null;
+  let fallbackController = null;
 
-  $("socarRecenterBtn")?.addEventListener("click", () => {
+  $("headerMapRecenterBtn")?.addEventListener("click", () => {
+    closeClusterSheet();
     if (activeMap && originLatLng) {
+      activeMap.setLevel(6);
       activeMap.panTo(originLatLng);
       toast(`${originLabel} 중심으로 이동했습니다.`);
+    } else if (fallbackController) {
+      fallbackController.resetView();
     } else {
       state.region = VIVALDI_PARK_ORIGIN.name;
       state.userCoords = { lat: VIVALDI_PARK_ORIGIN.lat, lng: VIVALDI_PARK_ORIGIN.lng, source: "default" };
@@ -989,23 +1329,36 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
 
   try {
     const maps = await loadKakaoSdk(appKey);
-    if (!canvasEl || $("socarMapCanvas") !== canvasEl) return;
+    if (!canvasEl || $("headerMapCanvas") !== canvasEl) return;
     canvasEl.innerHTML = "";
+
+    const mapStageEl = document.createElement("div");
+    mapStageEl.className = "header-map-kakao-stage-box";
+    canvasEl.appendChild(mapStageEl);
+
+    const zoomControlWrap = document.createElement("div");
+    zoomControlWrap.className = "header-map-zoom-controls";
+    zoomControlWrap.innerHTML = `
+      <span class="header-map-zoom-badge" id="headerMapZoomBadge">Lv.6 · 반경 7km 통합</span>
+      <div class="header-map-zoom-btn-group" role="group" aria-label="지도 확대 축소">
+        <button type="button" class="header-map-zoom-btn" id="headerMapZoomInBtn" aria-label="지도 확대">+</button>
+        <button type="button" class="header-map-zoom-btn" id="headerMapZoomOutBtn" aria-label="지도 축소">−</button>
+      </div>
+    `;
+    canvasEl.appendChild(zoomControlWrap);
+
     originLatLng = new maps.LatLng(Number(origin.lat), Number(origin.lng));
-    activeMap = new maps.Map(canvasEl, {
+    activeMap = new maps.Map(mapStageEl, {
       center: originLatLng,
-      level: 5,
+      level: 6,
     });
 
-    const bounds = new maps.LatLngBounds();
-    bounds.extend(originLatLng);
-
     const myOverlayEl = document.createElement("div");
-    myOverlayEl.className = "socar-my-pin";
+    myOverlayEl.className = "header-map-my-pin";
     myOverlayEl.innerHTML = `
-      <span class="socar-my-pulse"></span>
-      <span class="socar-my-dot"></span>
-      <span class="socar-my-badge">내 위치 · ${escapeHtml(originLabel)}</span>
+      <span class="header-map-my-pulse"></span>
+      <span class="header-map-my-dot"></span>
+      <span class="header-map-my-badge">내 위치 · ${escapeHtml(originLabel)}</span>
     `;
     new maps.CustomOverlay({
       map: activeMap,
@@ -1016,70 +1369,131 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     });
 
     const pinElements = new Map();
-    const overlays = new Map();
-    const addPin = (item, pos) => {
-      const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
-      const pinBtn = document.createElement("button");
-      pinBtn.type = "button";
-      pinBtn.className = `socar-price-pin${item.id === selectedItem?.id ? " is-active" : ""}`;
-      pinBtn.innerHTML = `
-        <span class="socar-pin-tag">${escapeHtml(machineLabel)}</span>
-        <strong>${money(item.price)}</strong>
-        <span class="socar-pin-tail" aria-hidden="true"></span>
-      `;
-      pinBtn.addEventListener("click", () => {
-        selectedItem = item;
-        runtime.selectedMapListingId = item.id;
-        pinElements.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
-        activeMap.panTo(pos);
-        renderFloatingCard(item);
-      });
-      pinElements.set(item.id, pinBtn);
+    const activeOverlays = new Map();
+    let cachedLevel = null;
+    let cachedClusters = [];
 
-      const overlay = new maps.CustomOverlay({
+    const createClusterOverlay = (cl) => {
+      const pos = new maps.LatLng(cl.lat, cl.lng);
+
+      if (cl.count === 1) {
+        const item = cl.items[0];
+        const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
+        const pinBtn = document.createElement("button");
+        pinBtn.type = "button";
+        pinBtn.className = `header-map-price-pin${item.id === selectedItem?.id ? " is-active" : ""}`;
+        pinBtn.innerHTML = `
+          <span class="header-map-pin-tag">${escapeHtml(machineLabel)}</span>
+          <strong>${money(item.price)}</strong>
+          <span class="header-map-pin-tail" aria-hidden="true"></span>
+        `;
+        pinBtn.addEventListener("click", () => {
+          closeClusterSheet();
+          selectedItem = item;
+          runtime.selectedMapListingId = item.id;
+          pinElements.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
+          activeMap.panTo(pos);
+          renderFloatingCard(item);
+        });
+        pinElements.set(item.id, pinBtn);
+
+        return new maps.CustomOverlay({
+          map: activeMap,
+          position: pos,
+          content: pinBtn,
+          yAnchor: 1.15,
+          zIndex: item.id === selectedItem?.id ? 6 : 5,
+        });
+      }
+
+      const tierClass = cl.count >= 100 || cl.isAllCluster ? "is-major" : cl.count >= 20 ? "is-medium" : "is-minor";
+      const dotBtn = document.createElement("button");
+      dotBtn.type = "button";
+      dotBtn.className = `header-map-cluster-dot ${tierClass}`;
+      dotBtn.setAttribute("aria-label", `${cl.label} ${cl.count}대 통합 매물 전체 보기`);
+      dotBtn.innerHTML = `
+        <span class="header-map-cluster-count">${cl.count.toLocaleString()}</span>
+        <span class="header-map-cluster-sub">${cl.isAllCluster ? "전체 보기" : "대 통합"}</span>
+        <span class="header-map-cluster-caption">${escapeHtml(cl.label)}</span>
+      `;
+      dotBtn.addEventListener("click", () => {
+        openClusterSheet(cl, () => {
+          if (cl.boundsPoints?.length > 1) {
+            const b = new maps.LatLngBounds();
+            cl.boundsPoints.forEach((p) => b.extend(new maps.LatLng(p.lat, p.lng)));
+            activeMap.setBounds(b, 60, 60, 140, 60);
+          } else {
+            activeMap.setLevel(Math.max(4, activeMap.getLevel() - 3), { animate: true });
+            activeMap.panTo(pos);
+          }
+        });
+      });
+
+      return new maps.CustomOverlay({
         map: activeMap,
         position: pos,
-        content: pinBtn,
-        yAnchor: 1.15,
-        zIndex: item.id === selectedItem?.id ? 6 : 5,
+        content: dotBtn,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: cl.isAllCluster ? 8 : 7,
       });
-      overlays.set(item.id, overlay);
     };
 
-    const mapItems = new Map(items.map((item) => [item.id, item]));
-    for (const item of runtime.catalog ?? []) {
-      if (item.status === "open") mapItems.set(item.id, item);
-    }
-    const positions = new Map([...mapItems].map(([id, item]) => {
-      const { lat, lng } = listingCoords(item, id);
-      return [id, new maps.LatLng(lat, lng)];
-    }));
-    for (const item of items) bounds.extend(positions.get(item.id));
+    const syncOverlays = (forceRecluster = false) => {
+      if (!activeMap || $("headerMapCanvas") !== canvasEl) return;
+      const level = activeMap.getLevel();
+      const step = getClusterThresholdKm(level);
+      const badgeEl = $("headerMapZoomBadge");
+      if (badgeEl) badgeEl.textContent = `Lv.${level} · ${step.label}`;
 
-    const renderVisiblePins = () => {
-      const viewport = activeMap.getBounds();
-      for (const [id, pos] of positions) {
-        if (viewport.contain(pos)) {
-          if (!overlays.has(id)) addPin(mapItems.get(id), pos);
-        } else if (overlays.has(id)) {
-          overlays.get(id).setMap(null);
-          overlays.delete(id);
-          pinElements.delete(id);
+      if (forceRecluster || cachedLevel !== level) {
+        activeOverlays.forEach((ov) => ov.setMap(null));
+        activeOverlays.clear();
+        pinElements.clear();
+        cachedLevel = level;
+        cachedClusters = clusterListingsByZoom(allItems, level, origin);
+      }
+
+      const viewport = activeMap.getBounds?.();
+      const checkViewport = Boolean(viewport) && cachedClusters.length > 40;
+
+      for (const cl of cachedClusters) {
+        const pos = new maps.LatLng(cl.lat, cl.lng);
+        const visible = !checkViewport || viewport.contain(pos);
+        if (visible) {
+          if (!activeOverlays.has(cl.id)) {
+            activeOverlays.set(cl.id, createClusterOverlay(cl));
+          }
+        } else if (activeOverlays.has(cl.id)) {
+          activeOverlays.get(cl.id).setMap(null);
+          activeOverlays.delete(cl.id);
+          if (cl.count === 1) pinElements.delete(cl.items[0].id);
         }
       }
     };
 
-    if (items.length > 0) {
-      activeMap.setBounds(bounds, 70, 60, 180, 60);
-    }
-    renderVisiblePins();
-    maps.event.addListener(activeMap, "idle", renderVisiblePins);
+    syncOverlays(true);
+    maps.event.addListener(activeMap, "zoom_changed", () => syncOverlays(true));
+    maps.event.addListener(activeMap, "idle", () => syncOverlays(false));
+
+    $("headerMapZoomInBtn")?.addEventListener("click", () => {
+      activeMap.setLevel(Math.max(1, activeMap.getLevel() - 1), { animate: true });
+    });
+    $("headerMapZoomOutBtn")?.addEventListener("click", () => {
+      activeMap.setLevel(Math.min(13, activeMap.getLevel() + 1), { animate: true });
+    });
   } catch {
-    if (canvasEl && $("socarMapCanvas")) {
-      renderHeaderVisualFallback(canvasEl, origin, originLabel, items, selectedItem, (chosen) => {
-        selectedItem = chosen;
-        runtime.selectedMapListingId = chosen.id;
-        renderFloatingCard(chosen);
+    if (canvasEl && $("headerMapCanvas")) {
+      fallbackController = renderHeaderVisualFallback(canvasEl, origin, originLabel, allItems, selectedItem, {
+        initialLevel: 6,
+        onSelectItem: (chosen) => {
+          closeClusterSheet();
+          selectedItem = chosen;
+          runtime.selectedMapListingId = chosen.id;
+          renderFloatingCard(chosen);
+        },
+        onOpenClusterSheet: openClusterSheet,
+        onRecenterReset: () => toast(`${originLabel} 중심으로 이동했습니다.`),
       });
     }
   }

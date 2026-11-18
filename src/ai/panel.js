@@ -1375,16 +1375,16 @@ export function createAiPanel({
       onDone: (outcome) => {
         if (!triggerButton) return;
         if (outcome === "completed") {
-          triggerButton.textContent = "🤖 전담 진행중";
+          triggerButton.textContent = "전담 진행중";
         } else {
           triggerButton.disabled = false;
-          triggerButton.textContent = "🤖 거래 전담";
+          triggerButton.textContent = "거래 전담";
         }
       },
       onError: (kind) => {
         if (triggerButton) {
           triggerButton.disabled = false;
-          triggerButton.textContent = "🤖 거래 전담";
+          triggerButton.textContent = "거래 전담";
         }
         if (kind !== "aborted") {
           appendAiMessage("거래 전담을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.", "assistant");
@@ -1557,10 +1557,10 @@ export function createAiPanel({
           quickBtn.className = "button button-primary";
           if (item.type === "rent") {
             quickBtn.textContent = activeDates
-              ? `⚡ 바로 예약 (${formatShortDate(activeDates.start)}~${formatShortDate(activeDates.end)})`
+              ? `바로 예약 (${formatShortDate(activeDates.start)}~${formatShortDate(activeDates.end)})`
               : "📅 날짜 골라 바로 예약";
           } else {
-            quickBtn.textContent = "⚡ 바로 구매 신청";
+            quickBtn.textContent = "바로 구매 신청";
           }
           quickBtn.addEventListener("click", () => startOneTapListingAction(item, activeDates, null, quickBtn));
           actions.append(quickBtn);
@@ -1569,7 +1569,7 @@ export function createAiPanel({
           delegateBtn.type = "button";
           delegateBtn.className = "button button-secondary ai-rec-delegate-btn";
           delegateBtn.dataset.aiDelegate = item.id;
-          delegateBtn.textContent = "🤖 거래 전담";
+          delegateBtn.textContent = "거래 전담";
           delegateBtn.addEventListener("click", () => startFullDelegationAction(item, activeDates, delegateBtn));
           actions.append(delegateBtn);
         }
@@ -1617,7 +1617,7 @@ export function createAiPanel({
     title.textContent = isMyPage
       ? "마이페이지 변경 확인"
       : isDelegation
-        ? "🤖 부재중 거래 전담 확인"
+        ? "부재중 거래 전담 확인"
         : isPurchase
           ? "구매 신청 확인"
           : "대여 요청 확인";

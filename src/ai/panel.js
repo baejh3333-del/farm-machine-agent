@@ -545,6 +545,8 @@ export function createAiPanel({
   let lastUserTranscriptAt = 0;
   // 위임 결과를 읽어 주는 중: 그 전사는 이미 그린 답변과 같아 새 말풍선을 만들지 않는다.
   let delegatedReadout = null;
+  // 패널이 이미 그리고 읽으라고 넘긴 위임 ID: 그 낭독 전사는 말풍선으로 다시 그리지 않는다.
+  const spokenDelegationIds = new Set();
   const aiDefaultPlaceholder = $("aiInput").placeholder;
 
   function setPlusMenuOpen(nextOpen) {
@@ -2593,6 +2595,7 @@ export function createAiPanel({
       rememberAgentTurn(...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]), { role: "assistant", content: spoken });
       const errorBubble = appendAiMessage(spoken, "assistant");
       delegatedReadout = { liveGen, bubble: errorBubble };
+      if (delegationId) spokenDelegationIds.add(delegationId);
       reportDispatchTiming(timer, { outcome: "error", speechToDispatchMs, utteranceMs, status: Number(error?.status) || 0 });
       return { spokenSummary: spoken, effect };
     }
@@ -2654,7 +2657,10 @@ export function createAiPanel({
     const spokenSummary = speak ? buildSpokenSummary(reply, { listingCount: cardIds.length, result }) : "";
     const thinkingContext = speak ? buildDelegationThinkingContext(result, cardIds) : "";
     // 이 결과를 읽는 동안 들어오는 농농이 전사는 이미 그린 답변과 같으므로 새 말풍선을 만들지 않는다.
-    if (speak && spokenSummary) delegatedReadout = { liveGen, bubble };
+    if (speak && spokenSummary) {
+      delegatedReadout = { liveGen, bubble };
+      if (delegationId) spokenDelegationIds.add(delegationId);
+    }
     reportDispatchTiming(timer, {
       outcome: write && superseded() ? "superseded_write" : speak ? "spoken" : "rendered_silent",
       write,
@@ -2820,10 +2826,15 @@ export function createAiPanel({
           }
           appendOrUpdateTranscriptBubble("user", payload?.delta || "");
         },
-        onAssistantTranscriptDelta: (payload) => {
+        onAssistantTranscriptDelta: (payload, meta) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           // 위임 결과를 읽는 소리의 전사는 이미 그린 답변(카드·글)과 같으므로 말풍선을 또 만들지 않는다.
-          if (delegatedReadout?.liveGen === liveGen) return;
+          // 컨트롤러가 어느 위임을 읽는지(meta.delegationId) 알려 주면 그 위임만 가린다.
+          if (meta && typeof meta === "object" && "delegationId" in meta) {
+            if (meta.delegationId && spokenDelegationIds.has(meta.delegationId)) return;
+          } else if (delegatedReadout?.liveGen === liveGen) {
+            return;
+          }
           appendOrUpdateTranscriptBubble("assistant", payload?.delta || "");
         },
         onTurnCommitted: (turn, meta) => {
@@ -3177,6 +3188,7 @@ export function createAiPanel({
   function performReset() {
     sessionGeneration += 1;
     claimedDelegationIds.clear();
+    spokenDelegationIds.clear();
     lastLiveUserCommit = null;
     lastUserTranscriptAt = 0;
     delegatedReadout = null;

@@ -70,7 +70,7 @@ function resolveListingImage(item) {
     || getListingPhotoSrc(item)
     || MACHINE_FALLBACK_IMAGE[item?.machineType]
     || (item?.machineType ? machineImage(item.machineType) : "")
-    || "./src/nongnong-potato.svg"
+    || "./src/nongnong-icon.png"
   );
 }
 
@@ -1445,7 +1445,7 @@ export function createAiPanel({
         img.addEventListener("error", () => {
           if (img.dataset.fallbackApplied) return;
           img.dataset.fallbackApplied = "1";
-          img.src = "./src/nongnong-potato.svg";
+          img.src = "./src/nongnong-icon.png";
         });
         const badges = document.createElement("div");
         badges.className = "ai-rec-card-badges";

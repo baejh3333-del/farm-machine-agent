@@ -1519,7 +1519,7 @@ img {
   background: transparent;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 22px rgba(16, 48, 36, 0.2);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
 }
 
 .ai-launcher img {
@@ -1552,7 +1552,7 @@ img {
 .ai-header {
   padding: 16px 18px;
   background: var(--primary-light);
-  border-bottom: 1px solid #cce5d6;
+  border-bottom: 1px solid #d4d4d4;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1650,7 +1650,7 @@ img {
   width: 100%;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid #b8dec8;
+  border: 1px solid #d4d4d4;
   background: var(--primary-light);
   display: flex;
   align-items: center;
@@ -1665,7 +1665,7 @@ img {
 .chat-bubble.assistant .ai-rec-info strong { margin: 0; }
 
 .ai-rec-card-btn:hover {
-  background: #d3efe0;
+  background: #e5e5e5;
 }
 
 .ai-rec-info strong {
@@ -2618,7 +2618,7 @@ img {
 
 /* Compact final recommendation */
 .ai-condition-tags { display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 10px; white-space:normal; }
-.ai-condition-tag { display:inline-flex; padding:4px 8px; border-radius:999px; background:#edf5ee; color:#24563a; font-size: 0.6875rem; line-height:1.5; }
+.ai-condition-tag { display:inline-flex; padding:4px 8px; border-radius:999px; background:#edf5ee; color:#333333; font-size: 0.6875rem; line-height:1.5; }
 .ai-rec-note { margin-top:10px; font-size: 0.75rem; color:var(--text-muted); white-space:normal; }
 
 /* Compact, easy-to-scan AI recommendation summary */
@@ -4482,7 +4482,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   gap: 6px;
   padding: 8px 14px;
   background: #f4faf5;
-  border-bottom: 1px solid #d7e8dc;
+  border-bottom: 1px solid #e5e5e5;
   font-size: 0.75rem;
 }
 .ai-context-bar[hidden] { display: none; }
@@ -4493,8 +4493,8 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding: 3px 9px;
   border-radius: 999px;
   background: #ffffff;
-  border: 1px solid #cce5d6;
-  color: #1f4d32;
+  border: 1px solid #d4d4d4;
+  color: #333333;
   font-weight: 600;
 }
 .ai-context-action {
@@ -4510,7 +4510,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   font-weight: 700;
   cursor: pointer;
 }
-.ai-context-action:hover { background: var(--primary-dark, #21653c); }
+.ai-context-action:hover { background: var(--primary-dark, #333333); }
 
 /* 추천 매물 카드 원탭 실행 레이아웃 */
 .ai-rec-card {
@@ -4536,7 +4536,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-date-picker {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid #cce5d6;
+  border: 1px solid #d4d4d4;
   border-radius: 12px;
   background: #f7fbf8;
   display: grid;
@@ -4551,9 +4551,9 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   min-height: 34px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid #9ccab0;
+  border: 1px solid #d4d4d4;
   background: #ffffff;
-  color: #1f4d32;
+  color: #333333;
   font: inherit;
   font-size: 0.75rem;
   font-weight: 700;
@@ -4571,7 +4571,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   min-width: 0;
   min-height: 36px;
   padding: 4px 8px;
-  border: 1px solid var(--line-strong, #c5d1c7);
+  border: 1px solid var(--line-strong, #d4d4d4);
   border-radius: 8px;
   font: inherit;
   font-size: 0.8125rem;
@@ -4589,7 +4589,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   gap: 10px;
   padding: 12px 14px;
   margin-top: 8px;
-  border: 1px solid #d7e8dc;
+  border: 1px solid #e5e5e5;
   border-radius: 14px;
   background: #f8fcf9;
 }
@@ -4602,10 +4602,10 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-qb-tab {
   min-height: 36px;
   padding: 4px 8px;
-  border: 1px solid #cce0d2;
+  border: 1px solid #d4d4d4;
   border-radius: 10px;
   background: #ffffff;
-  color: #2c4133;
+  color: #333333;
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 700;
@@ -4613,14 +4613,14 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 }
 .ai-qb-tab.is-active {
   border-color: var(--primary);
-  background: var(--primary-light, #e6f4eb);
-  color: var(--primary-dark, #1f5c38);
+  background: var(--primary-light, #f2f2f2);
+  color: var(--primary-dark, #333333);
 }
 .ai-qb-section { display: grid; gap: 8px; }
 .ai-qb-label {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #466050;
+  color: #6b6b6b;
 }
 .ai-qb-chips {
   display: flex;
@@ -4630,10 +4630,10 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-qb-chip {
   min-height: 32px;
   padding: 4px 10px;
-  border: 1px solid #c9dcd0;
+  border: 1px solid #d4d4d4;
   border-radius: 999px;
   background: #ffffff;
-  color: #273c2f;
+  color: #333333;
   font: inherit;
   font-size: 0.75rem;
   font-weight: 600;
@@ -4653,7 +4653,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 }
 .ai-qb-examples {
   padding-top: 4px;
-  border-top: 1px dashed #d7e8dc;
+  border-top: 1px dashed #e5e5e5;
 }
 
 /* =========================================

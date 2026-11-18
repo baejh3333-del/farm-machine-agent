@@ -51,7 +51,7 @@
           <span class="nav-badge nav-badge-alert" id="dealsNavBadge" hidden>0</span>
           <span class="mypage-dot" id="dealsNavDot" hidden aria-label="안 읽은 메시지 있음"></span>
         </button>
-        <div class="mypage-dropdown" hidden>
+        <div class="mypage-dropdown">
           <button type="button" class="nav-item mypage-trigger" id="myPageButton" aria-expanded="false" aria-controls="myPageMenu" aria-haspopup="true">
             <span class="nav-label">마이페이지</span>
             <span class="mypage-dot" id="myPageNotifDot" hidden aria-hidden="true"></span>
@@ -407,6 +407,29 @@
               <button type="button" class="button button-secondary button-sm" id="accountLogoutButton">로그아웃</button>
             </div>
           </div>
+          <section class="panel edu-cert" id="eduCertPanel" aria-labelledby="eduCertTitle">
+            <div class="edu-cert-row">
+              <button type="button" class="edu-cert-toggle" id="eduCertToggle" aria-controls="eduCertPreviewWrap" aria-expanded="false" disabled>
+                <span class="edu-cert-check" id="eduCertCheck" role="img" aria-label="교육이수증 미등록"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="edu-cert-info">
+                  <span class="edu-cert-title" id="eduCertTitle">교육이수증</span>
+                  <span class="edu-cert-status" id="eduCertStatus">농기계 안전교육 이수증 사진을 올리면 체크 표시가 돼요.</span>
+                </span>
+                <span class="edu-cert-caret" id="eduCertCaret" aria-hidden="true" hidden>
+                  <span class="edu-cert-caret-label" id="eduCertCaretLabel">사진 펼치기</span>
+                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </button>
+              <div class="edu-cert-actions">
+                <button type="button" class="button button-primary button-sm" id="eduCertUploadButton">사진 올리기</button>
+                <button type="button" class="button button-secondary button-sm" id="eduCertDeleteButton" hidden>삭제</button>
+                <input type="file" id="eduCertInput" accept="image/jpeg,image/png,image/webp" hidden />
+              </div>
+            </div>
+            <div class="edu-cert-preview" id="eduCertPreviewWrap" hidden>
+              <img id="eduCertPreview" alt="내가 올린 교육이수증 사진 (누르면 접혀요)" title="누르면 접혀요" />
+            </div>
+          </section>
           <div class="owner-stats" id="ownerStats"></div>
 
           <div class="owner-columns">
@@ -553,7 +576,7 @@
 
   <!-- 우측 하단 플로팅 AI 농농이 버튼 및 패널 -->
   <button type="button" class="ai-launcher" id="aiLauncher" aria-label="농농이 상담 열기" aria-controls="aiPanel" aria-expanded="false">
-    <img src="./src/nongnong.png" alt="농농이에게 물어보기" />
+    <img src="./src/nongnong-potato.svg" alt="농농이에게 물어보기" />
   </button>
 
   <div class="ai-panel-backdrop" id="aiBackdrop" hidden></div>
@@ -562,7 +585,7 @@
     <div class="ai-header">
       <div class="ai-header-info">
         <div class="ai-avatar-wrap" aria-hidden="true">
-          <img class="ai-avatar" src="./src/nongnong.png" width="46" height="46" alt="" />
+          <img class="ai-avatar" src="./src/nongnong-potato.svg" width="46" height="46" alt="" />
         </div>
         <div>
           <strong id="aiTitle">농농이</strong>
@@ -588,7 +611,7 @@
         <div class="ai-welcome ai-welcome-hero" id="aiWelcomeHero">
           <div class="ai-hero-badge">
             <span class="ai-hero-glow" aria-hidden="true"></span>
-            <img src="./src/nongnong.png" width="68" height="68" alt="" />
+            <img src="./src/nongnong-potato.svg" width="68" height="68" alt="" />
           </div>
           <h3 class="ai-hero-title">농농이에게 뭐든지 물어보세요!</h3>
           <div class="ai-capability-grid" role="group" aria-label="추천 빠른 질문">

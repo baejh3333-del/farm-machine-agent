@@ -1,4 +1,7 @@
 import { KOREA_REGIONS, getRegionCoords, latLngToKmaGrid } from './korea-regions.js';
+import { FARM_LOCATIONS_BY_REGION } from './region-farm-locations.js';
+
+export { FARM_LOCATIONS_BY_REGION };
 
 // 검수된 작물-작업 연결을 UI와 추천 API가 함께 사용한다.
 // 기계 적합성은 예시이며 실제 작업기 호환·현장 상태는 게시자 확인이 필요하다.
@@ -2538,8 +2541,21 @@ export function listingCoords(itemOrRegion, itemId = "") {
   }
   const region = typeof itemOrRegion === "string" ? itemOrRegion : itemOrRegion?.region;
   const id = typeof itemOrRegion === "string" ? itemId : itemOrRegion?.id || itemId;
+  if (id === "hc-vivaldi-1") {
+    const palbong = REGION_COORDS["서면 팔봉리"];
+    return { lat: palbong.lat, lng: palbong.lng };
+  }
+  const spots = FARM_LOCATIONS_BY_REGION[region];
+  if (Array.isArray(spots) && spots.length > 0) {
+    const slotMatch = typeof id === "string" ? id.match(/-slot-(\d+)$/) : null;
+    const spotIdx = slotMatch
+      ? (Number(slotMatch[1]) - 1) % spots.length
+      : stableHash(id || region) % spots.length;
+    const chosen = spots[spotIdx];
+    return { lat: chosen.lat, lng: chosen.lng };
+  }
   const base = REGION_COORDS[region] || getRegionCoords(region) || REGION_COORDS["영양읍"];
-  if (!id || region === "서면 팔봉리" || id === "hc-vivaldi-1") {
+  if (!id || region === "서면 팔봉리") {
     return { lat: base.lat, lng: base.lng };
   }
   const h1 = stableHash(`${id}:lat`);

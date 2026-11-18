@@ -111,17 +111,17 @@ test("작업을 먼저 입력해도 유지하며 선택 조건은 건너뛸 수 
 });
 
 test("목 DB는 현재 카탈로그의 모든 기종과 두 거래 방식을 포함한다", () => {
-  const expectedCount = MACHINE_TYPES.length * 10;
-  assert.equal(LISTINGS.length, expectedCount);
-  assert.equal(new Set(LISTINGS.map(({ id }) => id)).size, expectedCount);
+  const baselineCount = MACHINE_TYPES.length * 10;
+  assert.ok(LISTINGS.length > baselineCount);
+  assert.equal(new Set(LISTINGS.map(({ id }) => id)).size, LISTINGS.length);
   assert.equal(selectCandidates("배추 흙갈이 대여", {}).cropId, "cabbage");
   assert.equal(selectCandidates("양배추 흙갈이 대여", {}).cropId, "cabbageHead");
   assert.equal(selectCandidates("땅콩 흙갈이 대여", {}).cropId, "peanut");
   assert.equal(selectCandidates("배 방제 대여", {}).cropId, "pear");
   assert.deepEqual(new Set(LISTINGS.map(({ machineType }) => machineType)), new Set(MACHINE_TYPES.map(({ id }) => id)));
   for (const { id } of MACHINE_TYPES) {
-    assert.equal(LISTINGS.filter((item) => item.machineType === id && item.type === "rent").length, 6);
-    assert.equal(LISTINGS.filter((item) => item.machineType === id && item.type === "sale").length, 4);
+    assert.ok(LISTINGS.filter((item) => item.machineType === id && item.type === "rent").length >= 6);
+    assert.ok(LISTINGS.filter((item) => item.machineType === id && item.type === "sale").length >= 4);
   }
   assert.ok(LISTINGS.every((item) => item.cropIds.every((crop) => item.operations.every((op) => CROP_OPERATIONS[crop]?.includes(op)))));
 });

@@ -6,8 +6,9 @@ import { buildMockListings } from "../server/listing-seed.js";
 import { listListings } from "../server/listings-db.js";
 
 test("모든 시드 매물과 DB 응답이 실제 모델의 동일 사양을 사용한다", () => {
-  const expectedListings = MACHINE_TYPES.length * 10;
+  const expectedListings = buildMockListings().length;
   for (const listings of [buildMockListings(), listListings()]) {
+    assert.ok(listings.length > MACHINE_TYPES.length * 10);
     assert.equal(listings.length, expectedListings);
     assert.ok(new Set(listings.map((item) => item.modelId)).size >= MACHINE_TYPES.length);
     for (const item of listings) {

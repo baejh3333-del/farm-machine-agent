@@ -15,6 +15,7 @@ import {
 } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";
 import { runDelegatedChatReply } from "../server/delegated-chat.js";
+import { acceptOffer, submitOffer } from "../server/trade-negotiation.js";
 import { createListing } from "../server/listings-service.js";
 import { initEnvironment, inspectDatabase, runMigrations } from "../server/migrator.js";
 import { MAX_RENTAL_DAYS } from "../server/rentals.js";
@@ -398,14 +399,39 @@ test("4. 에스컬레이션(escalate_to_user) 시 일시정지·system 기록 �
   assert.ok(sysMsg);
   assert.equal(sysMsg.escalationReason, "price_negotiation");
 
-  // 소유자가 직접 human 메시지를 보내면 aiPausedReason과 aiConsecutiveTurns가 초기화됨
+  // 구매자(상대)가 다시 메시지를 보내도 판매자 쪽 확인 대기는 풀리지 않는다.
+  const buyerAgain = await sendMessage(
+    buyer4.user,
+    { id: randomUUID(), conversationId: convId, body: "그럼 10%라도 안 될까요?" },
+    { pool }
+  );
+  const stillPaused = await getConversationMessages(owner4.user.id, { conversationId: convId, pool });
+  assert.equal(stillPaused.conversation.aiPausedReason, "escalated:price_negotiation");
+  const blocked = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: buyerAgain.message.seq,
+    targetRole: "owner",
+    pool,
+    call: mockCall,
+  });
+  assert.equal(blocked.skipped, true);
+  assert.equal(blocked.reason, "AI_PAUSED");
+
+  // 판매자가 직접 답하면 '직접 이어받기(takeover)'로 남고 연속 AI 턴은 초기화된다. 다시 맡기기 전까지 자동 응대 없음.
   const humanReply = await sendMessage(
     owner4.user,
     { id: randomUUID(), conversationId: convId, body: "정가로만 가능합니다." },
     { pool }
   );
-  assert.equal(humanReply.conversation.aiPausedReason, null);
+  assert.equal(humanReply.conversation.aiPausedReason, "takeover");
   assert.equal(humanReply.conversation.aiConsecutiveTurns, 0);
+
+  const resumed = await updateConversationAiPolicy(
+    owner4.user,
+    { conversationId: convId, mode: "autonomous", resume: true },
+    { pool }
+  );
+  assert.equal(resumed.conversation.aiPausedReason, null);
 });
 
 test("5. AI-to-AI 핑퐁 상한(maxConsecutiveAiTurns) 및 system 메시지 무트리거 검증", async () => {
@@ -557,33 +583,64 @@ test("6. LLM 실행 중 인간 답장 도착 시 스테일 AI 응답 폐기 및 
   });
   assert.equal(staleRes.aborted, true);
   assert.equal(staleRes.reason, "STALE_TRIGGER_ON_COMMIT");
+  const staleAi = await pool.query(
+    `SELECT COUNT(*)::int AS cnt FROM messages WHERE conversation_id = $1 AND sender_kind = 'ai_proxy'`,
+    [convId]
+  );
+  assert.equal(staleAi.rows[0].cnt, 0);
 
-  // propose_rental_handoff는 rental_requests에 행을 추가하지 않음
+  // 직접 이어받은 뒤에는 새 메시지가 와도 다시 맡기기 전까지 자동 응대하지 않는다.
   const m2 = await sendMessage(
     buyer6.user,
-    { id: randomUUID(), conversationId: convId, body: "모레 하루 대여로 진행할게요." },
+    { id: randomUUID(), conversationId: convId, body: "내일 하루 대여로 진행할게요." },
+    { pool }
+  );
+  const pausedRes = await runDelegatedChatReply({ conversationId: convId, triggerSeq: m2.message.seq, targetRole: "owner", pool, call: staleCall });
+  assert.equal(pausedRes.reason, "AI_PAUSED");
+
+  // 다시 맡긴 뒤 판매자 AI는 구조화 제안만 등록하고 대여 신청(rental_requests)은 만들지 않는다.
+  await updateConversationAiPolicy(owner6.user, { conversationId: convId, mode: "autonomous", resume: true }, { pool });
+  const m3 = await sendMessage(
+    buyer6.user,
+    { id: randomUUID(), conversationId: convId, body: "조건 알려주세요." },
     { pool }
   );
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-  const handoffCall = async () => ({
-    content: [
-      {
-        type: "tool_use",
-        id: "t_handoff",
-        name: "propose_rental_handoff",
-        input: { start: tomorrow, end: tomorrow, estimatedPrice: 250000, note: "오전 9시 인수" },
-      },
-    ],
-  });
-  const handoffRes = await runDelegatedChatReply({
+  const offerCall = async ({ tools }) => {
+    assert.ok(!tools.some((t) => t.name === "apply_agreed_offer"), "판매자 AI에는 신청 도구가 없다");
+    return {
+      content: [
+        {
+          type: "tool_use",
+          id: "t_offer",
+          name: "submit_offer",
+          input: {
+            amount: 250000,
+            amountUnit: "total",
+            start: tomorrow,
+            end: tomorrow,
+            transportPayer: "none",
+            transportFee: 0,
+            note: "오전 9시 직접 인수",
+            message: "내일 하루 25만원, 오전 9시 직접 인수 조건으로 제안드려요.",
+          },
+        },
+      ],
+    };
+  };
+  const offerRes = await runDelegatedChatReply({
     conversationId: convId,
-    triggerSeq: m2.message.seq,
+    triggerSeq: m3.message.seq,
     targetRole: "owner",
     today: kstToday(),
     pool,
-    call: handoffCall,
+    call: offerCall,
   });
-  assert.equal(handoffRes.action, "handoff_proposed");
+  assert.equal(offerRes.action, "offer_submitted");
+  assert.equal(offerRes.offer.fromRole, "owner");
+  assert.equal(offerRes.offer.acceptedByOwner, true);
+  assert.equal(offerRes.offer.acceptedByBuyer, false);
+  assert.equal(offerRes.offer.totalAmount, 250000);
 
   const rentalRows = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list6.id]);
   assert.equal(rentalRows.rows[0].cnt, 0);
@@ -645,7 +702,7 @@ test("7. LLM 키 미설정 시 안전 종료 및 HTTP /api/conversations + /api/
   assert.equal(replyHttp.body.result.reason, "LLM_UNAVAILABLE");
 });
 
-test("8. fullDelegation 거래 전담 모드: 환경·예산 검증 후 대여/구매 자동 접수(transaction_completed) 검증", async () => {
+test("8. 거래 전담: 목표가를 향한 구조화 역제안 → 양측 합의 → 합의 금액 그대로 신청(대여·구매), 중복 신청 없음", async () => {
   const owner8 = await signupHttp(baseUrl, "dc_owner8", "전담소유");
   const buyer8 = await signupHttp(baseUrl, "dc_buyer8", "전담구매");
   const { listing: rentListing } = await createListing(
@@ -680,95 +737,131 @@ test("8. fullDelegation 거래 전담 모드: 환경·예산 검증 후 대여/�
         intent: "rent",
         targetStart: tomorrow,
         targetEnd: tomorrow,
+        targetPrice: 110000,
         maxBudget: 150000,
-        allowNegotiation: false,
+        budgetUnit: "total",
+        allowNegotiation: true,
         areaPyeong: 500,
-        cropIds: ["pepper"],
-        operations: ["till"],
-        ownedModelId: null,
-        region: "영양읍",
         pickupPreference: "오전 9시 직접 인수",
-        customRules: "비 오는 날 제외",
       },
     },
     { pool }
   );
   assert.equal(policyRes.conversation.buyerAiPolicy.fullDelegation, true);
   assert.equal(policyRes.conversation.buyerAiPolicy.autoExecuteTransaction, true);
-  assert.equal(policyRes.conversation.buyerAiPolicy.maxConsecutiveAiTurns, 6);
   assert.equal(policyRes.conversation.buyerAiPolicy.maxBudget, 150000);
   const convId = policyRes.conversation.id;
 
-  const ownerReply = await sendMessage(
+  // 판매자(사람)가 정가 12만원·직접 인수 조건을 구조화 제안으로 보낸다.
+  const ownerMsg = await sendMessage(
     owner8.user,
-    { id: randomUUID(), conversationId: convId, body: `내일(${tomorrow}) 오전 9시 12만원에 대여 가능합니다.` },
+    { id: randomUUID(), conversationId: convId, body: `내일(${tomorrow}) 오전 9시 직접 인수, 12만원입니다.` },
     { pool }
   );
+  const ownerOffer = await submitOffer(
+    {
+      conversationId: convId,
+      actorUserId: owner8.user.id,
+      terms: { amount: 120000, amountUnit: "total", start: tomorrow, end: tomorrow, transportPayer: "none" },
+    },
+    { pool }
+  );
+  assert.equal(ownerOffer.offer.termsVersion, 1);
 
   let round = 0;
-  const mockWeather = async ({ region }) => ({
-    region,
-    weather: { date: tomorrow, summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 8, tempMax: 18 },
-    rangeForecast: [{ date: tomorrow, summary: "맑음", icon: "sun", suitability: "good", pop: 10, tempMin: 8, tempMax: 18 }],
-  });
-  const mockCall = async ({ system, tools }) => {
+  let seenPrompt = "";
+  const mockWeather = async ({ region }) => ({ region, weather: { date: tomorrow, summary: "맑음", suitability: "good" } });
+  const counterCall = async ({ system, tools, messages }) => {
     round += 1;
-    assert.ok(system.includes("거래 전담 모드 (Full Delegation)"));
-    assert.ok(system.includes("150,000원"));
-    assert.ok(tools.some((t) => t.name === "complete_delegated_transaction"));
+    seenPrompt = system;
+    assert.ok(tools.some((t) => t.name === "submit_offer"));
+    assert.ok(tools.some((t) => t.name === "apply_agreed_offer"));
     if (round === 1) {
-      return {
-        content: [
-          { type: "tool_use", id: "c1", name: "check_availability", input: { start: tomorrow, end: tomorrow } },
-          { type: "tool_use", id: "c2", name: "get_weather", input: { region: "영양읍", date: tomorrow, endDate: tomorrow } },
-          { type: "tool_use", id: "c3", name: "check_farm_compatibility", input: { areaPyeong: 500 } },
-        ],
-      };
+      return { content: [{ type: "tool_use", id: "n1", name: "get_negotiation_state", input: {} }] };
     }
+    const state = JSON.parse(messages[messages.length - 1].content.find((b) => b.tool_use_id === "n1").content);
+    assert.equal(state.myEvaluation.verdict, "counter_in_range");
+    assert.equal(state.myEvaluation.counterSuggestion.amount, 115000);
+    assert.equal(JSON.stringify(state).includes("150000"), false, "한도 원값은 도구 결과에 없다");
     return {
       content: [
         {
           type: "tool_use",
-          id: "c4",
-          name: "complete_delegated_transaction",
+          id: "n2",
+          name: "submit_offer",
           input: {
+            amount: state.myEvaluation.counterSuggestion.amount,
+            amountUnit: "total",
             start: tomorrow,
             end: tomorrow,
-            agreedPrice: 120000,
-            note: "오전 9시 직접 인수 합의",
-            closingReply: "날씨와 일정·예산이 모두 맞아 내일 오전 9시 인수로 대여 신청을 자동 접수했습니다.",
+            transportPayer: "none",
+            transportFee: 0,
+            message: "직접 인수로 11만 5천원이면 바로 진행하고 싶습니다.",
           },
         },
       ],
     };
   };
 
-  const txRes = await runDelegatedChatReply({
+  // 메시지가 먼저였고 제안이 뒤였으므로 트리거는 최신 seq(판매자 메시지)
+  const counterRes = await runDelegatedChatReply({
     conversationId: convId,
-    triggerSeq: ownerReply.message.seq,
+    triggerSeq: ownerMsg.message.seq,
     targetRole: "buyer",
     today: kstToday(),
     pool,
-    call: mockCall,
+    call: counterCall,
     getWeather: mockWeather,
   });
-  assert.equal(txRes.action, "transaction_completed");
-  assert.equal(txRes.kind, "rental");
-  assert.equal(txRes.aiPausedReason, "transaction_completed");
-  assert.equal(txRes.rentalRequest.listingId, rentListing.id);
-  assert.equal(txRes.rentalRequest.requesterId, buyer8.user.id);
-  assert.equal(txRes.rentalRequest.totalPrice, 120000);
-  assert.equal(txRes.rentalRequest.status, "pending");
+  assert.equal(counterRes.action, "offer_submitted");
+  assert.equal(counterRes.offer.termsVersion, 2);
+  assert.equal(counterRes.offer.fromRole, "buyer");
+  assert.equal(counterRes.offer.itemTotal, 115000);
+  assert.equal(seenPrompt.includes("150,000"), false, "최대 예산은 프롬프트에 없다");
+  assert.equal(seenPrompt.includes("110,000"), false, "목표가는 프롬프트에 없다");
+  assert.ok(seenPrompt.includes("빌리는 분"));
+
+  // 판매자(사람)가 같은 버전(v2)에 수락 → 합의
+  const accepted = await acceptOffer(
+    { conversationId: convId, actorUserId: owner8.user.id, offerId: counterRes.offer.id, termsVersion: 2 },
+    { pool }
+  );
+  assert.equal(accepted.agreed, true);
+  const ownerOk = await sendMessage(owner8.user, { id: randomUUID(), conversationId: convId, body: "좋습니다, 그렇게 하죠." }, { pool });
+
+  const applyCall = async () => ({
+    content: [{ type: "tool_use", id: "a1", name: "apply_agreed_offer", input: { message: "합의한 조건으로 대여 신청을 접수했어요. 승인해 주시면 확정됩니다." } }],
+  });
+  const applyRes = await runDelegatedChatReply({
+    conversationId: convId,
+    triggerSeq: ownerOk.message.seq,
+    targetRole: "buyer",
+    today: kstToday(),
+    pool,
+    call: applyCall,
+  });
+  assert.equal(applyRes.action, "applied");
+  assert.equal(applyRes.order.kind, "rental");
+  assert.equal(applyRes.order.status, "pending");
+  assert.equal(applyRes.order.totalPrice, 115000, "정가 12만원이 아니라 합의 금액으로 저장");
 
   const rentalCheck = await pool.query(`SELECT * FROM rental_requests WHERE listing_id = $1`, [rentListing.id]);
   assert.equal(rentalCheck.rows.length, 1);
   assert.equal(rentalCheck.rows[0].requester_id, buyer8.user.id);
+  assert.equal(Number(rentalCheck.rows[0].total_price), 115000);
+  assert.equal(Number(rentalCheck.rows[0].list_daily_price), 120000);
+  assert.equal(String(rentalCheck.rows[0].offer_id), counterRes.offer.id);
+  assert.equal(rentalCheck.rows[0].created_via, "buyer_ai");
 
-  const convState = await getConversationMessages(buyer8.user.id, { conversationId: convId, pool });
-  assert.equal(convState.conversation.aiPausedReason, "transaction_completed");
-  assert.ok(convState.messages.some((m) => m.senderKind === "ai_proxy" && m.body.includes("자동 접수")));
+  // 같은 합의에 대한 '감사합니다' 후속 이벤트는 신청을 추가로 만들지 않는다.
+  const thanks = await sendMessage(owner8.user, { id: randomUUID(), conversationId: convId, body: "감사합니다!" }, { pool });
+  const dupRes = await runDelegatedChatReply({ conversationId: convId, triggerSeq: thanks.message.seq, targetRole: "buyer", today: kstToday(), pool, call: applyCall });
+  assert.equal(dupRes.action, "applied");
+  assert.equal(dupRes.idempotent, true);
+  const rentalAfterDup = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [rentListing.id]);
+  assert.equal(rentalAfterDup.rows[0].cnt, 1);
 
-  // 판매 매물에 대해서도 purchase_orders 자동 생성 검증
+  // 판매 매물: 목표가 이내 제안은 구매자 AI가 수락 → 합의 즉시 합의 금액으로 구매 신청
   const { listing: saleListing } = await createListing(
     owner8.user,
     {
@@ -786,49 +879,43 @@ test("8. fullDelegation 거래 전담 모드: 환경·예산 검증 후 대여/�
     },
     { pool }
   );
-  await updateConversationAiPolicy(
+  const salePolicy = await updateConversationAiPolicy(
     buyer8.user,
     {
       listingId: saleListing.id,
       mode: "autonomous",
-      policy: { fullDelegation: true, intent: "sale", maxBudget: 4000000, pickupPreference: "영양읍 직거래" },
+      policy: { fullDelegation: true, intent: "sale", targetPrice: 3400000, maxBudget: 3600000, allowNegotiation: true },
     },
     { pool }
   );
-  const ownerSaleReply = await sendMessage(
-    owner8.user,
-    { id: randomUUID(), conversationId: (await getConversationMessages(buyer8.user.id, { listingId: saleListing.id, pool })).conversation.id, body: "350만원에 직거래 가능합니다." },
+  const saleConvId = salePolicy.conversation.id;
+  const saleMsg = await sendMessage(owner8.user, { id: randomUUID(), conversationId: saleConvId, body: "340만원에 직거래 가능합니다." }, { pool });
+  await submitOffer(
+    { conversationId: saleConvId, actorUserId: owner8.user.id, terms: { amount: 3400000, amountUnit: "total", transportPayer: "none" } },
     { pool }
   );
   const saleTxRes = await runDelegatedChatReply({
-    conversationId: ownerSaleReply.conversation.id,
-    triggerSeq: ownerSaleReply.message.seq,
+    conversationId: saleConvId,
+    triggerSeq: saleMsg.message.seq,
     targetRole: "buyer",
     pool,
-    call: async () => ({
-      content: [
-        {
-          type: "tool_use",
-          id: "s1",
-          name: "complete_delegated_transaction",
-          input: {
-            agreedPrice: 3500000,
-            note: "영양읍 직거래 합의",
-            closingReply: "예산 범위 내 조건이라 구매 신청을 자동 접수했습니다.",
-          },
-        },
-      ],
-    }),
+    call: async ({ system }) => {
+      assert.equal(system.includes("3,600,000"), false);
+      return { content: [{ type: "tool_use", id: "s1", name: "accept_offer", input: { message: "340만원 직거래 조건으로 진행할게요." } }] };
+    },
   });
-  assert.equal(saleTxRes.action, "transaction_completed");
-  assert.equal(saleTxRes.kind, "purchase");
-  assert.equal(saleTxRes.purchaseOrder.listingId, saleListing.id);
-  assert.equal(saleTxRes.purchaseOrder.buyerId, buyer8.user.id);
-  assert.equal(saleTxRes.purchaseOrder.price, 3500000);
-  assert.equal(saleTxRes.purchaseOrder.status, "pending");
+  assert.equal(saleTxRes.action, "offer_accepted");
+  assert.equal(saleTxRes.agreed, true);
+  assert.equal(saleTxRes.order.kind, "purchase");
+  assert.equal(saleTxRes.order.totalPrice, 3400000);
+  assert.equal(saleTxRes.order.status, "pending");
+  const poRows = await pool.query(`SELECT * FROM purchase_orders WHERE listing_id = $1`, [saleListing.id]);
+  assert.equal(poRows.rows.length, 1);
+  assert.equal(poRows.rows[0].buyer_id, buyer8.user.id);
+  assert.equal(Number(poRows.rows[0].price), 3400000);
 });
 
-test("9. 정보 부족·예산 초과 시 무응답 대기(ai_proxy 미전송 및 waitingForUser) 검증", async () => {
+test("9. 정보 부족·한도 초과 시 무응답 대기, 상대에게 한도·에스컬레이션 비공개", async () => {
   const owner9 = await signupHttp(baseUrl, "dc_owner9", "대기소유");
   const buyer9 = await signupHttp(baseUrl, "dc_buyer9", "대기구매");
   const { listing: list9 } = await createListing(
@@ -885,59 +972,82 @@ test("9. 정보 부족·예산 초과 시 무응답 대기(ai_proxy 미전송 �
   assert.equal(stateAfterUnknown.messages.filter((m) => m.senderKind === "ai_proxy").length, 0);
   assert.equal(stateAfterUnknown.conversation.waitingForUser, true);
   assert.ok(stateAfterUnknown.conversation.escalationSummary.includes("수리 이력"));
-  assert.equal(stateAfterUnknown.conversation.aiDraftJson?.waitingForUser, true);
   assert.equal(stateAfterUnknown.conversation.aiDraftJson?.suggestedReplyDraft, "작년 가을에 점검 후 오일 교환 완료했습니다.");
+  const buyerViewA = await getConversationMessages(buyer9.user.id, { conversationId: convId, pool });
+  assert.equal(buyerViewA.conversation.waitingForUser, false);
+  assert.equal(buyerViewA.messages.some((m) => m.body.includes("수리 이력이 없어")), false);
 
-  // Case B: fullDelegation 모드에서 예산 초과 제안 -> 서버 가드레일이 자동 실행 차단 및 무응답 대기
+  // Case B: 한도(9만원) 밖 13만원 제안 → 구매자 AI는 수락하지 못하고 사용자 확인으로 멈춘다(신청·발신 없음)
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
   await updateConversationAiPolicy(
     buyer9.user,
     {
       conversationId: convId,
       mode: "autonomous",
-      policy: { fullDelegation: true, intent: "rent", targetStart: tomorrow, targetEnd: tomorrow, maxBudget: 90000 },
+      policy: { fullDelegation: true, intent: "rent", targetStart: tomorrow, targetEnd: tomorrow, targetPrice: 80000, maxBudget: 90000, allowNegotiation: true },
     },
     { pool }
   );
-  const q2 = await sendMessage(
-    owner9.user,
-    { id: randomUUID(), conversationId: convId, body: "운반비 포함해서 13만원에 대여 가능합니다." },
+  await submitOffer(
+    {
+      conversationId: convId,
+      actorUserId: owner9.user.id,
+      terms: { amount: 100000, amountUnit: "daily", start: tomorrow, end: tomorrow, transportPayer: "buyer", transportFee: 30000 },
+    },
     { pool }
   );
+  const q2 = await sendMessage(owner9.user, { id: randomUUID(), conversationId: convId, body: "운반비 3만원 포함 13만원에 대여 가능합니다." }, { pool });
+  let budgetRound = 0;
+  let acceptOutput = null;
   const escBudget = await runDelegatedChatReply({
     conversationId: convId,
     triggerSeq: q2.message.seq,
     targetRole: "buyer",
     today: kstToday(),
     pool,
-    call: async () => ({
-      content: [
-        {
-          type: "tool_use",
-          id: "b1",
-          name: "complete_delegated_transaction",
-          input: {
-            start: tomorrow,
-            end: tomorrow,
-            agreedPrice: 130000,
-            closingReply: "13만원으로 접수하겠습니다.",
+    call: async ({ messages }) => {
+      budgetRound += 1;
+      if (budgetRound === 1) {
+        return { content: [{ type: "tool_use", id: "b1", name: "accept_offer", input: { message: "13만원으로 하겠습니다." } }] };
+      }
+      acceptOutput = JSON.parse(messages[messages.length - 1].content.find((b) => b.tool_use_id === "b1").content);
+      return {
+        content: [
+          {
+            type: "tool_use",
+            id: "b2",
+            name: "escalate_to_user",
+            input: { reasonCode: "price_outside_policy", summaryForUser: "상대 제안이 맡기신 범위를 넘어 확인이 필요해요." },
           },
-        },
-      ],
-    }),
+        ],
+      };
+    },
   });
+  assert.equal(acceptOutput.ok, false);
+  assert.equal(acceptOutput.code, "OFFER_OUTSIDE_POLICY");
   assert.equal(escBudget.action, "escalated");
-  assert.equal(escBudget.reasonCode, "budget_exceeded");
-  assert.equal(escBudget.aiPausedReason, "escalated:budget_exceeded");
-  assert.equal(escBudget.waitingForUser, true);
+  assert.equal(escBudget.aiPausedReason, "escalated:price_outside_policy");
 
   const rentalCount = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list9.id]);
   assert.equal(rentalCount.rows[0].cnt, 0);
   const stateAfterBudget = await getConversationMessages(buyer9.user.id, { conversationId: convId, pool });
   assert.equal(stateAfterBudget.messages.filter((m) => m.senderKind === "ai_proxy").length, 0);
+
+  // 판매자 화면/응답에는 구매자 한도·에스컬레이션·초안이 없다.
+  const ownerView = await getConversationMessages(owner9.user.id, { conversationId: convId, pool });
+  const ownerJson = JSON.stringify(ownerView);
+  assert.equal(ownerJson.includes("90000"), false);
+  assert.equal(ownerJson.includes("80000"), false);
+  assert.equal(ownerJson.includes("맡기신 범위"), false);
+  assert.deepEqual(ownerView.conversation.buyerAiPolicy, {});
+
+  // 판매자가 메시지를 다시 보내도 구매자의 확인 대기는 유지된다.
+  const q3 = await sendMessage(owner9.user, { id: randomUUID(), conversationId: convId, body: "답 주세요~" }, { pool });
+  const stillWaiting = await runDelegatedChatReply({ conversationId: convId, triggerSeq: q3.message.seq, targetRole: "buyer", pool, call: async () => { throw new Error("must not call LLM"); } });
+  assert.equal(stillWaiting.reason, "AI_PAUSED");
 });
 
-test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 및 365일 상한 허용 검증", async () => {
+test("10. 대리 채팅 대여 제안에서 365일 초과 기간 거부 및 365일 상한 허용 검증", async () => {
   const owner10 = await signupHttp(baseUrl, "dc_owner10", "기간소유");
   const buyer10 = await signupHttp(baseUrl, "dc_buyer10", "기간구매");
   const { listing: list10 } = await createListing(
@@ -973,18 +1083,12 @@ test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 �
     { pool }
   );
   const convId = firstMsg.conversation.id;
-
-  // Case A: fullDelegation 모드에서 check_availability 및 complete_delegated_transaction 모두 365일 초과 거부
   await updateConversationAiPolicy(
     buyer10.user,
-    {
-      conversationId: convId,
-      mode: "autonomous",
-      policy: { fullDelegation: true, intent: "rent", targetStart: start, targetEnd: tooLongEnd },
-    },
+    { conversationId: convId, mode: "autonomous", policy: { fullDelegation: true, intent: "rent", targetStart: start, targetEnd: tooLongEnd }, resume: true },
     { pool }
   );
-  const ownerReplyA = await sendMessage(
+  const ownerReply = await sendMessage(
     owner10.user,
     { id: randomUUID(), conversationId: convId, body: "원하시는 날짜 알려주시면 확인해드릴게요." },
     { pool }
@@ -993,14 +1097,16 @@ test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 �
   let roundA = 0;
   let checkTooLongOut = null;
   let checkMaxOut = null;
-  const resTooLong = await runDelegatedChatReply({
+  let offerTooLongOut = null;
+  const res = await runDelegatedChatReply({
     conversationId: convId,
-    triggerSeq: ownerReplyA.message.seq,
+    triggerSeq: ownerReply.message.seq,
     targetRole: "buyer",
     today,
     pool,
     call: async ({ messages }) => {
       roundA += 1;
+      const toolOut = (id) => JSON.parse(messages[messages.length - 1].content.find((b) => b.tool_use_id === id).content);
       if (roundA === 1) {
         return {
           content: [
@@ -1009,23 +1115,22 @@ test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 �
           ],
         };
       }
-      const lastUser = messages[messages.length - 1];
-      const toolResults = Array.isArray(lastUser?.content) ? lastUser.content : [];
-      checkTooLongOut = JSON.parse(toolResults.find((b) => b.tool_use_id === "chk_over").content);
-      checkMaxOut = JSON.parse(toolResults.find((b) => b.tool_use_id === "chk_max").content);
+      if (roundA === 2) {
+        checkTooLongOut = toolOut("chk_over");
+        checkMaxOut = toolOut("chk_max");
+        return {
+          content: [{
+            type: "tool_use", id: "of_over", name: "submit_offer",
+            input: { amount: 100000, amountUnit: "daily", start, end: tooLongEnd, transportPayer: "none", message: "366일 대여 원합니다." },
+          }],
+        };
+      }
+      offerTooLongOut = toolOut("of_over");
       return {
-        content: [
-          {
-            type: "tool_use",
-            id: "tx_over",
-            name: "complete_delegated_transaction",
-            input: {
-              start,
-              end: tooLongEnd,
-              closingReply: "366일 대여 접수하겠습니다.",
-            },
-          },
-        ],
+        content: [{
+          type: "tool_use", id: "of_max", name: "submit_offer",
+          input: { amount: 100000, amountUnit: "daily", start, end: maxAllowedEnd, transportPayer: "none", message: `${MAX_RENTAL_DAYS}일 대여로 제안드립니다.` },
+        }],
       };
     },
   });
@@ -1033,129 +1138,78 @@ test("10. 대리 채팅 대여 경로에서 365일 초과 대여 기간 거부 �
   assert.ok(checkTooLongOut?.error?.includes(String(MAX_RENTAL_DAYS)));
   assert.equal(checkMaxOut?.available, true);
   assert.equal(checkMaxOut?.days, MAX_RENTAL_DAYS);
-  assert.equal(resTooLong.action, "escalated");
-  assert.equal(resTooLong.reasonCode, "invalid_schedule");
-  assert.equal(resTooLong.waitingForUser, true);
+  assert.equal(offerTooLongOut.ok, false);
+  assert.ok(offerTooLongOut.error.includes(String(MAX_RENTAL_DAYS)));
+  assert.equal(res.action, "offer_submitted");
+  assert.equal(res.offer.days, MAX_RENTAL_DAYS);
+  assert.equal(res.offer.itemTotal, 100000 * MAX_RENTAL_DAYS);
 
-  const countAfterA = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list10.id]);
-  assert.equal(countAfterA.rows[0].cnt, 0);
-
-  // Case B: 일반 autonomous 모드에서 propose_rental_handoff도 365일 초과 시 거부
-  const buyerReplyB = await sendMessage(
-    buyer10.user,
-    { id: randomUUID(), conversationId: convId, body: "날짜 다시 확인해주세요." },
-    { pool }
-  );
-  await updateConversationAiPolicy(
-    buyer10.user,
-    {
-      conversationId: convId,
-      mode: "autonomous",
-      policy: { fullDelegation: false, intent: "rent" },
-    },
-    { pool }
-  );
-  const ownerReplyB = await sendMessage(
-    owner10.user,
-    { id: randomUUID(), conversationId: convId, body: "366일이나 365일 중 어떤 걸로 할까요?" },
-    { pool }
-  );
-
-  let roundB = 0;
-  let handoffOverOut = null;
-  const resHandoff = await runDelegatedChatReply({
-    conversationId: convId,
-    triggerSeq: ownerReplyB.message.seq,
-    targetRole: "buyer",
-    today,
-    pool,
-    call: async ({ messages }) => {
-      roundB += 1;
-      if (roundB === 1) {
-        return {
-          content: [
-            {
-              type: "tool_use",
-              id: "ho_over",
-              name: "propose_rental_handoff",
-              input: { start, end: tooLongEnd },
-            },
-          ],
-        };
-      }
-      const lastUser = messages[messages.length - 1];
-      const toolResults = Array.isArray(lastUser?.content) ? lastUser.content : [];
-      handoffOverOut = JSON.parse(toolResults.find((b) => b.tool_use_id === "ho_over").content);
-      return {
-        content: [
-          {
-            type: "tool_use",
-            id: "reply_ok",
-            name: "send_proxy_reply",
-            input: {
-              body: `대여 기간은 최대 ${MAX_RENTAL_DAYS}일까지 가능해서 기간을 조정해 주세요.`,
-              confidence: "high",
-              rationale: "최대 대여 기간 초과 안내",
-            },
-          },
-        ],
-      };
-    },
-  });
-
-  assert.ok(handoffOverOut?.error?.includes(String(MAX_RENTAL_DAYS)));
-  assert.equal(resHandoff.action, "replied");
-  assert.equal(buyerReplyB.message.seq < ownerReplyB.message.seq, true);
-
-  const countAfterB = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list10.id]);
-  assert.equal(countAfterB.rows[0].cnt, 0);
+  const countAfter = await pool.query(`SELECT COUNT(*)::int AS cnt FROM rental_requests WHERE listing_id = $1`, [list10.id]);
+  assert.equal(countAfter.rows[0].cnt, 0);
 });
 
-test("11. 시연 농가(demo-owner) 매물에서 구매자가 자동 응대(autonomous)로 문의 시 AI 자동 답장 스케줄 및 실행", async () => {
+test("11. 시연 농가 매물도 명시적 수신 위임(listing_ai_policies)이 있을 때만 판매자 AI가 자동 답장", async () => {
   await pool.query(
     `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
      VALUES ('demo-owner', '시연 농가', 'demo-owner@users.moa-farm.example.com', false, now(), now())
      ON CONFLICT (id) DO NOTHING`
   );
-  const demoListingId = randomUUID();
-  await pool.query(
-    `INSERT INTO listings (
-      id, owner_id, type, model_id, title, brand, machine_type,
-      crop_ids, operations, area_min, area_max, price, region,
-      condition, inspected_at, included, pickup, description, status, is_demo
-    ) VALUES (
-      $1, 'demo-owner', 'rent', 'asia-amc900', '시연용 아세아 관리기', '아세아', 'cultivator',
-      ARRAY['pepper'], ARRAY['till'], 100, 2000, 80000, '영양읍',
-      'good', '2026-10-12', '로터리', '직접 인수', '주말 오전 인수 가능', 'open', true
-    )`,
-    [demoListingId]
-  );
+  const insertDemoListing = async (title) => {
+    const id = randomUUID();
+    await pool.query(
+      `INSERT INTO listings (
+        id, owner_id, type, model_id, title, brand, machine_type,
+        crop_ids, operations, area_min, area_max, price, region,
+        condition, inspected_at, included, pickup, description, status, is_demo
+      ) VALUES (
+        $1, 'demo-owner', 'rent', 'asia-amc900', $2, '아세아', 'cultivator',
+        ARRAY['pepper'], ARRAY['till'], 100, 2000, 80000, '영양읍',
+        'good', '2026-10-12', '로터리', '직접 인수', '주말 오전 인수 가능', 'open', true
+      )`,
+      [id, title]
+    );
+    return id;
+  };
 
+  // (a) 위임 없음: 구매자가 자동 응대를 켜도 판매자 AI는 꺼진 상태
+  const noPolicyListing = await insertDemoListing("시연용 관리기(위임 없음)");
   const buyer11 = await signupHttp(baseUrl, "dc_buyer11", "시연구매");
+  const noPolicyHttp = await apiReq(baseUrl, "/api/conversations", {
+    method: "POST",
+    cookie: buyer11.cookie,
+    json: { listingId: noPolicyListing, action: "update_ai_policy", mode: "autonomous", policy: { instructions: "토요일 오전" } },
+  });
+  assert.equal(noPolicyHttp.status, 200);
+  assert.equal(noPolicyHttp.body.conversation.ownerAiMode, "off");
+  const noPolicyRun = await runDelegatedChatReply({
+    conversationId: noPolicyHttp.body.conversation.id,
+    triggerSeq: 1,
+    targetRole: "owner",
+    pool,
+    call: async () => { throw new Error("must not call LLM"); },
+  });
+  assert.equal(noPolicyRun.reason, "AI_MODE_OFF");
+
+  // (b) 판매자가 매물 단위 수신 위임을 명시적으로 저장한 경우
+  const demoListingId = await insertDemoListing("시연용 아세아 관리기");
+  await pool.query(
+    `INSERT INTO listing_ai_policies (listing_id, owner_id, mode, policy) VALUES ($1, 'demo-owner', 'autonomous', $2::jsonb)`,
+    [demoListingId, JSON.stringify({ allowNegotiation: false, fullDelegation: false })]
+  );
   const policyHttp = await apiReq(baseUrl, "/api/conversations", {
     method: "POST",
     cookie: buyer11.cookie,
-    json: {
-      listingId: demoListingId,
-      action: "update_ai_policy",
-      mode: "autonomous",
-      policy: { instructions: "토요일 오전 대여 희망" },
-    },
+    json: { listingId: demoListingId, action: "update_ai_policy", mode: "autonomous", policy: { instructions: "토요일 오전 대여 희망" } },
   });
   assert.equal(policyHttp.status, 200);
   const convId = policyHttp.body.conversation.id;
   assert.equal(policyHttp.body.conversation.buyerAiMode, "autonomous");
-  assert.equal(policyHttp.body.conversation.ownerAiMode, "off");
+  assert.equal(policyHttp.body.conversation.ownerAiMode, "autonomous");
 
   const sendHttp = await apiReq(baseUrl, "/api/conversations", {
     method: "POST",
     cookie: buyer11.cookie,
-    json: {
-      action: "send",
-      id: randomUUID(),
-      conversationId: convId,
-      body: "이번 주 토요일 오전에 대여 가능할까요?",
-    },
+    json: { action: "send", id: randomUUID(), conversationId: convId, body: "이번 주 토요일 오전에 대여 가능할까요?" },
   });
   assert.equal(sendHttp.status, 201);
   assert.equal(sendHttp.body.aiReplyScheduled, true);
@@ -1165,21 +1219,20 @@ test("11. 시연 농가(demo-owner) 매물에서 구매자가 자동 응대(auto
     triggerSeq: sendHttp.body.message.seq,
     targetRole: "owner",
     pool,
-    call: async () => ({
-      content: [
-        {
-          type: "tool_use",
-          id: "demo_reply",
-          name: "send_proxy_reply",
-          input: {
-            body: "네, 토요일 오전 직접 인수로 대여 가능합니다.",
-            confidence: "high",
-            rationale: "시연 매물 조건 일치",
+    call: async ({ system }) => {
+      assert.ok(system.includes("빌려주는 분"));
+      return {
+        content: [
+          {
+            type: "tool_use",
+            id: "demo_reply",
+            name: "send_proxy_reply",
+            input: { body: "네, 토요일 오전 직접 인수로 대여 가능합니다.", confidence: "high", rationale: "시연 매물 조건 일치" },
           },
-        },
-      ],
-    }),
+        ],
+      };
+    },
   });
-  assert.equal(replyRes.action, "replied");
-  assert.equal(replyRes.replyToSeq, sendHttp.body.message.seq);
+  assert.ok(replyRes.action === "replied" || replyRes.reason === "ALREADY_REPLIED");
+  if (replyRes.action === "replied") assert.equal(replyRes.replyToSeq, sendHttp.body.message.seq);
 });

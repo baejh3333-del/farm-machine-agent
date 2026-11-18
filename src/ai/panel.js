@@ -512,6 +512,7 @@ export function createAiPanel({
   toggleFavorite,
   isFavorite,
   openChat,
+  openDeal,
   getOwnedMachines = () => ({ owned: [], selectedId: "" }),
 }) {
   let recommendationPending = false;
@@ -719,6 +720,7 @@ export function createAiPanel({
       openChat(target);
       return;
     }
+    if (typeof openDeal === "function") return openDeal(target?.conversationId || null);
     setView("requests");
   }
 
@@ -1038,7 +1040,7 @@ export function createAiPanel({
       delegated.start
         ? ["희망 일정", `${formatReservationDate(delegated.start)}${delegated.end && delegated.end !== delegated.start ? ` ~ ${formatReservationDate(delegated.end)}` : ""}`]
         : null,
-      Number.isFinite(Number(delegated.maxBudget)) ? ["희망 예산", money(Number(delegated.maxBudget))] : null,
+      Number.isFinite(Number(delegated.maxBudget)) ? ["최대 예산(상대에게 비공개)", money(Number(delegated.maxBudget))] : null,
       ["전담 상태", delegated.statusLabel || "부재중 자동 협상·응대 활성화"],
     ].filter((row) => row && row[1]);
     for (const [label, value] of rows) {
@@ -1063,6 +1065,14 @@ export function createAiPanel({
       });
     });
     box.append(go);
+    if (typeof openDeal === "function") {
+      const manage = document.createElement("button");
+      manage.type = "button";
+      manage.className = "ai-rec-card-btn ai-delegation-manage-btn";
+      manage.textContent = "거래 관리에서 보낸 메시지·확인할 일 보기 ›";
+      manage.addEventListener("click", () => openDeal(delegated.conversationId || null));
+      box.append(manage);
+    }
     bubble.append(box);
     refreshAuthenticatedData?.({ includeRequests: true, includeConversations: true }).catch(() => {});
   }
@@ -1090,8 +1100,11 @@ export function createAiPanel({
     const go = document.createElement("button");
     go.type = "button";
     go.className = "ai-rec-card-btn";
-    go.textContent = done.kind === "rental" ? "대여 요청 메뉴에서 확인하기 ›" : "거래 채팅에서 확인하기 ›";
-    go.addEventListener("click", () => setView("requests"));
+    go.textContent = "거래 관리에서 신청 상태 보기 ›";
+    go.addEventListener("click", () => {
+      if (typeof openDeal === "function") openDeal(done.conversationId || null);
+      else setView("requests");
+    });
     box.append(go);
     bubble.append(box);
     refreshAuthenticatedData?.({

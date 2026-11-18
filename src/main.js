@@ -17,6 +17,8 @@ import {
 } from "./core/motion.js";
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
+import { createDealsView } from "./views/deals.js";
+import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { createAiPanel } from "./ai/panel.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
@@ -38,6 +40,8 @@ const appDeps = {
   chatForm: (...args) => txViews.chatForm(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
   renderListings: (...args) => catalogViews.renderListings(...args),
+  openDeal: (conversationId) => setView("deals", { conversationId }),
+  onConversationRead: (...args) => dealsView.onConversationRead(...args),
 };
 
 function getOwnedMachinesSnapshot() {
@@ -59,6 +63,15 @@ function getOwnedMachinesSnapshot() {
 
 const catalogViews = createCatalogViews(appDeps);
 const txViews = createTransactionViews(appDeps);
+const dealsView = createDealsView({
+  setView: (...args) => setView(...args),
+  refreshAuthenticatedData: (...args) => refreshAuthenticatedData(...args),
+  updateBadges: (...args) => updateBadges(...args),
+  chatForm: (...args) => txViews.chatForm(...args),
+  handleRequestAction: (...args) => txViews.handleRequestAction(...args),
+  savePendingIntentAndRedirectLogin: (...args) => savePendingIntentAndRedirectLogin(...args),
+  closeForm: () => hideDialog($("formBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); }),
+});
 const aiPanel = createAiPanel({
   state,
   runtime,
@@ -75,6 +88,7 @@ const aiPanel = createAiPanel({
   toggleFavorite: (...args) => toggleFavorite(...args),
   isFavorite: (id) => activeFavorites().includes(id),
   openChat: (target) => txViews.chatForm(target),
+  openDeal: (conversationId) => setView("deals", conversationId ? { conversationId } : {}),
   getOwnedMachines: () => getOwnedMachinesSnapshot(),
 });
 
@@ -136,6 +150,7 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     catalogViews.renderListings();
     if (state.view === "requests") txViews.renderBuyerRequests();
     if (state.view === "owner") txViews.renderOwner();
+    if (state.view === "deals") dealsView.renderList();
   } catch (error) {
     if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
     if (error?.status !== 401) {
@@ -248,6 +263,17 @@ function updateBadges() {
       ownerBadge.textContent = String(runtime.approvableRequestCount);
     }
   }
+  const dealsBadge = $("dealsNavBadge");
+  const dealsDot = $("dealsNavDot");
+  if (dealsBadge || dealsDot) {
+    const counts = isLoggedIn() ? dealsView.badgeCounts() : { attention: 0, unread: 0 };
+    if (dealsBadge) {
+      dealsBadge.hidden = counts.attention === 0;
+      dealsBadge.textContent = String(counts.attention);
+      dealsBadge.setAttribute("aria-label", `확인 필요 ${counts.attention}건`);
+    }
+    if (dealsDot) dealsDot.hidden = counts.attention > 0 || counts.unread === 0;
+  }
   const myPageDot = $("myPageNotifDot");
   if (myPageDot) {
     const hasPending = favCount > 0 || (isLoggedIn() && runtime.approvableRequestCount > 0);
@@ -255,7 +281,7 @@ function updateBadges() {
   }
 }
 
-const viewIds = { garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
+const viewIds = { deals: "dealsView", garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
 const MY_PAGE_VIEWS = new Set(["requests", "owner", "ownerLoginRequired", "garage", "about"]);
 
 // 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
@@ -275,9 +301,13 @@ function markNav(view) {
   }
 }
 
-function setView(view) {
+function setView(view, options = {}) {
   closeAiPanel({ returnFocus: false });
   if (!Object.hasOwn(viewIds, view)) view = "home";
+  if (view !== "deals") {
+    dealsView.hide();
+    if (parseDealsHash(location.hash)) history.replaceState(null, "", location.pathname + location.search);
+  }
   if (view === "owner" && !isLoggedIn()) view = "ownerLoginRequired";
   state.view = view;
   const onMainPage = MAIN_PAGE_VIEWS.includes(view);
@@ -292,6 +322,18 @@ function setView(view) {
   }
   if (view === "requests") {
     txViews.renderBuyerRequests();
+    if (isLoggedIn()) refreshAuthenticatedData();
+  }
+  if (view === "deals") {
+    const target = { conversationId: options.conversationId || null, filter: options.filter || null };
+    if (!options.fromHistory) {
+      const next = dealsHash(target);
+      if (location.hash !== next) history.pushState(null, "", next);
+    }
+    if (!isLoggedIn()) {
+      runtime.pendingIntent = { type: "deal", conversationId: target.conversationId };
+    }
+    dealsView.show(target);
     if (isLoggedIn()) refreshAuthenticatedData();
   }
   if (view === "garage") runtime.garage?.refresh();
@@ -962,6 +1004,8 @@ function bindEvents() {
       if (target) txViews.openEditListing(target);
       return;
     }
+    const inboundBtn = event.target.closest("[data-owner-inbound]");
+    if (inboundBtn) return dealsView.openInboundPolicy(listingById(inboundBtn.dataset.ownerInbound));
     const removeBtn = event.target.closest("[data-owner-remove]");
     if (removeBtn) {
       const id = removeBtn.dataset.ownerRemove;
@@ -992,6 +1036,10 @@ function bindEvents() {
     if (rejectBtn) return txViews.handleRequestAction("reject", rejectBtn.dataset.reqReject, rejectBtn);
     const cancelBtn = event.target.closest("[data-req-cancel]");
     if (cancelBtn) return txViews.handleRequestAction("cancel", cancelBtn.dataset.reqCancel, cancelBtn);
+    const openDealBtn = event.target.closest("[data-open-deal]");
+    if (openDealBtn) return setView("deals", { conversationId: openDealBtn.dataset.openDeal });
+    const gotoDealsBtn = event.target.closest("[data-goto-deals]");
+    if (gotoDealsBtn) return setView("deals", { filter: gotoDealsBtn.dataset.gotoDeals });
     const openChatBtn = event.target.closest("[data-open-chat]");
     if (openChatBtn) {
       return txViews.chatForm({
@@ -1221,6 +1269,16 @@ function initLoginForm() {
       });
       return true;
     }
+    if (intent.type === "deal") {
+      setView("deals", intent.conversationId ? { conversationId: intent.conversationId } : {});
+      return true;
+    }
+    if (intent.type === "inbound") {
+      setView("owner");
+      const target = listingById(intent.listingId);
+      if (target) dealsView.openInboundPolicy(target);
+      return true;
+    }
     if (intent.type === "newListing") {
       setView("owner");
       txViews.openNewListing(intent.draftValues || null);
@@ -1403,6 +1461,7 @@ function initLoginForm() {
     .then(async (result) => {
       await applyAccountTransition(result.user);
       if (isLoggedIn() && state.view === "ownerLoginRequired") setView("owner");
+      if (isLoggedIn() && state.view === "deals") setView("deals", { ...(parseDealsHash(location.hash) || {}), fromHistory: true });
       if (isLoggedIn() && isPlaceholderNickname(result.user?.name)) {
         openNicknameModal({ required: true });
       }
@@ -1462,7 +1521,22 @@ initRevealOnScroll();
 initScrollMotion();
 initMainPageScrollSpy();
 catalogViews.setTransaction(state.transaction);
-setView("home");
+dealsView.bind();
+{
+  const initialDeals = parseDealsHash(location.hash);
+  if (initialDeals) setView("deals", { ...initialDeals, fromHistory: true });
+  else setView("home");
+}
+window.addEventListener("popstate", () => {
+  const target = parseDealsHash(location.hash);
+  if (target) setView("deals", { ...target, fromHistory: true });
+  else if (state.view === "deals") setView("home");
+});
+// 채팅 밖에서도 확인 필요·안 읽음 배지가 갱신되도록 대화 목록만 주기적으로 조회한다(GET은 읽음 처리하지 않음).
+setInterval(() => {
+  if (!isLoggedIn() || document.visibilityState !== "visible" || state.view === "deals") return;
+  refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
+}, 45000);
 renderAll();
 runtime.catalogReady = loadCatalog();
 refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });

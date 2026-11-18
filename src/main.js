@@ -101,12 +101,16 @@ async function loadCatalog({ quiet = false } = {}) {
     if (epoch !== runtime.authEpoch) return;
     if (!Array.isArray(data.listings)) throw new Error("잘못된 매물 응답");
     runtime.catalog = data.listings;
-    ensureHongcheonRandomListing({ randomize: true });
+    if (!data.listings.length) {
+      ensureHongcheonRandomListing({ randomize: false });
+    }
     runtime.catalogState = "ready";
   } catch (error) {
     if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
     if (!quiet) console.error(error);
-    ensureHongcheonRandomListing({ randomize: false });
+    if (!Array.isArray(runtime.catalog) || !runtime.catalog.length) {
+      ensureHongcheonRandomListing({ randomize: false });
+    }
     runtime.catalogState = "error";
   }
   renderAll();

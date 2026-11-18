@@ -170,7 +170,6 @@ export function ensureHongcheonRandomListing({ randomize = false } = {}) {
       lng: hasCoord(existing.lng) ? existing.lng : HONGCHEON_NEARBY_FARM.lng,
     };
     runtime.catalog = runtime.catalog.map((item) => (item === existing ? listing : item));
-    runtime.selectedMapListingId = listing.id;
     return listing;
   }
 
@@ -809,11 +808,10 @@ export function getClusterThresholdKm(zoomLevel) {
   return matched || HEADER_CLUSTER_STEPS[HEADER_CLUSTER_STEPS.length - 1];
 }
 
-function getHeaderMapAllItems(origin) {
-  const randomListing = ensureHongcheonRandomListing({ randomize: false });
-  const catalog = Array.isArray(runtime.catalog) && runtime.catalog.length ? runtime.catalog : [randomListing];
+export function getHeaderMapAllItems(origin) {
+  const catalog = Array.isArray(runtime.catalog) ? runtime.catalog : [];
   const openItems = catalog.filter((item) => item.status === "open");
-  const list = openItems.length ? openItems : [randomListing];
+  const list = openItems.length ? openItems : [ensureHongcheonRandomListing({ randomize: false })];
   return [...list].sort((a, b) => distanceKm(origin, a, a.id) - distanceKm(origin, b, b.id));
 }
 

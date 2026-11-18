@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { REGION_COORDS, listingCoords, distanceKm } from "../src/data/farm-machines.js";
 import { KOREA_REGIONS, latLngToKmaGrid, getRegionCoords, findNearestRegion } from "../src/data/korea-regions.js";
 import { getWeatherAndMapConfig } from "../server/weather.js";
-import { clusterListingsByZoom, getClusterThresholdKm } from "../src/views/map-weather.js";
+import { runtime } from "../src/core/store.js";
+import { clusterListingsByZoom, getClusterThresholdKm, getHeaderMapAllItems } from "../src/views/map-weather.js";
 
 test("listingCoords와 distanceKm는 결정적 좌표 기반 직선거리를 계산한다", () => {
   const c1 = listingCoords("영양읍", "rent-1");
@@ -176,4 +177,26 @@ test("clusterListingsByZoom은 지도 축소 레벨에 따라 매물을 단일 �
   assert.equal(lv12[0].isAllCluster, true);
   assert.equal(lv12[0].items[0].id, "hc-1");
   assert.equal(lv12[0].items.length, 4);
+});
+
+test("getHeaderMapAllItems는 DB 매물이 있으면 홍천 강제 선택·덧씌우기를 하지 않고 비어 있을 때만 폴백한다", () => {
+  const prevCatalog = runtime.catalog;
+  const prevSelected = runtime.selectedMapListingId;
+  try {
+    runtime.selectedMapListingId = "";
+    runtime.catalog = [
+      { id: "yy-only-1", region: "영양읍", title: "영양 매물", status: "open", lat: 36.6667, lng: 129.1124 },
+    ];
+    const items = getHeaderMapAllItems({ lat: 36.6667, lng: 129.1124 });
+    assert.deepEqual(items.map((i) => i.id), ["yy-only-1"]);
+    assert.equal(runtime.selectedMapListingId, "");
+
+    runtime.catalog = [];
+    const fallbackItems = getHeaderMapAllItems({ lat: 37.6456, lng: 127.6844 });
+    assert.equal(fallbackItems.length, 1);
+    assert.equal(fallbackItems[0].id, "hc-vivaldi-1");
+  } finally {
+    runtime.catalog = prevCatalog;
+    runtime.selectedMapListingId = prevSelected;
+  }
 });

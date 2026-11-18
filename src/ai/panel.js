@@ -2,6 +2,7 @@ import { CROP_BY_ID, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machine
 import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
 import { isAffirmative } from "./affirm.js";
+import { SETUP_CHANGED_EVENT, applyInitialSetup, buildInitialSetupFields, isInitialSetupDone } from "../views/initial-setup.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
 import { isUnclearUtterance, joinSpokenText, tidySpokenText } from "./spoken-text.js";
@@ -514,8 +515,6 @@ export function createAiPanel({
   let photoLabel = "첨부한 기계 사진";
   let lastPhotoDataUrl = null;
   let savedDraft = null;
-  let quickOwnedNote = "";
-  let setupExpanded = false;
   let plusMenuOpen = false;
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
@@ -735,22 +734,16 @@ export function createAiPanel({
     return { owned, selectedId, selectedOwnedModelId };
   }
 
-  function formatSetupSummary() {
-    const region = state.region || "영양읍";
-    const area = Number(state.filters?.areaPyeong) > 0 ? `${Number(state.filters.areaPyeong)}평` : "면적 미정";
-    const { owned } = getGarageInfo();
-    const ownedLabel = quickOwnedNote
-      ? quickOwnedNote
-      : owned.length
-        ? `${owned[0].name || "보유 기계"}${owned.length > 1 ? ` 외 ${owned.length - 1}대` : ""}`
-        : "보유 기계 없음";
-    return `내 초기 설정: ${region} · ${area} · ${ownedLabel}`;
-  }
-
   function renderStarterBar() {
     const root = $("aiStarters");
     if (!root) return;
     root.replaceChildren();
+
+    // 내 초기 설정은 처음 한 번만 여기서 받고, 이후에는 마이페이지 > 내 계정에서 관리한다.
+    // 설정을 마치면 이 칸에 보여 줄 것이 없으므로 빈 여백이 남지 않게 통째로 숨긴다.
+    const setupDone = isInitialSetupDone();
+    root.classList.toggle("is-empty", setupDone);
+    if (setupDone) return;
 
     const card = document.createElement("div");
     card.className = "ai-starter-card";
@@ -759,102 +752,35 @@ export function createAiPanel({
     setupBar.className = "ai-setup-bar";
     const summary = document.createElement("span");
     summary.className = "ai-setup-summary";
-    summary.textContent = formatSetupSummary();
-    const toggleBtn = document.createElement("button");
-    toggleBtn.type = "button";
-    toggleBtn.className = "ai-setup-toggle";
-    toggleBtn.setAttribute("aria-expanded", String(setupExpanded));
-    toggleBtn.textContent = setupExpanded ? "접기" : "설정 변경";
-    setupBar.append(summary, toggleBtn);
+    summary.textContent = "처음 오셨네요! 내 초기 설정을 알려주세요";
+    setupBar.append(summary);
 
     const form = document.createElement("div");
     form.className = "ai-setup-form";
-    form.hidden = !setupExpanded;
-
-    const fields = document.createElement("div");
-    fields.className = "ai-setup-fields";
-
-    const regionField = document.createElement("label");
-    regionField.className = "ai-setup-field";
-    regionField.append(document.createTextNode("동네"));
-    const regionSelect = document.createElement("select");
-    regionSelect.setAttribute("aria-label", "작업 동네");
-    const regionNames = Object.keys(REGION_COORDS || { 영양읍: 1, 청기면: 1, 입암면: 1, 수비면: 1 });
-    for (const r of regionNames) {
-      const opt = document.createElement("option");
-      opt.value = r;
-      opt.textContent = r;
-      if ((state.region || "영양읍") === r) opt.selected = true;
-      regionSelect.append(opt);
-    }
-    regionField.append(regionSelect);
-
-    const areaField = document.createElement("label");
-    areaField.className = "ai-setup-field";
-    areaField.append(document.createTextNode("면적(평)"));
-    const areaInput = document.createElement("input");
-    areaInput.type = "number";
-    areaInput.min = "0";
-    areaInput.step = "50";
-    areaInput.placeholder = "예: 300";
-    areaInput.value = state.filters?.areaPyeong ? String(state.filters.areaPyeong) : "";
-    areaInput.setAttribute("aria-label", "작업 면적(평)");
-    areaField.append(areaInput);
-
-    const ownedField = document.createElement("label");
-    ownedField.className = "ai-setup-field is-full";
-    ownedField.append(document.createTextNode("보유 농기계 메모"));
-    const ownedInput = document.createElement("input");
-    ownedInput.type = "text";
-    ownedInput.maxLength = 60;
-    ownedInput.placeholder = "예: 대동 관리기 보유";
-    ownedInput.value = quickOwnedNote;
-    ownedInput.setAttribute("aria-label", "보유 농기계 메모");
-    ownedField.append(ownedInput);
-
-    fields.append(regionField, areaField, ownedField);
-
+    const { fields, read } = buildInitialSetupFields("aiSetup");
     const formActions = document.createElement("div");
     formActions.className = "ai-setup-form-actions";
+    const note = document.createElement("span");
+    note.className = "ai-setup-note";
+    note.textContent = "나중에 내 계정에서 바꿀 수 있어요.";
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.className = "button button-primary";
     saveBtn.textContent = "적용";
     saveBtn.addEventListener("click", () => {
-      state.region = regionSelect.value || "영양읍";
-      const parsedArea = Number(areaInput.value);
-      state.filters.areaPyeong = Number.isFinite(parsedArea) && parsedArea > 0 ? String(Math.round(parsedArea)) : "";
-      quickOwnedNote = ownedInput.value.trim();
-      setupExpanded = false;
-      form.hidden = true;
-      toggleBtn.setAttribute("aria-expanded", "false");
-      toggleBtn.textContent = "설정 변경";
-      summary.textContent = formatSetupSummary();
-      persist();
-      renderListings();
+      applyInitialSetup(read()); // 목록 다시 그리기는 main.js의 SETUP_CHANGED_EVENT 리스너가 맡는다.
       refreshContextBar();
-      toast("초기 조건을 반영했어요.");
+      toast("초기 조건을 반영했어요. 내 계정에서 언제든 바꿀 수 있어요.");
     });
-    formActions.append(saveBtn);
+    formActions.append(note, saveBtn);
     form.append(fields, formActions);
+    card.append(setupBar, form);
 
-    toggleBtn.addEventListener("click", () => {
-      setupExpanded = !setupExpanded;
-      form.hidden = !setupExpanded;
-      toggleBtn.setAttribute("aria-expanded", String(setupExpanded));
-      toggleBtn.textContent = setupExpanded ? "접기" : "설정 변경";
-    });
-
-    const guide = document.createElement("div");
-    guide.className = "ai-starter-guide";
-    const guideText = document.createElement("p");
-    guideText.className = "ai-starter-guide-text";
-    guideText.textContent = "농사일이나 기종을 한 줄로 말하면 필요한 조건만 차례로 여쭤볼게요.";
-    guide.append(guideText);
-
-    card.append(setupBar, form, guide);
     root.append(card);
   }
+
+  // 내 계정에서 설정을 바꿔도 농농이 칸 상태(첫 설정 표시 여부)를 맞춘다.
+  window.addEventListener(SETUP_CHANGED_EVENT, renderStarterBar);
 
   renderStarterBar();
 
@@ -1060,7 +986,7 @@ export function createAiPanel({
       ...(owned.length ? { ownedMachines: owned.slice(0, 10) } : {}),
       ...(selectedOwnedModelId ? { selectedOwnedModelId } : {}),
       ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
-      ...(quickOwnedNote ? { ownedMachineNote: quickOwnedNote } : {}),
+      ...(state.ownedNote ? { ownedMachineNote: state.ownedNote } : {}),
       ...(fullDelegationEnabled ? { fullDelegation: true } : {}),
       ...(lastShownListingIds.length ? { lastShownListings: lastShownListingIds.map((id, index) => ({ no: index + 1, id })) } : {}),
       ...(openConfirmation?.card.isConnected
@@ -3237,7 +3163,6 @@ export function createAiPanel({
     insuranceAsked = false;
     savedDraft = null;
     lastPhotoDataUrl = null;
-    setupExpanded = false;
     setFullDelegation(false);
     setPlusMenuOpen(false);
     renderStarterBar();

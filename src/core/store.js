@@ -32,6 +32,8 @@ const defaults = {
   selectedCrop: "all",
   filters: blankFilters(),
   aiSummaries: {},
+  setupDone: false,
+  ownedNote: "",
 };
 
 function sanitizeUserCoords(raw) {
@@ -63,6 +65,8 @@ try {
     selectedCrop: typeof saved.selectedCrop === "string" ? saved.selectedCrop : defaults.selectedCrop,
     filters: { ...blankFilters(), ...(saved.filters || {}) },
     aiSummaries: saved.aiSummaries && typeof saved.aiSummaries === "object" ? saved.aiSummaries : {},
+    setupDone: saved.setupDone === true,
+    ownedNote: typeof saved.ownedNote === "string" ? saved.ownedNote : "",
   };
 } catch {
   state = structuredClone(defaults);
@@ -218,6 +222,8 @@ export function persist(onUpdateBadges) {
         selectedCrop: state.selectedCrop,
         filters: state.filters,
         aiSummaries: state.aiSummaries,
+        setupDone: state.setupDone,
+        ownedNote: state.ownedNote,
       }),
     );
   } catch {

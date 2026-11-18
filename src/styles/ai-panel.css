@@ -1558,8 +1558,60 @@ body.ai-fullscreen .ai-launcher {
 
 .ai-setup-form-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* 첫 설정을 마치면 시작 칸은 보여 줄 것이 없어 통째로 숨긴다 */
+#aiStarters.is-empty {
+  display: none !important;
+}
+
+.ai-setup-note {
+  margin-right: auto;
+  font-size: 0.7rem;
+  color: var(--text-muted, #5e7468);
+}
+
+/* 마이페이지 > 내 계정: 내 초기 설정 칸 (입력 칸은 농농이 첫 설정과 같은 모양) */
+.account-setup {
+  margin: 0 0 16px;
+  padding: 18px 22px;
+  display: grid;
+  gap: 8px;
+}
+.account-setup-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.account-setup-title {
+  font-weight: 800;
+  color: var(--forest, #174233);
+}
+.account-setup-summary {
+  font-size: 0.82rem;
+  color: var(--text-muted, #5e7468);
+}
+.account-setup-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted, #5e7468);
+}
+.account-setup-body {
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
+}
+.account-setup .ai-setup-field input,
+.account-setup .ai-setup-field select {
+  min-height: 38px;
+  font-size: 0.88rem;
+}
+.account-setup .ai-setup-field {
+  font-size: 0.8rem;
 }
 
 .ai-setup-form-actions .button {

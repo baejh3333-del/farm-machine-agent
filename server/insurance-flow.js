@@ -49,9 +49,17 @@ export function classifyInsuranceReply(message) {
   const text = String(message || "").replace(/\s*\[사진 첨부\]\s*$/, "").trim();
   if (!text || /[?？]\s*$/.test(text)) return "unclear";
   if (/아니|괜찮|됐어|됐습니다|필요\s*없|안\s*(?:할|해|받)|말래|넘어|싫|다음에|나중에|그만/.test(text)) return "no";
-  if (isAffirmative(text) || /^(?:네|예|응)?[,\s]*(?:추천|알려|연결|부탁|신청)/.test(text)) return "yes";
+  if (isAffirmative(text) || INSURANCE_YES.test(text)) return "yes";
   return "unclear";
 }
+
+// "엉 연결해줘", "넹 추천 좀", "당연하지 상담 연결해 줘", "좋아요 보험 알려주세요"처럼
+// 짧은 긍정어(있어도 되고 없어도 됨) 뒤에 추천·연결·상담·신청을 맡기는 말이 오면 긍정으로 본다.
+const YES_LEAD = "(?:네+|넵+|넹+|넴|예+|예스|응+|웅+|엉+|어+|으응|ㅇㅇ+|ㅇㅋ+|오케이|ok(?:ay)?|yes|그래(?:요)?|좋아(?:요)?|좋죠|좋지(?:요)?|좋습니다|당연(?:하지|하죠|히)?|물론(?:이죠)?|그럼(?:요)?|알겠어(?:요)?|하모|그려(?:유)?|콜)";
+const INSURANCE_YES = new RegExp(
+  `^(?:${YES_LEAD}[,.!~\\s]*)*(?:(?:보험|상담|농협|그거|그것)\\s*(?:도|을|를|으로|로)?\\s*)?(?:추천|알려|연결|부탁|신청|상담|가입\\s*안내|해\\s*(?:줘|주세요|주라|주소|주이소|도라))`,
+  "i",
+);
 
 /** 예약을 마친 뒤 보험을 물을지와 그때 쓸 진행 상태. 팔기·빌려주기에는 묻지 않는다. */
 export function insuranceOfferFor(reservation, listing) {

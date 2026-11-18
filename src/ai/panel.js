@@ -793,7 +793,7 @@ export function createAiPanel({
     if (labelEl) labelEl.textContent = photoLabel || "첨부한 기계 사진";
     // 사진은 고르기만 해서는 보내지 않는다: 사용자가 전송(또는 음성 대화 중 말하기)해야 함께 간다.
     const hint = preview.querySelector(".ai-photo-meta span");
-    if (hint) hint.textContent = isLiveVoiceActive() ? "전송을 누르면 사진만 보내요. 말하면 사진과 함께 전달돼요." : "전송을 누르면 사진만 보내요.";
+    if (hint) hint.textContent = "입력한 글이 있으면 사진과 함께 보내요.";
   }
 
   function clearPhoto() {
@@ -2774,14 +2774,14 @@ export function createAiPanel({
   }
 
   // 음성 대화 중 사진을 보내면 답을 화면에 표시하고 음성으로 읽어 준다.
-  async function sendPhotoDuringLiveVoice() {
+  async function sendPhotoDuringLiveVoice(message) {
     if (livePhotoInFlight) return false;
     const photo = takeLivePhoto();
     if (!photo) return false;
     const gen = sessionGeneration;
     const liveGen = liveVoiceGeneration;
     livePhotoInFlight = true;
-    const message = "";
+    $("aiInput").value = "";
     appendAiMessage(message, "user", [], photo);
     const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
     pending.classList.add("is-thinking");
@@ -2812,6 +2812,7 @@ export function createAiPanel({
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
       pending.remove();
       restorePendingPhoto(photo);
+      if (message && !$("aiInput").value.trim()) $("aiInput").value = message;
       const msg = error?.message && /[가-힣]/.test(error.message) ? error.message : "사진을 지금 확인하지 못했어요.";
       appendAiMessage(`${msg} 사진은 그대로 두었어요. 전송을 다시 누르시거나 말로 설명해 주세요.`, "assistant");
       if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진은 그대로 두었으니 다시 보내 주시거나 말로 설명해 주세요.`);
@@ -3143,14 +3144,13 @@ export function createAiPanel({
   async function sendAiQuestion(event) {
     event.preventDefault();
     const sendingPhoto = photoIsNew && agentPhoto ? agentPhoto : null;
-    const typedText = $("aiInput").value.trim();
-    const message = sendingPhoto ? "" : typedText;
+    const message = $("aiInput").value.trim();
     if ((!message && !sendingPhoto) || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
     // 음성 대화 중에는 사진 응답도 음성으로 읽어 준다.
     if (sendingPhoto && isLiveVoiceActive()) {
       if (livePhotoInFlight) return toast("앞서 보낸 사진을 확인하고 있어요. 잠시만 기다려 주세요.");
-      sendPhotoDuringLiveVoice();
+      sendPhotoDuringLiveVoice(message);
       return;
     }
     if (sendingPhoto) lastPhotoDataUrl = sendingPhoto;
@@ -3161,7 +3161,7 @@ export function createAiPanel({
     recommendationPending = true;
     const submit = $("aiForm").querySelector('[type="submit"]');
     submit.disabled = true;
-    if (!sendingPhoto) $("aiInput").value = "";
+    $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
     $("aiStarters").hidden = true;

@@ -98,7 +98,10 @@ test("발화마다 utteranceId를 붙이고 start/end 타임스탬프를 커밋�
   });
   await tick(40);
   const assistantCommit = calls.committed.find((c) => c.turn.role === "assistant");
-  assert.deepEqual(assistantCommit.meta, { replyTo: calls.user[0].utteranceId, delegationId: null, startMs: 1000, endMs: 1500 });
+  assert.deepEqual(assistantCommit.meta, {
+    utteranceId: assistantCommit.meta.utteranceId, replyTo: calls.user[0].utteranceId, delegationId: null, startMs: 1000, endMs: 1500,
+  });
+  assert.match(assistantCommit.meta.utteranceId, /^ast_/);
 
   // 다음 발화는 새 id, 위임에는 그 발화의 메타데이터가 간다.
   emit({ type: "session.input_transcript.delta", delta: "트랙터 빌려줘", start_ms: 2000, end_ms: 2600 });
@@ -294,4 +297,101 @@ test("세션을 다시 시작하면 발화 상태를 초기화하지만 utteranc
   emit({ type: "session.started" });
   emit({ type: "session.input_transcript.delta", delta: "다시" });
   assert.notEqual(calls.user.at(-1).utteranceId, first);
+});
+
+test("정정은 바로 앞 작업만 무효로 하고, 관련 없는 이전 작업 결과는 그대로 들려준다", async () => {
+  const gates = { a: deferred(), b: deferred() };
+  const { live, emit, calls, spoken } = makeLive({
+    delegate: async (payload) => {
+      if (payload.delegationId === "a") { await gates.a.promise; return { spokenSummary: "트랙터 3대 있어요" }; }
+      if (payload.delegationId === "b") { await gates.b.promise; return { spokenSummary: "내일은 맑아요" }; }
+      return { spokenSummary: "모레는 비가 와요" };
+    },
+  });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "트랙터 찾아줘" });
+  emit({ type: "session.delegation.created", delegation: { id: "a", target: "client" } });
+  emit({ type: "session.input_transcript.delta", delta: "내일 날씨 알려줘" });
+  emit({ type: "session.delegation.created", delegation: { id: "b", target: "client" } });
+  emit({ type: "session.input_transcript.delta", delta: "아니 모레 날씨" });
+  emit({ type: "session.delegation.created", delegation: { id: "c", target: "client" } });
+  await tick();
+  const meta = Object.fromEntries(calls.delegations.map((d) => [d.payload.delegationId, d.meta]));
+  assert.equal(meta.a.isStale(), false); // 관련 없는 작업은 그대로
+  assert.equal(meta.b.isStale(), true); // 정정 대상
+  assert.equal(meta.c.isStale(), false);
+  gates.a.resolve();
+  gates.b.resolve();
+  await tick();
+  assert.deepEqual(spoken(), ["모레는 비가 와요", "트랙터 3대 있어요"]);
+
+  // 두 번째 정정은 그다음 최근 작업(c)을 겨냥하고, 이미 정정된 b나 관련 없는 a에는 영향이 없다.
+  emit({ type: "session.input_transcript.delta", delta: "아니 글피" });
+  assert.equal(meta.c.isStale(), true);
+  assert.equal(meta.a.isStale(), false);
+});
+
+test("줄에서 꺼내 말할 때 다시 확인한다: 줄 서 있는 동안 정정된 조회 결과는 버리고 관련 없는 결과는 말한다", async () => {
+  const { live, emit, spoken } = makeLive({ options: { userQuietMs: 60 } });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "트랙터 찾아줘" });
+  emit({ type: "session.delegation.created", delegation: { id: "x", target: "client" } });
+  emit({ type: "session.input_transcript.delta", delta: "콤바인도 찾아줘" });
+  emit({ type: "session.delegation.created", delegation: { id: "y", target: "client" } });
+  emit({ type: "session.input_transcript.delta", delta: "음" }); // 사용자가 계속 말하는 중 → 두 결과 모두 줄을 선다.
+  await tick();
+  assert.deepEqual(spoken(), []);
+  emit({ type: "session.input_transcript.delta", delta: " 아니 이앙기로" }); // 바로 앞 작업(y)만 정정
+  await tick(120);
+  assert.deepEqual(spoken(), ["결과:트랙터 찾아줘"]);
+  await live.stop();
+});
+
+test("쓰기 결과는 정정이 와도 남기되, 사용자가 말하는 동안에는 끼어들지 않고 말이 끝난 뒤 보낸다", async () => {
+  const gate = deferred();
+  const { live, emit, spoken } = makeLive({
+    options: { userQuietMs: 80 },
+    delegate: async () => { await gate.promise; return { spokenSummary: "예약 완료했어요", result: { reservation: { id: "r1" } } }; },
+  });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "트랙터 예약해줘" });
+  emit({ type: "session.delegation.created", delegation: { id: "w", target: "client" } });
+  emit({ type: "session.input_transcript.delta", delta: "아니 콤바인으로" });
+  gate.resolve();
+  await tick();
+  assert.deepEqual(spoken(), []); // 사용자가 말하는 중
+  await tick(150);
+  assert.deepEqual(spoken(), ["예약 완료했어요"]);
+  await live.stop();
+});
+
+test("어시스턴트 부분 delta는 같은 발화 동안 같은 utteranceId를 쓰고, 커밋 메타와 일치하며 위임 낭독에는 delegationId가 붙는다", async () => {
+  const assistantDeltas = [];
+  const { live, emit, calls } = makeLive({
+    options: { onAssistantTranscriptDelta: (payload, meta) => assistantDeltas.push({ payload, meta }) },
+  });
+  await live.start();
+  emit({ type: "session.started" });
+  emit({ type: "session.input_transcript.delta", delta: "안녕" });
+  emit({ type: "session.output_transcript.delta", delta: "안녕하세요, ", start_ms: 10, end_ms: 20 });
+  emit({ type: "session.output_transcript.delta", delta: "반가워요.", start_ms: 20, end_ms: 30 });
+  assert.deepEqual(assistantDeltas[0].payload, { delta: "안녕하세요, ", startMs: 10, endMs: 20 });
+  const firstId = assistantDeltas[0].meta.utteranceId;
+  assert.equal(assistantDeltas[1].meta.utteranceId, firstId);
+  assert.equal(assistantDeltas[0].meta.replyTo, calls.user[0].utteranceId);
+  await tick(40);
+  const commit = calls.committed.find((c) => c.turn.role === "assistant");
+  assert.equal(commit.meta.utteranceId, firstId);
+
+  // 위임 결과 낭독: 새 발화 id, delegationId 연결
+  emit({ type: "session.input_transcript.delta", delta: "트랙터 찾아줘" });
+  emit({ type: "session.delegation.created", delegation: { id: "d9", target: "client" } });
+  await tick();
+  emit({ type: "session.output_transcript.delta", delta: "트랙터가 있어요." });
+  const last = assistantDeltas.at(-1).meta;
+  assert.notEqual(last.utteranceId, firstId);
+  assert.equal(last.delegationId, "d9");
 });

@@ -10,13 +10,16 @@
 // - onUserTranscriptDelta 페이로드에 utteranceId·correction이 붙는다.
 // - onTurnCommitted(turn, meta): user면 meta = utterance 스냅샷
 //   { utteranceId, startMs, endMs, speechRevision, taskRevision, correction },
-//   assistant면 meta = { replyTo, delegationId, startMs, endMs }.
-// - onClientDelegation(payload, meta): meta = utterance 스냅샷 + isStale()(그 뒤 정정 발화가 왔는지).
+//   assistant면 meta = { utteranceId("ast_N"), replyTo, delegationId, startMs, endMs }.
+// - onAssistantTranscriptDelta(payload, meta): meta = { utteranceId, replyTo, delegationId }로, 같은 발화의
+//   부분 delta와 커밋이 같은 utteranceId를 쓴다.
+// - onClientDelegation(payload, meta): meta = utterance 스냅샷 + isStale()(이 작업을 바로잡는 정정이 왔는지).
 //   반환값에 effect: "read"|"write"를 줄 수 있다. 없으면 result.reservation/createdListing/updatedListing
 //   또는 outcome completed|partial이면 write로 본다.
 // 리비전: speechRevision은 새 사용자 발화마다, taskRevision은 정정 발화("아니, …", "…말고")에서만 오른다.
-// 정정 뒤 도착한 이전 조회(read) 결과와 줄 서 있던 조회 결과 낭독은 버린다. 정정이 아닌 새 발화면 이전 작업 결과는
-// 말이 끝난 뒤 그대로 들려준다. 실제로 쓴(write) 결과와 오류 안내는 절대 버리지 않는다.
+// 정정은 바로 앞(가장 최근) 작업 하나만 무효로 한다. 그 작업의 조회(read) 결과는 도착 시점과 줄에서 꺼내 말할
+// 시점에 다시 확인해 버린다. 관련 없는 다른 작업 결과는 말이 끝난 뒤 그대로 들려준다. 실제로 쓴(write) 결과와
+// 오류 안내는 절대 버리지 않되, 사용자가 말하는 중이면 끝날 때까지 기다렸다가 말한다.
 import { createLiveVoiceSession } from "./recommend-agent.js";
 import { joinSpokenText, tidySpokenText } from "./spoken-text.js";
 
@@ -141,7 +144,11 @@ export function createGptLiveController({
   let seq = 0;
   let lastUserAudioAt = 0; // 마지막 사용자 전사 delta 시각
   let outputSuppressed = false; // 사용자가 끼어든 뒤 남은 농농이 음성은 끈다.
-  let speechQueue = []; // 사용자가 말하는 동안 미뤄 둔 commentary: { payload, kind, taskRevision, write }
+  let speechQueue = []; // 사용자가 말하는 동안 미뤄 둔 commentary: { payload, kind, task, write }
+  let taskSeq = 0;
+  let tasks = []; // 위임 작업 { delegationId, utteranceId, seq, superseded, supersededBy }
+  let lastSpokenDelegationId = null; // 마지막으로 결과 낭독을 보낸 위임(어시스턴트 발화에 붙인다)
+  let assistantSeq = 0;
   let speechTimer = null;
   let utteranceSeq = 0;
   let speechRevision = 0; // 새 사용자 발화마다 오른다.
@@ -181,20 +188,26 @@ export function createGptLiveController({
     speechQueue = [];
     for (const item of queued) {
       if (isStaleSpeech(item)) continue;
-      send(item.payload, s);
+      sendSpeech(item, s);
     }
   }
 
-  // 정정 뒤에 남은 이전 조회 결과 낭독은 버린다. UI 안내와 실제 쓰기 결과는 남긴다.
+  // 정정된 작업의 조회 결과 낭독만 버린다(보낼 때·줄에서 꺼낼 때 다시 확인). UI 안내와 실제 쓰기 결과는 남긴다.
   function isStaleSpeech(item) {
-    return item.kind === "result" && !item.write && item.taskRevision < taskRevision;
+    return item.kind === "result" && !item.write && Boolean(item.task?.superseded);
   }
 
-  function speakWhenQuiet(payload, s = session, { kind = "ui", taskRevision: rev = taskRevision, write = false } = {}) {
+  function sendSpeech(item, s) {
+    const ok = send(item.payload, s);
+    if (ok && item.kind === "result") lastSpokenDelegationId = item.payload.delegation_id ?? null;
+    return ok;
+  }
+
+  function speakWhenQuiet(payload, s = session, { kind = "ui", task = null, write = false } = {}) {
     if (!s) return false;
-    const item = { payload, kind, taskRevision: rev, write };
+    const item = { payload, kind, task, write };
     if (isStaleSpeech(item)) return false;
-    if (!userSpeakingNow() && !speechQueue.length) return send(payload, s);
+    if (!userSpeakingNow() && !speechQueue.length) return sendSpeech(item, s);
     speechQueue.push(item);
     flushSpeechQueue(s);
     return true;
@@ -232,6 +245,13 @@ export function createGptLiveController({
       utterance.correction = true;
       taskRevision += 1;
       utterance.taskRevision = taskRevision;
+      // 정정은 바로 앞 요청 하나만 바로잡는다: 가장 최근에 시작된(아직 정정되지 않은) 작업만 무효로 하고,
+      // 그 전의 독립적인 작업은 그대로 둔다.
+      const target = tasks.findLast((t) => !t.superseded && t.utteranceId !== utterance.id);
+      if (target) {
+        target.superseded = true;
+        target.supersededBy = utterance.id;
+      }
       speechQueue = speechQueue.filter((item) => !isStaleSpeech(item));
       if (!speechQueue.length) clearSpeechTimer();
     }
@@ -276,9 +296,20 @@ export function createGptLiveController({
     if (text) {
       onTurnCommitted(
         { role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) },
-        meta || { replyTo: lastUtterance?.id ?? null, delegationId: null, startMs: null, endMs: null },
+        { ...(meta || newAssistantMeta()) },
       );
     }
+  }
+
+  // 어시스턴트 발화 하나에 붙는 안정적인 식별자: 부분 delta와 커밋이 같은 utteranceId를 쓴다.
+  function newAssistantMeta() {
+    return {
+      utteranceId: `ast_${++assistantSeq}`,
+      replyTo: lastUtterance?.id ?? null,
+      delegationId: delegatedReply ? lastSpokenDelegationId : null,
+      startMs: null,
+      endMs: null,
+    };
   }
 
   function scheduleSpeakingIdle(s) {
@@ -338,6 +369,8 @@ export function createGptLiveController({
       lastUtterance = null;
       assistantMeta = null;
       delegationsInFlight = 0;
+      tasks = [];
+      lastSpokenDelegationId = null;
       setState("idle");
     }
   }
@@ -356,7 +389,11 @@ export function createGptLiveController({
     userText = "";
     const owner = utterance ? endUtterance() : lastUtterance;
     const taskRev = taskRevision;
-    const isStale = () => taskRevision > taskRev;
+    const task = { delegationId, utteranceId: owner?.id ?? null, seq: ++taskSeq, superseded: false, supersededBy: null };
+    tasks.push(task);
+    if (tasks.length > 20) tasks = tasks.slice(-20); // 정정은 가장 최근 작업만 겨냥하므로 오래된 기록은 필요 없다.
+    // 이 작업을 바로잡는 정정 발화가 왔는지. 다른 작업을 정정한 발화로는 바뀌지 않는다.
+    const isStale = () => task.superseded;
     const meta = {
       ...(snapshotUtterance(owner) || {
         utteranceId: null, startMs: null, endMs: null, speechRevision, taskRevision: taskRev, correction: false,
@@ -397,7 +434,7 @@ export function createGptLiveController({
       speakWhenQuiet(
         { type: "session.commentary.append", event_id: id("result"), delegation_id: delegationId, content: String(spokenSummary).slice(0, 800) },
         s,
-        { kind: "result", taskRevision: taskRev, write },
+        { kind: "result", task, write },
       );
     }
     leaveThinking();
@@ -450,15 +487,17 @@ export function createGptLiveController({
           setOutputSuppressed(s, false);
         }
         flushUserTurn();
-        if (!assistantMeta) {
-          assistantMeta = { replyTo: lastUtterance?.id ?? null, delegationId: null, startMs: null, endMs: null };
-        }
+        if (!assistantMeta) assistantMeta = newAssistantMeta();
         if (assistantMeta.startMs == null && Number.isFinite(event.start_ms)) assistantMeta.startMs = event.start_ms;
         if (Number.isFinite(event.end_ms)) assistantMeta.endMs = event.end_ms;
         if (event.delegation_id && !assistantMeta.delegationId) assistantMeta.delegationId = event.delegation_id;
         assistantText = joinSpokenText(assistantText, event.delta || "");
         if (state !== "thinking") setState("speaking");
-        onAssistantTranscriptDelta({ delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms });
+        // 두 번째 인자: 같은 어시스턴트 발화의 모든 부분 delta가 같은 utteranceId를 가진다.
+        onAssistantTranscriptDelta(
+          { delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms },
+          { utteranceId: assistantMeta.utteranceId, replyTo: assistantMeta.replyTo, delegationId: assistantMeta.delegationId },
+        );
         scheduleSpeakingIdle(s);
         break;
       case "session.delegation.created":

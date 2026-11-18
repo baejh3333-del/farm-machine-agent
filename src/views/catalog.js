@@ -638,6 +638,11 @@ function openDetail(id) {
           <p>${escapeHtml(item.description)}</p>
         </div>
 
+        ${item.type === "rent" && item.rentalOperator ? `<details class="detail-box rental-operator">
+          <summary><strong>작업자 동반 가능</strong> · +${money(item.rentalOperator.dailyPrice)}/일</summary>
+          <p class="rental-operator-experience"><strong>${escapeHtml(item.rentalOperator.name)}</strong><br>${escapeHtml(item.rentalOperator.experience)}</p>
+        </details>` : ""}
+
         <div class="detail-actions">
           <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${item.id}" aria-label="찜하기" aria-pressed="${isFav}">
             ${favoriteIcon()}

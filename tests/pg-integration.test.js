@@ -190,6 +190,7 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
     "0009_trade_offers.sql",
     "0010_delegation_jobs.sql",
     "0011_insurance_consult_repair_kind.sql",
+    "0013_rental_operators.sql",
   ]);
 
   const info = await inspectDatabase({ pool });
@@ -563,6 +564,62 @@ test("[PGlite 로컬 엔진] 4. 중복 대여 승인 직렬화, GiST 배타 제�
     () => cancelRentalRequest(userB.user, sameDayReqId, { pool }),
     (err) => err.status === 409 && err.code === "CANCEL_WINDOW_PASSED"
   );
+});
+
+test("작업자 동반 대여의 요금과 프로필을 보존하고 같은 농가의 중복 배치를 막는다", async () => {
+  const today = kstToday();
+  const start = shiftDate(today, 3);
+  const end = shiftDate(start, 1);
+  const rentalOperator = { name: "김 작업자", experience: "관리기 작업 7년", dailyPrice: 70_000 };
+  const fields = {
+    id: randomUUID(),
+    type: "rent",
+    modelId: "asia-amc900",
+    title: "작업자 동반 관리기",
+    region: "청기면",
+    price: 50_000,
+    cropIds: ["pepper"],
+    operations: ["ridge"],
+    rentalOperator,
+  };
+  const first = await createListing(userA.user, fields, { pool });
+  const second = await createListing(userA.user, { ...fields, id: randomUUID() }, { pool });
+  assert.deepEqual(first.listing.rentalOperator, rentalOperator);
+
+  const payload = { id: randomUUID(), listingId: first.listing.id, start, end, rentalOperator };
+  const created = await createRentalRequest(userB.user, payload, { pool });
+  const competing = await createRentalRequest(userC.user, { ...payload, id: randomUUID(), listingId: second.listing.id }, { pool });
+  const changedOperator = { ...rentalOperator, dailyPrice: 80_000 };
+  await updateListing(userA.user, { action: "update", id: first.listing.id, rentalOperator: changedOperator }, { pool });
+  assert.equal(created.request.totalPrice, 240_000);
+  assert.deepEqual(created.request.rentalOperator, rentalOperator);
+  assert.equal((await createRentalRequest(userB.user, payload, { pool })).idempotent, true);
+  await assert.rejects(
+    () => createRentalRequest(userB.user, { ...payload, id: randomUUID() }, { pool }),
+    { code: "OPERATOR_OPTION_CHANGED" },
+  );
+
+  const approved = await approveRentalRequest(userA.user, payload.id, { pool });
+  assert.equal(approved.request.status, "approved");
+  assert.deepEqual(approved.request.rentalOperator, rentalOperator);
+  const { incoming } = await listRequestsForUser(userA.user.id, { pool });
+  const blocked = incoming.find((request) => request.id === competing.request.id);
+  assert.equal(blocked.derivedState, "operator_conflict");
+  assert.equal(blocked.canApprove, false);
+  await assert.rejects(
+    () => approveRentalRequest(userA.user, competing.request.id, { pool }),
+    { code: "OPERATOR_DATE_OVERLAP" },
+  );
+  await assert.rejects(
+    () => createRentalRequest(userB.user, { ...payload, listingId: second.listing.id, id: randomUUID() }, { pool }),
+    { code: "OPERATOR_DATE_OVERLAP" },
+  );
+  const machineOnly = await createRentalRequest(userB.user, {
+    ...payload, id: randomUUID(), listingId: second.listing.id, rentalOperator: null,
+  }, { pool });
+  assert.equal(machineOnly.request.totalPrice, 100_000);
+  await cancelRentalRequest(userB.user, payload.id, { pool });
+  assert.equal((await approveRentalRequest(userA.user, competing.request.id, { pool })).request.status, "approved");
 });
 
 test("[PGlite 로컬 엔진] 5. 클라이언트 UUID 멱등성(4개 엔드포인트) 및 상태 전이 재시도 200·충돌 409", async () => {

@@ -349,7 +349,7 @@ export function nextActions(deal) {
   }
   if (
     myRole === "owner" && order &&
-    (order.canApprove === true || (order.status === "pending" && !["expired", "conflict"].includes(order.derivedState)))
+    (order.canApprove === true || (order.status === "pending" && !["expired", "conflict", "operator_conflict"].includes(order.derivedState)))
   ) {
     // 대여 신청은 승인/거절 API가 있다. 구매 신청 승인 API는 아직 없으므로 승인 버튼을 약속하지 않는다.
     if (order.kind === "purchase") actions.push({ key: "purchase_received", attention: true, label: "구매 신청 도착 · 대화로 인수 일정 확인" });

@@ -128,6 +128,10 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageA.locator("#editIncluded").fill("로터리, 두둑성형기 포함");
     await pageA.locator("#editPickup").fill("영양읍 창고 직거래");
     await pageA.locator("#editDescription").fill("Playwright E2E 테스트 매물입니다.");
+    await pageA.locator("#editOperatorEnabled").check();
+    await pageA.locator("#editOperatorName").fill("김 작업자");
+    await pageA.locator("#editOperatorPrice").fill("70000");
+    await pageA.locator("#editOperatorExperience").fill("관리기 작업 경력 7년");
     await pageA.locator("#listingSubmitButton").click();
 
     await pageA.locator("#formBackdrop").waitFor({ state: "hidden" });
@@ -189,6 +193,8 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageB.locator('header [data-view="browse"]').click();
     await matchingCard.locator("[data-detail]").first().click();
     await pageB.locator("#detailBackdrop").waitFor({ state: "visible" });
+    await pageB.locator("#detailBackdrop .rental-operator summary").click();
+    await pageB.getByText("관리기 작업 경력 7년").waitFor({ state: "visible" });
     await pageB.locator("[data-detail-action]").click();
     await pageB.locator("#loginView").waitFor({ state: "visible" });
 
@@ -198,6 +204,8 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageB.locator("#rentalForm").waitFor({ state: "visible" });
     await pageB.locator("#rentStart").fill(startDate);
     await pageB.locator("#rentEnd").fill(endDate);
+    await pageB.locator("#rentWithOperator").check();
+    assert.match(await pageB.locator("#rentalEstimate").textContent(), /농기계.+작업자.+=/);
     await pageB.locator("#rentNote").fill("고추밭 작업 대여 요청합니다.");
     await pageB.locator("#rentalSubmitButton").click();
     await pageB.locator("#formBackdrop").waitFor({ state: "hidden" });
@@ -230,6 +238,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageA.locator('#ownerRequests [data-req-approve]').waitFor({ state: "visible" });
     await pageA.locator('#ownerRequests [data-req-approve]').click();
     await pageA.locator('#ownerRequests:has-text("예약 확정")').waitFor({ state: "visible" });
+    await pageA.locator("#ownerRequests summary", { hasText: "배치된 작업자 · 김 작업자" }).waitFor({ state: "visible" });
     await pageA.locator("#ownerBadge").waitFor({ state: "hidden" });
 
     // Owner A replies in buyer-scoped chat

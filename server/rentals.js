@@ -17,6 +17,7 @@ function deriveRequestFields(row, approvedRanges, viewerId, today) {
   if (row.status === "pending") {
     const overlapsApproved = approvedRanges.some((r) => !(end < r.start || start > r.end));
     if (overlapsApproved) derivedState = "conflict";
+    else if (row.operator_conflict) derivedState = "operator_conflict";
     else if (start < today) derivedState = "expired";
     else derivedState = "approvable";
   } else if (row.status === "approved") {
@@ -40,6 +41,7 @@ function deriveRequestFields(row, approvedRanges, viewerId, today) {
     end,
     note: row.note ?? "",
     dailyPrice: Number(row.daily_price),
+    rentalOperator: row.rental_operator ?? null,
     days: Number(row.days),
     totalPrice: Number(row.total_price),
     status: row.status,
@@ -63,7 +65,14 @@ async function fetchRequestWithJoins(db, requestId) {
             l.status AS listing_status,
             l.region AS listing_region,
             ou.name AS owner_name,
-            ru.name AS requester_name
+            ru.name AS requester_name,
+            EXISTS (
+              SELECT 1 FROM rental_requests booked_operator
+              WHERE booked_operator.operator_owner_id = r.operator_owner_id
+                AND booked_operator.status = 'approved'
+                AND daterange(booked_operator.start_date, booked_operator.end_date, '[]')
+                    && daterange(r.start_date, r.end_date, '[]')
+            ) AS operator_conflict
      FROM rental_requests r
      JOIN listings l ON l.id = r.listing_id
      JOIN "user" ou ON ou.id = l.owner_id
@@ -108,7 +117,14 @@ export async function listRequestsForUser(userId, { today = kstToday(), pool = g
             l.status AS listing_status,
             l.region AS listing_region,
             ou.name AS owner_name,
-            ru.name AS requester_name
+            ru.name AS requester_name,
+            EXISTS (
+              SELECT 1 FROM rental_requests booked_operator
+              WHERE booked_operator.operator_owner_id = r.operator_owner_id
+                AND booked_operator.status = 'approved'
+                AND daterange(booked_operator.start_date, booked_operator.end_date, '[]')
+                    && daterange(r.start_date, r.end_date, '[]')
+            ) AS operator_conflict
      FROM rental_requests r
      JOIN listings l ON l.id = r.listing_id
      JOIN "user" ou ON ou.id = l.owner_id
@@ -133,13 +149,20 @@ export async function listRequestsForUser(userId, { today = kstToday(), pool = g
   return { incoming, outgoing, approvableCount };
 }
 
-function matchesRentalIdempotency(existing, userId, listingId, start, end, note) {
+function sameOperator(left, right) {
+  return left?.name === right?.name
+    && left?.experience === right?.experience
+    && left?.dailyPrice === right?.dailyPrice;
+}
+
+function matchesRentalIdempotency(existing, userId, listingId, start, end, note, operator) {
   return (
     existing.requester_id === userId &&
     existing.listing_id === listingId &&
     formatIsoDate(existing.start_date) === start &&
     formatIsoDate(existing.end_date) === end &&
-    (existing.note ?? "") === note
+    (existing.note ?? "") === note &&
+    sameOperator(existing.rental_operator, operator)
   );
 }
 
@@ -157,12 +180,21 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
   }
   const note = normalizeText(payload?.note ?? "", { min: 0, max: 500, field: "요청 메모", allowNewlines: true });
 
+  const operator = payload?.rentalOperator ?? null;
+  if (operator !== null && (
+    typeof operator.name !== "string" ||
+    typeof operator.experience !== "string" ||
+    !Number.isSafeInteger(operator.dailyPrice) || operator.dailyPrice < 1
+  )) {
+    fail(400, "INVALID_OPERATOR_QUOTE", "작업자 정보와 요금을 다시 확인해 주세요.");
+  }
+
   try {
     return await withTransaction(async (client) => {
       const existingRes = await client.query(`SELECT * FROM rental_requests WHERE id = $1 FOR UPDATE`, [id]);
       if (existingRes.rows.length) {
         const existing = existingRes.rows[0];
-        if (!matchesRentalIdempotency(existing, user.id, listingId, start, end, note)) {
+        if (!matchesRentalIdempotency(existing, user.id, listingId, start, end, note, operator)) {
           fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
         }
         const requestDto = await buildSingleRequestDto(client, id, user.id, today);
@@ -197,17 +229,25 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
       }
 
       const dailyPrice = Number(listing.price);
-      const totalPrice = dailyPrice * days;
+      if (operator && !sameOperator(listing.rental_operator, operator)) {
+        fail(409, "OPERATOR_OPTION_CHANGED", "작업자 옵션이 변경됐어요. 새 요금과 이력을 확인해 주세요.");
+      }
+      const acceptedOperator = operator ? listing.rental_operator : null;
+      const operatorDailyPrice = acceptedOperator?.dailyPrice ?? 0;
+      const totalPrice = (dailyPrice + operatorDailyPrice) * days;
 
       await client.query(
         `INSERT INTO rental_requests (
           id, listing_id, requester_id, start_date, end_date,
-          note, daily_price, days, total_price, status
-        ) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending')`,
-        [id, listingId, user.id, start, end, note, dailyPrice, days, totalPrice]
+          note, daily_price, days, total_price, status, rental_operator, operator_owner_id, operator_daily_price
+        ) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', $10, $11, $12)`,
+        [id, listingId, user.id, start, end, note, dailyPrice, days, totalPrice, acceptedOperator, acceptedOperator ? listing.owner_id : null, operatorDailyPrice]
       );
 
       const requestDto = await buildSingleRequestDto(client, id, user.id, today);
+      if (requestDto.derivedState === "operator_conflict") {
+        fail(409, "OPERATOR_DATE_OVERLAP", "같은 기간에 확정된 작업자 동반 예약이 있습니다.");
+      }
       return { status: 201, idempotent: false, request: requestDto };
     }, pool);
   } catch (error) {
@@ -215,7 +255,7 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
     if (error?.code === "23505") {
       const existingRes = await pool.query(`SELECT * FROM rental_requests WHERE id = $1 LIMIT 1`, [id]);
       const existing = existingRes.rows[0];
-      if (existing && matchesRentalIdempotency(existing, user.id, listingId, start, end, note)) {
+      if (existing && matchesRentalIdempotency(existing, user.id, listingId, start, end, note, operator)) {
         const requestDto = await buildSingleRequestDto(pool, id, user.id, today);
         return { status: 200, idempotent: true, request: requestDto };
       }
@@ -283,6 +323,9 @@ export async function approveRentalRequest(user, requestId, { today = kstToday()
         [id]
       );
     } catch (error) {
+      if (error?.constraint === "rental_requests_operator_no_overlap") {
+        fail(409, "OPERATOR_DATE_OVERLAP", "같은 기간에 확정된 작업자 동반 예약이 있습니다.");
+      }
       if (error?.code === "23P01") {
         fail(409, "DATE_OVERLAP", "이미 승인된 다른 예약과 기간이 겹칩니다.");
       }

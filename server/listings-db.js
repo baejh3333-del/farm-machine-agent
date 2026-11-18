@@ -31,6 +31,7 @@ export function toListingDto(row, booked = [], viewerId = null) {
     areaMin: Number(row.area_min),
     areaMax: Number(row.area_max),
     price: Number(row.price),
+    rentalOperator: row.rental_operator ?? null,
     region: row.region,
     condition: row.condition,
     inspectedAt: typeof row.inspected_at === "string"

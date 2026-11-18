@@ -17,6 +17,7 @@ function openForm(html) {
 const REQUEST_STATE_LABEL = {
   approvable: "승인 대기",
   conflict: "일정 충돌 (승인 불가)",
+  operator_conflict: "작업자 일정 겹침",
   expired: "기간 경과",
   upcoming: "예약 확정",
   active: "대여 중",
@@ -28,6 +29,17 @@ const REQUEST_STATE_LABEL = {
 function renderRequestBadge(req) {
   const label = REQUEST_STATE_LABEL[req.derivedState] || req.status;
   return `<span class="step-pill req-pill req-pill-${escapeHtml(req.derivedState || req.status)}">${escapeHtml(label)}</span>`;
+}
+
+function renderRentalOperator(req) {
+  const operator = req.rentalOperator;
+  if (!operator) return "";
+  const assigned = ["upcoming", "active", "completed"].includes(req.derivedState);
+  const label = assigned ? "배치된 작업자" : "요청한 작업자";
+  return `<details class="rental-operator">
+    <summary>${label} · ${escapeHtml(operator.name)} · ${money(operator.dailyPrice)}/일</summary>
+    <small class="rental-operator-experience">${escapeHtml(operator.experience)}</small>
+  </details>`;
 }
 
 function rentalForm(id, draftValues = null) {
@@ -45,6 +57,13 @@ function rentalForm(id, draftValues = null) {
   const initialStart = draftValues?.start || (state.filters.date >= minToday ? state.filters.date : minToday);
   const initialEnd = draftValues?.end || (state.filters.dateEnd >= initialStart ? state.filters.dateEnd : initialStart);
   const initialNote = draftValues?.note || "";
+  const operator = item.rentalOperator;
+  const savedOperator = draftValues?.rentalOperator;
+  const restoreOperator = Boolean(operator && savedOperator &&
+    operator.name === savedOperator.name &&
+    operator.experience === savedOperator.experience &&
+    operator.dailyPrice === savedOperator.dailyPrice);
+  const getRequestedOperator = () => $("rentWithOperator")?.checked ? operator : null;
   let draftRequestId = draftValues?.requestId || crypto.randomUUID();
 
   openForm(`
@@ -57,6 +76,17 @@ function rentalForm(id, draftValues = null) {
         <label>반납 예정일<input type="date" id="rentEnd" min="${escapeHtml(initialStart)}" value="${escapeHtml(initialEnd)}" required></label>
       </div>
       <div id="rentalBookingWeather" class="rental-booking-weather" hidden aria-live="polite"></div>
+      ${operator ? `<div class="rental-operator rental-operator-option">
+        <label class="rental-operator-toggle">
+          <input type="checkbox" id="rentWithOperator" ${restoreOperator ? "checked" : ""}>
+          <span>작업자 동반 <strong>+${money(operator.dailyPrice)}/일</strong></span>
+        </label>
+        <details>
+          <summary>${escapeHtml(operator.name)} 작업자 이력 보기</summary>
+          <p class="rental-operator-experience">${escapeHtml(operator.experience)}</p>
+        </details>
+        <small>소유 농가가 대여를 승인하면 작업자 배치도 확정돼요.</small>
+      </div>` : ""}
       <p id="rentalEstimate" aria-live="polite"></p>
       <label>작업 내용 · 방문 메모 (선택)
         <textarea id="rentNote" maxlength="500" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다.">${escapeHtml(initialNote)}</textarea>
@@ -94,8 +124,13 @@ function rentalForm(id, draftValues = null) {
     const valid = Number.isInteger(days) && days > 0 && start >= minToday;
     const button = $("rentalSubmitButton");
     if (valid) {
-      const totalPrice = item.price * days;
-      $("rentalEstimate").textContent = "운송비와 보증금은 소유 농가에 확인해 주세요.";
+      const machineTotal = item.price * days;
+      const operatorTotal = (getRequestedOperator()?.dailyPrice ?? 0) * days;
+      const totalPrice = machineTotal + operatorTotal;
+      const extras = "운송비와 보증금은 소유 농가에 확인해 주세요.";
+      $("rentalEstimate").textContent = operatorTotal
+        ? `농기계 ${money(machineTotal)} + 작업자 ${money(operatorTotal)} = ${money(totalPrice)}. ${extras}`
+        : extras;
       button.textContent = `${days}일 · ${money(totalPrice)} 대여 신청하기`;
       if (!busy) button.disabled = false;
     } else {
@@ -106,7 +141,7 @@ function rentalForm(id, draftValues = null) {
     updateBookingWeather(start, end, valid);
   };
   $("rentalForm").addEventListener("input", () => {
-    const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}`;
+    const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}|${Boolean(getRequestedOperator())}`;
     if (lastPayloadFingerprint && fp !== lastPayloadFingerprint) {
       draftRequestId = crypto.randomUUID();
       lastPayloadFingerprint = null;
@@ -114,6 +149,10 @@ function rentalForm(id, draftValues = null) {
     updateEstimate();
   });
   updateEstimate();
+  if (savedOperator && !restoreOperator) {
+    draftRequestId = crypto.randomUUID();
+    toast("작업자 옵션이 변경됐어요. 새 요금과 이력을 확인해 주세요.");
+  }
 
   $("rentalForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -124,14 +163,15 @@ function rentalForm(id, draftValues = null) {
     if (end < start || start < today()) return toast("대여 시작일과 반납일을 다시 확인하세요.");
     if (!available(listingById(id), start, end)) return toast("해당 기간에는 이미 확정된 예약이 있어 대여할 수 없습니다.");
 
-    lastPayloadFingerprint = `${start}|${end}|${note}`;
+    const rentalOperator = getRequestedOperator();
+    lastPayloadFingerprint = `${start}|${end}|${note}|${Boolean(rentalOperator)}`;
     busy = true;
     const button = $("rentalSubmitButton");
     button.disabled = true;
     try {
       await apiFetch("/api/requests", {
         method: "POST",
-        json: { action: "create", id: draftRequestId, listingId: id, start, end, note },
+        json: { action: "create", id: draftRequestId, listingId: id, start, end, note, rentalOperator },
       });
       hideDialog($("formBackdrop"));
       await Promise.all([deps.loadCatalog({ quiet: true }), deps.refreshAuthenticatedData()]);
@@ -140,15 +180,20 @@ function rentalForm(id, draftValues = null) {
       if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
       if (error?.status === 401) {
         deps.savePendingIntentAndRedirectLogin(
-          { type: "rental", listingId: id, draftValues: { start, end, note, requestId: draftRequestId } },
+          { type: "rental", listingId: id, draftValues: { start, end, note, rentalOperator, requestId: draftRequestId } },
           "세션이 만료되었습니다. 로그인 후 이어서 신청할 수 있어요."
         );
+        return;
+      }
+      if (error?.code === "OPERATOR_OPTION_CHANGED") {
+        await deps.loadCatalog({ quiet: true });
+        if ($("rentalSubmitButton") === button) rentalForm(id, { start, end, note, rentalOperator });
         return;
       }
       toast(error?.message || "대여 요청을 보내지 못했습니다.");
     } finally {
       busy = false;
-      if ($("rentalSubmitButton")) updateEstimate();
+      if ($("rentalSubmitButton") === button) updateEstimate();
     }
   });
 }
@@ -1186,6 +1231,7 @@ function renderBuyerRequests() {
           </div>
           <strong>${escapeHtml(req.listingTitle || "농기계 매물")}</strong>
           <small>대여 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)} · 소유자 ${escapeHtml(req.listingOwnerName || "-")}${req.note ? `<br>내 메모: ${escapeHtml(req.note)}` : ""}</small>
+          ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
           <button type="button" class="button button-secondary button-sm" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 채팅</button>
@@ -1309,6 +1355,7 @@ function renderOwner() {
           </div>
           <strong>${escapeHtml(req.listingTitle || "농기계")}</strong>
           <small>요청자: ${escapeHtml(req.requesterName)} · 희망 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)}${req.note ? `<br>메모: ${escapeHtml(req.note)}` : ""}</small>
+          ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
           ${renderRequestActionsHtml(req)}
@@ -1366,6 +1413,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
     || (state.selectedCrop && state.selectedCrop !== "all" ? state.selectedCrop : CROPS[0].id);
   const initialOp = (Array.isArray(val("operations", null)) ? val("operations", null)[0] : null) || OPERATIONS[0].id;
   const initialPrice = val("price", "");
+  const initialOperator = val("rentalOperator", null);
   const initialAreaMin = val("areaMin", 300);
   const initialAreaMax = val("areaMax", 1500);
   const initialRegion = val("region", state.region || "영양읍");
@@ -1454,6 +1502,20 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
         <label>포함 작업기·부속품<input id="editIncluded" maxlength="120" required value="${escapeHtml(initialIncluded)}" placeholder="예: 로터리, 두둑성형기 포함"></label>
         <label>인수·전달 방법<input id="editPickup" maxlength="120" required value="${escapeHtml(initialPickup)}" placeholder="예: 영양읍 창고 직접 방문 인수"></label>
       </div>
+      <div id="editOperatorOption" class="rental-operator rental-operator-option">
+        <label class="rental-operator-toggle">
+          <input type="checkbox" id="editOperatorEnabled" ${initialOperator ? "checked" : ""}>
+          작업자 동반 대여 제공
+        </label>
+        <fieldset id="editOperatorFields" class="rental-operator-fields">
+          <legend>공개 작업자 프로필</legend>
+          <div class="form-row-2">
+            <label>이름<input id="editOperatorName" maxlength="40" value="${escapeHtml(initialOperator?.name ?? "")}" required></label>
+            <label>일당(원)<input id="editOperatorPrice" type="number" min="1" max="500000000" value="${escapeHtml(initialOperator?.dailyPrice ?? "")}" required></label>
+          </div>
+          <label>작업 이력<textarea id="editOperatorExperience" maxlength="300" placeholder="예: 트랙터 경운·로터리 작업 7년, 농기계 안전교육 수료" required>${escapeHtml(initialOperator?.experience ?? "")}</textarea></label>
+        </fieldset>
+      </div>
       <label>상세 설명 및 초보자 안내<textarea id="editDescription" maxlength="1000" required placeholder="기계 작동 상태와 초보 농부님이 사용할 때 주의할 점을 적어주세요.">${escapeHtml(initialDescription)}</textarea></label>
       <button class="button button-primary button-large" type="submit" id="listingSubmitButton">${isEdit ? "수정 내용 저장하기" : "+ 매물 등록 완료하기"}</button>
     </form>
@@ -1510,6 +1572,16 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   $("editModelId").addEventListener("change", syncModelLock);
 
   let busy = false;
+  const syncOperatorFields = () => {
+    const isRental = $("editType").value === "rent";
+    const enabled = isRental && $("editOperatorEnabled").checked;
+    $("editOperatorOption").hidden = !isRental;
+    $("editOperatorFields").hidden = !enabled;
+    $("editOperatorFields").disabled = !enabled;
+  };
+  syncOperatorFields();
+  $("editType").addEventListener("change", syncOperatorFields);
+  $("editOperatorEnabled").addEventListener("change", syncOperatorFields);
   let lastSubmitHash = null;
   let capturedPhotoDataUrl = null;
 
@@ -1592,6 +1664,11 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       action: isEdit ? "update" : "create",
       id: draftListingId,
       type: $("editType").value,
+      rentalOperator: $("editOperatorFields").disabled ? null : {
+        name: $("editOperatorName").value.trim(),
+        dailyPrice: Number($("editOperatorPrice").value),
+        experience: $("editOperatorExperience").value.trim(),
+      },
       modelId,
       brand: spec ? spec.brand : $("editBrand").value.trim(),
       machineType: spec ? spec.machineType : $("editMachine").value,

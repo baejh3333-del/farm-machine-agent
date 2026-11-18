@@ -67,7 +67,7 @@ test("사진 첨부: 고르면 미리보기만 뜨고 글은 그대로이며, �
   }
 });
 
-test("사진 첨부: 글+사진, 사진만 보내기 모두 실제 사진을 보내고, 실패하면 글과 사진을 남겨 다시 보낼 수 있다", async () => {
+test("사진 첨부: 전송할 때 사진만 보내고, 입력한 글은 다음 전송을 위해 남긴다", async () => {
   const server = await startStaticServer();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -79,7 +79,7 @@ test("사진 첨부: 글+사진, 사진만 보내기 모두 실제 사진을 보
     await page.locator("#aiPhotoPreview").waitFor({ state: "visible" });
     await send(page);
     await page.locator(".chat-bubble.assistant", { hasText: "사진을 지금 확인하지 못했어요" }).waitFor();
-    assert.equal(agentRequests[0].message, "여기서 기름이 새요");
+    assert.equal(agentRequests[0].message, undefined);
     assert.equal(agentRequests[0].inputMode, "text");
     assert.match(agentRequests[0].image, /^data:image\/(webp|jpeg|png);base64,/);
     assert.equal(await page.locator("#aiPhotoPreview").isVisible(), true, "photo stays attached after a failure");
@@ -88,20 +88,27 @@ test("사진 첨부: 글+사진, 사진만 보내기 모두 실제 사진을 보
     await send(page);
     await page.locator(".chat-bubble.assistant", { hasText: "기름이 새는" }).waitFor();
     assert.equal(agentRequests.length, 2);
-    assert.equal(agentRequests[1].message, "여기서 기름이 새요");
+    assert.equal(agentRequests[1].message, undefined);
     assert.equal(agentRequests[1].image, agentRequests[0].image, "retry sends the same photo");
     assert.equal(await page.locator("#aiPhotoPreview").isHidden(), true, "sent photo leaves the composer");
 
-    // 사진만 보내기
+    assert.equal(await page.locator(".chat-bubble.user").last().textContent(), "");
+    assert.equal(await page.locator("#aiInput").inputValue(), "여기서 기름이 새요");
+    await send(page);
+    await page.waitForFunction(() => !document.querySelector("#aiMessages .is-thinking"));
+    assert.equal(agentRequests[2].message, "여기서 기름이 새요");
+    assert.equal(agentRequests[2].image, undefined);
+
+    // 입력한 글 없이 사진 보내기
     await attach(page);
     await page.locator("#aiPhotoPreview").waitFor({ state: "visible" });
     assert.equal(await page.locator("#aiInput").inputValue(), "");
     await send(page);
     await page.waitForFunction(() => document.querySelectorAll(".chat-bubble.user img.ai-chat-photo").length >= 3);
     await page.waitForFunction(() => !document.querySelector("#aiMessages .is-thinking"));
-    assert.equal(agentRequests.length, 3);
-    assert.equal(agentRequests[2].message, "이 기계 사진이에요.");
-    assert.match(agentRequests[2].image, /^data:image\//);
+    assert.equal(agentRequests.length, 4);
+    assert.equal(agentRequests[3].message, undefined);
+    assert.match(agentRequests[3].image, /^data:image\//);
     assert.deepEqual(errors, []);
     await page.close();
   } finally {

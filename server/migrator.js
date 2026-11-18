@@ -88,7 +88,7 @@ export async function inspectDatabase({ pool = getPool(), migrationsDir = DEFAUL
   }
 
   const counts = {};
-  for (const name of ["user", "session", "listings", "favorites", "owned_machines", "rental_requests", "conversations", "messages", "agent_sessions", "agent_messages", "agent_actions", "purchase_orders", "agent_tool_calls", "farm_profiles", "crop_catalog", "operation_catalog", "machine_type_catalog", "machine_model_specs"]) {
+  for (const name of ["user", "session", "listings", "listing_draft_photos", "favorites", "owned_machines", "rental_requests", "conversations", "messages", "agent_sessions", "agent_messages", "agent_actions", "purchase_orders", "agent_tool_calls", "farm_profiles", "crop_catalog", "operation_catalog", "machine_type_catalog", "machine_model_specs"]) {
     if (tables.includes(name)) {
       const res = await pool.query(`SELECT count(*)::int AS count FROM "${name}"`);
       counts[name] = res.rows[0].count;

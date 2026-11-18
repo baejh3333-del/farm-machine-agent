@@ -47,7 +47,7 @@ export async function askAgent(
     timeoutMs: image ? 50000 : 30000,
     json: {
       action: "chat",
-      message,
+      ...(message ? { message } : {}),
       history,
       region,
       inputMode: inputMode === "voice" ? "voice" : "text",
@@ -71,6 +71,7 @@ export async function askAgent(
 export async function executeAgentAction(pendingAction, requestId, { insuranceAsked = false } = {}) {
   return apiFetch("/api/agent", {
     method: "POST",
+    ...(pendingAction?.type === "create_listing" ? { timeoutMs: 45000 } : {}),
     json: { action: "execute", pendingAction, requestId, insuranceAsked },
   });
 }

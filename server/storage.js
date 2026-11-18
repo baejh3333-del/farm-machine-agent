@@ -189,6 +189,7 @@ export async function reconcilePhotos({ pool = getPool(), minAgeMs = 10 * 60 * 1
     }
     try {
       await deletePhotoObject(obj.key);
+      await pool.query("DELETE FROM listing_draft_photos WHERE photo_key = $1", [obj.key]);
       deletedKeys.push(obj.key);
     } catch (error) {
       errors.push({ key: obj.key, error: error instanceof Error ? error.message : "unknown" });

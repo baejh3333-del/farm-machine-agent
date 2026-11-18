@@ -2024,7 +2024,7 @@ async function runTurn(
         let photoNote = null;
         if (!draft && user && image?.dataUrl) {
           try {
-            draft = await saveDraft(user, image.dataUrl);
+            draft = await saveDraft(user, image.dataUrl, { pool });
           } catch (error) {
             photoNote = "사진을 저장하지 못했어요. 등록 화면에서 사진을 다시 올려 주세요.";
             console.warn("draft photo save failed", error?.code || error?.name);
@@ -2106,7 +2106,7 @@ async function runTurn(
           }
         } else {
           if (!draft && user && image?.dataUrl) {
-            try { draft = await saveDraft(user, image.dataUrl); } catch { /* ignore */ }
+            try { draft = await saveDraft(user, image.dataUrl, { pool }); } catch { /* ignore */ }
           }
           const priceInfo = resolved.estimated ?? estimatePrice(await loadCatalog(), { purpose: resolved.type, modelId: resolved.modelId, machineType: resolved.machineType });
           out.listingDraft = {
@@ -2512,7 +2512,7 @@ export async function executeListingAction(user, action, { requestId, pool = get
   if (resolved.price === null || !Number.isSafeInteger(resolved.price) || resolved.price < 0) {
     return { outcome: "failed", code: "PRICE_REQUIRED", message: "가격이 정해지지 않았어요. ‘상세 수정 후 등록’에서 가격을 입력해 주세요." };
   }
-  const photoDataUrl = !cleanDraft && typeof action?.photoDataUrl === "string" && action.photoDataUrl.startsWith("data:image/")
+  const photoDataUrl = typeof action?.photoDataUrl === "string" && action.photoDataUrl.startsWith("data:image/")
     ? action.photoDataUrl
     : null;
   const id = cleanDraft ? cleanDraft.listingId : requestId;
@@ -2531,7 +2531,8 @@ export async function executeListingAction(user, action, { requestId, pool = get
     areaMin: resolved.areaMin,
     areaMax: resolved.areaMax,
     description: resolved.description,
-    ...(cleanDraft ? { draftPhotoKey: cleanDraft.photoKey } : (photoDataUrl ? { photoDataUrl } : {})),
+    ...(cleanDraft ? { draftPhotoKey: cleanDraft.photoKey } : {}),
+    ...(photoDataUrl ? { photoDataUrl } : {}),
   }, { pool });
 
   const listing = result.listing || {};

@@ -272,7 +272,7 @@ test("초안을 등록 화면 값으로 바꾸고, 저장 안 된 초안은 사�
   assert.equal(saved.id, "11111111-1111-4111-8111-111111111111");
   assert.equal(saved.draftPhotoKey, "listings/11111111-1111-4111-8111-111111111111/a.webp");
   assert.equal(saved.draftPhotoUrl, "/api/photos?key=x");
-  assert.equal(saved.photoDataUrl, undefined);
+  assert.equal(saved.photoDataUrl, "data:image/jpeg;base64,AAA");
   assert.deepEqual(
     { type: saved.type, title: saved.title, description: saved.description, price: saved.price, machineType: saved.machineType, modelId: saved.modelId, brand: saved.brand },
     { type: "rent", title: "관리기 빌려드려요", description: "소개글", price: 45000, machineType: "cultivator", modelId: "asia-amc900", brand: "아세아텍" },

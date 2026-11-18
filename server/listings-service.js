@@ -178,16 +178,21 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
     return { status: 200, idempotent: true, listing };
   }
 
-  // 농농이가 저장한 초안 사진: 이 매물 ID로 저장된 키만 받아 새로 올리지 않고 그대로 쓴다.
+  // 현재 회원의 초안 사진만 재사용한다. 이전 초안은 첨부 원본으로 다시 저장할 수 있다.
   const draftPhotoKey = typeof payload?.draftPhotoKey === "string" && payload.draftPhotoKey.trim()
     ? payload.draftPhotoKey.trim()
     : null;
   let draftKey = null;
   if (draftPhotoKey) {
-    if (!isValidPhotoKey(draftPhotoKey) || !draftPhotoKey.startsWith(`listings/${id}/`) || !(await getPhotoObject(draftPhotoKey))) {
-      fail(400, "INVALID_DRAFT_PHOTO", "사진을 다시 올려 주세요.");
+    const draft = isValidPhotoKey(draftPhotoKey) && draftPhotoKey.startsWith(`listings/${id}/`)
+      ? await pool.query(
+        "SELECT 1 FROM listing_draft_photos WHERE listing_id = $1 AND user_id = $2 AND photo_key = $3",
+        [id, user.id, draftPhotoKey],
+      )
+      : null;
+    if (draft?.rows.length && await getPhotoObject(draftPhotoKey)) {
+      draftKey = draftPhotoKey;
     }
-    draftKey = draftPhotoKey;
   }
 
   let uploadedKey = null;
@@ -197,8 +202,9 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
     await putPhotoObject(uploadedKey, encoded.buffer, encoded.contentType);
   }
 
+  let outcome;
   try {
-    const outcome = await withTransaction(async (client) => {
+    outcome = await withTransaction(async (client) => {
       const locked = await client.query(`SELECT * FROM listings WHERE id = $1 FOR UPDATE`, [id]);
       if (locked.rows.length) {
         const existing = locked.rows[0];
@@ -206,6 +212,15 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
           fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
         }
         return { idempotent: true, discardUploaded: Boolean(uploadedKey) };
+      }
+
+      const draftOwner = await client.query(
+        "SELECT user_id FROM listing_draft_photos WHERE listing_id = $1 FOR UPDATE",
+        [id],
+      );
+      const reservedForAnotherUser = draftOwner.rows.length > 0 && draftOwner.rows[0].user_id !== user.id;
+      if (reservedForAnotherUser || (draftPhotoKey && !draftKey && !uploadedKey)) {
+        fail(400, "INVALID_DRAFT_PHOTO", "사진을 다시 올려 주세요.");
       }
 
       await client.query(
@@ -245,15 +260,14 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
         ]
       );
 
+      if (draftOwner.rows.length) {
+        await client.query(
+          "DELETE FROM listing_draft_photos WHERE listing_id = $1 AND user_id = $2",
+          [id, user.id],
+        );
+      }
       return { idempotent: false, discardUploaded: false };
     }, pool);
-
-    if (outcome.discardUploaded && uploadedKey) {
-      await deletePhotoObject(uploadedKey).catch(() => {});
-    }
-
-    const listing = await fetchListingById(id, { viewerId: user.id, includeRemoved: true, pool });
-    return { status: outcome.idempotent ? 200 : 201, idempotent: outcome.idempotent, listing };
   } catch (error) {
     if (uploadedKey) {
       await deletePhotoObject(uploadedKey).catch(() => {});
@@ -270,6 +284,11 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
     }
     throw error;
   }
+  if (outcome.discardUploaded && uploadedKey) {
+    await deletePhotoObject(uploadedKey).catch(() => {});
+  }
+  const listing = await fetchListingById(id, { viewerId: user.id, includeRemoved: true, pool });
+  return { status: outcome.idempotent ? 200 : 201, idempotent: outcome.idempotent, listing };
 }
 
 export async function updateListing(user, payload, { pool = getPool() } = {}) {

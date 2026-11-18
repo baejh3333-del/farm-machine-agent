@@ -595,6 +595,11 @@ export function createGptLiveController({
     lastUserCommit = spokenText; // 패널이 이 발화를 위임 턴으로 기록한다.
     userText = "";
     const owner = utterance ? endUtterance(spokenText) : lastUtterance;
+    // 이 발화가 정정이면, 그로 인해 무효가 된 작업의 원래 말을 함께 넘긴다(에이전트가 '아니 콤바인으로'만 받지 않게).
+    // 관련 없는 다른 작업은 넣지 않는다. 애매해서 되묻는 중이면 아직 무효가 된 작업이 없으므로 비어 있다.
+    const corrects = owner?.correction
+      ? tasks.filter((t) => t.supersededBy === owner.id && t.text).map((t) => ({ delegationId: t.delegationId, text: t.text }))
+      : [];
     const taskRev = taskRevision;
     const task = {
       delegationId, utteranceId: owner?.id ?? null, seq: ++taskSeq, superseded: false, supersededBy: null,
@@ -609,6 +614,7 @@ export function createGptLiveController({
         utteranceId: null, startMs: null, endMs: null, speechRevision, taskRevision: taskRev, correction: false,
       }),
       isStale,
+      corrects,
     };
     delegatedReply = true;
     assistantMeta = null;

@@ -2378,6 +2378,13 @@ export function createAiPanel({
       : `${failure.message} 질문을 글로 적어 주세요.`;
   }
 
+  function closeLiveTranscriptBubble(bubble, isUser) {
+    bubble.classList.remove("is-live-transcript");
+    if (isUser) return;
+    const finalText = tidySpokenText(bubble.textContent || "");
+    if (finalText.trim()) bubble.replaceChildren(renderMarkdownElement(finalText));
+  }
+
   function finalizeLiveTranscriptBubbles() {
     liveUserBubble?.classList.remove("is-live-transcript");
     liveAssistantBubble?.classList.remove("is-live-transcript");
@@ -2429,9 +2436,19 @@ export function createAiPanel({
     const isUser = role === "user";
     let bubble = isUser ? liveUserBubble : liveAssistantBubble;
     const textChunk = typeof delta === "string" ? delta : "";
+    // 위임이 진행 중이면 상태가 'thinking'에 머물러 말풍선이 닫히지 않는다. 컨트롤러가 준 발화 id가 바뀌면 새 발화이므로
+    // 이전 말풍선을 닫고 새로 만든다(그러지 않으면 '트랙터 찾아줘내일 날씨 알려줘'처럼 이어 붙는다).
+    const utteranceId = typeof meta?.utteranceId === "string" ? meta.utteranceId : "";
+    if (bubble && utteranceId && bubble.dataset.liveUtteranceId && bubble.dataset.liveUtteranceId !== utteranceId) {
+      closeLiveTranscriptBubble(bubble, isUser);
+      if (isUser) liveUserBubble = null;
+      else liveAssistantBubble = null;
+      bubble = null;
+    }
     if (!bubble && textChunk && joinSpokenText("", textChunk)) {
       bubble = appendAiMessage(joinSpokenText("", textChunk), isUser ? "user" : "assistant");
       bubble.classList.add("is-live-transcript");
+      if (utteranceId) bubble.dataset.liveUtteranceId = utteranceId;
       if (isUser) liveUserBubble = bubble;
       else liveAssistantBubble = bubble;
     } else if (bubble && textChunk) {
@@ -2447,15 +2464,7 @@ export function createAiPanel({
       scrollAiToEnd();
     }
     if (meta?.done || meta?.final) {
-      if (bubble) {
-        bubble.classList.remove("is-live-transcript");
-        if (!isUser) {
-          const finalText = tidySpokenText(bubble.textContent || "");
-          if (finalText.trim()) {
-            bubble.replaceChildren(renderMarkdownElement(finalText));
-          }
-        }
-      }
+      if (bubble) closeLiveTranscriptBubble(bubble, isUser);
       if (isUser) liveUserBubble = null;
       else liveAssistantBubble = null;
     }
@@ -2549,6 +2558,21 @@ export function createAiPanel({
     if (lastResults === bubble) lastShownListingIds = [];
   }
 
+  // 정정 발화('아니 콤바인으로')를 보낼 때, 그 정정으로 무효가 된 요청의 원래 말을 history 끝에 붙인다.
+  // 아직 결과가 안 와서 기억(agentHistory)에 없는 요청만 붙이고, 기억 자체는 바꾸지 않는다(중복 기록 없음).
+  function withCorrectedRequests(history, corrects) {
+    if (!Array.isArray(corrects) || !corrects.length) return history;
+    const known = new Set(history.filter((h) => h?.role === "user").map((h) => String(h.content || "").trim()));
+    const added = [];
+    for (const item of corrects) {
+      const text = typeof item?.text === "string" ? item.text.trim() : "";
+      if (!text || known.has(text)) continue;
+      known.add(text);
+      added.push({ role: "user", content: text });
+    }
+    return added.length ? [...history, ...added] : history;
+  }
+
   async function handleClientDelegation(payload, gen, liveGen, meta = null) {
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
     const timer = createDispatchTimer();
@@ -2586,7 +2610,7 @@ export function createAiPanel({
     try {
       timer.mark("request");
       result = await askAgent(userText, {
-        history: committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory,
+        history: withCorrectedRequests(committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory, meta?.corrects),
         region: uiContext.region,
         uiContext,
         inputMode: "voice",
@@ -2618,6 +2642,22 @@ export function createAiPanel({
       if (delegationId) spokenDelegationIds.add(delegationId);
       reportDispatchTiming(timer, { outcome: "error", speechToDispatchMs, utteranceMs, status: Number(error?.status) || 0 });
       return { spokenSummary: spoken, effect };
+    }
+
+    // 서버에 AI가 없거나 막혔으면(mode: "unavailable") 아무 일도 하지 않았다. '확인했어요'처럼 된 척하지 않고 그대로 알린다.
+    if (result?.mode === "unavailable") {
+      if (sentPending && gen === sessionGeneration && !lastPendingAction) lastPendingAction = sentPending; // 실행되지 않았으니 승인 대기를 되돌린다.
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration || superseded()) {
+        reportDispatchTiming(timer, { outcome: "unavailable_stale", speechToDispatchMs, utteranceMs });
+        return { effect: "read" };
+      }
+      const spoken = "지금은 AI 상담을 쓸 수 없어요. 잠시 후 다시 시도해 주세요.";
+      rememberAgentTurn(...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]), { role: "assistant", content: spoken });
+      const unavailableBubble = appendAiMessage(spoken, "assistant");
+      delegatedReadout = { liveGen, bubble: unavailableBubble };
+      if (delegationId) spokenDelegationIds.add(delegationId);
+      reportDispatchTiming(timer, { outcome: "unavailable", speechToDispatchMs, utteranceMs });
+      return { spokenSummary: spoken, effect: "read" };
     }
 
     const write = isWriteOutcome(result);
@@ -2849,7 +2889,7 @@ export function createAiPanel({
             lastUserTranscriptAt = Date.now();
             delegatedReadout = null; // 사용자가 새로 말하기 시작하면 위임 답변 읽기는 끝난 것이다.
           }
-          appendOrUpdateTranscriptBubble("user", payload?.delta || "");
+          appendOrUpdateTranscriptBubble("user", payload?.delta || "", { utteranceId: payload?.utteranceId });
         },
         onAssistantTranscriptDelta: (payload, meta) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
@@ -2860,7 +2900,7 @@ export function createAiPanel({
           } else if (delegatedReadout?.liveGen === liveGen) {
             return;
           }
-          appendOrUpdateTranscriptBubble("assistant", payload?.delta || "");
+          appendOrUpdateTranscriptBubble("assistant", payload?.delta || "", { utteranceId: meta?.utteranceId });
         },
         onTurnCommitted: (turn, meta) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;

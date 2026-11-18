@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { REGION_COORDS, listingCoords, distanceKm } from "../src/data/farm-machines.js";
 import { KOREA_REGIONS, latLngToKmaGrid, getRegionCoords, findNearestRegion } from "../src/data/korea-regions.js";
 import { getWeatherAndMapConfig } from "../server/weather.js";
+import { clusterListingsByZoom, getClusterThresholdKm } from "../src/views/map-weather.js";
 
 test("listingCoords와 distanceKm는 결정적 좌표 기반 직선거리를 계산한다", () => {
   const c1 = listingCoords("영양읍", "rent-1");
@@ -146,4 +147,33 @@ test("getWeatherAndMapConfig는 전국 지역명과 명시적 lat/lng 좌표를 
   } finally {
     if (prevKma !== undefined) process.env.KMA_WEATHER_API_KEY = prevKma;
   }
+});
+
+test("clusterListingsByZoom은 지도 축소 레벨에 따라 매물을 단일 점으로 단계적 통합한다", () => {
+  const origin = { lat: 37.6456, lng: 127.6844 };
+  const sampleItems = [
+    { id: "hc-1", region: "서면 팔봉리", title: "팔봉 트랙터", lat: 37.6538, lng: 127.6942, status: "open" },
+    { id: "hc-2", region: "강원특별자치도 홍천군", title: "남면 트랙터", lat: 37.618, lng: 127.805, status: "open" },
+    { id: "yy-1", region: "영양읍", title: "영양 농기계 1", lat: 36.6667, lng: 129.1124, status: "open" },
+    { id: "yy-2", region: "청기면", title: "영양 농기계 2", lat: 36.704, lng: 129.048, status: "open" },
+  ];
+
+  assert.equal(getClusterThresholdKm(5).km, 2.5);
+  assert.equal(getClusterThresholdKm(8).km, 38);
+  assert.equal(getClusterThresholdKm(12).km, 1000);
+
+  const lv4 = clusterListingsByZoom(sampleItems, 4, origin);
+  assert.equal(lv4.length, 4);
+  assert.ok(lv4.every((c) => c.count === 1));
+
+  const lv8 = clusterListingsByZoom(sampleItems, 8, origin);
+  assert.equal(lv8.length, 2);
+  assert.deepEqual(lv8.map((c) => c.count).sort((a, b) => a - b), [2, 2]);
+
+  const lv12 = clusterListingsByZoom(sampleItems, 12, origin);
+  assert.equal(lv12.length, 1);
+  assert.equal(lv12[0].count, 4);
+  assert.equal(lv12[0].isAllCluster, true);
+  assert.equal(lv12[0].items[0].id, "hc-1");
+  assert.equal(lv12[0].items.length, 4);
 });

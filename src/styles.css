@@ -4851,6 +4851,46 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   z-index: 10;
 }
 
+.socar-public-office-pin {
+  background: #1b598e;
+  padding: 4px 7px;
+  font-size: 0.72rem;
+}
+
+.socar-public-office-dialog {
+  width: min(92vw, 560px);
+  max-height: 75vh;
+  border: 1px solid #dce4df;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.socar-public-office-dialog::backdrop {
+  background: #172b2380;
+}
+
+.socar-public-office-dialog form {
+  float: right;
+}
+
+.socar-public-office-dialog input {
+  display: block;
+  width: 100%;
+  margin: 8px 0 14px;
+  padding: 8px;
+}
+
+#socarPublicOfficesResults {
+  display: grid;
+  gap: 6px;
+}
+
+#socarPublicOfficesResults button {
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
+}
+
 .socar-pin-tag {
   font-size: 0.72rem;
   font-weight: 700;

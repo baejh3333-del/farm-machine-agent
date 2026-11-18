@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   getOrCreateAgentSession,
   loadFarmProfile,
@@ -28,6 +29,7 @@ import {
   executeRentalRequest,
   runAgentTurn,
 } from "../server/nongnong-agent.js";
+import { isAffirmative } from "../server/nongnong.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
 import voiceApi from "../server/voice-api.js";
 import { createRentalRequest } from "../server/rentals.js";
@@ -105,6 +107,49 @@ const EXECUTE_ACTIONS = {
   },
 };
 
+const CONFIRMABLE_ACTIONS = new Set(["rental_request", "purchase_request", "create_listing"]);
+const ACTION_LABEL = { rental_request: "대여 예약 요청", purchase_request: "구매 신청", create_listing: "매물 등록" };
+
+/**
+ * 바로 앞 턴에서 농농이 확인을 물은 작업(pendingAction)에 사용자가 "네", "응 해줘"라고 답하면
+ * 모델을 다시 부르지 않고 그 자리에서 실행한다. 매물 ID를 잃어버리거나 "잠시 후 진행"으로 끝나는 일을 막는다.
+ * 실행 대상이 아니면 null.
+ */
+export async function runConfirmedAction({ message, pending, user, requestId, run, beforeWrite }) {
+  if (!user || !pending || typeof pending !== "object" || !CONFIRMABLE_ACTIONS.has(pending.type)) return null;
+  if (!isAffirmative(message)) return null;
+  const label = ACTION_LABEL[pending.type];
+  const title = typeof pending.title === "string" && pending.title.trim()
+    ? `${pending.title.replace(/\s*·\s*/g, " ").trim().slice(0, 60)} `
+    : "";
+  try {
+    await beforeWrite?.(pending.type);
+    const executed = await run(user, pending, requestId);
+    if (executed?.outcome === "completed" || executed?.outcome === "partial") {
+      const number = executed.reservation?.number || executed.createdListing?.number || "";
+      const reply = executed.outcome === "completed"
+        ? `${title}${label}을 완료했어요.${number ? ` 신청 번호는 ${number}예요.` : ""}`
+        : executed.message;
+      return {
+        mode: "agent",
+        reply,
+        listingIds: [],
+        learnedSlots: {},
+        executedAction: pending.type,
+        ...(executed.reservation ? { reservation: executed.reservation } : {}),
+        ...(executed.createdListing ? { createdListing: executed.createdListing } : {}),
+      };
+    }
+    const reason = String(executed?.message || "요청을 처리하지 못했어요").replace(/[.。]\s*$/, "");
+    return { mode: "agent", reply: `${title}${label}을 하지 못했어요. 이유: ${reason}. 다른 매물을 찾아 드릴까요?`, listingIds: [], learnedSlots: {}, actionFailed: true };
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 401) throw error;
+    const reason = error instanceof HttpError ? error.message.replace(/[.。]\s*$/, "") : "서버 연결이 잠시 불안정했어요";
+    if (!(error instanceof HttpError)) console.warn("confirmed_action_failed", error?.name || "unknown");
+    return { mode: "agent", reply: `${title}${label}을 하지 못했어요. 이유: ${reason}. "다시 해줘"라고 말씀하시면 바로 다시 시도할게요.`, listingIds: [], learnedSlots: {}, actionFailed: true, pendingAction: pending };
+  }
+}
+
 /** 사진을 검사·재인코딩(EXIF 제거)해서 모델에 보낼 형태로 만든다. 저장은 하지 않는다. */
 async function preparePhoto(dataUrl) {
   try {
@@ -128,9 +173,11 @@ const agentApi = handle(["POST"], async (request) => {
     const hasImage = typeof body.image === "string" && body.image.length > 0;
     if (message.length > 500 || (!message && !hasImage)) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
     // 호출 제한을 먼저 검사해 사진 디코딩 비용도 횟수에 넣는다.
+    // 호출 제한 검사와 로그인 확인은 서로 기다릴 필요가 없어 함께 실행한다(응답 시간 단축).
+    const userPromise = currentUser(request).catch(() => null);
     await enforceRateLimit(request, "recommend");
     const image = hasImage ? await preparePhoto(body.image) : undefined;
-    const user = await currentUser(request).catch(() => null);
+    const user = await userPromise;
     const [farmProfile, session] = user?.id
       ? await Promise.all([
           loadFarmProfile(user.id).catch(() => null),
@@ -173,14 +220,30 @@ const agentApi = handle(["POST"], async (request) => {
       });
       if (insurance) return { status: 200, body: insurance };
     }
-    const turn = await runAgentTurn(message, {
+    const pendingRequestId = typeof body.pendingAction?.requestId === "string" && UUID.test(body.pendingAction.requestId)
+      ? body.pendingAction.requestId
+      : randomUUID();
+    const confirmed = !image && user
+      ? await runConfirmedAction({
+          message,
+          pending: body.pendingAction,
+          user,
+          requestId: pendingRequestId,
+          run: (u, pending, id) => EXECUTE_ACTIONS[pending.type].run(u, pending, id),
+          beforeWrite: async (type) => {
+            await assertWritesAllowed();
+            await enforceRateLimit(request, EXECUTE_ACTIONS[type].rateKind, { userId: user.id });
+          },
+        })
+      : null;
+    const turn = confirmed ?? await runAgentTurn(message, {
       history: Array.isArray(body.history) ? body.history : [],
       region: typeof body.region === "string" ? body.region : undefined,
       inputMode: body.inputMode === "voice" ? "voice" : "text",
       uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
       image,
       user,
-      farmProfile,
+      farmProfile: user?.id ? (farmProfile ?? null) : undefined,
       sessionId: activeSessionId,
       sessionSlots: session?.slots,
       savedDraft: cleanSavedDraft(body.savedDraft),

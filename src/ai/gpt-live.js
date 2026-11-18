@@ -6,10 +6,14 @@
 // onError(error, { fatal, source }): fatal이면 세션은 이미 정리 중이고(source: "start"|"connection"),
 // fatal이 아니면 대화는 계속된다(source: "delegation"|"event"|"audio").
 import { createLiveVoiceSession } from "./recommend-agent.js";
+import { joinSpokenText, tidySpokenText } from "./spoken-text.js";
 
-const GREETING = "한국어로 반갑게 인사하며 어떤 농사일이나 농기계를 찾으시는지 여쭤보고 대답을 기다려 주세요.";
-const CONTINUE_GREETING = "앞선 대화 내용과 조건을 기억한 상태에서, 짧게 인사하고 바로 이어서 도와드릴 점을 말씀해 주세요.";
-const PROGRESS = "모아농 매물과 기상·호환성 정보를 확인하고 있습니다.";
+export const GREETING_TEXT = "안녕하세요, 농농이에요. 대여, 구매, 판매 중에 어떤 걸 도와드릴까요?";
+// 연결되자마자 농농이가 먼저 말하게 한다. 사용자가 이미 말하고 있으면 인사를 건너뛴다(말 끊기 방지).
+const GREETING = `지금 바로 첫 인사로 "${GREETING_TEXT}" 이 한 문장만 말하고, 사용자의 대답을 기다려 주세요.`;
+const CONTINUE_GREETING = "앞선 대화 내용과 조건을 기억한 상태에서, 한 문장으로 짧게 인사하고 이어서 도와드릴 점을 여쭤 주세요.";
+// 사용자에게 읽어 주는 말이 아니라 모델에게 주는 진행 상황이다. "확인해볼게요" 같은 중간 안내를 매번 말하지 않게 한다.
+const PROGRESS = "백엔드 조회 중이다. 결과가 오기 전에는 '확인해볼게요', '잠시만요' 같은 중간 안내를 하지 말고 조용히 기다린다. 결과가 오면 결과만 짧게 말한다.";
 
 function abortError() {
   const error = new Error("gpt-live 연결이 취소되었습니다.");
@@ -76,6 +80,8 @@ export function createGptLiveController({
   iceTimeoutMs = 2500,
   closeTimeoutMs = 15000,
   speakingIdleMs = 1500,
+  // 사용자의 마지막 음성 전사 뒤 이 시간 안에는 아직 말하는 중으로 본다(그동안 농농이 말을 시작하지 않는다).
+  userQuietMs = 700,
   onState = () => {},
   onUserTranscriptDelta = () => {},
   onAssistantTranscriptDelta = () => {},
@@ -98,6 +104,10 @@ export function createGptLiveController({
   let delegatedReply = false; // 위임 결과를 읽어 주는 중인 발화는 패널이 이미 답변으로 기록했다.
   let speakingTimer = null;
   let seq = 0;
+  let lastUserAudioAt = 0; // 마지막 사용자 전사 delta 시각
+  let outputSuppressed = false; // 사용자가 끼어든 뒤 남은 농농이 음성은 끈다.
+  let speechQueue = []; // 사용자가 말하는 동안 미뤄 둔 commentary
+  let speechTimer = null;
 
   const setState = (next) => { if (state !== next) { state = next; onState(next); } };
   const idleState = () => (muted ? "muted" : "listening");
@@ -105,6 +115,45 @@ export function createGptLiveController({
   const syncIdleState = () => { if (state === "listening" || state === "muted") setState(idleState()); };
   const id = (p) => `${p}_${Date.now()}_${seq++}`;
   const current = (s) => s && session === s && s.gen === gen;
+
+  const userSpeakingNow = () => Boolean(lastUserAudioAt) && Date.now() - lastUserAudioAt < userQuietMs;
+
+  function clearSpeechTimer() {
+    if (speechTimer) {
+      clearTimeout(speechTimer);
+      speechTimer = null;
+    }
+  }
+
+  // 사용자가 말하는 중이면 농농이가 말할 내용(commentary)을 미뤘다가 말이 끝난 뒤 보낸다.
+  function flushSpeechQueue(s) {
+    clearSpeechTimer();
+    if (!current(s) || !speechQueue.length) return;
+    if (userSpeakingNow()) {
+      const wait = Math.max(20, userQuietMs - (Date.now() - lastUserAudioAt));
+      speechTimer = setTimeout(() => flushSpeechQueue(s), wait);
+      speechTimer?.unref?.();
+      return;
+    }
+    const queued = speechQueue;
+    speechQueue = [];
+    for (const payload of queued) send(payload, s);
+  }
+
+  function speakWhenQuiet(payload, s = session) {
+    if (!s) return false;
+    if (!userSpeakingNow() && !speechQueue.length) return send(payload, s);
+    speechQueue.push(payload);
+    flushSpeechQueue(s);
+    return true;
+  }
+
+  function setOutputSuppressed(s, next) {
+    outputSuppressed = next;
+    if (s?.audio) {
+      try { s.audio.muted = next; } catch { /* ignore */ }
+    }
+  }
 
   function clearSpeakingTimer() {
     if (speakingTimer) {
@@ -124,7 +173,7 @@ export function createGptLiveController({
 
   function flushAssistantTurn({ interrupted = false } = {}) {
     clearSpeakingTimer();
-    const text = assistantText.trim();
+    const text = tidySpokenText(assistantText);
     assistantText = "";
     if (text) onTurnCommitted({ role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) });
   }
@@ -170,6 +219,10 @@ export function createGptLiveController({
     }
     release(s);
     if (active) {
+      clearSpeechTimer();
+      speechQueue = [];
+      lastUserAudioAt = 0;
+      outputSuppressed = false;
       session = null;
       ready = false;
       greeted = false;
@@ -202,7 +255,7 @@ export function createGptLiveController({
       result = (await onClientDelegation({ delegationId, userText: utterance, userTurnCommitted })) || {};
     } catch (error) {
       if (current(s)) onError(error, { fatal: false, source: "delegation" });
-      result = { spokenSummary: "죄송합니다, 확인 중 문제가 생겼습니다. 잠시 후 다시 말씀해 주세요." };
+      result = { spokenSummary: "죄송해요, 처리 중에 연결 문제가 생겼어요. 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요." };
     }
     if (!current(s)) return;
     const { spokenSummary, thinkingContext } = result;
@@ -210,7 +263,8 @@ export function createGptLiveController({
       send({ type: "session.thinking.append", event_id: id("think"), delegation_id: delegationId, content: String(thinkingContext).slice(0, 800) }, s);
     }
     if (spokenSummary) {
-      send({ type: "session.commentary.append", event_id: id("result"), delegation_id: delegationId, content: String(spokenSummary).slice(0, 800) }, s);
+      // 결과가 늦게 와도 사용자가 말하는 중이면 끝날 때까지 기다렸다가 말한다.
+      speakWhenQuiet({ type: "session.commentary.append", event_id: id("result"), delegation_id: delegationId, content: String(spokenSummary).slice(0, 800) }, s);
     }
     if (state === "thinking") setState(idleState());
   }
@@ -226,15 +280,19 @@ export function createGptLiveController({
         setState(idleState());
         if (muted) send({ type: "session.input_audio.mute", event_id: id("mute") }, s);
         const opening = Array.isArray(history) && history.length > 0 ? CONTINUE_GREETING : GREETING;
-        if (!greeted && send({ type: "session.commentary.append", event_id: id("greeting"), delegation_id: null, content: opening }, s)) {
+        if (!greeted && userSpeakingNow()) {
+          greeted = true; // 사용자가 먼저 말을 시작했으면 인사로 끊지 않는다.
+        } else if (!greeted && send({ type: "session.commentary.append", event_id: id("greeting"), delegation_id: null, content: opening }, s)) {
           greeted = true;
         }
         break;
       }
       case "session.input_transcript.delta":
         clearSpeakingTimer();
-        // 사용자가 말을 끊고 들어오면(barge-in) 직전 어시스턴트 발화를 마무리하고 즉시 듣는 상태로 전환한다.
+        lastUserAudioAt = Date.now();
+        // 사용자가 말을 끊고 들어오면(barge-in) 농농이 소리를 바로 끄고, 직전 발화를 마무리한 뒤 듣는 상태로 바꾼다.
         if (state === "speaking") {
+          setOutputSuppressed(s, true);
           flushAssistantTurn({ interrupted: true });
           setState(idleState());
         }
@@ -244,8 +302,13 @@ export function createGptLiveController({
         onUserTranscriptDelta({ delta: event.delta || "", text: userText, startMs: event.start_ms, endMs: event.end_ms });
         break;
       case "session.output_transcript.delta":
+        if (outputSuppressed) {
+          // 사용자가 끼어든 뒤 아직 말하는 중이면 끊긴 발화의 나머지를 버린다. 말이 끝난 뒤의 새 답변은 다시 들린다.
+          if (userSpeakingNow()) break;
+          setOutputSuppressed(s, false);
+        }
         flushUserTurn();
-        assistantText += event.delta || "";
+        assistantText = joinSpokenText(assistantText, event.delta || "");
         if (state !== "thinking") setState("speaking");
         onAssistantTranscriptDelta({ delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms });
         scheduleSpeakingIdle(s);
@@ -412,7 +475,7 @@ export function createGptLiveController({
 
   function notifyUiEvent(text) {
     if (!text) return false;
-    return send({ type: "session.commentary.append", event_id: id("ui"), delegation_id: null, content: String(text).slice(0, 800) });
+    return speakWhenQuiet({ type: "session.commentary.append", event_id: id("ui"), delegation_id: null, content: String(text).slice(0, 800) });
   }
 
   function stop() {

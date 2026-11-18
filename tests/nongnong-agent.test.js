@@ -616,53 +616,52 @@ test("음성으로 들어온 질문이면 되묻기·되읽기 지시를 더하�
   assert.doesNotMatch(typed.calls[0].system, /음성 인식/);
 });
 
-test("음성: 로그인 상태에서 말로 \"네\"라고 해도 대여 예약은 바로 만들지 않고 확인 카드로 넘긴다", async (t) => {
+test("음성: 로그인 상태에서 말로 \"네 예약해 주세요\"라고 하면 글과 똑같이 대여 예약을 바로 만든다", async (t) => {
   withKey(t, "test");
   let wrote = false;
-  const deps = { beforeWrite: async () => {}, createRentalRequest: async () => { wrote = true; return { request: {} }; } };
+  const deps = { beforeWrite: async () => {}, createRentalRequest: async () => { wrote = true; return { request: { id: "00000000-0000-4000-8000-000000000001", days: 2, totalPrice: rentable.price * 2 } }; } };
   const { call } = scripted([
     { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
-    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
+    { content: [{ type: "text", text: "대여 예약을 접수했어요." }] },
   ]);
   const result = await runAgentTurn("네 예약해 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
-  assert.equal(wrote, false);
-  assert.equal(result.reservation, undefined);
-  assert.equal(result.pendingAction.type, "rental_request");
-  assert.equal(result.pendingAction.listingId, rentable.id);
+  assert.equal(wrote, true);
+  assert.equal(result.reservation.kind, "rental");
+  assert.equal(result.pendingAction, undefined);
 });
 
-test("음성: 말로 \"네\"라고 해도 구매 신청·매물 등록·수정은 바로 처리하지 않는다", async (t) => {
+test("음성: 말로 \"네 살게예\"·\"네 올려 주세요\"·\"네 고쳐 주세요\"라고 하면 구매 신청·매물 등록·수정을 바로 처리한다", async (t) => {
   withKey(t, "test");
   const writes = [];
   const deps = {
     beforeWrite: async () => {},
-    sendPurchaseMessage: async () => { writes.push("purchase"); return {}; },
+    sendPurchaseMessage: async () => { writes.push("purchase"); return { conversation: { id: "c1" } }; },
     createListing: async () => { writes.push("listing"); return { listing: { id: "x" } }; },
-    updateListing: async () => { writes.push("update"); return {}; },
+    updateListing: async () => { writes.push("update"); return { listing: {} }; },
     fetchOwnListings: async () => [{ ...rentable, ownerId: USER.id }],
   };
   const purchase = scripted([
     { content: [{ type: "tool_use", id: "p1", name: "create_purchase_request", input: { listingId: saleItem.id } }] },
-    { content: [{ type: "text", text: "확인 버튼을 눌러 주세요." }] },
+    { content: [{ type: "text", text: "구매 신청을 보냈어요." }] },
   ]);
   const bought = await runAgentTurn("네 살게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: purchase.call, today: TODAY, deps });
-  assert.equal(bought.pendingAction.type, "purchase_request");
+  assert.equal(bought.reservation.kind, "purchase");
+  assert.equal(bought.pendingAction, undefined);
 
   const listing = scripted([
     { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "tractor", title: "트랙터 빌려드려요", price: 80000, region: "영양읍" } }] },
-    { content: [{ type: "text", text: "초안을 확인해 주세요." }] },
+    { content: [{ type: "text", text: "등록했어요." }] },
   ]);
-  const drafted = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
-  assert.equal(drafted.createdListing, undefined);
-  assert.ok(drafted.listingDraft);
+  const created = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
+  assert.ok(created.createdListing);
 
   const update = scripted([
     { content: [{ type: "tool_use", id: "u1", name: "update_listing", input: { listingId: rentable.id, price: 10000 } }] },
-    { content: [{ type: "text", text: "바뀔 내용을 확인해 주세요." }] },
+    { content: [{ type: "text", text: "고쳤어요." }] },
   ]);
-  await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
-  assert.match(JSON.stringify(update.calls[1].messages.at(-1).content), /VOICE_CONFIRMATION_REQUIRED/);
-  assert.deepEqual(writes, []);
+  const updated = await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
+  assert.ok(updated.updatedListing);
+  assert.deepEqual(writes, ["purchase", "listing", "update"]);
 });
 
 test("음성: 말로 \"네\"라고 해도 거래 전담 위임은 자동 실행하지 않고 확인 카드로 넘긴다", async (t) => {

@@ -1458,10 +1458,7 @@ export function createAiPanel({
       titleRow.className = "ai-result-title";
       const titleLabel = document.createElement("span");
       titleLabel.textContent = `농농이가 찾은 맞춤 매물 (${listingIds.length}건)`;
-      const railHint = document.createElement("span");
-      railHint.className = "ai-result-rail-hint";
-      railHint.textContent = "좌우로 넘겨 비교 ›";
-      titleRow.append(titleLabel, railHint);
+      titleRow.append(titleLabel);
       results.append(titleRow);
 
       const cardsRail = document.createElement("div");

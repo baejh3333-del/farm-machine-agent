@@ -136,6 +136,29 @@ export async function inspectDatabase({ pool = getPool(), migrationsDir = DEFAUL
   };
 }
 
+/**
+ * inspectDatabase 결과에서 배포 가능 여부만 추린다(읽기 전용). 코드가 기대하는 마이그레이션이 모두 적용되고
+ * 체크섬이 같으며, 환경 표시가 있어야 ready다.
+ */
+export function migrationReadiness(info) {
+  const problems = [];
+  if (!info.environment) problems.push("ENVIRONMENT_UNINITIALIZED");
+  if (info.pendingMigrations.length) problems.push("PENDING_MIGRATIONS");
+  if (info.checksumMismatches.length) problems.push("CHECKSUM_MISMATCH");
+  if (info.unknownMigrations.length) problems.push("UNKNOWN_MIGRATIONS");
+  return {
+    ready: problems.length === 0,
+    problems,
+    target: info.target,
+    environment: info.environment,
+    writesFrozen: info.writesFrozen,
+    appliedCount: info.appliedMigrations.length,
+    pendingMigrations: info.pendingMigrations,
+    checksumMismatches: info.checksumMismatches,
+    unknownMigrations: info.unknownMigrations,
+  };
+}
+
 export async function initEnvironment({ env: explicitEnv, pool = getPool() } = {}) {
   const env = resolveExpectedEnv(explicitEnv);
   const target = describeDatabaseTarget(pool);

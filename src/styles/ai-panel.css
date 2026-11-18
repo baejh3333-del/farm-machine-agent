@@ -1988,12 +1988,14 @@ body.ai-fullscreen .ai-launcher {
 
 .ai-plus-btn.is-open span,
 .ai-plus-btn[aria-expanded="true"] span {
-  transform: scale(1.06);
+  transform: rotate(45deg);
 }
 
 .ai-plus-btn span {
   display: inline-block;
-  font-size: 0.95rem;
+  font-size: 1.4rem;
+  font-weight: 500;
+  line-height: 1;
   transition: transform 0.22s var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
@@ -2002,7 +2004,7 @@ body.ai-fullscreen .ai-launcher {
   bottom: calc(100% + 10px);
   left: 0;
   z-index: 30;
-  min-width: 148px;
+  min-width: 176px;
   padding: 6px;
   display: grid;
   gap: 4px;

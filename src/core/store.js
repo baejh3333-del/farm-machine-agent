@@ -165,6 +165,44 @@ export function resetAccountRuntimeState() {
   runtime.educationCertificate = null;
 }
 
+// NDJSON 응답을 줄 단위로 읽는다. {type:"result"} 또는 {type:"error"} 줄을 { status, body }로 돌려준다.
+export async function readNdjsonResult(response, onEvent, isStale = () => false) {
+  const reader = response.body?.getReader?.();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let final = null;
+  const handleLine = (line) => {
+    if (!line.trim() || final) return;
+    let event;
+    try { event = JSON.parse(line); } catch { return; }
+    if (!event || typeof event !== "object") return;
+    if (event.type === "result") {
+      final = { status: Number(event.status) || 200, body: event.body && typeof event.body === "object" ? event.body : {} };
+    } else if (event.type === "error") {
+      final = { status: Number(event.status) || 500, body: { code: event.code, error: event.error } };
+    } else if (!isStale()) {
+      try { onEvent(event); } catch { /* 진행 표시 오류는 응답에 영향을 주지 않는다 */ }
+    }
+  };
+  if (!reader) {
+    const text = await response.text();
+    text.split("\n").forEach(handleLine);
+  } else {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (value) buffer += decoder.decode(value, { stream: !done });
+      let newline;
+      while ((newline = buffer.indexOf("\n")) >= 0) {
+        handleLine(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+      }
+      if (done) break;
+    }
+    handleLine(buffer + decoder.decode());
+  }
+  return final || { status: 502, body: { code: "STREAM_INCOMPLETE", error: "응답을 끝까지 받지 못했어요. 잠시 후 다시 시도해 주세요." } };
+}
+
 export async function apiFetch(url, options = {}) {
   const epoch = runtime.authEpoch;
   const controller = new AbortController();
@@ -191,13 +229,25 @@ export async function apiFetch(url, options = {}) {
       throw staleErr;
     }
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (response.status === 401 && isLoggedIn() && runtime.onSessionExpiredHandler) {
+    // 진행 알림 스트림(NDJSON): 중간 줄은 onStreamEvent로 넘기고, 마지막 결과 줄을 응답으로 쓴다.
+    const streamed = response.ok && typeof options.onStreamEvent === "function"
+      && /application\/x-ndjson/i.test(response.headers?.get?.("Content-Type") || "")
+      ? await readNdjsonResult(response, options.onStreamEvent, () => epoch !== runtime.authEpoch)
+      : null;
+    if (streamed && epoch !== runtime.authEpoch) {
+      const staleErr = new Error("계정 상태가 변경되었습니다.");
+      staleErr.code = "AUTH_CHANGED";
+      throw staleErr;
+    }
+    const data = streamed ? streamed.body : await response.json().catch(() => ({}));
+    const ok = streamed ? streamed.status >= 200 && streamed.status < 300 : response.ok;
+    const status = streamed ? streamed.status : response.status;
+    if (!ok) {
+      if (status === 401 && isLoggedIn() && runtime.onSessionExpiredHandler) {
         runtime.onSessionExpiredHandler();
       }
-      const err = new Error(data?.error || `요청 처리에 실패했습니다. (${response.status})`);
-      err.status = response.status;
+      const err = new Error(data?.error || `요청 처리에 실패했습니다. (${status})`);
+      err.status = status;
       err.code = data?.code || "REQUEST_FAILED";
       throw err;
     }

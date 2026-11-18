@@ -14,7 +14,7 @@ test("voice panel: live delegation, layout, contacts, stop and fallback preserve
       const file = path === "/" ? "index.html" : path.slice(1);
       if (file.includes("..")) throw new Error("invalid path");
       const bytes = await readFile(new URL(`../${file}`, import.meta.url));
-      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
+      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".json") ? "application/json" : file.endsWith(".css") ? "text/css" : "text/html");
       res.end(bytes);
     } catch { res.writeHead(404); res.end(); }
   });
@@ -146,7 +146,7 @@ function startStaticServer() {
       const file = path === "/" ? "index.html" : path.slice(1);
       if (file.includes("..")) throw new Error("invalid path");
       const bytes = await readFile(new URL(`../${file}`, import.meta.url));
-      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
+      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".json") ? "application/json" : file.endsWith(".css") ? "text/css" : "text/html");
       res.end(bytes);
     } catch { res.writeHead(404); res.end(); }
   });
@@ -356,7 +356,7 @@ test("voice panel: voice switching keeps conversation memory and delegation send
       const file = path === "/" ? "index.html" : path.slice(1);
       if (file.includes("..")) throw new Error("invalid path");
       const bytes = await readFile(new URL(`../${file}`, import.meta.url));
-      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
+      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".json") ? "application/json" : file.endsWith(".css") ? "text/css" : "text/html");
       res.end(bytes);
     } catch { res.writeHead(404); res.end(); }
   });

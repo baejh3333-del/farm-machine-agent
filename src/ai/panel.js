@@ -791,6 +791,9 @@ export function createAiPanel({
     if (agentPhoto) $("aiPhotoThumb").src = agentPhoto;
     const labelEl = $("aiPhotoLabel");
     if (labelEl) labelEl.textContent = photoLabel || "첨부한 기계 사진";
+    // 사진은 고르기만 해서는 보내지 않는다: 사용자가 전송(또는 음성 대화 중 말하기)해야 함께 간다.
+    const hint = preview.querySelector(".ai-photo-meta span");
+    if (hint) hint.textContent = isLiveVoiceActive() ? "전송을 누르거나 말씀하시면 함께 보내요" : "전송을 누르면 함께 보내요";
   }
 
   function clearPhoto() {
@@ -810,12 +813,8 @@ export function createAiPanel({
     photoLabel = label;
     savedDraft = null;
     showPhotoPreview();
-    // 음성 대화 중이면 마이크를 끄지 않고 사진을 바로 농농이에게 보내 음성으로 답하게 한다.
-    if (isLiveVoiceActive()) {
-      sendPhotoDuringLiveVoice();
-      return;
-    }
-    $("aiInput")?.focus();
+    // 고르기만 해서는 보내지 않는다(음성 대화 중에도). 입력해 둔 글은 그대로 두고 입력칸으로 돌아간다.
+    $("aiInput")?.focus({ preventScroll: true });
   }
 
   async function handlePhotoFile(file, labelOverride) {
@@ -940,7 +939,7 @@ export function createAiPanel({
 
   function rememberPendingAction(result) {
     const pending = result?.pendingAction;
-    if (pending && ["rental_request", "purchase_request"].includes(pending.type)) {
+    if (pending && ["rental_request", "purchase_request", "my_page_action"].includes(pending.type)) {
       lastPendingAction = { ...pending, requestId: pending.requestId || crypto.randomUUID() };
     } else if (result?.listingDraft && Number.isFinite(result.listingDraft.price) && result.listingDraft.price > 0) {
       const draft = result.listingDraft;
@@ -1147,7 +1146,9 @@ export function createAiPanel({
         return;
       }
       if (error?.status === 401) {
-        const loginMsg = pendingAction.type === "create_listing"
+        const loginMsg = pendingAction.type === "my_page_action"
+          ? "🔒 로그인이 풀렸어요. 다시 로그인한 뒤 마이페이지 변경을 요청해 주세요."
+          : pendingAction.type === "create_listing"
           ? "🔒 매물 등록은 로그인한 뒤 할 수 있어요. 로그인하면 입력한 초안으로 이어서 등록해요."
           : pendingAction.type === "delegate_transaction"
             ? "🔒 거래 전담은 로그인한 뒤 맡길 수 있어요. 로그인하면 바로 이어서 진행해요."
@@ -1384,6 +1385,42 @@ export function createAiPanel({
     });
   }
 
+  // 답을 기다리는 동안의 말풍선(물결 표시 + 짧은 안내).
+  function appendThinkingBubble(text) {
+    const bubble = appendAiMessage(text, "assistant");
+    bubble.classList.add("is-thinking");
+    const wave = document.createElement("span");
+    wave.className = "ai-thinking-wave";
+    wave.setAttribute("aria-hidden", "true");
+    wave.innerHTML = "<span></span><span></span><span></span><span></span>";
+    bubble.prepend(wave);
+    return bubble;
+  }
+
+  // 서버가 알려 준 실제 조회 단계를 말풍선 아래에 쌓는다. 앞 단계는 끝난 것으로 표시하고 같은 문구는 한 번만 쓴다.
+  function showProgressStep(bubble, label) {
+    if (!bubble?.isConnected || typeof label !== "string" || !label) return;
+    let list = bubble.querySelector(".ai-progress-steps");
+    if (!list) {
+      list = document.createElement("ul");
+      list.className = "ai-progress-steps";
+      list.setAttribute("aria-live", "polite");
+      bubble.classList.add("has-progress");
+      bubble.append(list);
+    }
+    if ([...list.children].some((li) => li.dataset.label === label)) return;
+    list.querySelectorAll("li.is-current").forEach((li) => {
+      li.classList.remove("is-current");
+      li.classList.add("is-done");
+    });
+    const item = document.createElement("li");
+    item.className = "is-current";
+    item.dataset.label = label;
+    item.textContent = label;
+    list.append(item);
+    scrollAiToEnd();
+  }
+
   function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
@@ -1560,20 +1597,26 @@ export function createAiPanel({
   }
 
   function appendConfirmation(bubble, action) {
-    const requestId = crypto.randomUUID();
+    const isMyPage = action.type === "my_page_action";
+    // 마이페이지 변경은 서버가 만든 requestId를 써서, 버튼과 "네"가 겹쳐도 한 번만 반영된다.
+    const requestId = isMyPage && typeof action.requestId === "string" && action.requestId ? action.requestId : crypto.randomUUID();
     const isPurchase = action.type === "purchase_request";
     const isDelegation = action.type === "delegate_transaction";
     const card = document.createElement("div");
     card.className = "ai-confirm";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
-    title.textContent = isDelegation
-      ? "🤖 부재중 거래 전담 확인"
-      : isPurchase
-        ? "구매 신청 확인"
-        : "대여 요청 확인";
+    title.textContent = isMyPage
+      ? "마이페이지 변경 확인"
+      : isDelegation
+        ? "🤖 부재중 거래 전담 확인"
+        : isPurchase
+          ? "구매 신청 확인"
+          : "대여 요청 확인";
     card.append(title);
-    const rows = isDelegation
+    const rows = isMyPage
+      ? [["변경 내용", action.summary]]
+      : isDelegation
       ? [
           ["매물", action.title],
           ["지역", action.region],
@@ -1605,7 +1648,9 @@ export function createAiPanel({
     }
     const notice = document.createElement("div");
     notice.className = "ai-rec-notice";
-    notice.textContent = isDelegation
+    notice.textContent = isMyPage
+      ? "승인하면 내 계정에 바로 반영돼요."
+      : isDelegation
       ? "승인하면 1:1 거래 채팅방에서 농농이 자동 협상·응대 모드가 시작돼요."
       : isPurchase
         ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
@@ -1615,7 +1660,8 @@ export function createAiPanel({
     const approve = document.createElement("button");
     approve.type = "button";
     approve.className = "button button-primary";
-    approve.textContent = isDelegation ? "승인하고 전담 시작" : "승인하고 요청 보내기";
+    const approveLabel = isMyPage ? "승인하고 변경하기" : isDelegation ? "승인하고 전담 시작" : "승인하고 요청 보내기";
+    approve.textContent = approveLabel;
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.className = "button button-secondary";
@@ -1629,7 +1675,7 @@ export function createAiPanel({
       approve.disabled = busy;
       cancel.disabled = busy;
     };
-    if (action.type === "rental_request" || action.type === "purchase_request") {
+    if (action.type === "rental_request" || action.type === "purchase_request" || isMyPage) {
       openConfirmation = { action, approve, card };
     }
     const forget = () => {
@@ -1640,21 +1686,24 @@ export function createAiPanel({
       forget();
       card.dataset.state = "cancelled";
       actions.remove();
-      rememberAgentTurn({ role: "user", content: "요청은 보내지 않을게요." });
-      const msg = "알겠어요. 요청은 보내지 않았어요. 다른 날짜나 매물이 필요하면 말씀해 주세요.";
+      if (isMyPage) lastPendingAction = null; // 취소한 변경은 다음 "네"로 실행하지 않는다.
+      rememberAgentTurn({ role: "user", content: isMyPage ? "바꾸지 않을게요." : "요청은 보내지 않을게요." });
+      const msg = isMyPage
+        ? "알겠어요. 마이페이지는 바꾸지 않았어요."
+        : "알겠어요. 요청은 보내지 않았어요. 다른 날짜나 매물이 필요하면 말씀해 주세요.";
       appendAiMessage(msg, "assistant");
       rememberAgentTurn({ role: "assistant", content: msg });
     });
 
     approve.addEventListener("click", () => {
-      rememberAgentTurn({ role: "user", content: "승인합니다. 요청을 보내 주세요." });
+      rememberAgentTurn({ role: "user", content: isMyPage ? "승인합니다. 바꿔 주세요." : "승인합니다. 요청을 보내 주세요." });
       executeOneTapAction({
         pendingAction: action,
         requestId,
         triggerButton: approve,
         onBusy: () => {
           setBusy(true);
-          approve.textContent = "요청을 보내는 중…";
+          approve.textContent = isMyPage ? "바꾸는 중…" : "요청을 보내는 중…";
         },
         onDone: (outcome) => {
           forget();
@@ -1664,7 +1713,7 @@ export function createAiPanel({
         onError: (kind) => {
           if (kind === "aborted") {
             setBusy(false);
-            approve.textContent = "승인하고 요청 보내기";
+            approve.textContent = approveLabel;
             return;
           }
           setBusy(false);
@@ -2004,8 +2053,8 @@ export function createAiPanel({
   function renderAgentEffects(bubble, result, { reply = "", includeFollowUp = true } = {}) {
     if (!bubble || !result) return;
     rememberPendingAction(result);
-    if (result.reservation || result.createdListing) {
-      // 말로 바로 실행한 작업도 화면 목록(대여 요청·내 매물)을 새로 고친다.
+    if (result.reservation || result.createdListing || result.myPageAction) {
+      // 말로 바로 실행한 작업도 화면 목록(대여 요청·내 매물·마이페이지)을 새로 고친다.
       Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
     }
     if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
@@ -2057,6 +2106,7 @@ export function createAiPanel({
       result.pendingAction?.type === "rental_request"
       || result.pendingAction?.type === "purchase_request"
       || result.pendingAction?.type === "delegate_transaction"
+      || result.pendingAction?.type === "my_page_action"
     ) {
       appendConfirmation(bubble, result.pendingAction);
     }
@@ -2330,7 +2380,8 @@ export function createAiPanel({
   const LIVE_STATUS_TEXT = {
     connecting: "농농이와 실시간 음성 대화를 연결하는 중…",
     listening: "농농이와 실시간 음성 대화 중 (듣는 중…)",
-    thinking: "농농이가 매물·날씨를 확인하는 중…",
+    // 실제로 무엇을 조회하는지는 서버 진행 알림이 올 때만 보여 준다(showLiveProgressStatus).
+    thinking: "농농이가 답을 준비하는 중…",
     speaking: "농농이가 말하는 중…",
     muted: "마이크가 꺼져 있어요 (눌러서 다시 켜기)",
     idle: "농농이와 실시간 음성 대화 중 (듣는 중…)",
@@ -2353,6 +2404,14 @@ export function createAiPanel({
       liveBtn.setAttribute("aria-pressed", String(active));
       liveBtn.classList.toggle("is-active", active);
     }
+  }
+
+  // 위임 처리 중 실제 조회 단계를 음성 상태 줄에 보여 준다. 상태가 바뀌면 syncLiveVoiceBar가 다시 덮어쓴다.
+  function showLiveProgressStatus(label) {
+    const bar = $("aiVoiceLiveBar");
+    const statusEl = $("aiVoiceLiveStatus");
+    if (!statusEl || !bar || bar.hidden || bar.dataset.voiceState !== "thinking") return;
+    statusEl.textContent = `${label}…`;
   }
 
   function appendOrUpdateTranscriptBubble(role, delta, meta = {}) {
@@ -2532,6 +2591,24 @@ export function createAiPanel({
       : () => seq !== delegationSeq;
     const utteranceMs = Number.isFinite(meta?.startMs) && Number.isFinite(meta?.endMs) ? Math.max(0, meta.endMs - meta.startMs) : undefined;
     const sentPending = voicePhoto ? null : takePendingAction();
+    // 실제 내부 조회가 실행될 때만 진행 말풍선을 띄우고, 같은 문구를 음성 컨트롤러(meta.onProgress)에도 알린다.
+    // 이 위임이 정정·초기화로 무효가 됐으면 아무것도 보이거나 알리지 않는다.
+    let progressBubble = null;
+    const onProgress = ({ label }) => {
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration || superseded()) return;
+      if (!progressBubble?.isConnected) {
+        progressBubble = appendThinkingBubble("농농이가 확인하고 있어요…");
+        progressBubble.classList.add("ai-progress-bubble");
+        if (delegationId) progressBubble.dataset.progressFor = delegationId;
+      }
+      showProgressStep(progressBubble, label);
+      showLiveProgressStatus(label);
+      try { meta?.onProgress?.({ label }); } catch { /* 진행 알림 실패는 위임 결과에 영향을 주지 않는다 */ }
+    };
+    const clearProgress = () => {
+      progressBubble?.remove();
+      progressBubble = null;
+    };
     let result;
     try {
       timer.mark("request");
@@ -2548,9 +2625,12 @@ export function createAiPanel({
         fullDelegation: fullDelegationEnabled,
         pendingAction: sentPending,
         ...(voicePhoto ? { image: voicePhoto } : {}),
+        onProgress,
       });
       timer.mark("response");
     } catch (error) {
+      clearProgress();
+      restorePendingPhoto(voicePhoto);
       timer.mark("error");
       const sameSession = gen === sessionGeneration;
       const { reason, spoken, unknownWrite } = delegationErrorSpeech(error, sentPending);
@@ -2570,8 +2650,10 @@ export function createAiPanel({
       return { spokenSummary: spoken, effect };
     }
 
+    clearProgress();
     // 서버에 AI가 없거나 막혔으면(mode: "unavailable") 아무 일도 하지 않았다. '확인했어요'처럼 된 척하지 않고 그대로 알린다.
     if (result?.mode === "unavailable") {
+      restorePendingPhoto(voicePhoto);
       if (sentPending && gen === sessionGeneration && !lastPendingAction) lastPendingAction = sentPending; // 실행되지 않았으니 승인 대기를 되돌린다.
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration || superseded()) {
         reportDispatchTiming(timer, { outcome: "unavailable_stale", speechToDispatchMs, utteranceMs });
@@ -2605,13 +2687,14 @@ export function createAiPanel({
     }
     let disposition = decide();
     if (disposition === "drop") {
+      restorePendingPhoto(voicePhoto);
       reportDispatchTiming(timer, { outcome: "stale_dropped", write, catalogPending, speechToDispatchMs, utteranceMs, ...serverTiming });
       return { effect };
     }
     if (disposition === "notify") {
       // 패널 대화가 초기화된 뒤 도착한 확정 결과: 그려 넣을 대화가 없으니 알림으로만 알린다.
       toast(describeWriteOutcome(result));
-      if (result?.reservation || result?.createdListing) Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+      if (result?.reservation || result?.createdListing || result?.myPageAction) Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
       reportDispatchTiming(timer, { outcome: "stale_write_notified", write, catalogPending, speechToDispatchMs, utteranceMs, ...serverTiming });
       return { effect };
     }
@@ -2662,7 +2745,6 @@ export function createAiPanel({
       ...serverTiming,
     });
     if (!speak) return { effect };
-    scheduleHeldLivePhoto();
     return { spokenSummary, effect, ...(thinkingContext ? { thinkingContext } : {}), result };
   }
 
@@ -2678,28 +2760,25 @@ export function createAiPanel({
     return photo;
   }
 
-  // 확인 중에 올려 둔 사진은 다음 말과 함께 보내되, 사용자가 3초 안에 말하지 않으면 사진만 먼저 보낸다.
-  function scheduleHeldLivePhoto() {
-    if (!photoIsNew || !agentPhoto) return;
-    const liveGen = liveVoiceGeneration;
-    setTimeout(() => {
-      if (liveGen !== liveVoiceGeneration || !photoIsNew || !isLiveVoiceActive()) return;
-      if (liveController.state === "thinking" || liveController.state === "speaking") {
-        scheduleHeldLivePhoto();
-        return;
-      }
-      sendPhotoDuringLiveVoice();
-    }, 3000);
+  // 보낸 사진이 쓰이지 못했으면(오류·서버 AI 없음·정정으로 무효) 다시 보낼 수 있게 첨부 상태로 되돌린다.
+  // 그 사이 사용자가 다른 사진을 골랐거나 뺐으면 건드리지 않는다.
+  function restorePendingPhoto(photo) {
+    if (!photo || photoIsNew || (agentPhoto && agentPhoto !== photo)) return;
+    agentPhoto = photo;
+    photoIsNew = true;
+    showPhotoPreview();
   }
 
-  async function sendPhotoDuringLiveVoice() {
-    if (livePhotoInFlight || liveController?.state === "thinking") return; // 진행 중인 위임 턴이 사진을 함께 보낸다.
+  // 음성 대화 중 사용자가 전송을 눌러 사진(과 입력한 글)을 보낸다. 답은 화면에 그리고 음성으로도 읽어 준다.
+  async function sendPhotoDuringLiveVoice(typedText = "") {
+    if (livePhotoInFlight) return false;
     const photo = takeLivePhoto();
-    if (!photo) return;
+    if (!photo) return false;
     const gen = sessionGeneration;
     const liveGen = liveVoiceGeneration;
     livePhotoInFlight = true;
-    const message = "이 사진을 보고 기계 상태를 알려 주세요.";
+    const typed = String(typedText || "").trim();
+    const message = typed || "이 사진을 보고 기계 상태를 알려 주세요.";
     appendAiMessage(message, "user", [], photo);
     const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
     pending.classList.add("is-thinking");
@@ -2729,9 +2808,12 @@ export function createAiPanel({
     } catch (error) {
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
       pending.remove();
+      // 사진은 첨부 상태로 되돌리고 입력한 글도 돌려놓아, 전송만 다시 누르면 같은 내용으로 다시 보낸다.
+      restorePendingPhoto(photo);
+      if (typed && $("aiInput") && !$("aiInput").value.trim()) $("aiInput").value = typed;
       const msg = error?.message && /[가-힣]/.test(error.message) ? error.message : "사진을 지금 확인하지 못했어요.";
-      appendAiMessage(`${msg} 사진을 다시 올려 주시거나 말로 설명해 주세요.`, "assistant");
-      if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진을 다시 올려 주시거나 말로 설명해 주세요.`);
+      appendAiMessage(`${msg} 사진은 그대로 두었어요. 전송을 다시 누르시거나 말로 설명해 주세요.`, "assistant");
+      if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진은 그대로 두었으니 다시 보내 주시거나 말로 설명해 주세요.`);
     } finally {
       if (liveGen === liveVoiceGeneration) livePhotoInFlight = false;
       scrollAiToEnd();
@@ -3060,9 +3142,17 @@ export function createAiPanel({
   async function sendAiQuestion(event) {
     event.preventDefault();
     const sendingPhoto = photoIsNew && agentPhoto ? agentPhoto : null;
-    const message = $("aiInput").value.trim() || (sendingPhoto ? "이 기계 사진이에요." : "");
+    const typedText = $("aiInput").value.trim();
+    const message = typedText || (sendingPhoto ? "이 기계 사진이에요." : "");
     if (!message || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
+    // 음성 대화 중에 사진을 보내면 답을 음성으로도 읽어 주는 사진 경로로 보낸다(입력한 글과 함께).
+    if (sendingPhoto && isLiveVoiceActive()) {
+      if (livePhotoInFlight) return toast("앞서 보낸 사진을 확인하고 있어요. 잠시만 기다려 주세요.");
+      $("aiInput").value = "";
+      sendPhotoDuringLiveVoice(typedText);
+      return;
+    }
     if (sendingPhoto) lastPhotoDataUrl = sendingPhoto;
 
     const gen = sessionGeneration;
@@ -3105,13 +3195,8 @@ export function createAiPanel({
       if (!sendingPhoto && typeof liveController?.applyTypedCorrection === "function") {
         try { correctedVoiceTasks = liveController.applyTypedCorrection(message) || []; } catch { correctedVoiceTasks = []; }
       }
-      pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
-      pending.classList.add("is-thinking");
-      const wave = document.createElement("span");
-      wave.className = "ai-thinking-wave";
-      wave.setAttribute("aria-hidden", "true");
-      wave.innerHTML = "<span></span><span></span><span></span><span></span>";
-      pending.prepend(wave);
+      pending = appendThinkingBubble(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…");
+      const pendingBubble = pending;
       if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
       if (gen !== sessionGeneration) return;
       const uiContext = collectUiContext();
@@ -3127,6 +3212,11 @@ export function createAiPanel({
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
         pendingAction: sendingPhoto ? null : takePendingAction(),
+        // 서버가 실제 내부 조회를 실행할 때만 단계가 온다(조회가 없으면 아무것도 보이지 않는다).
+        onProgress: ({ label }) => {
+          if (gen !== sessionGeneration || !pendingBubble.isConnected) return;
+          showProgressStep(pendingBubble, label);
+        },
       });
       if (gen !== sessionGeneration) return;
       if (agentResult?.sessionId) agentSessionId = agentResult.sessionId;
@@ -3147,6 +3237,8 @@ export function createAiPanel({
     } catch (error) {
       if (gen !== sessionGeneration) return;
       console.error("AI 상담 호출 실패", error);
+      // 실패하면 입력한 글을 되돌려 둔다(사진은 아직 첨부 상태라 전송만 다시 누르면 같은 내용으로 다시 보낸다).
+      if (typedText && !$("aiInput").value.trim()) $("aiInput").value = typedText;
       appendAiMessage(error?.message || "AI 상담을 호출할 수 없습니다. 잠시 후 다시 시도해 주세요.", "assistant");
       if ($("aiModeLabel")) $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
     } finally {

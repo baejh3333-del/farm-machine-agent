@@ -6,8 +6,10 @@ import {
   upsertFarmProfile,
 } from "../server/agent-session-store.js";
 import { sendMessage } from "../server/chat.js";
+import { createProgressStream } from "../server/agent-progress-stream.js";
 import {
   assertWritesAllowed,
+  classifyError,
   currentUser,
   fail,
   handle,
@@ -29,6 +31,7 @@ import {
   executeRentalRequest,
   runAgentTurn,
 } from "../server/nongnong-agent.js";
+import { executeMyPageAction, MY_PAGE_ACTION_TYPE, myPageRateKind } from "../server/my-page-agent.js";
 import { isAffirmative } from "../server/nongnong.js";
 import { enforceRateLimit } from "../server/rate-limit.js";
 import voiceApi from "../server/voice-api.js";
@@ -105,10 +108,20 @@ const EXECUTE_ACTIONS = {
       };
     },
   },
+  // 마이페이지 변경: 허용 목록·필드 검증과 소유권 검사는 server/my-page-agent.js와 기존 서비스가 다시 한다.
+  [MY_PAGE_ACTION_TYPE]: {
+    rateKind: (pending) => myPageRateKind(pending),
+    run: (user, pending, requestId) => executeMyPageAction(user, pending, { requestId }),
+  },
 };
 
-const CONFIRMABLE_ACTIONS = new Set(["rental_request", "purchase_request", "create_listing"]);
-const ACTION_LABEL = { rental_request: "대여 예약 요청", purchase_request: "구매 신청", create_listing: "매물 등록" };
+const rateKindOf = (type, pending) => {
+  const kind = EXECUTE_ACTIONS[type].rateKind;
+  return typeof kind === "function" ? kind(pending) : kind;
+};
+
+const CONFIRMABLE_ACTIONS = new Set(["rental_request", "purchase_request", "create_listing", MY_PAGE_ACTION_TYPE]);
+const ACTION_LABEL = { rental_request: "대여 예약 요청", purchase_request: "구매 신청", create_listing: "매물 등록", [MY_PAGE_ACTION_TYPE]: "마이페이지 변경" };
 
 /**
  * 바로 앞 턴에서 농농이 확인을 물은 작업(pendingAction)에 사용자가 "네", "응 해줘"라고 답하면
@@ -119,12 +132,18 @@ export async function runConfirmedAction({ message, pending, user, requestId, ru
   if (!user || !pending || typeof pending !== "object" || !CONFIRMABLE_ACTIONS.has(pending.type)) return null;
   if (!isAffirmative(message)) return null;
   const label = ACTION_LABEL[pending.type];
-  const title = typeof pending.title === "string" && pending.title.trim()
+  const myPage = pending.type === MY_PAGE_ACTION_TYPE;
+  // 마이페이지 확인의 title은 "…바꿀까요?" 같은 질문이라 답변 앞에 붙이지 않는다.
+  const title = !myPage && typeof pending.title === "string" && pending.title.trim()
     ? `${pending.title.replace(/\s*·\s*/g, " ").trim().slice(0, 60)} `
     : "";
   try {
-    await beforeWrite?.(pending.type);
+    await beforeWrite?.(pending.type, pending);
     const executed = await run(user, pending, requestId);
+    if (myPage && executed?.outcome === "completed") {
+      const { outcome: _outcome, message: doneMessage, ...rest } = executed;
+      return { mode: "agent", reply: doneMessage, listingIds: [], learnedSlots: {}, executedAction: pending.type, ...rest };
+    }
     if (executed?.outcome === "completed" || executed?.outcome === "partial") {
       const number = executed.reservation?.number || executed.createdListing?.number || "";
       const reply = executed.outcome === "completed"
@@ -141,6 +160,7 @@ export async function runConfirmedAction({ message, pending, user, requestId, ru
       };
     }
     const reason = String(executed?.message || "요청을 처리하지 못했어요").replace(/[.。]\s*$/, "");
+    if (myPage) return { mode: "agent", reply: `${label}을 하지 못했어요. 이유: ${reason}.`, listingIds: [], learnedSlots: {}, actionFailed: true };
     return { mode: "agent", reply: `${title}${label}을 하지 못했어요. 이유: ${reason}. 다른 매물을 찾아 드릴까요?`, listingIds: [], learnedSlots: {}, actionFailed: true };
   } catch (error) {
     if (error instanceof HttpError && error.status === 401) throw error;
@@ -196,143 +216,163 @@ function withTiming(result, body, timing) {
   return { ...result, timing: snapshot };
 }
 
-const agentApi = handle(["POST"], async (request) => {
+async function chatTurn(request, body, started, progress) {
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  const hasImage = typeof body.image === "string" && body.image.length > 0;
+  if (message.length > 500 || (!message && !hasImage)) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
+  // 호출 제한을 먼저 검사해 사진 디코딩 비용도 횟수에 넣는다.
+  // 호출 제한 검사와 로그인 확인은 서로 기다릴 필요가 없어 함께 실행한다(응답 시간 단축).
+  const userPromise = currentUser(request).catch(() => null);
+  await enforceRateLimit(request, "recommend");
+  const image = hasImage ? await preparePhoto(body.image) : undefined;
+  const user = await userPromise;
+  const [farmProfile, session] = user?.id
+    ? await Promise.all([
+        loadFarmProfile(user.id).catch(() => null),
+        getOrCreateAgentSession(user.id, typeof body.sessionId === "string" ? body.sessionId : null).catch(() => null),
+      ])
+    : [null, null];
+  const activeSessionId = session?.id ?? null;
+  let turnMeta = null;
+  // 지연 시간(내용 없음): 요청을 받은 때부터 첫 모델 호출·쓸모 있는 결과까지 걸린 ms.
+  const timing = createTurnTiming(started);
+  // 같은 요청 안에서는 매물 목록을 한 번만 읽는다(에이전트 턴과 보험 추천이 같은 목록을 다시 읽지 않게).
+  let listingsPromise = null;
+  const deps = {
+    fetchListings: () => (listingsPromise ??= timing.measureCatalog(fetchListings({ viewerId: user?.id ?? null }))),
+    getWeather: (options) => getWeatherAndMapConfig(options),
+    createRentalRequest: (u, payload) => createRentalRequest(u, payload),
+    sendPurchaseMessage: (u, payload) => sendMessage(u, payload),
+    delegateTransaction: (u, payload, opts) => executeDelegatedTransaction(u, payload, opts),
+    createListing: (u, payload) => createListing(u, payload),
+    updateListing: (u, payload) => updateListing(u, payload),
+    toggleFavorite: (u, { listingId, favorite }) => toggleFavorite(u.id, listingId, { favorite }),
+    fetchOwnListings: () => (user ? fetchListings({ viewerId: user.id, ownerOnly: true }) : []),
+    loadFarmProfile: (userId) => loadFarmProfile(userId),
+    onTurnComplete: (meta) => { turnMeta = meta; timing.useful(); },
+    onModelCall: (event) => timing.model(event),
+    // 실제 내부 조회가 실행될 때만 진행 문구를 스트림으로 보낸다(stream: true 요청만).
+    onToolProgress: (event) => progress.progress(event),
+    beforeWrite: async (toolName) => {
+      await assertWritesAllowed();
+      await enforceRateLimit(request, CHAT_WRITE_RATE_KIND[toolName] || "rental", { userId: user.id });
+    },
+  };
+  const insuranceAsked = body.insuranceAsked === true;
+  // 보험 추천 흐름 중이면(예약 뒤 "보험을 추천해드릴까요?"에 대한 답) 그 흐름을 먼저 처리한다.
+  if (!image && body.insuranceOffer) {
+    const insurance = await handleInsuranceTurn(message, body.insuranceOffer, {
+      user,
+      region: typeof body.region === "string" ? body.region : undefined,
+      deps: {
+        fetchListings: deps.fetchListings,
+        createConsult: async (u, payload) => {
+          await assertWritesAllowed();
+          await enforceRateLimit(request, "message", { userId: u.id });
+          return createInsuranceConsult(u, payload);
+        },
+      },
+    });
+    if (insurance) {
+      timing.useful();
+      return { status: 200, body: withTiming(insurance, body, timing) };
+    }
+  }
+  const pendingRequestId = typeof body.pendingAction?.requestId === "string" && UUID.test(body.pendingAction.requestId)
+    ? body.pendingAction.requestId
+    : randomUUID();
+  const confirmed = !image && user
+    ? await runConfirmedAction({
+        message,
+        pending: body.pendingAction,
+        user,
+        requestId: pendingRequestId,
+        run: (u, pending, id) => EXECUTE_ACTIONS[pending.type].run(u, pending, id),
+        beforeWrite: async (type, pending) => {
+          await assertWritesAllowed();
+          await enforceRateLimit(request, rateKindOf(type, pending), { userId: user.id });
+        },
+      })
+    : null;
+  const turn = confirmed ?? await runAgentTurn(message, {
+    history: Array.isArray(body.history) ? body.history : [],
+    region: typeof body.region === "string" ? body.region : undefined,
+    inputMode: body.inputMode === "voice" ? "voice" : "text",
+    uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
+    image,
+    user,
+    farmProfile: user?.id ? (farmProfile ?? null) : undefined,
+    sessionId: activeSessionId,
+    sessionSlots: session?.slots,
+    savedDraft: cleanSavedDraft(body.savedDraft),
+  }, {
+    timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)),
+    deps,
+  });
+  if (confirmed) timing.useful();
+  const result = turn?.mode === "agent" ? await attachInsuranceAsk(turn, { asked: insuranceAsked, loadListings: deps.fetchListings }) : turn;
+  if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
+  if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
+
+  if (user?.id && result?.mode === "agent") {
+    const slotsPatch = result.learnedSlots || {};
+    const persistPromises = [];
+    if (activeSessionId) {
+      persistPromises.push(
+        recordAgentTurn({
+          sessionId: activeSessionId,
+          userId: user.id,
+          userMessage: message || (hasImage ? "(사진 첨부)" : ""),
+          assistantReply: result.reply,
+          slotsPatch,
+          intent: turnMeta?.intent ?? null,
+          stage: turnMeta?.stage ?? null,
+          toolCalls: turnMeta?.toolCalls || [],
+        }),
+      );
+    }
+    if (slotsPatch.region || slotsPatch.cropIds?.length || slotsPatch.areaPyeong) {
+      persistPromises.push(
+        upsertFarmProfile(user.id, {
+          region: slotsPatch.region,
+          cropIds: slotsPatch.cropIds,
+          areaPyeong: slotsPatch.areaPyeong,
+        }),
+      );
+    }
+    if (persistPromises.length) {
+      const persistTask = Promise.allSettled(persistPromises);
+      await scheduleWaitUntil(persistTask, { awaitFallback: true });
+    }
+  }
+
+  const payload = withTiming(activeSessionId && result?.mode === "agent" ? { ...result, sessionId: activeSessionId } : result, body, timing);
+  // 진행 알림을 이미 보냈으면 결과도 같은 스트림의 마지막 줄로 보낸다.
+  if (progress.finish(200, payload)) return undefined;
+  return { status: 200, body: payload };
+}
+
+const agentApi = handle(["POST"], async (request, response) => {
   const started = Date.now();
   const body = await readJson(request, { maxBytes: MAX_UPLOAD_JSON_BYTES });
   const action = body.action === "execute" ? "execute" : "chat";
 
   if (action === "chat") {
-    const message = typeof body.message === "string" ? body.message.trim() : "";
-    const hasImage = typeof body.image === "string" && body.image.length > 0;
-    if (message.length > 500 || (!message && !hasImage)) fail(400, "INVALID_MESSAGE", "질문은 1~500자로 입력해 주세요.");
-    // 호출 제한을 먼저 검사해 사진 디코딩 비용도 횟수에 넣는다.
-    // 호출 제한 검사와 로그인 확인은 서로 기다릴 필요가 없어 함께 실행한다(응답 시간 단축).
-    const userPromise = currentUser(request).catch(() => null);
-    await enforceRateLimit(request, "recommend");
-    const image = hasImage ? await preparePhoto(body.image) : undefined;
-    const user = await userPromise;
-    const [farmProfile, session] = user?.id
-      ? await Promise.all([
-          loadFarmProfile(user.id).catch(() => null),
-          getOrCreateAgentSession(user.id, typeof body.sessionId === "string" ? body.sessionId : null).catch(() => null),
-        ])
-      : [null, null];
-    const activeSessionId = session?.id ?? null;
-    let turnMeta = null;
-    // 지연 시간(내용 없음): 요청을 받은 때부터 첫 모델 호출·쓸모 있는 결과까지 걸린 ms.
-    const timing = createTurnTiming(started);
-    // 같은 요청 안에서는 매물 목록을 한 번만 읽는다(에이전트 턴과 보험 추천이 같은 목록을 다시 읽지 않게).
-    let listingsPromise = null;
-    const deps = {
-      fetchListings: () => (listingsPromise ??= timing.measureCatalog(fetchListings({ viewerId: user?.id ?? null }))),
-      getWeather: (options) => getWeatherAndMapConfig(options),
-      createRentalRequest: (u, payload) => createRentalRequest(u, payload),
-      sendPurchaseMessage: (u, payload) => sendMessage(u, payload),
-      delegateTransaction: (u, payload, opts) => executeDelegatedTransaction(u, payload, opts),
-      createListing: (u, payload) => createListing(u, payload),
-      updateListing: (u, payload) => updateListing(u, payload),
-      toggleFavorite: (u, { listingId, favorite }) => toggleFavorite(u.id, listingId, { favorite }),
-      fetchOwnListings: () => (user ? fetchListings({ viewerId: user.id, ownerOnly: true }) : []),
-      loadFarmProfile: (userId) => loadFarmProfile(userId),
-      onTurnComplete: (meta) => { turnMeta = meta; timing.useful(); },
-      onModelCall: (event) => timing.model(event),
-      beforeWrite: async (toolName) => {
-        await assertWritesAllowed();
-        await enforceRateLimit(request, CHAT_WRITE_RATE_KIND[toolName] || "rental", { userId: user.id });
-      },
-    };
-    const insuranceAsked = body.insuranceAsked === true;
-    // 보험 추천 흐름 중이면(예약 뒤 "보험을 추천해드릴까요?"에 대한 답) 그 흐름을 먼저 처리한다.
-    if (!image && body.insuranceOffer) {
-      const insurance = await handleInsuranceTurn(message, body.insuranceOffer, {
-        user,
-        region: typeof body.region === "string" ? body.region : undefined,
-        deps: {
-          fetchListings: deps.fetchListings,
-          createConsult: async (u, payload) => {
-            await assertWritesAllowed();
-            await enforceRateLimit(request, "message", { userId: u.id });
-            return createInsuranceConsult(u, payload);
-          },
-        },
-      });
-      if (insurance) {
-        timing.useful();
-        return { status: 200, body: withTiming(insurance, body, timing) };
+    const progress = createProgressStream(response, { enabled: body.stream === true });
+    try {
+      return await chatTurn(request, body, started, progress);
+    } catch (error) {
+      if (!progress.started) throw error;
+      // 진행 알림을 보낸 뒤라 상태 코드를 바꿀 수 없다: 오류를 마지막 줄로 알린다.
+      const outcome = error instanceof HttpError
+        ? { status: error.status, code: error.code, message: error.message }
+        : classifyError(error);
+      if (!(error instanceof HttpError)) {
+        console.error("agent stream failed", JSON.stringify({ status: outcome.status, errorCode: typeof error?.code === "string" ? error.code : null }), error instanceof Error ? error.stack : String(error));
       }
+      progress.fail({ status: outcome.status, code: outcome.code, error: outcome.message });
+      return undefined;
     }
-    const pendingRequestId = typeof body.pendingAction?.requestId === "string" && UUID.test(body.pendingAction.requestId)
-      ? body.pendingAction.requestId
-      : randomUUID();
-    const confirmed = !image && user
-      ? await runConfirmedAction({
-          message,
-          pending: body.pendingAction,
-          user,
-          requestId: pendingRequestId,
-          run: (u, pending, id) => EXECUTE_ACTIONS[pending.type].run(u, pending, id),
-          beforeWrite: async (type) => {
-            await assertWritesAllowed();
-            await enforceRateLimit(request, EXECUTE_ACTIONS[type].rateKind, { userId: user.id });
-          },
-        })
-      : null;
-    const turn = confirmed ?? await runAgentTurn(message, {
-      history: Array.isArray(body.history) ? body.history : [],
-      region: typeof body.region === "string" ? body.region : undefined,
-      inputMode: body.inputMode === "voice" ? "voice" : "text",
-      uiContext: body.uiContext && typeof body.uiContext === "object" ? body.uiContext : undefined,
-      image,
-      user,
-      farmProfile: user?.id ? (farmProfile ?? null) : undefined,
-      sessionId: activeSessionId,
-      sessionSlots: session?.slots,
-      savedDraft: cleanSavedDraft(body.savedDraft),
-    }, {
-      timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)),
-      deps,
-    });
-    if (confirmed) timing.useful();
-    const result = turn?.mode === "agent" ? await attachInsuranceAsk(turn, { asked: insuranceAsked, loadListings: deps.fetchListings }) : turn;
-    if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
-    if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
-
-    if (user?.id && result?.mode === "agent") {
-      const slotsPatch = result.learnedSlots || {};
-      const persistPromises = [];
-      if (activeSessionId) {
-        persistPromises.push(
-          recordAgentTurn({
-            sessionId: activeSessionId,
-            userId: user.id,
-            userMessage: message || (hasImage ? "(사진 첨부)" : ""),
-            assistantReply: result.reply,
-            slotsPatch,
-            intent: turnMeta?.intent ?? null,
-            stage: turnMeta?.stage ?? null,
-            toolCalls: turnMeta?.toolCalls || [],
-          }),
-        );
-      }
-      if (slotsPatch.region || slotsPatch.cropIds?.length || slotsPatch.areaPyeong) {
-        persistPromises.push(
-          upsertFarmProfile(user.id, {
-            region: slotsPatch.region,
-            cropIds: slotsPatch.cropIds,
-            areaPyeong: slotsPatch.areaPyeong,
-          }),
-        );
-      }
-      if (persistPromises.length) {
-        const persistTask = Promise.allSettled(persistPromises);
-        await scheduleWaitUntil(persistTask, { awaitFallback: true });
-      }
-    }
-
-    return {
-      status: 200,
-      body: withTiming(activeSessionId && result?.mode === "agent" ? { ...result, sessionId: activeSessionId } : result, body, timing),
-    };
   }
 
   // 사용자가 화면에서 승인한 작업만 실행한다. 로그인 사용자 권한으로 처리한다.
@@ -341,11 +381,11 @@ const agentApi = handle(["POST"], async (request) => {
   const requestId = typeof body.requestId === "string" ? body.requestId : "";
   if (!UUID.test(requestId)) fail(400, "INVALID_REQUEST_ID", "요청 식별자가 올바르지 않습니다.");
   const pending = body.pendingAction;
-  const executor = pending && typeof pending === "object" ? EXECUTE_ACTIONS[pending.type] : null;
+  const executor = pending && typeof pending === "object" && Object.hasOwn(EXECUTE_ACTIONS, pending.type) ? EXECUTE_ACTIONS[pending.type] : null;
   if (!executor) {
     fail(400, "INVALID_ACTION", "승인할 작업 내용이 올바르지 않습니다.");
   }
-  await enforceRateLimit(request, executor.rateKind, { userId: user.id });
+  await enforceRateLimit(request, rateKindOf(pending.type, pending), { userId: user.id });
   try {
     const executed = await executor.run(user, pending, requestId);
     const result = executed?.outcome === "completed"

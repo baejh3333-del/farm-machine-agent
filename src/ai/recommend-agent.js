@@ -13,11 +13,31 @@ export async function askRecommendation(message, context) {
   return result;
 }
 
+// 서버가 실제 내부 조회를 실행할 때 보내는 진행 문구만 통과시킨다(짧은 한국어 한 문장, 같은 문구는 한 번).
+// 도구 이름·인자 같은 원자료, 기호가 섞인 문구, 진행이 아닌 줄은 버린다.
+export function safeProgressLabel(label) {
+  if (typeof label !== "string") return "";
+  const text = label.replace(/\s+/g, " ").trim();
+  if (!text || text.length > 60 || !/[가-힣]/.test(text) || /[{}[\]<>_=`\\\u0000-\u001f\u007f]/.test(text)) return "";
+  return text;
+}
+
+export function progressForwarder(onProgress) {
+  const seen = new Set();
+  return (event) => {
+    if (event?.type !== "progress") return;
+    const label = safeProgressLabel(event.label);
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    onProgress({ label });
+  };
+}
+
 // 농농 통합 에이전트(/api/agent). 서버에 AI 키가 없으면 { mode: "unavailable" }를 받는다.
 // insuranceOffer: 예약 뒤 보험 추천 흐름의 진행 상태, insuranceAsked: 이 대화에서 이미 물었는지.
 export async function askAgent(
   message,
-  { history = [], region, inputMode = "text", delegationId = null, sessionId = null, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation, pendingAction = null } = {},
+  { history = [], region, inputMode = "text", delegationId = null, sessionId = null, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation, pendingAction = null, onProgress = null } = {},
 ) {
   const mergedUiContext = uiContext || fullDelegation
     ? { ...(uiContext || {}), ...(fullDelegation ? { fullDelegation: true } : {}) }
@@ -39,7 +59,9 @@ export async function askAgent(
       ...(insuranceOffer ? { insuranceOffer } : {}),
       ...(pendingAction && typeof pendingAction === "object" ? { pendingAction } : {}),
       insuranceAsked,
+      ...(typeof onProgress === "function" ? { stream: true } : {}),
     },
+    ...(typeof onProgress === "function" ? { onStreamEvent: progressForwarder(onProgress) } : {}),
   });
   if (!result || typeof result.mode !== "string") throw new Error("농농이 응답 형식이 올바르지 않습니다.");
   return result;

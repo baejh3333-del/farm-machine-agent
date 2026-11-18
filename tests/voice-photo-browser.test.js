@@ -16,7 +16,7 @@ async function startStatic() {
       const file = path === "/" ? "index.html" : path.slice(1);
       if (file.includes("..")) throw new Error("invalid path");
       const bytes = await readFile(new URL(`../${file}`, import.meta.url));
-      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
+      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".json") ? "application/json" : file.endsWith(".css") ? "text/css" : "text/html");
       res.end(bytes);
     } catch { res.writeHead(404); res.end(); }
   });
@@ -37,9 +37,9 @@ async function openLivePage(browser, port, agent) {
     if (path === "/api/agent") {
       const body = req.postDataJSON();
       agentRequests.push(body);
-      const { delayMs = 0, json } = agent(body, agentRequests.length);
+      const { delayMs = 0, status = 200, json } = agent(body, agentRequests.length);
       if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
-      return route.fulfill({ json });
+      return route.fulfill({ status, json });
     }
     let data = {};
     if (path === "/api/listings") data = { listings };
@@ -85,21 +85,59 @@ async function openLivePage(browser, port, agent) {
 
 const photoReply = { mode: "agent", reply: "사진으로 보면 관리기 엔진 아래에서 기름이 새는 것으로 보여요.", listingIds: [], photoSummary: { machineType: "cultivator", confidence: "medium", observations: ["누유"] } };
 
-test("문제7: 음성 대화 중 사진을 올리면 마이크를 끄지 않고 바로 보내, 농농이 사진을 참고해 음성으로 답한다", async () => {
+test("문제7: 음성 대화 중 사진을 고르면 미리보기만 띄우고, 전송을 눌러야 입력한 글과 함께 보내 음성으로 답한다", async () => {
   const server = await startStatic();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
     const { page, errors, agentRequests } = await openLivePage(browser, server.address().port, () => ({ json: photoReply }));
-    assert.equal(await page.locator("#aiVoicePhotoBtn").isVisible(), true, "음성 바에서 바로 사진을 보낼 수 있다");
+    assert.equal(await page.locator("#aiVoicePhotoBtn").isVisible(), true, "음성 바에서 바로 사진을 고를 수 있다");
+    await page.locator("#aiInput").fill("엔진 아래가 젖어 있어요");
     await page.locator("#aiPhotoInput").setInputFiles({ name: "broken.png", mimeType: "image/png", buffer: PNG });
+    await page.locator("#aiPhotoPreview").waitFor({ state: "visible" });
+    await page.waitForTimeout(3500); // 예전처럼 몇 초 뒤 저절로 보내지 않는다
+    assert.equal(agentRequests.length, 0, "고르기만 해서는 보내지 않는다");
+    assert.equal(await page.locator("#aiInput").inputValue(), "엔진 아래가 젖어 있어요", "입력해 둔 글을 바꾸지 않는다");
+    assert.match(await page.locator("#aiPhotoThumb").getAttribute("src"), /^data:image\//);
+
+    await page.locator("#aiForm [type=submit]").click();
     await page.waitForFunction(() => window.voiceTest.sent.some((e) => e.type === "session.commentary.append" && e.content.includes("기름이 새는")));
     assert.equal(agentRequests.length, 1);
     assert.equal(agentRequests[0].inputMode, "voice");
+    assert.equal(agentRequests[0].message, "엔진 아래가 젖어 있어요");
     assert.match(agentRequests[0].image, /^data:image\//);
-    assert.equal(await page.evaluate(() => window.voiceTest.sent.some((e) => e.type === "session.input_audio.mute")), false, "사진을 골라도 마이크를 끄지 않는다");
+    assert.equal(await page.locator("#aiPhotoPreview").isHidden(), true, "보낸 사진은 첨부에서 빠진다");
+    assert.equal(await page.evaluate(() => window.voiceTest.sent.some((e) => e.type === "session.input_audio.mute")), false, "사진을 보내도 마이크를 끄지 않는다");
     assert.equal(await page.evaluate(() => window.voiceTest.track.enabled), true);
     assert.equal(await page.locator("#aiVoiceLiveBar").isVisible(), true, "음성 대화는 계속된다");
     assert.ok(await page.locator(".chat-bubble.user img.ai-chat-photo").count() >= 1, "보낸 사진이 대화에 보인다");
+    assert.deepEqual(errors, []);
+    await page.close();
+  } finally {
+    await browser.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("문제7: 음성 대화 중 사진만 보내다 실패하면 사진을 첨부 상태로 남겨 전송만 다시 누르면 같은 사진을 보낸다", async () => {
+  const server = await startStatic();
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const { page, errors, agentRequests } = await openLivePage(browser, server.address().port, (_body, n) => (n === 1
+      ? { status: 502, json: { code: "PHOTO_UNAVAILABLE", error: "사진을 지금 확인하지 못했어요." } }
+      : { json: photoReply }));
+    await page.locator("#aiPhotoInput").setInputFiles({ name: "broken.png", mimeType: "image/png", buffer: PNG });
+    await page.locator("#aiPhotoPreview").waitFor({ state: "visible" });
+    await page.locator("#aiForm [type=submit]").click();
+    await page.locator(".chat-bubble.assistant", { hasText: "사진은 그대로 두었어요" }).waitFor();
+    assert.equal(agentRequests.length, 1);
+    assert.equal(agentRequests[0].message, "이 사진을 보고 기계 상태를 알려 주세요.", "사진만 보낼 때의 기본 질문");
+    assert.equal(await page.locator("#aiPhotoPreview").isVisible(), true, "실패하면 사진을 다시 첨부해 둔다");
+
+    await page.locator("#aiForm [type=submit]").click();
+    await page.waitForFunction(() => window.voiceTest.sent.some((e) => e.type === "session.commentary.append" && e.content.includes("기름이 새는")));
+    assert.equal(agentRequests.length, 2);
+    assert.equal(agentRequests[1].image, agentRequests[0].image, "같은 사진으로 다시 보낸다");
+    assert.equal(await page.locator("#aiPhotoPreview").isHidden(), true);
     assert.deepEqual(errors, []);
     await page.close();
   } finally {

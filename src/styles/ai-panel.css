@@ -555,6 +555,53 @@ body.ai-fullscreen .ai-launcher {
     aiThinkingShimmer 2.1s ease-in-out infinite;
 }
 
+/* 서버가 알려 준 실제 조회 단계(진행 표시) */
+#aiPanel .chat-bubble.assistant.is-thinking.has-progress {
+  flex-wrap: wrap;
+}
+
+.ai-progress-steps {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.92em;
+  font-weight: 500;
+}
+
+.ai-progress-steps li {
+  position: relative;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.ai-progress-steps li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0.5em;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22a55a;
+}
+
+.ai-progress-steps li.is-done {
+  color: #6b6b6b;
+}
+
+.ai-progress-steps li.is-done::before {
+  content: "✓";
+  top: 0;
+  width: auto;
+  height: auto;
+  background: none;
+  color: #22a55a;
+  font-size: 0.9em;
+}
+
 .ai-thinking-wave {
   display: inline-flex;
   align-items: center;
@@ -870,6 +917,34 @@ body.ai-fullscreen .ai-launcher {
 
 #aiPanel .ai-photo-preview[hidden] {
   display: none;
+}
+
+#aiPanel .ai-photo-preview img {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+#aiPanel .ai-photo-preview #aiPhotoRemove {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  margin-left: auto;
+  border: 1px solid var(--line-strong, #d4d4d4);
+  border-radius: 999px;
+  background: var(--bg-surface, #ffffff);
+  color: var(--forest, #111111);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#aiPanel .ai-photo-preview #aiPhotoRemove:focus-visible {
+  outline: 2px solid var(--forest, #111111);
+  outline-offset: 2px;
 }
 
 #aiPanel .ai-photo-meta {

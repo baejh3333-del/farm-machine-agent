@@ -316,7 +316,7 @@ test("gpt-live 전사 delta를 누적해 전달한다", async () => {
   assert.deepEqual(calls.assistant[0], { delta: "네", startMs: 1, endMs: 2 });
 });
 
-test("gpt-live client delegation은 thinking → 결과 commentary 순으로 응답한다", async () => {
+test("gpt-live client delegation은 위임 시점엔 아무것도 보내지 않고(자동 접수 인사 보존) thinking → 결과 commentary 순으로 응답한다", async () => {
   const { live, sent, emit, calls } = makeLive();
   await live.start();
   emit({ type: "session.input_transcript.delta", delta: "트랙터" });
@@ -326,10 +326,10 @@ test("gpt-live client delegation은 thinking → 결과 commentary 순으로 응
   const types = sent.map((m) => `${m.type}:${m.delegation_id}`);
   assert.deepEqual(types, [
     "session.thinking.append:d1",
-    "session.thinking.append:d1",
     "session.commentary.append:d1",
   ]);
-  assert.equal(sent[2].content, "요약");
+  assert.equal(sent[0].content, "맥락");
+  assert.equal(sent[1].content, "요약");
 });
 
 test("gpt-live server 대상 delegation은 무시한다", async () => {

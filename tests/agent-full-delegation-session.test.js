@@ -364,15 +364,15 @@ test("4. selectToolsForTurn은 기본 턴에 핵심 도구 15개만 포함하고
   assert.ok(!coreNames.includes("create_listing"));
   assert.ok(!coreNames.includes("get_insurance_info"));
 
-  assert.equal(selectToolsForTurn({ hasImage: true }).length, 23);
-  assert.equal(selectToolsForTurn({ text: "관리기 시동이 안 걸려요" }).length, 23);
-  assert.equal(selectToolsForTurn({ text: "트랙터 팔고 싶어요" }).length, 23);
-  assert.equal(selectToolsForTurn({ text: "보험도 들어야 하나요?" }).length, 23);
-  assert.equal(selectToolsForTurn({ slots: { intent: "sell" } }).length, 23);
+  assert.equal(selectToolsForTurn({ hasImage: true }).length, 25);
+  assert.equal(selectToolsForTurn({ text: "관리기 시동이 안 걸려요" }).length, 25);
+  assert.equal(selectToolsForTurn({ text: "트랙터 팔고 싶어요" }).length, 25);
+  assert.equal(selectToolsForTurn({ text: "보험도 들어야 하나요?" }).length, 25);
+  assert.equal(selectToolsForTurn({ slots: { intent: "sell" } }).length, 25);
 
   process.env.AI_FULL_TOOLS = "1";
   try {
-    assert.equal(selectToolsForTurn({ text: "고추" }).length, 23);
+    assert.equal(selectToolsForTurn({ text: "고추" }).length, 25);
   } finally {
     delete process.env.AI_FULL_TOOLS;
   }

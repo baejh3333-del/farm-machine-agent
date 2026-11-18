@@ -13,9 +13,21 @@
 //   assistant면 meta = { utteranceId("ast_N"), replyTo, delegationId, startMs, endMs }.
 // - onAssistantTranscriptDelta(payload, meta): meta = { utteranceId, replyTo, delegationId }로, 같은 발화의
 //   부분 delta와 커밋이 같은 utteranceId를 쓴다.
-// - onClientDelegation(payload, meta): meta = utterance 스냅샷 + isStale()(이 작업을 바로잡는 정정이 왔는지).
+// - onClientDelegation(payload, meta): meta = utterance 스냅샷 + isStale()(이 작업을 바로잡는 정정이 왔는지)
+//   + onProgress({ label })(실제 백엔드 진행 이벤트가 있을 때만 부른다. 반환값 true = 받아들임).
 //   반환값에 effect: "read"|"write"를 줄 수 있다. 없으면 result.reservation/createdListing/updatedListing
 //   또는 outcome completed|partial이면 write로 본다.
+// 대기 중 말하기(공식 GPT-Live client delegation 흐름):
+// - 위임마다 즉시 접수 한마디는 정확히 한 번: GPT-Live 자동 acknowledgement(기본 지연 0ms)나 위임 직전 모델의 답이 그것이다.
+//   위임 시점에 thinking/commentary를 보내지 않는다(보내면 세션의 대기 중 자동 ack가 모두 취소된다).
+//   접수 뒤 결과·진행 소식을 보내기 전까지 모델이 스스로 덧붙이는 말(filler)은 소리를 끄고 기록하지 않는다.
+// - 진행 소식은 위임당 최대 한 번, meta.onProgress로 받은 실제 진행만, progressDelayMs가 지나도 결과가 없을 때 말한다.
+//   중복 label·결과 뒤·정정된 작업·다른 연결의 진행은 버리고, 두 번째부터는 말하지 않는 thinking으로만 넘긴다.
+//   겹친 위임끼리도 progressDelayMs 안에는 진행 소식을 한 번만 말한다.
+// - 결과 낭독 중 사용자가 끼어들면(barge-in, 확인 중 상태 포함) 소리를 끄고, 말이 끝난 뒤 새 요청이 없으면 남은 결과를
+//   한 번만 이어서 말한다(resume). 새 요청·답이 나왔으면 조회 결과는 thinking으로만 남기고, 쓰기 결과는 반드시 다시 알린다.
+// - 재연결: 이전 연결의 위임 ID는 새 세션에서 쓸 수 없으므로, 늦게 온 쓰기 결과·못 말한 쓰기 결과는 delegation_id null로 새 세션에서 알린다.
+// onAssistantTranscriptDelta/onTurnCommitted의 assistant meta에는 kind("reply"|"ack"|"progress"|"result"|"ui"|"greeting"|"carry")가 붙는다.
 // 리비전: speechRevision은 새 사용자 발화마다, taskRevision은 정정 발화("아니, …", "…말고")에서만 오른다.
 // 정정은 말한 조건(기종·날씨·날짜·지역·가격·거래)이 맞는 작업 하나만 무효로 한다. 맞는 작업이 여럿이거나
 // 조건 없는 정정에 진행 중인 작업이 여럿이면 어느 요청인지 되묻고, 답이 올 때까지 후보의 조회 결과 낭독만 잡아 둔다.
@@ -154,8 +166,28 @@ export const GREETING_TEXT = "안녕하세요, 농농이에요. 대여, 구매, 
 // 연결되자마자 농농이가 먼저 말하게 한다. 사용자가 이미 말하고 있으면 인사를 건너뛴다(말 끊기 방지).
 const GREETING = `지금 바로 첫 인사로 "${GREETING_TEXT}" 이 한 문장만 말하고, 사용자의 대답을 기다려 주세요.`;
 const CONTINUE_GREETING = "앞선 대화 내용과 조건을 기억한 상태에서, 한 문장으로 짧게 인사하고 이어서 도와드릴 점을 여쭤 주세요.";
-// 사용자에게 읽어 주는 말이 아니라 모델에게 주는 진행 상황이다. "확인해볼게요" 같은 중간 안내를 매번 말하지 않게 한다.
-const PROGRESS = "백엔드 조회 중이다. 결과가 오기 전에는 '확인해볼게요', '잠시만요' 같은 중간 안내를 하지 말고 조용히 기다린다. 결과가 오면 결과만 짧게 말한다.";
+const MAX_SILENT_PROGRESS = 3; // 위임당 말하지 않는 진행 메모(thinking) 최대 개수
+const CARRY_TTL_MS = 60_000; // 재연결 뒤 이전 연결의 쓰기 결과를 알려 줄 수 있는 시간
+const ORDER_TTL_MS = 6_000; // 보낸 commentary와 그 뒤 어시스턴트 발화를 짝지을 수 있는 시간
+// 잠깐 멈췄다 이어 말해도 같은 발화로 보는 종류: 앱이 보낸 내용을 풀어 말하는 중일 때만. 접수 인사는 이어 말하지 않는다.
+const CONTINUABLE = new Set(["result", "progress", "carry", "greeting", "ui"]);
+
+// 진행 label은 백엔드(패널)가 준 짧은 문구다. 특수 토큰·꺾쇠·제어 문자를 지우고 짧게 자른다.
+export function cleanProgressLabel(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/<\|[^|>]*\|>/g, " ")
+    .replace(/[<>|`\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+const progressNote = (label) => `실제 진행 상황: ${label}. 이 진행 상황만 한 문장으로 짧게 알리고, 결과는 아직 말하거나 추측하지 않는다.`;
+const silentProgressNote = (label) => `백엔드 진행 메모(말하지 않는다): ${label}`;
+const resumeNote = (summary) => `사용자가 끼어들어 이 결과 안내를 끝까지 듣지 못했다. 앞부분은 반복하지 말고 남은 핵심만 한 문장으로 이어서 말한다: ${summary}`;
+const missedNote = (summary) => `사용자가 이 결과 안내를 끝까지 듣지 못했다. 지금 말하지 말고, 사용자가 다시 물으면 이 내용으로 답한다: ${summary}`;
+const carryNote = (summary) => `이전 연결에서 처리된 작업 결과다. 사용자가 아직 듣지 못했으니 짧게 알린다: ${summary}`;
 
 function abortError() {
   const error = new Error("gpt-live 연결이 취소되었습니다.");
@@ -224,6 +256,17 @@ export function createGptLiveController({
   speakingIdleMs = 1500,
   // 사용자의 마지막 음성 전사 뒤 이 시간 안에는 아직 말하는 중으로 본다(그동안 농농이 말을 시작하지 않는다).
   userQuietMs = 700,
+  // 위임 뒤 이 시간 안에 결과가 오면 진행 소식을 말하지 않는다(한 번의 대기에 진행 소식은 최대 한 번).
+  progressDelayMs = 2500,
+  // 새 위임의 자동 접수 인사가 나올 시간: 그동안 진행 메모(thinking/commentary)를 보내지 않는다(보내면 ack가 취소된다).
+  ackGuardMs = 600,
+  // 결과 낭독이 끊긴 뒤 사용자 말이 끝나고 이만큼 새 요청·답이 없으면 남은 결과를 이어서 말한다.
+  resumeGraceMs = 900,
+  // 앱이 보낸 결과·진행을 말하던 발화가 끝난 뒤 이 시간 안에 이어지는 말은 그 연장으로 본다(위임이 새로 생기지 않았을 때만).
+  // 위임 직전 이 시간 안에 모델이 사용자에게 답했으면 그 답을 이 위임의 접수 인사로 본다.
+  continuationMs = 2500,
+  // 위임 대기 중 접수 인사 뒤 모델이 스스로 덧붙이는 말(filler)을 끈다.
+  suppressUnpromptedSpeech = true,
   onState = () => {},
   onUserTranscriptDelta = () => {},
   onAssistantTranscriptDelta = () => {},
@@ -267,6 +310,18 @@ export function createGptLiveController({
   let correction = null;
   // 대상을 되물은 상태: { candidates, attempts, askedBy }. 답이 올 때까지 후보의 조회 결과 낭독만 잡아 둔다.
   let clarification = null;
+  // 대기 중 말하기 제어
+  let ackCredits = []; // 자동 접수 인사를 아직 하지 않은 위임 ID(오래된 순)
+  let speechOrders = []; // 보낸 commentary: 다음 어시스턴트 발화가 무엇을 말하는지 { kind, delegationId, at }
+  let userSpokeSinceAssistant = false;
+  let delegationSinceAssistant = false;
+  let lastAssistantEnd = { at: 0, kind: null, delegationId: null, allowed: false };
+  let fillerSuppressed = false;
+  let lastDelegationAt = 0;
+  let lastProgressSpokenAt = 0;
+  let pendingResume = null; // { task, sawReply, sawDelegation }
+  let resumeTimer = null;
+  let carryOver = []; // 재연결 뒤 새 세션에서 알릴 쓰기 결과 { content, at }
 
   const setState = (next) => { if (state !== next) { state = next; onState(next); } };
   const idleState = () => (muted ? "muted" : "listening");
@@ -309,14 +364,21 @@ export function createGptLiveController({
   }
 
   // 정정된 작업의 조회 결과 낭독만 버린다(보낼 때·줄에서 꺼낼 때 다시 확인). UI 안내와 실제 쓰기 결과는 남긴다.
+  // 진행 소식은 결과가 이미 왔거나, 정정됐거나, 정정 대상을 되묻는 중이면 낡은 말이다.
   function isStaleSpeech(item) {
+    if (item.kind === "progress") return Boolean(item.task?.settled || item.task?.superseded || item.task?.held);
     return item.kind === "result" && !item.write && Boolean(item.task?.superseded);
   }
 
   function sendSpeech(item, s) {
     const ok = send(item.payload, s);
-    if (ok && item.kind === "result") lastSpokenDelegationId = item.payload.delegation_id ?? null;
-    return ok;
+    if (!ok) return false;
+    if (item.kind === "result") lastSpokenDelegationId = item.payload.delegation_id ?? null;
+    // 이제 모델이 이 commentary를 말한다: 끄고 있던 filler를 끝내고, 다음 발화를 이 말과 짝짓는다.
+    if (assistantMeta?.filler) flushAssistantTurn();
+    if (fillerSuppressed) setFillerSuppressed(s, false);
+    speechOrders.push({ kind: item.kind, delegationId: item.payload.delegation_id ?? null, at: Date.now() });
+    return true;
   }
 
   function speakWhenQuiet(payload, s = session, { kind = "ui", task = null, write = false } = {}) {
@@ -468,11 +530,49 @@ export function createGptLiveController({
     return lastUtterance;
   }
 
+  function applyAudioMute(s) {
+    if (s?.audio) {
+      try { s.audio.muted = outputSuppressed || fillerSuppressed; } catch { /* ignore */ }
+    }
+  }
+
   function setOutputSuppressed(s, next) {
     outputSuppressed = next;
-    if (s?.audio) {
-      try { s.audio.muted = next; } catch { /* ignore */ }
+    applyAudioMute(s);
+  }
+
+  function setFillerSuppressed(s, next) {
+    fillerSuppressed = next;
+    applyAudioMute(s);
+  }
+
+  // 새 어시스턴트 발화가 무엇인지 정한다. 대기 중 접수 인사 뒤의 자발적인 덧말(filler)은 끈다.
+  function classifyAssistantUtterance() {
+    const now = Date.now();
+    // 인사·UI 안내를 보낸 뒤 사용자가 먼저 말했으면 모델은 그 말에 답한다: 그 안내와는 더 이상 짝짓지 않는다.
+    speechOrders = speechOrders.filter((o) => now - o.at < ORDER_TTL_MS
+      && !((o.kind === "greeting" || o.kind === "ui") && o.at <= lastUserAudioAt));
+    let kind;
+    let delegationId = null;
+    const order = speechOrders.shift();
+    if (order) {
+      ({ kind, delegationId } = order);
+    } else if (userSpokeSinceAssistant) {
+      kind = "reply";
+    } else if (ackCredits.length) {
+      kind = "ack";
+      delegationId = ackCredits.shift();
+    } else if (!delegationSinceAssistant && lastAssistantEnd.allowed && CONTINUABLE.has(lastAssistantEnd.kind)
+      && now - lastAssistantEnd.at < continuationMs) {
+      ({ kind, delegationId } = lastAssistantEnd); // 앱이 보낸 결과·진행을 말하다 잠깐 멈췄다 잇는 같은 말
+    } else if (suppressUnpromptedSpeech && delegationsInFlight > 0) {
+      kind = "filler";
+    } else {
+      kind = "reply";
     }
+    userSpokeSinceAssistant = false;
+    delegationSinceAssistant = false;
+    return { kind, delegationId };
   }
 
   function clearSpeakingTimer() {
@@ -498,6 +598,13 @@ export function createGptLiveController({
     assistantText = "";
     const meta = assistantMeta;
     assistantMeta = null;
+    if (meta) {
+      lastAssistantEnd = { at: Date.now(), kind: meta.kind, delegationId: meta.delegationId, allowed: !meta.filler };
+    }
+    if (meta?.filler) {
+      if (fillerSuppressed && session) setFillerSuppressed(session, false);
+      return; // 끈 덧말은 기록하지 않는다.
+    }
     if (text) {
       onTurnCommitted(
         { role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) },
@@ -514,6 +621,7 @@ export function createGptLiveController({
       delegationId: delegatedReply ? lastSpokenDelegationId : null,
       startMs: null,
       endMs: null,
+      kind: "reply",
     };
   }
 
@@ -558,6 +666,22 @@ export function createGptLiveController({
     }
     release(s);
     if (active) {
+      // 이 연결에서 아직 못 알린 쓰기 결과(줄 선 것·끊긴 것)는 다음 연결에서 알린다(위임 ID는 새 세션에서 무효).
+      const now = Date.now();
+      for (const item of speechQueue) {
+        if (item.kind === "result" && item.write && item.task?.spokenSummary) carryOver.push({ content: item.task.spokenSummary, at: now });
+      }
+      if (pendingResume?.task?.write && pendingResume.task.spokenSummary) carryOver.push({ content: pendingResume.task.spokenSummary, at: now });
+      clearResume();
+      for (const t of tasks) if (t.progressTimer) { clearTimeout(t.progressTimer); t.progressTimer = null; }
+      ackCredits = [];
+      speechOrders = [];
+      userSpokeSinceAssistant = false;
+      delegationSinceAssistant = false;
+      lastAssistantEnd = { at: 0, kind: null, delegationId: null, allowed: false };
+      fillerSuppressed = false;
+      lastDelegationAt = 0;
+      lastProgressSpokenAt = 0;
       clearSpeechTimer();
       speechQueue = [];
       lastUserAudioAt = 0;
@@ -582,12 +706,138 @@ export function createGptLiveController({
     }
   }
 
+  // ── 진행 소식(meta.onProgress) ──
+  // 실제 백엔드 진행만 받는다. 위임당 소리 내는 진행 소식은 최대 한 번이고, 그 뒤 새 진행은 말하지 않는 thinking으로 넘긴다.
+  function reportProgress(s, task, info) {
+    if (!current(s) || task.settled || task.superseded) return false;
+    const label = cleanProgressLabel(typeof info === "string" ? info : info?.label);
+    if (!label) return false;
+    const key = label.replace(/\s+/g, "");
+    if (task.progressLabels.has(key)) return false; // 같은 진행을 두 번 알리지 않는다.
+    task.progressLabels.add(key);
+    if (task.progressSpoken) return sendSilentProgress(s, task, label);
+    task.progressPending = label; // 아직 말하기 전이면 가장 최근의 실제 진행을 말한다.
+    scheduleProgress(s, task);
+    return true;
+  }
+
+  function sendSilentProgress(s, task, label) {
+    if (task.silentProgress >= MAX_SILENT_PROGRESS) return false;
+    task.silentProgress += 1;
+    return send({ type: "session.thinking.append", event_id: id("progress"), delegation_id: task.delegationId, content: silentProgressNote(label) }, s);
+  }
+
+  function scheduleProgress(s, task) {
+    if (task.progressTimer) return;
+    const now = Date.now();
+    // 결과가 금방 오면 말하지 않는다. 새 위임의 자동 접수 인사가 나올 시간도 비켜 준다(append는 대기 중 ack를 취소한다).
+    const at = Math.max(task.createdAt + progressDelayMs, lastDelegationAt + ackGuardMs);
+    if (at <= now) { fireProgress(s, task); return; }
+    task.progressTimer = setTimeout(() => { task.progressTimer = null; fireProgress(s, task); }, at - now);
+    task.progressTimer?.unref?.();
+  }
+
+  function fireProgress(s, task) {
+    if (!current(s) || task.settled || task.superseded || task.progressSpoken || !task.progressPending) return;
+    const now = Date.now();
+    if (now < lastDelegationAt + ackGuardMs) { scheduleProgress(s, task); return; }
+    const label = task.progressPending;
+    task.progressPending = null;
+    task.progressSpoken = true;
+    // 겹친 위임끼리도 진행 소식을 연달아 말하지 않는다: 방금 다른 작업의 진행을 말했으면 이번 것은 조용히 넘긴다.
+    if (lastProgressSpokenAt && now - lastProgressSpokenAt < progressDelayMs) {
+      sendSilentProgress(s, task, label);
+      return;
+    }
+    lastProgressSpokenAt = now;
+    speakWhenQuiet(
+      { type: "session.commentary.append", event_id: id("progress"), delegation_id: task.delegationId, content: progressNote(label) },
+      s,
+      { kind: "progress", task },
+    );
+  }
+
+  // ── 재연결 뒤 이전 연결의 쓰기 결과 ──
+  function carryResult(summary) {
+    carryOver.push({ content: summary, at: Date.now() });
+    if (session && ready) flushCarryOver(session);
+  }
+
+  function flushCarryOver(s) {
+    const now = Date.now();
+    const items = carryOver.filter((c) => now - c.at < CARRY_TTL_MS);
+    carryOver = [];
+    for (const c of items) {
+      // 이전 세션의 위임 ID는 새 세션에서 알 수 없는 ID라 거부되므로 delegation_id는 null로 보낸다.
+      speakWhenQuiet({ type: "session.commentary.append", event_id: id("carry"), delegation_id: null, content: carryNote(c.content) }, s, { kind: "carry", write: true });
+    }
+  }
+
+  // ── 결과 낭독이 끊긴 뒤 이어 말하기(resume) ──
+  function clearResume() {
+    if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = null; }
+    pendingResume = null;
+  }
+
+  function noteInterruptedSpeech(s, cut) {
+    if (!cut || cut.kind !== "result" || !cut.delegationId) return;
+    const task = tasks.find((t) => t.delegationId === cut.delegationId);
+    if (!task || task.superseded || task.resumed || !task.spokenSummary) return;
+    pendingResume = { task, sawReply: false, sawDelegation: false };
+    armResume(s);
+  }
+
+  function armResume(s) {
+    if (resumeTimer) clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(() => { resumeTimer = null; checkResume(s); }, Math.max(20, userQuietMs + resumeGraceMs));
+    resumeTimer?.unref?.();
+  }
+
+  function checkResume(s) {
+    const r = pendingResume;
+    if (!r || !current(s)) return;
+    if (r.task.superseded) { pendingResume = null; return; } // 정정된 조회 결과는 이어 말하지 않는다.
+    if (userSpeakingNow() || (assistantMeta && !assistantMeta.filler) || Date.now() < lastDelegationAt + ackGuardMs) {
+      armResume(s);
+      return;
+    }
+    pendingResume = null;
+    r.task.resumed = true; // 한 결과는 한 번만 이어 말한다.
+    if (!r.task.write && (r.sawReply || r.sawDelegation)) {
+      // 사용자가 다른 이야기로 넘어갔다: 조회 결과는 다시 말하지 않고 모델이 기억만 하게 한다.
+      send({ type: "session.thinking.append", event_id: id("missed"), delegation_id: r.task.delegationId, content: missedNote(r.task.spokenSummary) }, s);
+      return;
+    }
+    speakWhenQuiet(
+      { type: "session.commentary.append", event_id: id("resume"), delegation_id: r.task.delegationId, content: resumeNote(r.task.spokenSummary) },
+      s,
+      { kind: "result", task: r.task, write: r.task.write },
+    );
+  }
+
   async function handleDelegation(s, event) {
     if (event.delegation?.target !== "client") return;
     const delegationId = event.delegation.id;
-    if (s.seen.has(delegationId)) return;
+    if (s.seen.has(delegationId)) return; // 같은 위임 이벤트가 두 번 와도 한 번만 처리한다.
     s.seen.add(delegationId);
+    const createdAt = Date.now();
+    // 접수 한마디는 위임당 정확히 한 번: 이 사용자 말에 모델이 이미 답하는 중이거나 막 답했으면 그 말이 접수 인사다.
+    // 그 뒤에 오는 자동 acknowledgement는 덧말(filler)로 끈다. 아니면 자동 acknowledgement 한 번을 허용한다.
+    const answeredJustNow = assistantMeta
+      ? !assistantMeta.filler && assistantMeta.kind === "reply"
+      : lastAssistantEnd.allowed && lastAssistantEnd.kind === "reply" && !userSpokeSinceAssistant
+        && createdAt - lastAssistantEnd.at < continuationMs;
+    if (assistantMeta && answeredJustNow) assistantMeta.kind = "ack";
     flushAssistantTurn();
+    if (answeredJustNow) lastAssistantEnd = { ...lastAssistantEnd, kind: "ack", delegationId };
+    else ackCredits.push(delegationId);
+    lastDelegationAt = createdAt;
+    delegationSinceAssistant = true;
+    // 이 사용자 말은 위임으로 처리됐다. 다음 발화는 그 말에 대한 답이 아니라 접수 인사(또는 덧말)다.
+    userSpokeSinceAssistant = false;
+    // 위임이 생겼다는 건 모델이 끼어든 사용자 말을 받아 새 응답을 시작했다는 뜻이다: 끊긴 발화의 나머지가 아니니 소리를 켠다.
+    if (outputSuppressed) setOutputSuppressed(s, false);
+    if (pendingResume) pendingResume.sawDelegation = true;
     const spokenText = (userText.trim() || pendingUserText).trim();
     // 위임 전에 짧은 맞장구가 먼저 나오면 사용자 발화가 이미 기록됐을 수 있다.
     const userTurnCommitted = Boolean(spokenText) && spokenText === lastUserCommit;
@@ -604,6 +854,8 @@ export function createGptLiveController({
     const task = {
       delegationId, utteranceId: owner?.id ?? null, seq: ++taskSeq, superseded: false, supersededBy: null,
       text: spokenText, slots: extractTaskSlots(spokenText), settled: false, held: false, write: false, staleNoted: false,
+      createdAt, spokenSummary: null, resumed: false,
+      progressLabels: new Set(), progressPending: null, progressSpoken: false, progressTimer: null, silentProgress: 0,
     };
     tasks.push(task);
     if (tasks.length > 20) tasks = tasks.slice(-20); // 정정은 최근 작업만 겨냥하므로 오래된 기록은 필요 없다.
@@ -615,12 +867,14 @@ export function createGptLiveController({
       }),
       isStale,
       corrects,
+      // 패널(백엔드)이 실제 검색·조회 진행 이벤트를 받을 때 부른다. 위임당 최대 한 번만 소리 내어 말한다.
+      onProgress: (info) => reportProgress(s, task, info),
     };
     delegatedReply = true;
     assistantMeta = null;
     delegationsInFlight += 1;
     setState("thinking");
-    send({ type: "session.thinking.append", event_id: id("progress"), delegation_id: delegationId, content: PROGRESS }, s);
+    // 위임 시점에는 아무것도 보내지 않는다: thinking/commentary를 보내면 세션의 대기 중 자동 접수 인사가 모두 취소된다.
     let result = {};
     let failed = false;
     try {
@@ -630,14 +884,21 @@ export function createGptLiveController({
       failed = true;
       result = { spokenSummary: "죄송해요, 처리 중에 연결 문제가 생겼어요. 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요." };
     }
-    if (!current(s)) return;
-    delegationsInFlight = Math.max(0, delegationsInFlight - 1);
-    const leaveThinking = () => { if (state === "thinking" && delegationsInFlight === 0) setState(idleState()); };
     const { spokenSummary, thinkingContext } = result;
     // 실패 안내는 쓰기가 됐는지 모르므로 쓰기처럼 다룬다(정정이 와도 알린다).
     const write = failed || isWriteDelegationResult(result);
     task.settled = true;
     task.write = write;
+    if (task.progressTimer) { clearTimeout(task.progressTimer); task.progressTimer = null; }
+    if (spokenSummary) task.spokenSummary = String(spokenSummary).slice(0, 800);
+    if (!current(s)) {
+      // 연결이 바뀐 뒤 늦게 온 결과: 조회 결과는 버리고, 쓰기 결과(또는 결과를 모르는 실패)는 새 연결에서 알린다.
+      if (write && task.spokenSummary) carryResult(task.spokenSummary);
+      return;
+    }
+    ackCredits = ackCredits.filter((d) => d !== delegationId); // 결과가 왔으니 따로 접수 인사를 할 필요가 없다.
+    delegationsInFlight = Math.max(0, delegationsInFlight - 1);
+    const leaveThinking = () => { if (state === "thinking" && delegationsInFlight === 0) setState(idleState()); };
     if (write) {
       task.held = false; // 실제로 쓴 결과와 실패 안내는 잡아 두지 않는다.
       // 되묻는 중이면 쓰기 결과는 후보에서 뺀다(되돌릴 수 없는 영수증이라 답으로 무효로 하지 않는다).
@@ -682,19 +943,26 @@ export function createGptLiveController({
         const opening = Array.isArray(history) && history.length > 0 ? CONTINUE_GREETING : GREETING;
         if (!greeted && userSpeakingNow()) {
           greeted = true; // 사용자가 먼저 말을 시작했으면 인사로 끊지 않는다.
-        } else if (!greeted && send({ type: "session.commentary.append", event_id: id("greeting"), delegation_id: null, content: opening }, s)) {
+        } else if (!greeted && sendSpeech({ payload: { type: "session.commentary.append", event_id: id("greeting"), delegation_id: null, content: opening }, kind: "greeting" }, s)) {
           greeted = true;
         }
+        if (carryOver.length) flushCarryOver(s);
         break;
       }
       case "session.input_transcript.delta":
         clearSpeakingTimer();
         lastUserAudioAt = Date.now();
-        // 사용자가 말을 끊고 들어오면(barge-in) 농농이 소리를 바로 끄고, 직전 발화를 마무리한 뒤 듣는 상태로 바꾼다.
-        if (state === "speaking") {
+        userSpokeSinceAssistant = true;
+        // 사용자가 말을 끊고 들어오면(barge-in) 농농이 소리를 바로 끄고, 직전 발화를 마무리한 뒤 듣는다.
+        // 위임 결과를 기다리는 중(thinking)에 접수 인사·진행 소식·결과를 말하는 중이어도 똑같이 끊는다. 백엔드 작업은 계속된다.
+        if (assistantMeta || state === "speaking") {
+          const cut = assistantMeta;
           setOutputSuppressed(s, true);
           flushAssistantTurn({ interrupted: true });
-          setState(idleState());
+          noteInterruptedSpeech(s, cut);
+          if (state === "speaking") setState(delegationsInFlight > 0 ? "thinking" : idleState());
+        } else if (pendingResume) {
+          armResume(s); // 사용자가 계속 말하는 중: 말이 끝난 뒤에 이어 말할지 정한다.
         }
         if (!userText) delegatedReply = false; // 새 사용자 턴: 이후 발화는 위임 답변이 아니다.
         userText += event.delta || "";
@@ -716,7 +984,21 @@ export function createGptLiveController({
           setOutputSuppressed(s, false);
         }
         flushUserTurn();
-        if (!assistantMeta) assistantMeta = newAssistantMeta();
+        if (!assistantMeta) {
+          const { kind, delegationId } = classifyAssistantUtterance();
+          assistantMeta = newAssistantMeta();
+          assistantMeta.kind = kind;
+          if (delegationId && kind !== "reply") assistantMeta.delegationId = delegationId;
+          if (kind === "filler") {
+            // 접수 인사 뒤 실제 진행·결과 없이 모델이 덧붙이는 말: 소리를 끄고 전사도 남기지 않는다.
+            assistantMeta.filler = true;
+            setFillerSuppressed(s, true);
+          } else {
+            if (fillerSuppressed) setFillerSuppressed(s, false);
+            if (pendingResume && kind !== "result") pendingResume.sawReply = true;
+          }
+        }
+        if (assistantMeta.filler) { scheduleSpeakingIdle(s); break; }
         if (assistantMeta.startMs == null && Number.isFinite(event.start_ms)) assistantMeta.startMs = event.start_ms;
         if (Number.isFinite(event.end_ms)) assistantMeta.endMs = event.end_ms;
         if (event.delegation_id && !assistantMeta.delegationId) assistantMeta.delegationId = event.delegation_id;
@@ -725,7 +1007,7 @@ export function createGptLiveController({
         // 두 번째 인자: 같은 어시스턴트 발화의 모든 부분 delta가 같은 utteranceId를 가진다.
         onAssistantTranscriptDelta(
           { delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms },
-          { utteranceId: assistantMeta.utteranceId, replyTo: assistantMeta.replyTo, delegationId: assistantMeta.delegationId },
+          { utteranceId: assistantMeta.utteranceId, replyTo: assistantMeta.replyTo, delegationId: assistantMeta.delegationId, kind: assistantMeta.kind },
         );
         scheduleSpeakingIdle(s);
         break;

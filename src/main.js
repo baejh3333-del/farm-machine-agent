@@ -143,6 +143,13 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     runtime.selectedOwnedMachineId = typeof meData?.selectedOwnedMachineId === "string" ? meData.selectedOwnedMachineId : "";
     runtime.garage?.setExternalOwned(runtime.ownedMachines, runtime.selectedOwnedMachineId);
     setEducationCertificateStatus(meData?.educationCertificate);
+    // 농농이로 닉네임을 바꾼 뒤처럼, 같은 계정의 이름이 바뀌었으면 상단 계정 버튼에도 반영한다.
+    const freshName = typeof meData?.user?.name === "string" ? meData.user.name : "";
+    if (freshName && runtime.accountUser?.id === meData.user.id && runtime.accountUser.name !== freshName) {
+      runtime.accountUser = { ...runtime.accountUser, name: freshName };
+      const accountButton = $("loginButton");
+      if (accountButton) accountButton.textContent = `${freshName} · 내 계정`;
+    }
 
     if (reqData) {
       runtime.incomingRequests = Array.isArray(reqData.incoming) ? reqData.incoming : [];

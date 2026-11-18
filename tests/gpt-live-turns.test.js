@@ -99,7 +99,7 @@ test("발화마다 utteranceId를 붙이고 start/end 타임스탬프를 커밋�
   await tick(40);
   const assistantCommit = calls.committed.find((c) => c.turn.role === "assistant");
   assert.deepEqual(assistantCommit.meta, {
-    utteranceId: assistantCommit.meta.utteranceId, replyTo: calls.user[0].utteranceId, delegationId: null, startMs: 1000, endMs: 1500,
+    utteranceId: assistantCommit.meta.utteranceId, replyTo: calls.user[0].utteranceId, delegationId: null, startMs: 1000, endMs: 1500, kind: "reply",
   });
   assert.match(assistantCommit.meta.utteranceId, /^ast_/);
 

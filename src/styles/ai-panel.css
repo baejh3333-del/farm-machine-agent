@@ -2221,3 +2221,13 @@ body.ai-fullscreen .ai-launcher {
     transition: none !important;
   }
 }
+
+/* 사용자가 정정해 무효가 된 음성 위임 결과: 지우지 않고 흐리게 표시한다. */
+.chat-bubble.is-superseded > :not(.ai-superseded-note) {
+  opacity: 0.45;
+}
+.ai-superseded-note {
+  font-size: 0.8rem;
+  color: var(--muted, #6b7280);
+  margin-bottom: 0.35rem;
+}

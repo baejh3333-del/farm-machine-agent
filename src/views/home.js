@@ -15,6 +15,10 @@ const RADIUS_OPTIONS = [
   { value: "all", label: "전체" },
 ];
 
+const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+const TIME_RE = /^\s*([01]?\d|2[0-3])\s*:?\s*([03]0)\s*$/;
+const ROW = 44;
+
 const STEPS = {
   borrow: [
     ["조건 고르기", "위치·날짜·작업만 고르면\n맞는 기계가 보여요", "filter"],
@@ -66,7 +70,9 @@ export function createHomeView(deps) {
   let monthOffset = null; // 달력 첫 달 (yyyy*12+mm)
   let howTab = "borrow";
   let faqOpen = 0;
-  let homeTimes = { start: "09:00", end: "18:00" };
+  const homeTimes = { start: "09:00", end: "18:00" };
+  const drafts = { start: null, end: null };
+  const times = () => homeTimes;
   function commit({ weather = false } = {}) {
     persist(deps.updateBadges);
     deps.renderAll();
@@ -94,11 +100,6 @@ export function createHomeView(deps) {
       const [y, m] = parts(state.filters.date || today());
       monthOffset = y * 12 + (m - 1);
     }
-    if (openPop === "time") {
-      const form = $("homeTimeForm");
-      form.elements.start.value = homeTimes.start;
-      form.elements.end.value = homeTimes.end;
-    }
     renderPops();
     if (wasDate) finishDate();
   }
@@ -118,13 +119,14 @@ export function createHomeView(deps) {
       if (!el) continue;
       const open = openPop === name;
       el.hidden = !open;
-      if (open && name !== "time") el.innerHTML = { loc: locHtml, date: dateHtml, task: taskHtml }[name]();
+      if (open) el.innerHTML = { loc: locHtml, date: dateHtml, time: timeHtml, task: taskHtml }[name]();
     }
     for (const btn of document.querySelectorAll("[data-home-pop]")) {
       const open = btn.dataset.homePop === openPop;
       btn.classList.toggle("is-open", open);
       btn.setAttribute("aria-expanded", String(open));
     }
+    if (openPop === "time") syncWheels();
   }
 
   // ---------- 위치 ----------
@@ -243,7 +245,111 @@ export function createHomeView(deps) {
     if (action === "apply") {
       openPop = "";
       finishDate();
+      setPop("time");
+    }
+  }
+
+  function wheelHtml(which, label, dayLabel) {
+    const value = times()[which];
+    const draft = drafts[which];
+    const bad = draft != null && !TIME_RE.test(draft);
+    const items = TIME_SLOTS.map((t) => `<li role="option" aria-selected="${t === value}" data-home-slot="${which}:${t}" class="${t === value ? "is-on" : ""}">${t}</li>`).join("");
+    return `
+      <div class="h2-time-col">
+        <div class="h2-time-head"><b>${label}</b><small>${dayLabel}</small></div>
+        <input class="h2-time-input${bad ? " is-bad" : ""}" data-home-time-input="${which}" inputmode="numeric" value="${escapeHtml(draft ?? value)}" aria-label="${label} 직접 입력 (예: 0930)" />
+        <div class="h2-wheel">
+          <span class="h2-wheel-band" aria-hidden="true"></span>
+          <ul class="h2-wheel-list" data-home-wheel="${which}" tabindex="0" role="listbox" aria-label="${label}">${items}</ul>
+        </div>
+      </div>`;
+  }
+
+  function timeHtml() {
+    const { date, dateEnd } = state.filters;
+    const { start, end } = times();
+    const sameDay = date && (dateEnd || date) === date;
+    const bad = sameDay && end <= start;
+    return `
+      <div class="h2-time">
+        ${wheelHtml("start", "받는 시간", date ? fullDate(date) : "빌리는 날")}
+        <span class="h2-vline" aria-hidden="true"></span>
+        ${wheelHtml("end", "반납 시간", dateEnd || date ? fullDate(dateEnd || date) : "반납하는 날")}
+      </div>
+      ${bad ? '<p class="h2-warn">하루만 빌릴 때는 반납 시간이 받는 시간보다 늦어야 해요</p>' : ""}
+      <div class="h2-pop-foot h2-pop-foot-end"><button type="button" class="h2-apply" data-home-time="apply">적용</button></div>`;
+  }
+
+  function setTime(which, value, { rerender = true } = {}) {
+    homeTimes[which] = value;
+    $("homeTimeText").textContent = `${homeTimes.start}–${homeTimes.end}`;
+    if (rerender) renderPops();
+  }
+
+  function highlightTime(list, value) {
+    for (const item of list.children) {
+      const selected = item.dataset.homeSlot.endsWith(value);
+      item.classList.toggle("is-on", selected);
+      item.setAttribute("aria-selected", String(selected));
+    }
+  }
+
+  function syncWheels() {
+    for (const list of document.querySelectorAll("[data-home-wheel]")) {
+      const which = list.dataset.homeWheel;
+      const index = TIME_SLOTS.indexOf(times()[which]);
+      list.dataset.index = String(index);
+      list.scrollTop = index * ROW;
+      list.addEventListener("scroll", () => {
+        const i = Math.max(0, Math.min(TIME_SLOTS.length - 1, Math.round(list.scrollTop / ROW)));
+        if (String(i) !== list.dataset.index) {
+          list.dataset.index = String(i);
+          highlightTime(list, TIME_SLOTS[i]);
+          const input = document.querySelector(`[data-home-time-input="${which}"]`);
+          if (input) input.value = TIME_SLOTS[i];
+          drafts[which] = null;
+          setTime(which, TIME_SLOTS[i], { rerender: false });
+        }
+      }, { passive: true });
+      list.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        event.preventDefault();
+        const i = Math.max(0, Math.min(TIME_SLOTS.length - 1, Number(list.dataset.index) + (event.key === "ArrowDown" ? 1 : -1)));
+        list.scrollTo({ top: i * ROW, behavior: "smooth" });
+      });
+    }
+  }
+
+  function onTimeClick(target) {
+    const slot = target.closest("[data-home-slot]")?.dataset.homeSlot;
+    if (slot) {
+      const [which, value] = [slot.slice(0, slot.indexOf(":")), slot.slice(slot.indexOf(":") + 1)];
+      drafts[which] = null;
+      setTime(which, value);
+      return;
+    }
+    if (target.closest('[data-home-time="apply"]')) {
+      drafts.start = drafts.end = null;
+      openPop = "";
       setPop("task");
+    }
+  }
+
+  function onTimeInput(input) {
+    const which = input.dataset.homeTimeInput;
+    drafts[which] = input.value;
+    const m = input.value.match(TIME_RE);
+    input.classList.toggle("is-bad", !m);
+    if (m) {
+      const value = `${pad2(m[1])}:${m[2]}`;
+      setTime(which, value, { rerender: false });
+      const list = document.querySelector(`[data-home-wheel="${which}"]`);
+      if (list) {
+        const i = TIME_SLOTS.indexOf(value);
+        list.dataset.index = String(i);
+        list.scrollTop = i * ROW;
+        highlightTime(list, value);
+      }
     }
   }
 
@@ -392,14 +498,6 @@ export function createHomeView(deps) {
   function bind() {
     const card = $("homeBooking");
     if (!card) return;
-    $("homeTimeForm")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const { start, end } = event.currentTarget.elements;
-      homeTimes = { start: start.value, end: end.value };
-      $("homeTimeText").textContent = `${homeTimes.start}–${homeTimes.end}`;
-      closePop();
-      card.querySelector('[data-home-pop="time"]').focus();
-    });
     card.addEventListener("click", (event) => {
       const t = event.target;
       const popBtn = t.closest("[data-home-pop]");
@@ -416,6 +514,7 @@ export function createHomeView(deps) {
       }
       if (t.closest("#homePopLoc")) return onLocClick(t);
       if (t.closest("#homePopDate")) return onDateClick(t);
+      if (t.closest("#homePopTime")) return onTimeClick(t);
       if (t.closest("#homePopTask")) return onTaskClick(t);
       if (t.closest("[data-home-widen]")) {
         state.filters.radius = "all";
@@ -424,6 +523,18 @@ export function createHomeView(deps) {
       }
       const detail = t.closest("[data-detail]")?.dataset.detail;
       if (detail) deps.openDetail(detail);
+    });
+    card.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-home-time-input]");
+      if (input) onTimeInput(input);
+    });
+    card.addEventListener("focusout", (event) => {
+      const input = event.target.closest("[data-home-time-input]");
+      if (input) {
+        drafts[input.dataset.homeTimeInput] = null;
+        input.classList.remove("is-bad");
+        input.value = times()[input.dataset.homeTimeInput];
+      }
     });
     document.addEventListener("click", (event) => {
       if (!openPop || !event.target.isConnected) return;
@@ -468,7 +579,7 @@ export function createHomeView(deps) {
     }
     renderSummary();
     renderRecs();
-    if (openPop) renderPops();
+    if (openPop && openPop !== "time") renderPops();
   }
 
   return { bind, render, closePop };

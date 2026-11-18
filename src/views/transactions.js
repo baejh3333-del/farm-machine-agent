@@ -1626,7 +1626,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   });
 
   $("listingEditorForm").addEventListener("input", () => {
-    if (!isEdit && lastSubmitHash !== null) {
+    if (!isEdit && !draftValues?.draftPhotoKey && lastSubmitHash !== null) {
       draftListingId = crypto.randomUUID();
       lastSubmitHash = null;
     }
@@ -1684,7 +1684,8 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       included: $("editIncluded").value.trim(),
       pickup: $("editPickup").value.trim(),
       description: $("editDescription").value.trim(),
-      ...(draftPhotoKey ? { draftPhotoKey } : (photoDataUrl ? { photoDataUrl } : {})),
+      ...(draftPhotoKey ? { draftPhotoKey } : {}),
+      ...(photoDataUrl ? { photoDataUrl } : {}),
       ...(isEdit && $("editRemovePhoto")?.checked && !file && !capturedPhotoDataUrl ? { removePhoto: true } : {}),
     };
 
@@ -1693,7 +1694,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
     $("listingSubmitButton").disabled = true;
 
     try {
-      await apiFetch("/api/listings", { method: "POST", json: payload });
+      await apiFetch("/api/listings", { method: "POST", json: payload, timeoutMs: 45000 });
       hideDialog($("formBackdrop"));
       await Promise.all([deps.loadCatalog({ quiet: true }), deps.refreshAuthenticatedData()]);
       renderOwner();

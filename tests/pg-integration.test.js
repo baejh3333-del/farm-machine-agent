@@ -190,6 +190,7 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
     "0009_trade_offers.sql",
     "0010_delegation_jobs.sql",
     "0011_insurance_consult_repair_kind.sql",
+    "0012_listing_draft_photos.sql",
     "0013_rental_operators.sql",
   ]);
 
@@ -1106,6 +1107,10 @@ test("[PGlite 로컬 엔진] 9. 초안 사진 저장과 draftPhotoKey 등록", a
     condition: "good", inspectedAt: today, description: "농농이가 쓴 소개글",
   };
 
+  await assert.rejects(
+    () => createListing(userA.user, { id: draft.listingId, ...fields, draftPhotoKey: draft.photoKey }, { pool }),
+    (err) => err.status === 400 && err.code === "INVALID_DRAFT_PHOTO",
+  );
   const created = await createListing(userB.user, { id: draft.listingId, ...fields, draftPhotoKey: draft.photoKey }, { pool });
   assert.equal(created.status, 201);
   assert.equal(created.listing.photoKey, draft.photoKey);
@@ -1160,6 +1165,8 @@ test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매�
   assert.equal(buyRes.body.reservation.listingId, targetSaleId);
 
   const listReqId = randomUUID();
+  const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#ddaa55" } }).jpeg().toBuffer();
+  const draftPhoto = await saveDraftPhoto(userB.user, `data:image/jpeg;base64,${jpeg.toString("base64")}`, { pool });
   const listRes = await apiReq(baseUrl, "/api/agent", {
     method: "POST",
     cookie: userB.cookie,
@@ -1167,6 +1174,7 @@ test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매�
       action: "execute",
       requestId: listReqId,
       pendingAction: {
+        ...draftPhoto,
         type: "create_listing",
         listingType: "sale",
         machineType: "cultivator",
@@ -1181,6 +1189,7 @@ test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매�
   assert.equal(listRes.body.outcome, "completed");
   assert.equal(listRes.body.createdListing.title, "원탭 등록 관리기");
   assert.equal(listRes.body.listing.type, "sale");
+  assert.equal(listRes.body.listing.photoKey, draftPhoto.photoKey);
 });
 
 test("[PGlite 로컬 엔진] 11. 농농이 음성 인식: 기능 확인, WAV 검증, 공급자 없음 503, 호출 제한", async (t) => {

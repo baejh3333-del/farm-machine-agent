@@ -17,7 +17,7 @@ export async function askRecommendation(message, context) {
 // insuranceOffer: 예약 뒤 보험 추천 흐름의 진행 상태, insuranceAsked: 이 대화에서 이미 물었는지.
 export async function askAgent(
   message,
-  { history = [], region, inputMode = "text", delegationId = null, sessionId = null, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation } = {},
+  { history = [], region, inputMode = "text", delegationId = null, sessionId = null, uiContext, image, savedDraft, insuranceOffer, insuranceAsked = false, fullDelegation, pendingAction = null } = {},
 ) {
   const mergedUiContext = uiContext || fullDelegation
     ? { ...(uiContext || {}), ...(fullDelegation ? { fullDelegation: true } : {}) }
@@ -37,6 +37,7 @@ export async function askAgent(
       ...(image ? { image } : {}),
       ...(savedDraft ? { savedDraft } : {}),
       ...(insuranceOffer ? { insuranceOffer } : {}),
+      ...(pendingAction && typeof pendingAction === "object" ? { pendingAction } : {}),
       insuranceAsked,
     },
   });

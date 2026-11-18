@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   checkFarmCompatibilityTool,
   cleanUiContext,
+  isRepairRequest,
   proposeRentalTool,
   runAgentTurn,
   sanitizeHistory,
@@ -123,7 +124,7 @@ test("읽기 전용 검색은 바로 실행하고 결과를 모델에 돌려준 
     { content: [{ type: "tool_use", id: "t1", name: "search_listings", input: { cropId: "pepper", operations: ["ridge"], transaction: "rent" } }] },
     { content: [{ type: "text", text: "고추 두둑 작업에 맞는 매물을 찾았어요." }] },
   ]);
-  const result = await runAgentTurn("고추 두둑 장비 빌릴래요", {}, { listings: LISTINGS, call, today: TODAY });
+  const result = await runAgentTurn("고추 두둑 장비 11월 20일에 빌릴래요", {}, { listings: LISTINGS, call, today: TODAY });
   assert.equal(calls.length, 2);
   const toolResult = calls[1].messages.at(-1).content[0];
   assert.equal(toolResult.type, "tool_result");
@@ -278,7 +279,7 @@ test("OpenAI로 에이전트를 돌려도 검색 → 답변 흐름이 같다", a
     }
     return Response.json({ choices: [{ message: { content: "고추 두둑 매물을 찾았어요." } }] });
   });
-  const result = await runAgentTurn("고추 두둑 빌릴래요", {}, { listings: LISTINGS, today: TODAY });
+  const result = await runAgentTurn("고추 두둑 내일 빌릴래요", {}, { listings: LISTINGS, today: TODAY });
   assert.equal(bodies.length, 2);
   const toolMessage = bodies[1].messages.at(-1);
   assert.equal(toolMessage.role, "tool");
@@ -616,53 +617,52 @@ test("음성으로 들어온 질문이면 되묻기·되읽기 지시를 더하�
   assert.doesNotMatch(typed.calls[0].system, /음성 인식/);
 });
 
-test("음성: 로그인 상태에서 말로 \"네\"라고 해도 대여 예약은 바로 만들지 않고 확인 카드로 넘긴다", async (t) => {
+test("음성: 로그인 상태에서 말로 \"네 예약해 주세요\"라고 하면 글과 똑같이 대여 예약을 바로 만든다", async (t) => {
   withKey(t, "test");
   let wrote = false;
-  const deps = { beforeWrite: async () => {}, createRentalRequest: async () => { wrote = true; return { request: {} }; } };
+  const deps = { beforeWrite: async () => {}, createRentalRequest: async () => { wrote = true; return { request: { id: "00000000-0000-4000-8000-000000000001", days: 2, totalPrice: rentable.price * 2 } }; } };
   const { call } = scripted([
     { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: rentable.id, start: "2026-11-20", end: "2026-11-21" } }] },
-    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
+    { content: [{ type: "text", text: "대여 예약을 접수했어요." }] },
   ]);
   const result = await runAgentTurn("네 예약해 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
-  assert.equal(wrote, false);
-  assert.equal(result.reservation, undefined);
-  assert.equal(result.pendingAction.type, "rental_request");
-  assert.equal(result.pendingAction.listingId, rentable.id);
+  assert.equal(wrote, true);
+  assert.equal(result.reservation.kind, "rental");
+  assert.equal(result.pendingAction, undefined);
 });
 
-test("음성: 말로 \"네\"라고 해도 구매 신청·매물 등록·수정은 바로 처리하지 않는다", async (t) => {
+test("음성: 말로 \"네 살게예\"·\"네 올려 주세요\"·\"네 고쳐 주세요\"라고 하면 구매 신청·매물 등록·수정을 바로 처리한다", async (t) => {
   withKey(t, "test");
   const writes = [];
   const deps = {
     beforeWrite: async () => {},
-    sendPurchaseMessage: async () => { writes.push("purchase"); return {}; },
+    sendPurchaseMessage: async () => { writes.push("purchase"); return { conversation: { id: "c1" } }; },
     createListing: async () => { writes.push("listing"); return { listing: { id: "x" } }; },
-    updateListing: async () => { writes.push("update"); return {}; },
+    updateListing: async () => { writes.push("update"); return { listing: {} }; },
     fetchOwnListings: async () => [{ ...rentable, ownerId: USER.id }],
   };
   const purchase = scripted([
     { content: [{ type: "tool_use", id: "p1", name: "create_purchase_request", input: { listingId: saleItem.id } }] },
-    { content: [{ type: "text", text: "확인 버튼을 눌러 주세요." }] },
+    { content: [{ type: "text", text: "구매 신청을 보냈어요." }] },
   ]);
   const bought = await runAgentTurn("네 살게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: purchase.call, today: TODAY, deps });
-  assert.equal(bought.pendingAction.type, "purchase_request");
+  assert.equal(bought.reservation.kind, "purchase");
+  assert.equal(bought.pendingAction, undefined);
 
   const listing = scripted([
     { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "tractor", title: "트랙터 빌려드려요", price: 80000, region: "영양읍" } }] },
-    { content: [{ type: "text", text: "초안을 확인해 주세요." }] },
+    { content: [{ type: "text", text: "등록했어요." }] },
   ]);
-  const drafted = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
-  assert.equal(drafted.createdListing, undefined);
-  assert.ok(drafted.listingDraft);
+  const created = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
+  assert.ok(created.createdListing);
 
   const update = scripted([
     { content: [{ type: "tool_use", id: "u1", name: "update_listing", input: { listingId: rentable.id, price: 10000 } }] },
-    { content: [{ type: "text", text: "바뀔 내용을 확인해 주세요." }] },
+    { content: [{ type: "text", text: "고쳤어요." }] },
   ]);
-  await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
-  assert.match(JSON.stringify(update.calls[1].messages.at(-1).content), /VOICE_CONFIRMATION_REQUIRED/);
-  assert.deepEqual(writes, []);
+  const updated = await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
+  assert.ok(updated.updatedListing);
+  assert.deepEqual(writes, ["purchase", "listing", "update"]);
 });
 
 test("음성: 말로 \"네\"라고 해도 거래 전담 위임은 자동 실행하지 않고 확인 카드로 넘긴다", async (t) => {
@@ -789,14 +789,24 @@ test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능
   assert.match(r3.createdListing.number, /^L-[0-9A-F]{8}$/);
 });
 
-test("[통합 오케스트레이터] 모델이 첫 턴 검색 없이 되물어도 작물·작업 언급 시 서버가 매물을 즉시 보강한다", async (t) => {
+test("[통합 오케스트레이터] 모델이 검색 없이 되물어도 대여 날짜가 정해졌으면 서버가 그 기간 매물로 보강한다", async (t) => {
   withKey(t, "test");
   const { call } = scripted([
-    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 면적과 날짜를 알려주시겠어요?" }] },
+    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 면적을 알려주시겠어요?" }] },
   ]);
-  const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
+  const result = await runAgentTurn("고추밭에 두둑을 만들려고 11월 20일에 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
   assert.equal(result.mode, "agent");
   assert.ok(result.listingIds.length > 0 && result.listingIds.length <= 3);
+  assert.deepEqual(result.searchDates, { start: "2026-11-20", end: "2026-11-20" });
+});
+
+test("[통합 오케스트레이터] 대여 날짜가 없으면 서버가 자동 추천하지 않는다", async (t) => {
+  withKey(t, "test");
+  const { call } = scripted([
+    { content: [{ type: "text", text: "고추밭 두둑 작업을 도와드릴게요. 언제 빌리실 건가요?" }] },
+  ]);
+  const result = await runAgentTurn("고추밭에 두둑을 만들려고 기계를 빌리고 싶어요.", {}, { listings: LISTINGS, call, today: TODAY });
+  assert.deepEqual(result.listingIds, []);
 });
 
 test("cleanUiContext는 ownedMachines·selectedOwnedModelId·favoriteIds를 검증·정제한다", () => {
@@ -1029,4 +1039,36 @@ test("timeoutMs는 공급자 전체의 예산이라 1순위가 예산을 다 쓰
   assert.equal(result, null);
   assert.equal(urls.length, 1, "남은 예산이 부족하면 다음 공급자를 부르지 않는다");
   assert.ok(Date.now() - started < 2500, "전체 대기 시간이 timeoutMs를 크게 넘지 않는다");
+});
+
+test("고장 문의: 수리 의도를 코드로 판단한다 (팔기·등록은 제외)", () => {
+  for (const yes of ["트랙터 시동이 안 걸려요", "관리기가 작동을 안 해요", "엔진에서 연기가 나요", "고장났어요", "이앙기 수리하고 싶어요", "기름이 새요"]) assert.equal(isRepairRequest(yes), true, yes);
+  for (const no of ["트랙터 빌리고 싶어요", "고장난 관리기 팔고 싶어요", "고추밭 두둑 기계 추천해 줘", "보험 알려 줘"]) assert.equal(isRepairRequest(no), false, no);
+});
+
+test("고장 문의: 매물 검색을 막고, 설정한 지역 기준 가까운 수리센터 3곳을 붙인다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [
+      { type: "tool_use", id: "s1", name: "search_listings", input: { machineType: "tractor", transaction: "rent" } },
+      { type: "tool_use", id: "g1", name: "get_repair_guide", input: { machineType: "tractor", symptom: "noStart" } },
+    ] },
+    { content: [{ type: "text", text: "연료부터 확인해 보세요. 아래 가까운 수리센터 3곳에 연락해 보세요." }] },
+  ]);
+  const result = await runAgentTurn("트랙터 시동이 안 걸려요", { region: "청기면" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  const blocked = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.match(blocked.error, /매물을 추천하지 않습니다/);
+  assert.match(calls[0].system, /고장·수리 문의다/);
+  assert.deepEqual(result.listingIds, []);
+  assert.equal(result.repairCenters.length, 3);
+  assert.equal(result.repairCenters[0].id, "yeongyang-rental-office");
+  assert.ok(Number.isFinite(result.repairCenters[0].distanceKm));
+});
+
+test("고장 문의: 모델이 수리센터 도구를 안 불러도 수리센터 3곳은 붙는다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([{ content: [{ type: "text", text: "연료와 배터리를 확인해 보세요." }] }]);
+  const result = await runAgentTurn("관리기가 작동을 안 해요", { region: "영양읍" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
+  assert.equal(result.repairCenters.length, 3);
+  assert.deepEqual(result.listingIds, []);
 });

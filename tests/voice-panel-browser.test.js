@@ -261,7 +261,8 @@ test("voice panel: live session 502 falls back to standard voice with one toast 
     await page.locator("#aiMicButton").click();
     await page.waitForFunction(() => Boolean(window.voiceTest.recognition));
     await page.locator("#aiMicButton").click();
-    await page.waitForFunction(() => document.body.textContent.includes("트랙터 매물을 찾았어요."));
+    // PR #42: 매물 카드가 붙은 답변은 설명 글 없이 추천 박스만 보인다.
+    await page.waitForFunction(() => Boolean(document.querySelector(".chat-bubble.assistant.has-results .ai-result")));
     assert.equal(requests.live.length, 1, "no further live session attempts");
     assert.equal(requests.agent[0].inputMode, "voice");
     assert.equal(requests.agent[0].message, "트랙터 찾아줘");
@@ -401,6 +402,10 @@ test("voice panel: voice switching keeps conversation memory and delegation send
     await page.evaluate(() => {
       window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "금요일은 비가 와서 월요일이 좋아요." });
       window.voiceTest.channel.emit({ type: "session.input_transcript.delta", delta: "고마워요" });
+    });
+    // 사용자가 말을 마친 뒤(침묵 구간이 지난 뒤)에야 농농이가 답한다. 말하는 도중의 발화는 버린다.
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
       window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "천만에요, 월요일에" });
     });
 

@@ -1,5 +1,6 @@
 ﻿// 농농이 음성 도우미: 녹음 → 16kHz 모노 WAV, 브라우저 음성 인식(대체 수단), 답변 읽어 주기, 음성 설정.
 // 브라우저 기능이 없거나 실패해도 글 상담이 그대로 되도록, 모든 함수는 실패를 오류 코드로 알려 준다.
+import { pickBestTranscript } from "../data/speech-glossary.js";
 
 export const TARGET_SAMPLE_RATE = 16000;
 export const MAX_RECORD_SECONDS = 30;
@@ -106,22 +107,22 @@ export function textForSpeech(text) {
     .trim();
 }
 
-/** 대여 승인 카드를 소리로 요약한다. 말로는 승인되지 않는다는 것도 알려 준다. */
+/** 대여 확인 카드를 소리로 요약하고, "네"라고 하면 바로 신청한다고 알려 준다. */
 export function rentalSummaryForSpeech(action) {
   const title = String(action?.title || "선택하신").replace(/\s*·\s*/g, " ");
   const region = action?.region && !title.includes(action.region) ? ` ${action.region}` : "";
   return [
     `${title}${region} 매물을 ${monthDay(action?.start)}부터 ${monthDay(action?.end)}까지 ${action?.days}일 빌리는 요청이에요.`,
     `대여료는 하루 ${koreanWon(action?.dailyPrice)}, 모두 ${koreanWon(action?.totalPrice)}이에요.`,
-    "내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.",
+    "맞으면 \"네\"라고 말씀해 주세요. 바로 신청해 드릴게요.",
   ].join(" ");
 }
 
-/** 농농 승인 카드(제목과 항목 줄)를 소리로 요약한다. 말로는 승인되지 않는다는 것도 알려 준다. */
+/** 농농 확인 카드(제목과 항목 줄)를 소리로 요약하고, "네"라고 하면 바로 진행한다고 알려 준다. */
 export function actionSummaryForSpeech(pending) {
   const title = String(pending?.title || "요청").replace(/\s*확인$/, "");
   const rows = (Array.isArray(pending?.rows) ? pending.rows : []).map(([label, value]) => `${label}, ${textForSpeech(value)}.`);
-  return [`${title} 내용이에요.`, ...rows, "내용이 맞으면 화면의 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요."].join(" ");
+  return [`${title} 내용이에요.`, ...rows, "맞으면 \"네\"라고 말씀해 주세요. 바로 진행해 드릴게요."].join(" ");
 }
 
 export function loadVoiceSettings(storage = globalThis.localStorage) {
@@ -277,7 +278,7 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
   recognition.lang = "ko-KR";
   recognition.continuous = true;
   recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
+  recognition.maxAlternatives = 3; // 후보 중 농기계·작물·지역 단어가 맞는 것을 고른다(사투리·고유명사 대비)
   let finalText = "";
   let failure = null;
   let stopping = false;
@@ -287,7 +288,8 @@ export function startBrowserRecognition({ maxSeconds = MAX_RECORD_SECONDS, onInt
   recognition.onresult = (event) => {
     let interim = "";
     for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const transcript = event.results[i][0]?.transcript || "";
+      const result = event.results[i];
+      const transcript = pickBestTranscript(Array.from({ length: result.length || 1 }, (_, k) => result[k]).filter(Boolean)) || "";
       if (event.results[i].isFinal) finalText += transcript;
       else interim += transcript;
     }

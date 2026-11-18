@@ -3130,6 +3130,18 @@ img {
   object-fit: contain;
 }
 
+.mypage-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #2d7a47);
+  flex-shrink: 0;
+}
+.mypage-dot[hidden] {
+  display: none;
+}
+
 .machine-example-label {
   position: absolute;
   right: 8px;
@@ -5012,4 +5024,125 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
     width: 100%;
     height: 120px;
   }
+}
+/* 가까운 수리센터 카드: 거리 표시 */
+.ai-center-distance { display: block; font-weight: 700; color: var(--primary); }
+/* 매물 추천 박스만 보일 때(설명 글 없음) 위쪽 구분선·여백을 없앤다 */
+.chat-bubble.has-results > .ai-result:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+
+/* 마이페이지 > 내 계정: 교육이수증 칸 */
+.edu-cert {
+  margin: 0 0 16px;
+  padding: 18px 22px;
+}
+.edu-cert-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.edu-cert-check {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px dashed #c3cdc7;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.edu-cert.is-done .edu-cert-check {
+  background: var(--primary);
+  border: 2px solid var(--primary);
+  color: #ffffff;
+}
+.edu-cert-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.edu-cert-toggle {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: -8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.edu-cert-toggle:disabled {
+  cursor: default;
+}
+.edu-cert-toggle:not(:disabled):hover {
+  background: var(--primary-light);
+}
+.edu-cert-toggle:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+.edu-cert-info {
+  display: flex;
+  flex-direction: column;
+}
+.edu-cert-title {
+  margin: 0 0 4px;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+.edu-cert-status {
+  font-size: 0.875rem;
+  color: #5f6b65;
+}
+.edu-cert-caret {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+.edu-cert-caret[hidden] {
+  display: none;
+}
+.edu-cert-caret svg {
+  transition: transform 0.2s ease;
+}
+.edu-cert.is-open .edu-cert-caret svg {
+  transform: rotate(180deg);
+}
+.edu-cert-preview img {
+  cursor: zoom-out;
+}
+.edu-cert.is-done .edu-cert-status {
+  color: var(--primary);
+  font-weight: 600;
+}
+.edu-cert-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.edu-cert-preview {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.edu-cert-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  object-fit: contain;
 }

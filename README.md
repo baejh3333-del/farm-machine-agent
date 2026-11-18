@@ -70,7 +70,7 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 
 - **실시간 음성 세션 (`server/gpt-live.js`)**: 브라우저가 만든 WebRTC SDP Offer를 서버가 `POST https://api.openai.com/v1/live/sessions`로 교환하며, 백엔드 조회·예약·거래 전담이 필요할 때는 `<|SpawnThinking|>` 기반 클라이언트 위임(`delegation: { type: "client" }`)으로 `/api/agent`(`inputMode: "voice"`)를 호출합니다.
 - **음성 → 글 폴백 (`server/voice.js`)**: 실시간 WebRTC를 쓸 수 없는 환경에서는 `/api/voice`가 16kHz 모노 16비트 PCM WAV(최대 30초, 1MB)를 OpenAI `gpt-4o-mini-transcribe`로 인식합니다. 키가 없으면 브라우저 음성 인식(`ko-KR`)으로 전환합니다.
-- **안전 가드**: 음성 차례(`inputMode: "voice"`)에서는 말로 한 "네"를 승인으로 보지 않으며, 대여·구매·매물 등록·거래 전담 등 상태를 바꾸는 작업은 반드시 화면 승인 카드를 눌러야 실행됩니다.
+- **바로 실행**: "구매해줘", "대여 예약해줘", "판매글 올려줘"처럼 분명한 요청이나 한 번의 확인 질문에 대한 "네"(사투리 대답 포함)는 글·음성 모두 승인으로 보고, 서버가 그 자리에서 대여 요청·구매 신청·매물 등록·수정을 실행합니다. 서버는 마지막 사용자 말이 실행 요청인지(`isAffirmative`) 다시 확인하며, 로그인하지 않았거나 조건이 부족하면 확인 카드로 넘깁니다. 거래 전담 위임은 지금처럼 확인 카드로 승인합니다.
 
 **환경 변수(모두 선택)**
 

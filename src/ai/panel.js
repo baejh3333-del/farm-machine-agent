@@ -1,8 +1,10 @@
 import { CROP_BY_ID, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machines.js";
 import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
+import { isAffirmative } from "./affirm.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
+import { isUnclearUtterance, joinSpokenText, tidySpokenText } from "./spoken-text.js";
 
 const MACHINE_LABELS = {
   cultivator: "관리기",
@@ -58,7 +60,7 @@ function resolveListingImage(item) {
     || getListingPhotoSrc(item)
     || MACHINE_FALLBACK_IMAGE[item?.machineType]
     || (item?.machineType ? machineImage(item.machineType) : "")
-    || "./src/nongnong.png"
+    || "./src/nongnong-potato.svg"
   );
 }
 
@@ -110,6 +112,8 @@ function inferFollowUpChoices(reply, result) {
 
 function wantsDatePicker(reply, result) {
   if (result.pendingAction || result.reservation || result.createdListing || result.updatedListing) return false;
+  // 서버가 날짜가 없어 대여 추천을 멈춘 턴이면 답변 문구와 관계없이 날짜 선택기를 띄운다.
+  if (result.askDate) return true;
   return /(?:언제|날짜|기간|며칠|시작일|반납일).*?(?:빌리|대여|필요|원하|알려|골라|말씀|정해|[?？])/.test(String(reply || ""));
 }
 
@@ -517,6 +521,9 @@ export function createAiPanel({
 }) {
   let recommendationPending = false;
   let agentHistory = [];
+  // 직전에 보여준 매물 순서(1번, 2번…)와 화면에 떠 있는 확인 카드. 채팅만으로 예약할 때 다음 요청에 함께 보낸다.
+  let lastShownListingIds = [];
+  let openConfirmation = null;
   let agentSessionId = null;
   let selectedLiveVoice = "noeul";
   let agentPhoto = null;
@@ -877,18 +884,21 @@ export function createAiPanel({
   }
 
   function applySelectedPhotoDataUrl(dataUrl, label = "첨부한 기계 사진") {
-    muteLiveVoiceForPhoto();
     agentPhoto = dataUrl;
     photoIsNew = true;
     photoLabel = label;
     savedDraft = null;
     showPhotoPreview();
+    // 음성 대화 중이면 마이크를 끄지 않고 사진을 바로 농농이에게 보내 음성으로 답하게 한다.
+    if (isLiveVoiceActive()) {
+      sendPhotoDuringLiveVoice();
+      return;
+    }
     $("aiInput")?.focus();
   }
 
   async function handlePhotoFile(file, labelOverride) {
     if (!file) return;
-    muteLiveVoiceForPhoto();
     try {
       applySelectedPhotoDataUrl(await shrinkPhoto(file), labelOverride || file.name || "첨부한 기계 사진");
     } catch (error) {
@@ -908,9 +918,11 @@ export function createAiPanel({
     $("aiPhotoInput")?.click();
   });
   $("aiPhotoInput")?.addEventListener("change", () => handlePhotoFileInput($("aiPhotoInput")));
+  $("aiVoicePhotoBtn")?.addEventListener("click", () => {
+    $("aiPhotoInput")?.click();
+  });
   $("aiCameraButton")?.addEventListener("click", () => {
     setPlusMenuOpen(false);
-    muteLiveVoiceForPhoto();
     openCameraCapture({
       fallbackInput: $("aiCameraInput"),
       triggerButton: $("aiCameraButton"),
@@ -1002,6 +1014,34 @@ export function createAiPanel({
     agentHistory = next.slice(-MAX_AGENT_HISTORY);
   }
 
+  // 바로 앞 답변에서 확인을 물은 작업. 다음 말이 "네/해줘"면 서버가 모델 없이 바로 실행한다(한 턴만 유효).
+  let lastPendingAction = null;
+
+  function rememberPendingAction(result) {
+    const pending = result?.pendingAction;
+    if (pending && ["rental_request", "purchase_request"].includes(pending.type)) {
+      lastPendingAction = { ...pending, requestId: pending.requestId || crypto.randomUUID() };
+    } else if (result?.listingDraft && Number.isFinite(result.listingDraft.price) && result.listingDraft.price > 0) {
+      const draft = result.listingDraft;
+      lastPendingAction = {
+        ...draft,
+        listingType: draft.type === "sale" ? "sale" : "rent",
+        type: "create_listing",
+        requestId: crypto.randomUUID(),
+        ...(!draft.photoKey && lastPhotoDataUrl ? { photoDataUrl: lastPhotoDataUrl } : {}),
+      };
+    } else {
+      lastPendingAction = null;
+    }
+  }
+
+  function takePendingAction() {
+    const pending = lastPendingAction;
+    lastPendingAction = null;
+    return pending;
+  }
+
+
   function collectUiContext() {
     const filters = state.filters || {};
     const detailBackdrop = $("detailBackdrop");
@@ -1027,6 +1067,16 @@ export function createAiPanel({
       ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
       ...(quickOwnedNote ? { ownedMachineNote: quickOwnedNote } : {}),
       ...(fullDelegationEnabled ? { fullDelegation: true } : {}),
+      ...(lastShownListingIds.length ? { lastShownListings: lastShownListingIds.map((id, index) => ({ no: index + 1, id })) } : {}),
+      ...(openConfirmation?.card.isConnected
+        ? {
+            pendingConfirmation: {
+              type: openConfirmation.action.type,
+              listingId: openConfirmation.action.listingId,
+              ...(openConfirmation.action.start ? { start: openConfirmation.action.start, end: openConfirmation.action.end || openConfirmation.action.start } : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -1126,6 +1176,7 @@ export function createAiPanel({
 
   async function executeOneTapAction({ pendingAction, requestId = crypto.randomUUID(), triggerButton, onBusy, onDone, onError }) {
     const gen = sessionGeneration;
+    lastPendingAction = null; // 화면 버튼으로 처리하면 말로 다시 실행하지 않는다.
     onBusy?.();
     if (triggerButton) triggerButton.disabled = true;
     try {
@@ -1415,10 +1466,11 @@ export function createAiPanel({
   function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
-    if (role === "assistant") {
-      const displayText = listingIds.length ? stripDuplicateMachineList(text, listingIds.length) : text;
-      bubble.append(renderMarkdownElement(displayText));
-    } else {
+    // 농농이가 매물을 추천할 때는 설명 글 없이 매물 추천 박스만 보여 준다(글은 대화 기록에만 남는다). (PR #42)
+    const cardsOnly = role === "assistant" && listingIds.length > 0;
+    if (role === "assistant" && !cardsOnly) {
+      bubble.append(renderMarkdownElement(text));
+    } else if (!cardsOnly) {
       const textNode = document.createElement("div");
       textNode.textContent = text;
       bubble.append(textNode);
@@ -1432,6 +1484,7 @@ export function createAiPanel({
     }
 
     if (listingIds.length) {
+      if (role === "assistant") lastShownListingIds = listingIds.filter((id) => listingById(id)).slice(0, 6);
       bubble.classList.add("has-results");
       const results = document.createElement("div");
       results.className = "ai-result";
@@ -1471,7 +1524,7 @@ export function createAiPanel({
         img.addEventListener("error", () => {
           if (img.dataset.fallbackApplied) return;
           img.dataset.fallbackApplied = "1";
-          img.src = "./src/nongnong.png";
+          img.src = "./src/nongnong-potato.svg";
         });
         const badges = document.createElement("div");
         badges.className = "ai-rec-card-badges";
@@ -1655,8 +1708,15 @@ export function createAiPanel({
       approve.disabled = busy;
       cancel.disabled = busy;
     };
+    if (action.type === "rental_request" || action.type === "purchase_request") {
+      openConfirmation = { action, approve, card };
+    }
+    const forget = () => {
+      if (openConfirmation?.card === card) openConfirmation = null;
+    };
 
     cancel.addEventListener("click", () => {
+      forget();
       card.dataset.state = "cancelled";
       actions.remove();
       rememberAgentTurn({ role: "user", content: "요청은 보내지 않을게요." });
@@ -1676,6 +1736,7 @@ export function createAiPanel({
           approve.textContent = "요청을 보내는 중…";
         },
         onDone: (outcome) => {
+          forget();
           card.dataset.state = outcome;
           actions.remove();
         },
@@ -1729,6 +1790,12 @@ export function createAiPanel({
       card.className = "ai-center-card";
       const name = document.createElement("strong");
       name.textContent = item.name || "";
+      // 수리센터: 사용자 지역에서의 거리(약 N km) 또는 전국 A/S 접수 표시
+      const where = document.createElement("small");
+      where.className = "ai-center-distance";
+      where.textContent = Number.isFinite(item.distanceKm)
+        ? `📍 약 ${Math.max(1, Math.round(item.distanceKm))}km`
+        : item.nationwide ? "📞 전국 A/S 접수 · 가까운 대리점 연결" : "";
       const services = document.createElement("small");
       services.textContent = item.services || "";
       const actions = document.createElement("div");
@@ -1738,7 +1805,9 @@ export function createAiPanel({
       const checked = document.createElement("small");
       checked.className = "ai-center-checked";
       checked.textContent = `확인일 ${item.checkedAt || "-"}`;
-      card.append(name, services, actions, checked);
+      card.append(name);
+      if (where.textContent) card.append(where);
+      card.append(services, actions, checked);
       wrap.append(card);
     }
     bubble.append(wrap);
@@ -2013,6 +2082,11 @@ export function createAiPanel({
 
   function renderAgentEffects(bubble, result, { reply = "", includeFollowUp = true } = {}) {
     if (!bubble || !result) return;
+    rememberPendingAction(result);
+    if (result.reservation || result.createdListing) {
+      // 말로 바로 실행한 작업도 화면 목록(대여 요청·내 매물)을 새로 고친다.
+      Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+    }
     if (result.listingDraft?.listingId && result.listingDraft?.photoKey) {
       savedDraft = { listingId: result.listingDraft.listingId, photoKey: result.listingDraft.photoKey, photoUrl: result.listingDraft.photoUrl };
     }
@@ -2032,7 +2106,7 @@ export function createAiPanel({
     const listed = result.createdListing || result.updatedListing;
     if (listed) renderCreatedListingButton(bubble, listed);
     if (Array.isArray(result.repairCenters) && result.repairCenters.length) {
-      appendContactCards(bubble, "🔧 수리·상담 연락처", result.repairCenters);
+      appendContactCards(bubble, "🔧 가까운 수리센터", result.repairCenters);
     }
     if (Array.isArray(result.insuranceContacts) && result.insuranceContacts.length) {
       appendContactCards(bubble, "🛡️ 보험 상담 연락처", result.insuranceContacts);
@@ -2078,6 +2152,10 @@ export function createAiPanel({
     const listingIds = result.reservation || result.createdListing || result.updatedListing
       ? []
       : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
+    if (listingIds.length) lastShownListingIds = listingIds.slice(0, 6);
+    if (result.reservation) lastShownListingIds = [];
+    // 새 답이 오면 이전 확인 카드는 "방금 물어본 것"이 아니므로 채팅 "네"로 실행하지 않는다(버튼은 그대로 쓸 수 있다).
+    openConfirmation = null;
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
     if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
@@ -2356,8 +2434,8 @@ export function createAiPanel({
     const isUser = role === "user";
     let bubble = isUser ? liveUserBubble : liveAssistantBubble;
     const textChunk = typeof delta === "string" ? delta : "";
-    if (!bubble && textChunk) {
-      bubble = appendAiMessage(textChunk, isUser ? "user" : "assistant");
+    if (!bubble && textChunk && joinSpokenText("", textChunk)) {
+      bubble = appendAiMessage(joinSpokenText("", textChunk), isUser ? "user" : "assistant");
       bubble.classList.add("is-live-transcript");
       if (isUser) liveUserBubble = bubble;
       else liveAssistantBubble = bubble;
@@ -2370,14 +2448,14 @@ export function createAiPanel({
         bubble.textContent = "";
         bubble.append(textNode);
       }
-      textNode.textContent += textChunk;
+      textNode.textContent = joinSpokenText(textNode.textContent, textChunk);
       scrollAiToEnd();
     }
     if (meta?.done || meta?.final) {
       if (bubble) {
         bubble.classList.remove("is-live-transcript");
         if (!isUser) {
-          const finalText = bubble.textContent || "";
+          const finalText = tidySpokenText(bubble.textContent || "");
           if (finalText.trim()) {
             bubble.replaceChildren(renderMarkdownElement(finalText));
           }
@@ -2428,6 +2506,8 @@ export function createAiPanel({
     const delegationId = payload?.delegationId || payload?.id || "";
     const userText = String(payload?.userText || payload?.transcript || payload?.message || "").trim();
     if (!userText) return { spokenSummary: "무슨 작업이나 농기계를 찾으시는지 다시 말씀해 주세요." };
+    // 인식이 실패했거나 알아들을 수 없는 조각이면 대충 넘기지 않고 짧게 다시 묻는다(모델 호출도 아낀다).
+    if (isUnclearUtterance(userText)) return { spokenSummary: "죄송해요, 잘 못 들었어요. 한 번만 다시 말씀해 주시겠어요?" };
     if (delegationId && renderedDelegationIds.has(delegationId)) {
       return null;
     }
@@ -2435,6 +2515,8 @@ export function createAiPanel({
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
 
     const uiContext = collectUiContext();
+    // 음성 대화 중에 올린 사진이 아직 안 보내졌으면 이 말과 함께 보낸다(예: 고장 부위 사진 + "여기서 연기가 나요").
+    const voicePhoto = takeLivePhoto();
     // 위임 전에 맞장구가 먼저 나오면 같은 발화가 이미 기억에 있다: 에이전트에는 그 앞까지만 history로 보낸다.
     let committedAt = -1;
     if (payload?.userTurnCommitted) {
@@ -2442,7 +2524,9 @@ export function createAiPanel({
         if (agentHistory[i].role === "user" && agentHistory[i].content === userText) { committedAt = i; break; }
       }
     }
-    const result = await askAgent(userText, {
+    let result;
+    try {
+      result = await askAgent(userText, {
       history: committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory,
       region: uiContext.region,
       uiContext,
@@ -2453,7 +2537,23 @@ export function createAiPanel({
       insuranceOffer,
       insuranceAsked,
       fullDelegation: fullDelegationEnabled,
+      pendingAction: voicePhoto ? null : takePendingAction(),
+      ...(voicePhoto ? { image: voicePhoto } : {}),
     });
+    } catch (error) {
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+      // 무한 대기로 두지 않고, 이유와 다음 방법을 한 문장으로 말한다.
+      const reason = typeof error?.message === "string" && /[가-힣]/.test(error.message) ? error.message.trim() : "";
+      const spoken = error?.status === 401
+        ? "구매나 예약은 로그인한 뒤에 할 수 있어요. 화면에서 로그인하시면 바로 이어서 해 드릴게요."
+        : error?.status === 429
+          ? "요청이 잠깐 몰렸어요. 조금 뒤에 같은 말씀을 한 번 더 해 주세요."
+          : `죄송해요, ${reason || "처리 중에 연결 문제가 생겼어요."} 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요.`;
+      if (reason) toast(reason);
+      rememberAgentTurn(...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]), { role: "assistant", content: spoken });
+      appendAiMessage(spoken, "assistant");
+      return { spokenSummary: spoken };
+    }
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
     if (result?.sessionId) agentSessionId = result.sessionId;
     if (delegationId) renderedDelegationIds.add(delegationId);
@@ -2462,9 +2562,10 @@ export function createAiPanel({
       ? result.reply.trim()
       : "말씀하신 내용을 확인했어요.";
     if (!result?.insuranceAsk) trackInsurance(result);
+    const photoNote = voicePhoto ? photoSummaryText(result?.photoSummary) : "";
     rememberAgentTurn(
-      ...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]),
-      { role: "assistant", content: reply },
+      ...(committedAt >= 0 ? [] : [{ role: "user", content: voicePhoto ? `[사진 첨부] ${userText}` : userText }]),
+      { role: "assistant", content: [reply, photoNote].filter(Boolean).join("\n") },
     );
 
     const listingIds = result?.reservation || result?.createdListing || result?.updatedListing
@@ -2474,24 +2575,81 @@ export function createAiPanel({
     renderAgentEffects(bubble, result, { reply, includeFollowUp: false });
     scrollAiToEnd();
 
-    let spokenSummary = reply;
-    if (
-      result?.pendingAction?.type === "rental_request"
-      || result?.pendingAction?.type === "purchase_request"
-      || result?.pendingAction?.type === "delegate_transaction"
-      || result?.pendingAction?.type === "create_listing"
-    ) {
-      spokenSummary += " 화면에 승인 카드를 띄워 드렸어요. 내용을 확인하신 뒤 초록색 승인 버튼을 눌러 주세요. 말로는 승인되지 않아요.";
-    }
+    // 답변을 그대로 읽게 한다. 실행은 말로 요청하면 서버가 바로 처리하므로 버튼을 누르라고 덧붙이지 않는다.
+    const spokenSummary = tidySpokenText(reply);
     const thinkingContext = buildDelegationThinkingContext(result, listingIds);
+    scheduleHeldLivePhoto();
     return { spokenSummary, ...(thinkingContext ? { thinkingContext } : {}), result };
   }
 
-  function muteLiveVoiceForPhoto() {
-    if (isLiveVoiceActive() && !liveController.muted) {
-      liveController.setMuted(true);
-      syncLiveMuteButton(true);
-      syncLiveVoiceBar(liveController.state);
+  // 음성 대화 중 올린 사진: 위임 턴이 진행 중이면 그 턴이 가져가고, 아니면 바로 보내 음성으로 답하게 한다.
+  let livePhotoInFlight = false;
+
+  function takeLivePhoto() {
+    if (!isLiveVoiceActive() || !photoIsNew || !agentPhoto) return null;
+    const photo = agentPhoto;
+    lastPhotoDataUrl = photo;
+    photoIsNew = false;
+    showPhotoPreview();
+    return photo;
+  }
+
+  // 확인 중에 올려 둔 사진은 다음 말과 함께 보내되, 사용자가 3초 안에 말하지 않으면 사진만 먼저 보낸다.
+  function scheduleHeldLivePhoto() {
+    if (!photoIsNew || !agentPhoto) return;
+    const liveGen = liveVoiceGeneration;
+    setTimeout(() => {
+      if (liveGen !== liveVoiceGeneration || !photoIsNew || !isLiveVoiceActive()) return;
+      if (liveController.state === "thinking" || liveController.state === "speaking") {
+        scheduleHeldLivePhoto();
+        return;
+      }
+      sendPhotoDuringLiveVoice();
+    }, 3000);
+  }
+
+  async function sendPhotoDuringLiveVoice() {
+    if (livePhotoInFlight || liveController?.state === "thinking") return; // 진행 중인 위임 턴이 사진을 함께 보낸다.
+    const photo = takeLivePhoto();
+    if (!photo) return;
+    const gen = sessionGeneration;
+    const liveGen = liveVoiceGeneration;
+    livePhotoInFlight = true;
+    const message = "이 사진을 보고 기계 상태를 알려 주세요.";
+    appendAiMessage(message, "user", [], photo);
+    const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
+    pending.classList.add("is-thinking");
+    try {
+      const uiContext = collectUiContext();
+      const result = await askAgent(message, {
+        history: agentHistory,
+        region: uiContext.region,
+        uiContext,
+        inputMode: "voice",
+        image: photo,
+        sessionId: agentSessionId,
+        insuranceAsked,
+        fullDelegation: fullDelegationEnabled,
+      });
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      pending.remove();
+      if (result?.sessionId) agentSessionId = result.sessionId;
+      if (result?.mode !== "agent") throw new Error("사진을 지금 확인하지 못했어요.");
+      if (!result.insuranceAsk) trackInsurance(result);
+      renderAgentResult(message, result, { photo: true });
+      const spoken = tidySpokenText(result.reply || "");
+      if (spoken && isLiveVoiceActive()) {
+        liveController.notifyUiEvent(`사진 확인 결과다. 이 내용을 사용자에게 그대로 짧게 말해 준다: ${spoken}`);
+      }
+    } catch (error) {
+      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      pending.remove();
+      const msg = error?.message && /[가-힣]/.test(error.message) ? error.message : "사진을 지금 확인하지 못했어요.";
+      appendAiMessage(`${msg} 사진을 다시 올려 주시거나 말로 설명해 주세요.`, "assistant");
+      if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진을 다시 올려 주시거나 말로 설명해 주세요.`);
+    } finally {
+      if (liveGen === liveVoiceGeneration) livePhotoInFlight = false;
+      scrollAiToEnd();
     }
   }
 
@@ -2667,10 +2825,12 @@ export function createAiPanel({
         if (gen !== sessionGeneration || fbGen !== fallbackVoiceGeneration) return;
         if ($("aiInput")) $("aiInput").placeholder = aiDefaultPlaceholder;
         const trimmed = String(recognizedText || "").trim();
-        if (trimmed) {
+        if (trimmed && !isUnclearUtterance(trimmed)) {
           fallbackVoiceUsed = true;
           pendingInputMode = "voice";
           submitPrompt(trimmed);
+        } else {
+          toast("잘 못 들었어요. 마이크 버튼을 누르고 한 번만 다시 말씀해 주세요.");
         }
       } catch (error) {
         if (gen === sessionGeneration && fbGen === fallbackVoiceGeneration) {
@@ -2813,6 +2973,20 @@ export function createAiPanel({
         performReset();
         return;
       }
+      // 확인 카드가 떠 있을 때 채팅으로 "네/예약해줘"라고 하면, 카드에 담긴 매물·날짜 그대로 버튼과 똑같이 실행한다.
+      // 말로 한 "네"는 잘못 들렸을 수 있어 음성 입력은 제외한다.
+      const confirmation = openConfirmation;
+      if (
+        !sendingPhoto
+        && inputMode !== "voice"
+        && confirmation?.card.isConnected
+        && !confirmation.approve.disabled
+        && isAffirmative(message)
+      ) {
+        rememberAgentTurn({ role: "user", content: message });
+        confirmation.approve.click();
+        return;
+      }
       pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
       pending.classList.add("is-thinking");
       const wave = document.createElement("span");
@@ -2834,6 +3008,7 @@ export function createAiPanel({
         insuranceOffer,
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
+        pendingAction: sendingPhoto ? null : takePendingAction(),
       });
       if (gen !== sessionGeneration) return;
       if (agentResult?.sessionId) agentSessionId = agentResult.sessionId;
@@ -2904,6 +3079,9 @@ export function createAiPanel({
     stopLiveVoice({ silent: true });
     stopFallbackVoice();
     agentHistory = [];
+    lastShownListingIds = [];
+    lastPendingAction = null;
+    openConfirmation = null;
     agentSessionId = null;
     insuranceOffer = null;
     insuranceAsked = false;

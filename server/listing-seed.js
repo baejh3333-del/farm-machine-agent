@@ -1,5 +1,38 @@
-import { applyModelSpecification } from "../src/data/machine-specifications.js";
-import { CROP_BY_ID, MACHINE_BY_ID, OPERATION_BY_ID } from "../src/data/farm-machines.js";
+import { MACHINE_SPECIFICATIONS, applyModelSpecification } from "../src/data/machine-specifications.js";
+import { CROP_BY_ID, FARM_LOCATIONS_BY_REGION, MACHINE_BY_ID, MACHINE_TYPES, OPERATION_BY_ID } from "../src/data/farm-machines.js";
+import { KOREA_REGIONS } from "../src/data/korea-regions.js";
+
+const ROLE_ORDER = ["powerUnit", "implement", "standalone", "implement", "standalone"];
+const MACHINE_TYPES_BY_ROLE = {
+  powerUnit: MACHINE_TYPES.filter((m) => m.role === "powerUnit").map((m) => m.id),
+  implement: MACHINE_TYPES.filter((m) => m.role === "implement").map((m) => m.id),
+  standalone: MACHINE_TYPES.filter((m) => m.role === "standalone").map((m) => m.id),
+};
+const MODELS_BY_TYPE = Object.fromEntries(
+  MACHINE_TYPES.map((m) => [
+    m.id,
+    MACHINE_SPECIFICATIONS.filter((spec) => spec.machineType === m.id),
+  ])
+);
+
+/**
+ * KOREA_REGIONS에서 선택 가능한 모든 지역(시/군/구 및 하위 읍/면)을 순서대로 추출합니다.
+ */
+export function getSelectableRegions() {
+  const result = [];
+  for (const prov of KOREA_REGIONS) {
+    for (const city of prov.cities) {
+      const fullName = `${prov.name} ${city.name}`;
+      result.push(fullName);
+      if (Array.isArray(city.subRegions)) {
+        for (const sub of city.subRegions) {
+          result.push(sub.name);
+        }
+      }
+    }
+  }
+  return result;
+}
 
 const seed = [
   { id: "r1", type: "rent", title: "대동 관리기 8마력 · 로터리 포함", brand: "대동", machineType: "cultivator", cropIds: ["pepper", "cabbage", "potato"], operations: ["till", "ridge"], areaMin: 100, areaMax: 3500, price: 45000, region: "영양읍", condition: "good", inspectedAt: "2026-10-21", included: "로터리 작업기", pickup: "직접 인수", description: "고추밭 흙갈이와 두둑 작업에 사용했습니다. 현장에서 작동 확인 가능합니다.", summary: "고추·배추·감자 100~3,500㎡ 밭의 흙갈이와 두둑 작업에 쓰는 관리기입니다.", booked: [{ start: "2026-11-09", end: "2026-11-10" }], owner: true },
@@ -93,5 +126,73 @@ export function buildMockListings() {
       }
     }
   });
+
+  // 이미 6개 이상 생성된 지역(영양읍·청기면·입암면·수비면) 및 상위 영양군 전체는 제외하고,
+  // 남아있는 모든 선택 가능 지역에 5개씩(powerUnit, implement, standalone + 실제 모델 + 실제 농가 좌표) 생성
+  const countByRegion = new Map();
+  for (const item of listings) {
+    countByRegion.set(item.region, (countByRegion.get(item.region) || 0) + 1);
+  }
+
+  const selectableRegions = getSelectableRegions();
+  selectableRegions.forEach((regionName, regionIdx) => {
+    if (regionName === "경상북도 영양군") return;
+    const existingCount = countByRegion.get(regionName) || 0;
+    if (existingCount >= 6) return;
+
+    const needed = 5 - existingCount;
+    const spots = FARM_LOCATIONS_BY_REGION[regionName] || [];
+    const usedMachineTypes = new Set(
+      listings.filter((item) => item.region === regionName).map((item) => item.machineType)
+    );
+
+    for (let slot = 0; slot < needed; slot++) {
+      const role = ROLE_ORDER[slot % ROLE_ORDER.length];
+      const rolePool = MACHINE_TYPES_BY_ROLE[role];
+      let machineType = rolePool[(regionIdx * 3 + slot * 2) % rolePool.length];
+      if (usedMachineTypes.has(machineType)) {
+        machineType = rolePool.find((m) => !usedMachineTypes.has(m)) || machineType;
+      }
+      usedMachineTypes.add(machineType);
+
+      const models = MODELS_BY_TYPE[machineType];
+      const chosenModel = models[(regionIdx * 5 + slot * 3) % models.length];
+      const [baseCrops, baseOperations, [areaMin, max], prices, baseIncluded] = profiles[machineType];
+      const spotIndex = existingCount + slot + 1;
+      const type = spotIndex <= 3 ? "rent" : "sale";
+      const condition = type === "sale" && slot % 2 === 1 ? "used" : "good";
+      const label = MACHINE_BY_ID[machineType].label;
+      const work = baseOperations.map((id) => OPERATION_BY_ID[id].label).join(", ");
+      const cropNames = baseCrops.map((id) => CROP_BY_ID[id].name).join("·");
+      const spot = spots[(spotIndex - 1) % spots.length];
+      const farmSpotLabel = spot?.village || `${regionName} 농가`;
+
+      listings.push({
+        id: `region-${regionIdx + 1}-slot-${spotIndex}`,
+        type,
+        modelId: chosenModel.id,
+        title: `${chosenModel.brand} ${chosenModel.model} · ${regionName}`,
+        brand: chosenModel.brand,
+        machineType,
+        cropIds: baseCrops,
+        operations: baseOperations,
+        areaMin,
+        areaMax: max + (slot % 3) * 250,
+        price: type === "rent" ? prices[0] + slot * 5000 : prices[1] + slot * 150000,
+        region: regionName,
+        farmSpotLabel,
+        condition,
+        inspectedAt: `2026-10-${String(1 + ((regionIdx * 7 + slot * 5) % 28)).padStart(2, "0")}`,
+        included: baseIncluded,
+        pickup: type === "sale" ? `${farmSpotLabel} 현장 확인 후 인수` : slot % 2 ? `${farmSpotLabel} 운반 협의` : `${farmSpotLabel} 직접 인수`,
+        description: `${farmSpotLabel} 보유 장비입니다.`,
+        summary: `${cropNames}의 ${work}에 쓰는 ${label}입니다.`,
+        booked: type === "rent" && slot === 0 ? [{ start: "2026-11-14", end: "2026-11-15" }] : [],
+        owner: false,
+        status: "open",
+      });
+    }
+  });
+
   return listings.map((item, index) => applyModelSpecification(item, index));
 }

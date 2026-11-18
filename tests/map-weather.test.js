@@ -97,52 +97,52 @@ test("getWeatherAndMapConfig는 endDate가 주어지면 예약 기간 일별 예
 });
 
 test("latLngToKmaGrid는 한국 주요 지점의 기상청 단기예보 격자(nx, ny)를 정확히 변환한다", () => {
-  assert.equal(KOREA_REGIONS.length, 17);
+  assert.equal(KOREA_REGIONS.length, 15);
   assert.deepEqual(latLngToKmaGrid(36.6667, 129.1124), { nx: 97, ny: 108 }); // 영양읍
   assert.deepEqual(latLngToKmaGrid(37.5665, 126.978), { nx: 60, ny: 127 }); // 서울 시청
   assert.deepEqual(latLngToKmaGrid(35.1796, 129.0756), { nx: 98, ny: 76 }); // 부산 시청
 });
 
 test("findNearestRegion과 getRegionCoords는 전국 시/군/구 및 GPS 좌표를 올바르게 매핑한다", () => {
-  const seoul = findNearestRegion(37.5665, 126.978);
-  assert.equal(seoul.province, "서울특별시");
-  assert.ok(seoul.distanceKm < 2);
+  const chuncheon = findNearestRegion(37.8813, 127.7298);
+  assert.equal(chuncheon.province, "강원특별자치도");
+  assert.ok(chuncheon.distanceKm < 2);
 
-  const suwon = findNearestRegion(37.2636, 127.0286);
-  assert.equal(suwon.name, "경기도 수원시");
-  assert.equal(suwon.city, "수원시");
-  assert.ok(suwon.distanceKm < 1);
+  const icheon = findNearestRegion(37.272, 127.435);
+  assert.equal(icheon.name, "경기도 이천시");
+  assert.equal(icheon.city, "이천시");
+  assert.ok(icheon.distanceKm < 1);
 
   const yeongyang = findNearestRegion(36.667, 129.112);
   assert.equal(yeongyang.name, "영양읍");
   assert.equal(yeongyang.city, "영양군");
 
-  const resolvedSuwon = getRegionCoords("경기도 수원시");
-  assert.equal(resolvedSuwon.name, "경기도 수원시");
-  assert.equal(resolvedSuwon.nx, 61);
-  assert.equal(resolvedSuwon.ny, 120);
+  const resolvedIcheon = getRegionCoords("경기도 이천시");
+  assert.equal(resolvedIcheon.name, "경기도 이천시");
+  assert.equal(resolvedIcheon.nx, 68);
+  assert.equal(resolvedIcheon.ny, 120);
 });
 
 test("getWeatherAndMapConfig는 전국 지역명과 명시적 lat/lng 좌표를 그대로 반영한다", async () => {
   const prevKma = process.env.KMA_WEATHER_API_KEY;
   delete process.env.KMA_WEATHER_API_KEY;
   try {
-    const resSuwon = await getWeatherAndMapConfig({ region: "경기도 수원시", date: "2026-05-15" });
-    assert.equal(resSuwon.region, "경기도 수원시");
-    assert.equal(resSuwon.coords.nx, 61);
-    assert.equal(resSuwon.coords.ny, 120);
-    assert.equal(resSuwon.weather.region, "경기도 수원시");
+    const resIcheon = await getWeatherAndMapConfig({ region: "경기도 이천시", date: "2026-05-15" });
+    assert.equal(resIcheon.region, "경기도 이천시");
+    assert.equal(resIcheon.coords.nx, 68);
+    assert.equal(resIcheon.coords.ny, 120);
+    assert.equal(resIcheon.weather.region, "경기도 이천시");
 
     const resGps = await getWeatherAndMapConfig({
-      region: "서울특별시 강남구",
-      lat: 37.5172,
-      lng: 127.0473,
+      region: "강원특별자치도 춘천시",
+      lat: 37.8813,
+      lng: 127.7298,
       date: "2026-05-15",
     });
-    assert.equal(resGps.region, "서울특별시 강남구");
-    assert.equal(resGps.coords.lat, 37.5172);
-    assert.equal(resGps.coords.lng, 127.0473);
-    assert.deepEqual({ nx: resGps.coords.nx, ny: resGps.coords.ny }, latLngToKmaGrid(37.5172, 127.0473));
+    assert.equal(resGps.region, "강원특별자치도 춘천시");
+    assert.equal(resGps.coords.lat, 37.8813);
+    assert.equal(resGps.coords.lng, 127.7298);
+    assert.deepEqual({ nx: resGps.coords.nx, ny: resGps.coords.ny }, latLngToKmaGrid(37.8813, 127.7298));
   } finally {
     if (prevKma !== undefined) process.env.KMA_WEATHER_API_KEY = prevKma;
   }

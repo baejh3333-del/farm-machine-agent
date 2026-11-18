@@ -1,5 +1,6 @@
 // 농농이 사진 상담 도구가 쓰는 순수 조회·계산 함수. 모델 판단 없이 검증 데이터만 돌려준다.
 import { MACHINE_BY_ID } from "../src/data/farm-machines.js";
+import { getRegionCoords } from "../src/data/korea-regions.js";
 import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { fetchRentalOffices } from "./integrations/rental-offices.js";
 import { INSURANCE_PRODUCTS } from "./knowledge/insurance.js";
@@ -139,5 +140,86 @@ export function getInsuranceInfo({ role, machineType } = {}) {
   return {
     products,
     note: "보험료는 기계와 조건에 따라 달라 확정해서 말하지 마세요. 가입은 지역 농협에서 확인하도록 안내하세요.",
+  };
+}
+
+// ── 가까운 수리센터 ──
+export const NEARBY_CENTER_LIMIT = 3;
+const NEARBY_MAX_KM = 100;
+
+function distanceKm(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * 사용자가 설정한 지역에서 가까운 수리센터를 거리순으로 고른다(기본 3곳).
+ * 1) 위치가 확인된 지역 창구(공공·지역)를 거리순으로, 100km 안쪽만
+ * 2) 공공데이터 임대사업소(연동돼 있을 때)
+ * 3) 모자라면 제조사 전국 A/S 창구(같은 제조사 먼저)로 채운다.
+ * 전화번호·사이트는 등록된 공식 정보만 쓴다.
+ */
+export async function findNearestRepairCenters({ region, brand, limit = NEARBY_CENTER_LIMIT } = {}, { fetchOffices = fetchRentalOffices } = {}) {
+  const origin = getRegionCoords(region || "");
+  const originName = origin?.name || region || "";
+  const located = [];
+
+  for (const center of REPAIR_CENTERS) {
+    if (center.kind === "maker" || !center.location) continue;
+    const place = getRegionCoords(center.location);
+    if (!place) continue;
+    located.push({ ...center, distanceKm: Math.round(distanceKm(origin, place) * 10) / 10 });
+  }
+
+  try {
+    const result = await fetchOffices({ region: region || "" });
+    if (result?.configured && Array.isArray(result.items)) {
+      result.items
+        .filter((item) => item?.officeName && item?.phone)
+        .forEach((item, index) => {
+          const place = getRegionCoords(item.region || item.address || "");
+          located.push({
+            id: `office-${index}-${item.officeName}`,
+            name: item.officeName,
+            kind: "public",
+            brands: [],
+            services: "농기계 임대사업소 (공공데이터)",
+            phone: item.phone,
+            url: null,
+            address: item.address || "",
+            source: { title: "공공데이터포털 · 농기계 임대사업소 정보", url: "https://www.data.go.kr" },
+            checkedAt: new Date().toISOString().slice(0, 10),
+            distanceKm: place ? Math.round(distanceKm(origin, place) * 10) / 10 : null,
+          });
+        });
+    }
+  } catch {
+    // 공공데이터 연동이 안 되면 등록된 창구만 쓴다.
+  }
+
+  const nearby = located
+    .filter((center) => center.distanceKm === null || center.distanceKm <= NEARBY_MAX_KM)
+    .sort((a, b) => (a.distanceKm ?? NEARBY_MAX_KM) - (b.distanceKm ?? NEARBY_MAX_KM));
+  const makers = REPAIR_CENTERS.filter((center) => center.kind === "maker");
+  const brandMakers = brand ? makers.filter((center) => center.brands.includes(brand)) : [];
+  const otherMakers = makers.filter((center) => !brandMakers.includes(center));
+  const fill = [...brandMakers, ...otherMakers].map((center) => ({ ...center, distanceKm: null, nationwide: true }));
+
+  const seen = new Set();
+  const centers = [];
+  for (const center of [...nearby, ...fill]) {
+    const key = `${center.name}|${center.phone}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    centers.push(center);
+    if (centers.length >= limit) break;
+  }
+  return {
+    origin: originName,
+    centers,
+    note: "가까운 순서예요. 위치가 확인된 지역 창구가 부족하면 제조사 전국 A/S 창구로 채웠어요. 전화번호와 사이트는 이 결과에 있는 것만 안내하세요.",
   };
 }

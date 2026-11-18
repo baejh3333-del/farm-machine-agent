@@ -224,7 +224,7 @@ test("문제5: 직전에 보여 준 매물 카드(ID·순서)를 다음 턴 프�
     uiContext: { shownListingIds: shown.map(({ id }) => id) },
   }, { listings: LISTINGS, call, today: TODAY, deps });
   assert.match(calls[0].system, /최근 보여 준 매물/);
-  for (const [i, item] of shown.entries()) assert.match(calls[0].system, new RegExp(`${i + 1}번: id=${item.id}`));
+  for (const [i, item] of shown.entries()) assert.match(calls[0].system, new RegExp(`${i + 1}번 id=${item.id}`));
   assert.equal(sent[0].listingId, target.id);
   // 모델이 번호를 빠뜨려도 신청 번호를 답변에 붙인다.
   assert.match(result.reply, /^구매 신청을 마쳤어요\. 신청 번호는 P-[0-9A-F]{8}예요\.$/);

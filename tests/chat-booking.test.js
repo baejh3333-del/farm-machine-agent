@@ -173,3 +173,16 @@ test("[긍정 판정] 번호만 말하면 승인이 아니고, 실행 동사가 
   for (const yes of ["2번으로 예약해줘", "1번으로 해 주세요", "2번 진행", "네", "예약해 줘"]) assert.equal(sharedAffirmative(yes), true, yes);
   assert.equal(isAffirmative, sharedAffirmative);
 });
+
+test("[긍정 판정] '승인할게'처럼 '예약해줘'가 아닌 다양한 긍정 표현도 승인으로 본다", () => {
+  const yes = ["승인할게", "승인할게요", "승인합니다", "승인해 주세요", "네 승인할게요", "확정할게", "요청 보내줘", "보내 주세요", "응 보내",
+    "좋네", "알겠어요", "알았어", "당연하죠", "물론이죠", "그렇게 하자", "이대로 해줘", "그대로 진행", "ㄱㄱ", "고고", "예스", "yes",
+    "동의합니다", "부탁할게요", "예약할게", "넵넵", "그래그래"];
+  for (const text of yes) assert.equal(sharedAffirmative(text), true, text);
+});
+
+test("[긍정 판정] 부정·보류·질문이 섞이면 승인으로 보지 않는다", () => {
+  const no = ["승인 안 할게", "보내지 마", "안 보내", "나중에 할게", "아직 승인 안 했어", "승인할까?", "승인할까", "괜찮아요",
+    "좋아 근데 다른 날로", "네 근데 3일로 바꿔줘", "그대로 두고 날짜만 바꿔줘", "보내기 전에 날짜 확인해줘", "확인", "2번"];
+  for (const text of no) assert.equal(sharedAffirmative(text), false, text);
+});

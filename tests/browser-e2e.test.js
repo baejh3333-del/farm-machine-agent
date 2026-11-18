@@ -145,6 +145,8 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
 
     // 2. Guest B searches, favorites, runs AI recommendation, adds garage machine, triggers login resume on rental request
     await pageB.goto(baseUrl, { waitUntil: "networkidle" });
+    // 모아농 2.0: 홈에는 예약창만 있고 매물 목록·검색은 '매물 찾기'에 있다
+    await pageB.locator('header [data-view="browse"]').first().click();
     await pageB.locator("#searchInput").fill(uniqueTitle);
     const matchingCard = pageB.locator("#listingGrid .listing-card", { hasText: uniqueTitle });
     await matchingCard.waitFor({ state: "visible" });

@@ -58,8 +58,8 @@
 }
 
 .chat-ai-bar {
-  background: var(--bg-warm, #faf5ec);
-  border: 1px solid var(--line, #ded5c6);
+  background: var(--bg-warm, #f6f6f6);
+  border: 1px solid var(--line, #e8e8e8);
   border-radius: 14px;
   padding: 10px 12px;
   margin-bottom: 10px;
@@ -81,7 +81,7 @@
 
 .chat-ai-modes {
   display: inline-flex;
-  background: var(--bg-subtle, #eee5d7);
+  background: var(--bg-subtle, #f2f2f2);
   border-radius: 999px;
   padding: 2px;
   gap: 2px;
@@ -112,7 +112,7 @@
 
 .chat-ai-mode-btn.active {
   background: var(--forest, #174233);
-  color: var(--bg-surface, #fffcf6);
+  color: var(--bg-surface, #ffffff);
   box-shadow: 0 2px 6px rgba(16, 48, 36, 0.16);
 }
 
@@ -156,7 +156,7 @@
   opacity: 1;
   margin-top: 10px;
   padding-top: 10px;
-  border-top-color: var(--line-strong, #d0c5b3);
+  border-top-color: var(--line-strong, #d6d6d6);
 }
 
 .chat-ai-policy-inner {
@@ -173,8 +173,8 @@
 }
 
 .chat-ai-chip {
-  border: 1px solid var(--line-strong, #d0c5b3);
-  background: var(--bg-surface, #fffcf6);
+  border: 1px solid var(--line-strong, #d6d6d6);
+  background: var(--bg-surface, #ffffff);
   color: var(--text-body, #2c4237);
   font-size: 0.76rem;
   font-weight: 600;
@@ -207,11 +207,11 @@
 .chat-ai-instruction-row input {
   flex: 1;
   min-width: 0;
-  border: 1px solid var(--line-strong, #d0c5b3);
+  border: 1px solid var(--line-strong, #d6d6d6);
   border-radius: 10px;
   padding: 7px 10px;
   font-size: 0.8125rem;
-  background: var(--bg-surface, #fffcf6);
+  background: var(--bg-surface, #ffffff);
 }
 
 /* 거래 전담 모드(부재중 자동 진행) 토글 & 위임 조건 그리드 */
@@ -219,8 +219,8 @@
   margin-top: 9px;
   padding: 9px 11px;
   border-radius: 12px;
-  background: var(--bg-surface, #fffcf6);
-  border: 1px solid var(--line, #ded5c6);
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--line, #e8e8e8);
   overflow: hidden;
   transition:
     border-color 0.24s ease,
@@ -278,7 +278,7 @@
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.03em;
-  background: var(--bg-subtle, #eee5d7);
+  background: var(--bg-subtle, #f2f2f2);
   color: var(--text-muted, #5e7468);
   transition:
     background-color 0.22s ease,
@@ -298,7 +298,7 @@
   gap: 6px;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px dashed var(--line-strong, #d0c5b3);
+  border-top: 1px dashed var(--line-strong, #d6d6d6);
   animation: delegatedSummaryExpand 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -313,7 +313,7 @@
   border-radius: 999px;
   font-size: 0.73rem;
   font-weight: 600;
-  background: var(--bg-surface, #fffcf6);
+  background: var(--bg-surface, #ffffff);
   border: 1px solid #c5dbb8;
   color: var(--forest, #174233);
 }
@@ -340,12 +340,12 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  border: 1px solid var(--line-strong, #d0c5b3);
+  border: 1px solid var(--line-strong, #d6d6d6);
   border-radius: 9px;
   padding: 6px 9px;
   font-size: 0.8125rem;
   color: var(--text-strong, #162a22);
-  background: var(--bg-surface, #fffcf6);
+  background: var(--bg-surface, #ffffff);
 }
 
 .delegated-policy-grid .delegated-policy-wide {
@@ -381,7 +381,7 @@
 .chat-line.mine.ai-proxy {
   background: #23533a;
   border-color: var(--forest, #174233);
-  color: var(--bg-surface, #fffcf6);
+  color: var(--bg-surface, #ffffff);
 }
 
 .chat-ai-badge {
@@ -398,7 +398,7 @@
 
 .chat-line.mine .chat-ai-badge {
   background: rgba(255, 252, 246, 0.22);
-  color: var(--bg-surface, #fffcf6);
+  color: var(--bg-surface, #ffffff);
 }
 
 .chat-line-system {
@@ -408,8 +408,8 @@
   font-size: 0.8rem;
   line-height: 1.45;
   color: var(--text-body, #2c4237);
-  background: var(--bg-warm, #faf5ec);
-  border: 1px solid var(--line, #ded5c6);
+  background: var(--bg-warm, #f6f6f6);
+  border: 1px solid var(--line, #e8e8e8);
   border-radius: 12px;
   padding: 8px 14px;
   white-space: pre-wrap;
@@ -539,7 +539,7 @@
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: var(--bg-warm, #faf5ec);
+  background: var(--bg-warm, #f6f6f6);
   border: 1.5px solid #23533a;
   animation: delegatedBannerEnter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -566,8 +566,8 @@
   font-size: 0.86rem;
   line-height: 1.45;
   color: var(--text-strong, #162a22);
-  background: var(--bg-surface, #fffcf6);
-  border: 1px solid var(--line, #ded5c6);
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--line, #e8e8e8);
   border-radius: 10px;
   padding: 8px 10px;
   white-space: pre-wrap;

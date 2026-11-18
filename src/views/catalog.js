@@ -327,8 +327,8 @@ function matches(item, filters) {
   return true;
 }
 
-function filteredListings(filters = state.filters) {
-  const query = $("searchInput").value.trim().toLowerCase();
+function filteredListings(filters = state.filters, { ignoreQuery = false } = {}) {
+  const query = ignoreQuery ? "" : $("searchInput").value.trim().toLowerCase();
   return allListings()
     .filter(
       (item) =>

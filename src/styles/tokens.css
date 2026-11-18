@@ -4,16 +4,16 @@
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --font-scale: 1;
 
-  --bg-page: #f5efe4;
-  --bg-surface: #fffcf6;
-  --bg-subtle: #eee5d7;
+  --bg-page: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f2f2f2;
   --bg-tint: #e6f4ec;
-  --bg-warm: #faf5ec;
+  --bg-warm: #f6f6f6;
 
-  --text-strong: #162a22;
-  --text-body: #2c4237;
-  --text-muted: #5e7468;
-  --text-soft: #82968b;
+  --text-strong: #111111;
+  --text-body: #333333;
+  --text-muted: #555555;
+  --text-soft: #6b6b6b;
 
   --forest: #174233;
   --forest-deep: #103024;
@@ -25,10 +25,10 @@
   --accent-amber-text: #92400e;
   --harvest-gold: #d97724;
 
-  --line: #ded5c6;
-  --line-strong: #d0c5b3;
+  --line: #e8e8e8;
+  --line-strong: #d6d6d6;
 
-  --surface-glass: rgba(255, 252, 246, 0.88);
+  --surface-glass: rgba(255, 255, 255, 0.9);
 
   --shadow-sm: 0 2px 8px rgba(22, 42, 34, 0.05);
   --shadow-md: 0 10px 28px rgba(22, 42, 34, 0.07);

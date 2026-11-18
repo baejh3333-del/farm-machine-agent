@@ -1,4 +1,4 @@
-import { MACHINE_BY_ID, listingCoords, distanceKm } from "../data/farm-machines.js";
+import { MACHINE_BY_ID, FARM_LOCATIONS_BY_REGION, listingCoords, distanceKm } from "../data/farm-machines.js";
 import { applyModelSpecification } from "../data/machine-specifications.js";
 import { getRegionCoords } from "../data/korea-regions.js";
 import { $, escapeHtml, money, today, addDays, toast, getListingPhotoSrc, machineImage } from "../core/utils.js";
@@ -1054,6 +1054,137 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
         selectedItem = chosen;
         runtime.selectedMapListingId = chosen.id;
         renderFloatingCard(chosen);
+      });
+    }
+  }
+}
+
+export function resolveListingFarmLabel(item, coords) {
+  if (item?.farmSpotLabel) return item.farmSpotLabel;
+  const spots = FARM_LOCATIONS_BY_REGION[item?.region];
+  if (Array.isArray(spots) && spots.length) {
+    const matched = spots.find(
+      (s) => Math.abs(Number(s.lat) - coords.lat) < 0.0001 && Math.abs(Number(s.lng) - coords.lng) < 0.0001
+    );
+    if (matched?.village) return matched.village;
+  }
+  if (typeof item?.pickup === "string") {
+    const stripped = item.pickup.replace(/\s*(직접 인수|운반 협의|현장 확인 후 인수)$/, "").trim();
+    if (stripped) return stripped;
+  }
+  return `${item?.region || ""} 농가`.trim();
+}
+
+function buildDetailPinMarkup(labelText) {
+  return `
+    <div class="detail-single-pin-wrap">
+      <div class="detail-addr-pill" id="detailMapAddrPill">${escapeHtml(labelText)}</div>
+      <div class="detail-red-pin" aria-hidden="true">
+        <svg width="34" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17 1C8.163 1 1 8.163 1 17c0 11.25 16 25.5 16 25.5S33 28.25 33 17C33 8.163 25.837 1 17 1z" fill="#E84D4A" stroke="#FFFFFF" stroke-width="2"/>
+          <circle cx="17" cy="16.5" r="6.5" fill="#FFFFFF"/>
+        </svg>
+      </div>
+    </div>
+  `;
+}
+
+function renderDetailMapFallback(container, coords, labelText) {
+  container.innerHTML = `
+    <div class="detail-map-fallback" role="region" aria-label="${escapeHtml(labelText)} 위치 지도">
+      <svg class="detail-fallback-svg" viewBox="0 0 600 260" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <pattern id="detailMapGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+            <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(23,66,51,0.06)" stroke-width="1" />
+          </pattern>
+        </defs>
+        <rect width="600" height="260" fill="#eef4ee" />
+        <rect width="600" height="260" fill="url(#detailMapGrid)" />
+        <path d="M-20,210 Q180,145 340,140 T620,85" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
+        <path d="M160,-10 Q250,130 380,275" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" />
+      </svg>
+      <div class="detail-fallback-center">
+        ${buildDetailPinMarkup(labelText)}
+      </div>
+      <div class="detail-map-zoom-controls" aria-hidden="true">
+        <span class="detail-map-zoom-btn">+</span>
+        <span class="detail-map-zoom-btn">-</span>
+      </div>
+    </div>
+  `;
+}
+
+export async function renderDetailListingMap(container, item) {
+  if (!container || !item) return;
+
+  const coords = listingCoords(item, item.id);
+  const fallbackLabel = resolveListingFarmLabel(item, coords);
+  container.innerHTML = `<div class="detail-map-loading">매물 위치 지도를 불러오는 중...</div>`;
+
+  const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
+  try {
+    const maps = await loadKakaoSdk(appKey);
+    if (!container.isConnected) return;
+
+    container.innerHTML = `
+      <div class="detail-map-stage">
+        <div id="detailKakaoMapBox" class="detail-kakao-map-box"></div>
+        <div class="detail-map-zoom-controls" role="group" aria-label="지도 확대 축소">
+          <button type="button" class="detail-map-zoom-btn" id="detailMapZoomIn" aria-label="지도 확대">+</button>
+          <button type="button" class="detail-map-zoom-btn" id="detailMapZoomOut" aria-label="지도 축소">−</button>
+        </div>
+      </div>
+    `;
+
+    const mapBox = $("detailKakaoMapBox");
+    const pos = new maps.LatLng(coords.lat, coords.lng);
+    const map = new maps.Map(mapBox, {
+      center: pos,
+      level: 4,
+    });
+
+    const pinWrap = document.createElement("div");
+    pinWrap.className = "detail-single-pin-wrap";
+    pinWrap.innerHTML = `
+      <div class="detail-addr-pill" id="detailMapAddrPill">${escapeHtml(fallbackLabel)}</div>
+      <div class="detail-red-pin" aria-hidden="true">
+        <svg width="34" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17 1C8.163 1 1 8.163 1 17c0 11.25 16 25.5 16 25.5S33 28.25 33 17C33 8.163 25.837 1 17 1z" fill="#E84D4A" stroke="#FFFFFF" stroke-width="2"/>
+          <circle cx="17" cy="16.5" r="6.5" fill="#FFFFFF"/>
+        </svg>
+      </div>
+    `;
+
+    new maps.CustomOverlay({
+      map,
+      position: pos,
+      content: pinWrap,
+      xAnchor: 0.5,
+      yAnchor: 1.0,
+      zIndex: 5,
+    });
+
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        if (!mapBox.isConnected) return;
+        map.relayout?.();
+        map.setCenter?.(pos);
+      });
+    }
+
+    $("detailMapZoomIn")?.addEventListener("click", () => map.setLevel(Math.max(1, map.getLevel() - 1), { animate: true }));
+    $("detailMapZoomOut")?.addEventListener("click", () => map.setLevel(Math.min(13, map.getLevel() + 1), { animate: true }));
+
+    resolveKakaoAddress(coords.lat, coords.lng, fallbackLabel).then((resolved) => {
+      const pillEl = $("detailMapAddrPill");
+      if (pillEl && resolved) pillEl.textContent = resolved;
+    });
+  } catch {
+    if (container.isConnected) {
+      renderDetailMapFallback(container, coords, fallbackLabel);
+      resolveKakaoAddress(coords.lat, coords.lng, fallbackLabel).then((resolved) => {
+        const pillEl = $("detailMapAddrPill");
+        if (pillEl && resolved) pillEl.textContent = resolved;
       });
     }
   }

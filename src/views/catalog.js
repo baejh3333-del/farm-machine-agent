@@ -3,7 +3,7 @@ import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, 
 import { available, compareListings } from "../data/recommendation.js";
 import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, addDays, koreanDateParts, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog, machineImage } from "../core/utils.js";
 import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites } from "../core/store.js";
-import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
+import { activeDistanceOrigin, renderWeatherBanner, renderDetailListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
 
 export function createCatalogViews(deps) {
 let lastPreviewCount = null;
@@ -503,12 +503,6 @@ function renderListings() {
   const items = filteredListings();
   $("resultCount").textContent = `총 ${items.length}대의 농기계 · ${{ distance: "거리순", price: "낮은 가격순", inspection: "최근 점검순" }[state.sort]}`;
 
-  const isMap = state.viewMode === "map";
-  $("viewModeList")?.classList.toggle("active", !isMap);
-  $("viewModeMap")?.classList.toggle("active", isMap);
-  $("viewModeList")?.setAttribute("aria-pressed", String(!isMap));
-  $("viewModeMap")?.setAttribute("aria-pressed", String(isMap));
-
   renderWeatherBanner({
     onSelectDate: (chosenDate) => {
       state.filters.date = chosenDate;
@@ -520,16 +514,7 @@ function renderListings() {
       refreshWeatherAndMapConfig({ onUpdate: () => renderListings() });
     },
   });
-  $("listingGrid").hidden = isMap;
-
-  if (isMap) {
-    renderListingMap(items, {
-      onOpenDetail: (id) => openDetail(id),
-      onGpsUpdated: () => renderListings(),
-    });
-  } else {
-    renderListingMap(items);
-  }
+  $("listingGrid").hidden = false;
 
   $("listingGrid").innerHTML = items.length
     ? items.map(card).join("")
@@ -576,6 +561,13 @@ function openDetail(id) {
             <li>내 트랙터·관리기와 작업기 연결 규격이 맞는지 확인하세요.</li>
             <li>비상 정지 스위치와 안전 덮개 등 안전장치를 꼭 점검하세요.</li>
           </ul>
+        </div>
+        <div class="detail-location-card">
+          <div class="detail-location-head">
+            <strong>매물 위치</strong>
+            <span class="detail-location-dist">내 동네에서 약 ${distanceKm(activeDistanceOrigin(), item, item.id)}km</span>
+          </div>
+          <div id="detailListingMapCanvas" class="detail-listing-map-canvas" aria-label="${escapeHtml(item.title)} 위치 지도"></div>
         </div>
       </div>
       <div class="detail-copy">
@@ -656,6 +648,7 @@ function openDetail(id) {
     </div>
   `;
   showDialog($("detailBackdrop"));
+  renderDetailListingMap($("detailListingMapCanvas"), item);
 }
 
 function openFavoritesModal() {

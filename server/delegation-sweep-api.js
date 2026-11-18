@@ -1,11 +1,16 @@
 // 대리 응대 작업 큐 정기 스윕 엔드포인트.
+// vercel.json 크론은 Hobby 요금제 한도(하루 1회)에 맞춘 백스톱이다(매일 19:00 UTC = 04:00 KST).
+// 분 단위 재시도·임대 회수는 server/delegation-kick.js의 트래픽 기반 스윕이 맡는다.
+// 외부 스케줄러가 같은 Bearer 비밀로 이 주소를 더 자주 호출해도 된다(처리는 멱등).
+// Hobby 요금제는 배포당 서버리스 함수가 12개까지라 별도 api/ 파일로 두지 않는다.
+// vercel.json rewrites: /api/delegation-jobs → /api/conversations?route=delegation-jobs
 // Vercel Cron은 `Authorization: Bearer ${CRON_SECRET}` 헤더로 GET 요청을 보낸다.
 // 비밀이 설정되지 않았으면 503으로 거부하고, 일치하지 않으면 401을 돌려준다(익명 수동 스윕 없음).
 // 응답에는 처리 건수만 담고 대화 내용이나 오류 원문은 담지 않는다.
 import { createHash, timingSafeEqual } from "node:crypto";
-import { fail, handle } from "../server/http.js";
-import { processDelegationJobs } from "../server/delegation-queue.js";
-import { isWritesFrozen } from "../server/migrator.js";
+import { fail, handle } from "./http.js";
+import { processDelegationJobs } from "./delegation-queue.js";
+import { isWritesFrozen } from "./migrator.js";
 
 const MIN_SECRET_LENGTH = 16;
 

@@ -125,6 +125,10 @@ export function classifyError(error) {
   ) {
     return { status: 503, code: "UNAVAILABLE", message: "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
   }
+  // 없는 테이블·열: 배포된 코드보다 DB 마이그레이션이 늦은 상태. 500 대신 503으로 알려 원인을 구분한다.
+  if (pgCode === "42P01" || pgCode === "42703") {
+    return { status: 503, code: "SCHEMA_NOT_READY", message: "서비스 준비 중입니다. 잠시 후 다시 시도해 주세요." };
+  }
   if (/^22/.test(pgCode) || pgCode === "23502" || pgCode === "23514") {
     return { status: 400, code: "INVALID_INPUT", message: "입력값을 처리할 수 없습니다. 내용을 확인해 주세요." };
   }

@@ -17,6 +17,8 @@ import {
   updateConversationAiPolicy,
 } from "../server/chat.js";
 import { runDelegatedChatReply, scheduleDelegatedReply } from "../server/delegated-chat.js";
+import { kickDelegationQueue } from "../server/delegation-kick.js";
+import delegationSweepApi from "../server/delegation-sweep-api.js";
 
 const MESSAGE_RATE_ACTIONS = new Set(["send", "mark_read", "update_ai_policy", "takeover", "resume", "dismiss_ai_draft", "set_inbound_policy"]);
 
@@ -25,7 +27,7 @@ function roleMode(conv, role) {
   return role === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
 }
 
-export default handle(["GET", "POST"], async (request) => {
+const conversationsApi = handle(["GET", "POST"], async (request) => {
   const user = await requireUser(request);
 
   if (request.method === "GET") {
@@ -44,6 +46,10 @@ export default handle(["GET", "POST"], async (request) => {
     const afterSeq = query.get("after_seq") ?? query.get("afterSeq");
     const beforeSeq = query.get("before_seq") ?? query.get("beforeSeq");
     const limit = query.get("limit");
+
+    // 채팅 화면 폴링에 얹어 만기된 대리 응대 재시도·만료 임대를 처리한다(응답은 기다리지 않음).
+    // Hobby 요금제 크론은 하루 1회라, 분 단위 처리는 이 트래픽 기반 스윕이 맡는다.
+    kickDelegationQueue({ conversationId });
 
     if (conversationId || (listingId && mode !== "list")) {
       const result = await getConversationMessages(user.id, {
@@ -208,3 +214,14 @@ export default handle(["GET", "POST"], async (request) => {
     },
   };
 });
+
+// /api/delegation-jobs(크론 스윕)는 함수 개수 제한(Hobby 12개) 때문에 이 함수로 들어온다.
+// vercel.json rewrites: /api/delegation-jobs → /api/conversations?route=delegation-jobs
+function isDelegationSweepRoute(request) {
+  const url = new URL(request.url || "/", "http://localhost");
+  return url.pathname === "/api/delegation-jobs" || url.searchParams.get("route") === "delegation-jobs";
+}
+
+export default function conversationsOrSweep(request, response) {
+  return isDelegationSweepRoute(request) ? delegationSweepApi(request, response) : conversationsApi(request, response);
+}

@@ -4,7 +4,8 @@ import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 
 import accountHandler from "../api/account.js";
-import delegationJobsHandler, { isAuthorizedSweep } from "../api/delegation-jobs.js";
+import delegationJobsHandler from "../api/conversations.js";
+import { isAuthorizedSweep } from "../server/delegation-sweep-api.js";
 import { resetAuthCache } from "../server/account-auth.js";
 import { sendMessage } from "../server/chat.js";
 import { createPglitePool, kstToday, setPool } from "../server/db.js";

@@ -26,6 +26,8 @@ Vercel 배포에서는 PostgreSQL을 연결합니다.
 1. 대상 환경에 `DATABASE_URL`과 `BETTER_AUTH_SECRET`을 서버 환경 변수로 설정합니다. 비밀값은 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`로 생성할 수 있습니다.
 2. 운영 환경의 `BETTER_AUTH_URL`에 서비스의 HTTPS 주소를 설정합니다. Vercel 기본 도메인을 쓰는 프리뷰는 시스템 환경 변수에서 호스트를 가져옵니다.
 3. 대상 DB에 연결할 수 있는 환경에서 `APP_ENV=production`(프리뷰는 `preview`)을 설정합니다. 새 DB는 `npm run db:init -- --env production`으로 환경을 표시하고, `npm run db:migrate -- --env production`으로 계정 및 앱 스키마를 준비합니다. 기존 DB는 먼저 `npm run db:inspect`로 환경을 확인합니다. 프리뷰는 명령의 `production`도 `preview`로 바꿉니다.
+4. 코드를 배포하기 전에 `npm run db:check`로 마이그레이션 준비 상태를 확인합니다. 미적용·체크섬 불일치가 있으면 종료 코드 1이며 DB는 바꾸지 않습니다. 기존 운영 DB 업그레이드 순서는 [docs/release-readiness-2026-11-18.md](docs/release-readiness-2026-11-18.md)를 따릅니다.
+5. `CRON_SECRET`(16자 이상)을 설정합니다. `vercel.json`의 크론은 Hobby 요금제 한도에 맞춰 하루 1회(19:00 UTC) 백스톱으로만 돌고, 대리 응대 재시도와 만료 임대 회수는 채팅 조회 요청에 얹은 스윕(`server/delegation-kick.js`, 대화방당 10초·전체 60초에 1회)이 처리합니다.
 
 ## AI API 연결 (농농이 · OpenAI 또는 Claude)
 

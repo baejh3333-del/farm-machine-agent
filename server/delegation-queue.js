@@ -2,8 +2,8 @@
 // - 같은 수신 이벤트(대화방·역할·트리거 seq)는 delegation_jobs 1행으로만 기록된다(멱등 enqueue).
 // - 처리기는 FOR UPDATE SKIP LOCKED로 작업을 임대하고, 임대 토큰이 맞을 때만 결과를 기록한다.
 // - 일시 오류는 제한된 횟수만큼 지수 백오프로 재시도하고, 이후 failed로 남겨 사용자에게 보이게 한다.
-// - 정기 스윕(api/delegation-jobs.js, 서버 비밀 필요)이 만료 임대·재시도·누락 이벤트를 회수하므로
-//   사용자가 앱을 닫아도 처리된다. 실행기는 at-least-once이며, 결과 멱등성은 runDelegatedChatReply의
+// - 트래픽 기반 스윕(delegation-kick.js, 채팅 폴링마다 throttle)과 하루 1회 정기 스윕(/api/delegation-jobs → server/delegation-sweep-api.js,
+//   서버 비밀 필요)이 만료 임대·재시도·누락 이벤트를 회수하므로 사용자가 앱을 닫아도 처리된다. 실행기는 at-least-once이며, 결과 멱등성은 runDelegatedChatReply의
 //   (conversation, reply_to_seq, sender) 유니크 인덱스와 커밋 재검증이 보장한다.
 import { randomUUID } from "node:crypto";
 import { getPool, withTransaction } from "./db.js";

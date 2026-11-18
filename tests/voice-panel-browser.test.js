@@ -87,6 +87,7 @@ test("voice panel: live delegation, layout, contacts, stop and fallback preserve
       await page.locator("#aiPlusMenu").waitFor({ state: "hidden" });
       assert.equal(await page.locator("#aiPanel").isVisible(), true);
       if (live) {
+        await page.locator("#aiPlusButton").click();
         await page.locator("#aiLiveVoiceButton").click();
         await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
         await page.evaluate(() => {
@@ -241,6 +242,7 @@ test("voice panel: live session 502 falls back to standard voice with one toast 
       liveSession: () => ({ status: 502, json: { error: "실시간 음성 대화를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.", code: "LIVE_SESSION_FAILED" } }),
       agent: agentReply,
     });
+    await page.locator("#aiPlusButton").click();
     await page.locator("#aiLiveVoiceButton").click();
     await page.waitForFunction(() => window.voiceTest.toasts.length > 0);
     await settle(page);
@@ -253,7 +255,7 @@ test("voice panel: live session 502 falls back to standard voice with one toast 
     assert.equal(await page.evaluate(() => window.voiceTest.stopped), 1, "microphone released");
     assert.equal(await page.evaluate(() => window.voiceTest.closedPeers), 1, "peer connection closed");
     assert.equal(await page.locator("#aiVoiceLiveBar").isHidden(), true);
-    assert.equal(await page.locator("#aiLiveVoiceButton").isHidden(), true);
+    assert.equal(await page.locator("#aiLiveVoiceButton").evaluate((el) => el.hidden), true);
     assert.equal(await page.locator("#aiLiveVoiceButton").getAttribute("aria-pressed"), "false");
     assert.equal(await page.locator("#aiMicButton").isVisible(), true);
 
@@ -283,6 +285,7 @@ test("voice panel: mic denial keeps live voice, delegation failure keeps session
       agent: agentReply,
       micError: "NotAllowedError",
     });
+    await denied.page.locator("#aiPlusButton").click();
     await denied.page.locator("#aiLiveVoiceButton").click();
     await denied.page.waitForFunction(() => window.voiceTest.toasts.length > 0);
     await settle(denied.page);
@@ -290,7 +293,7 @@ test("voice panel: mic denial keeps live voice, delegation failure keeps session
     assert.equal(deniedToasts.length, 1, `expected a single toast, got ${JSON.stringify(deniedToasts)}`);
     assert.match(deniedToasts[0], /마이크 권한/);
     assert.equal(denied.requests.live.length, 0);
-    assert.equal(await denied.page.locator("#aiLiveVoiceButton").isVisible(), true, "mic denial must not downgrade live voice");
+    assert.equal(await denied.page.locator("#aiLiveVoiceButton").evaluate((el) => el.hidden), false, "mic denial must not downgrade live voice");
     assert.equal(await denied.page.locator("#aiVoiceLiveBar").isHidden(), true);
     assert.deepEqual(denied.errors, []);
     await denied.page.close();
@@ -299,6 +302,7 @@ test("voice panel: mic denial keeps live voice, delegation failure keeps session
       liveSession: liveAnswer,
       agent: () => ({ status: 500, json: { error: "농농이가 잠시 쉬고 있어요." } }),
     });
+    await page.locator("#aiPlusButton").click();
     await page.locator("#aiLiveVoiceButton").click();
     await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
     await page.evaluate(() => {
@@ -326,6 +330,7 @@ test("voice panel: mic denial keeps live voice, delegation failure keeps session
     assert.equal(await page.locator(".is-live-transcript").count(), 0);
     assert.equal(await page.locator("#aiLiveVoiceButton").getAttribute("aria-pressed"), "false");
     assert.equal(await page.evaluate(() => window.voiceTest.stopped), 1);
+    await page.locator("#aiPlusButton").click();
     await page.locator("#aiLiveVoiceButton").click();
     await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
     await page.evaluate(() => window.voiceTest.channel.emit({ type: "session.output_transcript.delta", delta: "새 대화" }));
@@ -378,6 +383,7 @@ test("voice panel: voice switching keeps conversation memory and delegation send
       }),
     });
 
+    await page.locator("#aiPlusButton").click();
     await page.locator("#aiLiveVoiceButton").click();
     await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
     assert.equal(requests.live[0].voice, "noeul");

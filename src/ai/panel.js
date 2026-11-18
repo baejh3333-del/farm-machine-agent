@@ -3024,6 +3024,7 @@ export function createAiPanel({
   }
 
   $("aiLiveVoiceButton")?.addEventListener("click", () => {
+    setPlusMenuOpen(false);
     startLiveVoice();
   });
   $("aiMicButton")?.addEventListener("click", () => {

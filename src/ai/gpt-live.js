@@ -595,6 +595,11 @@ export function createGptLiveController({
     lastUserCommit = spokenText; // 패널이 이 발화를 위임 턴으로 기록한다.
     userText = "";
     const owner = utterance ? endUtterance(spokenText) : lastUtterance;
+    // 이 발화가 정정이면, 그로 인해 무효가 된 작업의 원래 말을 함께 넘긴다(에이전트가 '아니 콤바인으로'만 받지 않게).
+    // 관련 없는 다른 작업은 넣지 않는다. 애매해서 되묻는 중이면 아직 무효가 된 작업이 없으므로 비어 있다.
+    const corrects = owner?.correction
+      ? tasks.filter((t) => t.supersededBy === owner.id && t.text).map((t) => ({ delegationId: t.delegationId, text: t.text }))
+      : [];
     const taskRev = taskRevision;
     const task = {
       delegationId, utteranceId: owner?.id ?? null, seq: ++taskSeq, superseded: false, supersededBy: null,
@@ -609,6 +614,7 @@ export function createGptLiveController({
         utteranceId: null, startMs: null, endMs: null, speechRevision, taskRevision: taskRev, correction: false,
       }),
       isStale,
+      corrects,
     };
     delegatedReply = true;
     assistantMeta = null;
@@ -910,12 +916,27 @@ export function createGptLiveController({
     return stopPromise;
   }
 
+  // 실시간 음성 중에 글로 쓴 정정('아니 콤바인으로')도 말로 한 정정처럼 해당 작업 하나만 무효로 한다.
+  // 무효가 된 조회 결과는 말하지 않고, 실제로 쓴(write) 결과는 그대로 알린다(supersedeTask·handleDelegation 규칙).
+  // 어느 작업인지 애매하거나 맞는 작업이 없으면 아무것도 바꾸지 않는다. 반환값: 무효가 된 작업의 원래 말.
+  function applyTypedCorrection(text) {
+    if (!session || !isCorrectionUtterance(String(text || "").trim())) return [];
+    const pool = tasks.filter((t) => !t.superseded).map((t) => Object.assign(t, { active: isActiveTask(t) }));
+    const pick = pickCorrectionTarget(text, pool);
+    if (!pick.target) return [];
+    taskRevision += 1;
+    supersedeTask(pick.target, `typed_${taskRevision}`);
+    releaseHeld();
+    return pick.target.text ? [{ delegationId: pick.target.delegationId, text: pick.target.text }] : [];
+  }
+
   return {
     start,
     stop,
     setMuted,
     commitPendingTurns,
     notifyUiEvent,
+    applyTypedCorrection,
     get state() { return state; },
     get ready() { return ready; },
     get muted() { return muted; },

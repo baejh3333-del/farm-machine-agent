@@ -118,7 +118,6 @@ const HONGCHEON_RANDOM_PRESETS = [
 ];
 
 const kakaoAddressCache = new Map();
-let lastRandomPresetIndex = -1;
 
 export async function resolveKakaoAddress(lat, lng, fallbackAddress = "") {
   const numLat = Number(lat);
@@ -152,29 +151,32 @@ export async function resolveKakaoAddress(lat, lng, fallbackAddress = "") {
   }
 }
 
+const hasCoord = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+
 export function ensureHongcheonRandomListing({ randomize = false } = {}) {
   const existing = Array.isArray(runtime.catalog)
     ? runtime.catalog.find((item) => item.id === HONGCHEON_NEARBY_FARM.id)
     : null;
 
-  if (existing && !randomize && existing.lat && existing.lng && existing.farmName) {
-    return existing;
+  // 서버 매물(hc-vivaldi-1)이 있으면 그것이 기준이다. 기종·제목·가격을 임의 프리셋으로 바꾸면 상세·예약·저장 값이
+  // 서로 달라지므로(예: 13만원 트랙터가 4.5만원 관리기로 보임) 지도에 필요한 위치 정보만 비어 있을 때 채운다.
+  if (existing) {
+    const listing = {
+      ...existing,
+      farmName: existing.farmName || HONGCHEON_NEARBY_FARM.farmName,
+      ownerName: existing.ownerName || existing.farmName || HONGCHEON_NEARBY_FARM.farmName,
+      address: existing.address || HONGCHEON_NEARBY_FARM.address,
+      lat: hasCoord(existing.lat) ? existing.lat : HONGCHEON_NEARBY_FARM.lat,
+      lng: hasCoord(existing.lng) ? existing.lng : HONGCHEON_NEARBY_FARM.lng,
+    };
+    runtime.catalog = runtime.catalog.map((item) => (item === existing ? listing : item));
+    runtime.selectedMapListingId = listing.id;
+    return listing;
   }
 
-  let idx = lastRandomPresetIndex;
-  if (randomize || idx < 0) {
-    if (HONGCHEON_RANDOM_PRESETS.length > 1) {
-      let next = Math.floor(Math.random() * HONGCHEON_RANDOM_PRESETS.length);
-      if (next === lastRandomPresetIndex) {
-        next = (next + 1) % HONGCHEON_RANDOM_PRESETS.length;
-      }
-      idx = next;
-    } else {
-      idx = 0;
-    }
-    lastRandomPresetIndex = idx;
-  }
-
+  // 서버 목록을 못 받았을 때만 지도용 대체 매물을 만든다. 무작위로 바꾸지 않고 서버 시드와 같은 트랙터를 쓴다.
+  void randomize; // 예전 호출부 호환용: 더 이상 매물을 무작위로 바꾸지 않는다.
+  const idx = 0;
   const preset = HONGCHEON_RANDOM_PRESETS[idx] || HONGCHEON_RANDOM_PRESETS[0];
   const baseItem = {
     id: HONGCHEON_NEARBY_FARM.id,

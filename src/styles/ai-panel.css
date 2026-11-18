@@ -962,7 +962,8 @@ body.ai-fullscreen .ai-launcher {
 
 #aiForm .ai-tool-btn,
 #aiForm .ai-photo-btn,
-#aiForm .ai-camera-btn {
+#aiForm .ai-camera-btn,
+#aiForm .ai-live-voice-btn {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -986,14 +987,16 @@ body.ai-fullscreen .ai-launcher {
 
 #aiForm .ai-tool-btn:hover,
 #aiForm .ai-photo-btn:hover,
-#aiForm .ai-camera-btn:hover {
+#aiForm .ai-camera-btn:hover,
+#aiForm .ai-live-voice-btn:hover {
   background: #f2f2f2;
   border-color: #111111;
 }
 
 #aiForm .ai-tool-btn:active,
 #aiForm .ai-photo-btn:active,
-#aiForm .ai-camera-btn:active {
+#aiForm .ai-camera-btn:active,
+#aiForm .ai-live-voice-btn:active {
   transform: scale(0.96);
 }
 
@@ -1992,11 +1995,32 @@ body.ai-fullscreen .ai-launcher {
 }
 
 .ai-plus-btn span {
-  display: inline-block;
-  font-size: 1.4rem;
-  font-weight: 500;
-  line-height: 1;
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
   transition: transform 0.22s var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* CSS로 그린 '+' — 폰트 기준선과 무관하게 동그라미 정중앙에 위치 */
+.ai-plus-btn span::before,
+.ai-plus-btn span::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--forest, #111111);
+  transform: translate(-50%, -50%);
+}
+
+.ai-plus-btn span::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .ai-plus-menu {

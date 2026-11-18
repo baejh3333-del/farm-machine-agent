@@ -230,6 +230,14 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
   // Seed test DB and confirm all demo items in PostgreSQL + live recommend uses PG
   const seedRes = await seedDemoListings({ env: "test", pool });
   assert.equal(seedRes.inserted, expectedMockCount);
+  const demo = buildMockListings()[0];
+  await pool.query("UPDATE listings SET price = price + 1 WHERE id = $1", [demo.id]);
+  const refresh = await seedDemoListings({ env: "test", pool });
+  assert.equal(refresh.inserted, 1);
+  const refreshed = await pool.query("SELECT price FROM listings WHERE id = $1", [demo.id]);
+  assert.equal(Number(refreshed.rows[0].price), demo.price);
+  const repeated = await seedDemoListings({ env: "test", pool });
+  assert.equal(repeated.inserted, 0);
 
   const rec = await recommend("고추 두둑 대여", { maxPrice: 70000 }, { pool });
   assert.ok(rec.listingIds.length > 0);

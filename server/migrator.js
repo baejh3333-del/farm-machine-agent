@@ -490,9 +490,22 @@ export async function seedDemoListings({
           updated_at = now()
         WHERE listings.is_demo = true
           AND (
-            listings.pickup IS DISTINCT FROM EXCLUDED.pickup
+            listings.model_id IS DISTINCT FROM EXCLUDED.model_id
+            OR listings.title IS DISTINCT FROM EXCLUDED.title
+            OR listings.brand IS DISTINCT FROM EXCLUDED.brand
+            OR listings.machine_type IS DISTINCT FROM EXCLUDED.machine_type
+            OR listings.crop_ids IS DISTINCT FROM EXCLUDED.crop_ids
+            OR listings.operations IS DISTINCT FROM EXCLUDED.operations
+            OR listings.area_min IS DISTINCT FROM EXCLUDED.area_min
+            OR listings.area_max IS DISTINCT FROM EXCLUDED.area_max
+            OR listings.price IS DISTINCT FROM EXCLUDED.price
+            OR listings.region IS DISTINCT FROM EXCLUDED.region
+            OR listings.condition IS DISTINCT FROM EXCLUDED.condition
+            OR listings.inspected_at IS DISTINCT FROM EXCLUDED.inspected_at
+            OR listings.included IS DISTINCT FROM EXCLUDED.included
+            OR listings.pickup IS DISTINCT FROM EXCLUDED.pickup
             OR listings.description IS DISTINCT FROM EXCLUDED.description
-            OR listings.model_id IS DISTINCT FROM EXCLUDED.model_id
+            OR listings.summary IS DISTINCT FROM EXCLUDED.summary
             OR listings.sort_order IS DISTINCT FROM EXCLUDED.sort_order
           )`,
         [
@@ -561,14 +574,7 @@ export function ensureLocalDevReady() {
     const env = resolveExpectedEnv();
     await initEnvironment({ env, pool });
     await runMigrations({ env, pool });
-    const countRes = await pool.query("SELECT count(*)::int AS count FROM listings WHERE is_demo = true");
-    const legacyRes = await pool.query(
-      "SELECT 1 FROM listings WHERE is_demo = true AND pickup IN ('직접 인수', '운반 협의', '현장 확인 후 인수', '비발디파크 인근 농가 직접 인수') LIMIT 1"
-    );
-    if (
-      (countRes.rows[0].count < buildMockListings().length || legacyRes.rowCount > 0) &&
-      process.env.MOA_SKIP_DEMO_SEED !== "1"
-    ) {
+    if (process.env.MOA_SKIP_DEMO_SEED !== "1") {
       await seedDemoListings({ env, pool });
     }
   })().catch((error) => {

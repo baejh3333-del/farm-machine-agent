@@ -989,7 +989,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
 
   try {
     const maps = await loadKakaoSdk(appKey);
-    if (!canvasEl || !$("socarMapCanvas")) return;
+    if (!canvasEl || $("socarMapCanvas") !== canvasEl) return;
     canvasEl.innerHTML = "";
     originLatLng = new maps.LatLng(Number(origin.lat), Number(origin.lng));
     activeMap = new maps.Map(canvasEl, {
@@ -1016,10 +1016,8 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
     });
 
     const pinElements = new Map();
-    items.forEach((item) => {
-      const c = listingCoords(item, item.id);
-      const pos = new maps.LatLng(c.lat, c.lng);
-      bounds.extend(pos);
+    const overlays = new Map();
+    const addPin = (item, pos) => {
       const machineLabel = MACHINE_BY_ID[item.machineType]?.label || "농기계";
       const pinBtn = document.createElement("button");
       pinBtn.type = "button";
@@ -1038,18 +1036,44 @@ export async function renderHeaderMapView({ onOpenDetail, onRent } = {}) {
       });
       pinElements.set(item.id, pinBtn);
 
-      new maps.CustomOverlay({
+      const overlay = new maps.CustomOverlay({
         map: activeMap,
         position: pos,
         content: pinBtn,
         yAnchor: 1.15,
         zIndex: item.id === selectedItem?.id ? 6 : 5,
       });
-    });
+      overlays.set(item.id, overlay);
+    };
+
+    const mapItems = new Map(items.map((item) => [item.id, item]));
+    for (const item of runtime.catalog ?? []) {
+      if (item.status === "open") mapItems.set(item.id, item);
+    }
+    const positions = new Map([...mapItems].map(([id, item]) => {
+      const { lat, lng } = listingCoords(item, id);
+      return [id, new maps.LatLng(lat, lng)];
+    }));
+    for (const item of items) bounds.extend(positions.get(item.id));
+
+    const renderVisiblePins = () => {
+      const viewport = activeMap.getBounds();
+      for (const [id, pos] of positions) {
+        if (viewport.contain(pos)) {
+          if (!overlays.has(id)) addPin(mapItems.get(id), pos);
+        } else if (overlays.has(id)) {
+          overlays.get(id).setMap(null);
+          overlays.delete(id);
+          pinElements.delete(id);
+        }
+      }
+    };
 
     if (items.length > 0) {
       activeMap.setBounds(bounds, 70, 60, 180, 60);
     }
+    renderVisiblePins();
+    maps.event.addListener(activeMap, "idle", renderVisiblePins);
   } catch {
     if (canvasEl && $("socarMapCanvas")) {
       renderHeaderVisualFallback(canvasEl, origin, originLabel, items, selectedItem, (chosen) => {

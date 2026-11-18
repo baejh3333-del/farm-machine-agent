@@ -1680,7 +1680,10 @@ async function runTurn(
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     if (signal.aborted) return null;
     // 음성 답변은 짧게 읽히므로 출력 토큰을 줄여 응답 시간을 줄인다.
+    // 지연 시간 측정용 훅(내용 없음): 몇 번째 모델 호출이 언제 시작·끝났는지만 알린다.
+    try { deps?.onModelCall?.({ round, phase: "start" }); } catch { /* ignore */ }
     const data = await call({ system, messages, tools, maxTokens: voice && !image ? 600 : 1200, timeoutMs: image ? 25000 : 12000, signal });
+    try { deps?.onModelCall?.({ round, phase: "end", ok: Boolean(data) }); } catch { /* ignore */ }
     if (signal.aborted) return null;
     if (!data) return image ? { error: "PHOTO_UNAVAILABLE" } : null;
     addSources(data.sources);

@@ -66,6 +66,7 @@ export function createHomeView(deps) {
   let monthOffset = null; // 달력 첫 달 (yyyy*12+mm)
   let howTab = "borrow";
   let faqOpen = 0;
+  let homeTimes = { start: "09:00", end: "18:00" };
   function commit({ weather = false } = {}) {
     persist(deps.updateBadges);
     deps.renderAll();
@@ -87,12 +88,19 @@ export function createHomeView(deps) {
 
   // ---------- 말풍선 열고 닫기 ----------
   function setPop(name) {
+    const wasDate = openPop === "date";
     openPop = openPop === name ? "" : name;
     if (openPop === "date" && monthOffset === null) {
       const [y, m] = parts(state.filters.date || today());
       monthOffset = y * 12 + (m - 1);
     }
+    if (openPop === "time") {
+      const form = $("homeTimeForm");
+      form.elements.start.value = homeTimes.start;
+      form.elements.end.value = homeTimes.end;
+    }
     renderPops();
+    if (wasDate) finishDate();
   }
 
   function closePop() {
@@ -104,13 +112,13 @@ export function createHomeView(deps) {
   }
 
   function renderPops() {
-    const map = { loc: "homePopLoc", date: "homePopDate", task: "homePopTask" };
+    const map = { loc: "homePopLoc", date: "homePopDate", time: "homePopTime", task: "homePopTask" };
     for (const [name, id] of Object.entries(map)) {
       const el = $(id);
       if (!el) continue;
       const open = openPop === name;
       el.hidden = !open;
-      if (open) el.innerHTML = { loc: locHtml, date: dateHtml, task: taskHtml }[name]();
+      if (open && name !== "time") el.innerHTML = { loc: locHtml, date: dateHtml, task: taskHtml }[name]();
     }
     for (const btn of document.querySelectorAll("[data-home-pop]")) {
       const open = btn.dataset.homePop === openPop;
@@ -384,6 +392,14 @@ export function createHomeView(deps) {
   function bind() {
     const card = $("homeBooking");
     if (!card) return;
+    $("homeTimeForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const { start, end } = event.currentTarget.elements;
+      homeTimes = { start: start.value, end: end.value };
+      $("homeTimeText").textContent = `${homeTimes.start}–${homeTimes.end}`;
+      closePop();
+      card.querySelector('[data-home-pop="time"]').focus();
+    });
     card.addEventListener("click", (event) => {
       const t = event.target;
       const popBtn = t.closest("[data-home-pop]");

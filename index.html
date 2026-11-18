@@ -16,8 +16,8 @@
   <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261118" />
-  <link rel="stylesheet" href="/src/styles/home.css?v=20261119" />
-  <script type="module" src="/src/main.js?v=20261119"></script>
+  <link rel="stylesheet" href="/src/styles/home.css?v=20261119-2" />
+  <script type="module" src="/src/main.js?v=20261119-2"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -163,12 +163,27 @@
                   </div>
 
                   <div class="h2-group" id="homeDateGroup">
-                    <span class="h2-label" id="homeDateLabel">날짜</span>
+                    <span class="h2-label" id="homeDateLabel">날짜 · 시간</span>
+                    <div class="h2-date-time">
                     <button type="button" class="h2-input" data-home-pop="date" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="homeDateLabel homeDateText">
                       <span id="homeDateText">날짜 선택</span>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
                     </button>
+                    <button type="button" class="h2-input" data-home-pop="time" aria-haspopup="dialog" aria-expanded="false" aria-controls="homePopTime" aria-label="희망 시간 선택">
+                      <span id="homeTimeText">09:00–18:00</span>
+                    </button>
+                    </div>
                     <div class="h2-pop h2-pop-date" id="homePopDate" role="dialog" aria-label="날짜 선택" hidden></div>
+                    <div class="h2-pop h2-pop-time" id="homePopTime" role="dialog" aria-label="희망 시간 선택" hidden>
+                      <form id="homeTimeForm">
+                        <div class="h2-date-time">
+                          <label>받는 시간<input type="time" class="h2-input" name="start" value="09:00" required></label>
+                          <label>반납 시간<input type="time" class="h2-input" name="end" value="18:00" required></label>
+                        </div>
+                        <p>희망 시간은 참고용이에요. 매물 검색과 대여 요청은 날짜 단위로 진행돼요.</p>
+                        <div class="h2-pop-foot h2-pop-foot-end"><button type="submit" class="h2-apply">적용</button></div>
+                      </form>
+                    </div>
                   </div>
 
                   <div class="h2-group">

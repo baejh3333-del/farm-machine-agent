@@ -22,6 +22,7 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
+import { createHomeView } from "./views/home.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
 initFontScale();
@@ -65,6 +66,16 @@ function getOwnedMachinesSnapshot() {
 
 const catalogViews = createCatalogViews(appDeps);
 const txViews = createTransactionViews(appDeps);
+const homeView = createHomeView({
+  machineVisual: (...args) => machineVisual(...args),
+  renderAll: (...args) => renderAll(...args),
+  setView: (...args) => setView(...args),
+  updateBadges: (...args) => updateBadges(...args),
+  renderListings: (...args) => catalogViews.renderListings(...args),
+  openDetail: (...args) => catalogViews.openDetail(...args),
+  filteredListings: () => catalogViews.filteredListings(),
+  setTransaction: (type) => catalogViews.setTransaction(type),
+});
 const dealsView = createDealsView({
   setView: (...args) => setView(...args),
   refreshAuthenticatedData: (...args) => refreshAuthenticatedData(...args),
@@ -292,8 +303,8 @@ function updateBadges() {
 const viewIds = { deals: "dealsView", garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
 const MY_PAGE_VIEWS = new Set(["requests", "owner", "ownerLoginRequired", "garage", "about"]);
 
-// 홈과 매물 찾기는 한 페이지: 배너(홈) 아래로 스크롤하면 매물 목록(매물 찾기)이 이어진다
-const MAIN_PAGE_VIEWS = ["home", "browse"];
+// 모아농 2.0: 홈은 예약창·소개만 보여주고, 매물 목록은 '매물 찾기'에서 따로 본다
+const MAIN_PAGE_VIEWS = [];
 let scrollSpyPausedUntil = 0;
 
 function markNav(view) {
@@ -354,8 +365,8 @@ function setView(view, options = {}) {
   }
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
   scrollSpyPausedUntil = Date.now() + 1000;
-  if (view === "browse") $("market").scrollIntoView({ behavior: "smooth" });
-  else window.scrollTo({ top: 0 });
+  homeView.closePop();
+  window.scrollTo({ top: 0 });
 }
 
 // 스크롤 위치에 따라 상단 메뉴의 홈/매물 찾기 표시를 바꾼다
@@ -384,6 +395,7 @@ function renderAll() {
   catalogViews.renderQuickWizard();
   catalogViews.renderMachineCategoryBar();
   catalogViews.renderListings();
+  homeView.render();
   txViews.renderBuyerRequests();
   updateBadges();
   if (state.view === "map") {
@@ -1524,6 +1536,7 @@ $("detailContent").addEventListener("click", (event) => {
   }
 });
 bindEvents();
+homeView.bind();
 syncServerTime().then(() => { catalogViews.syncQuickSearchInputs(); renderAll(); });
 trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));

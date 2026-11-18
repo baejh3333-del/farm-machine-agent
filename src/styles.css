@@ -2900,7 +2900,7 @@ img {
               transform var(--dur-fast, 160ms) var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
 }
 .qs-field:hover:not(.disabled-field) {
-  background: #fffcf6;
+  background: #ffffff;
   border-color: rgba(45, 90, 63, 0.22);
 }
 .qs-field:focus-within {
@@ -4668,7 +4668,7 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   height: clamp(540px, 74vh, 760px);
   border-radius: 24px;
   overflow: hidden;
-  border: 1px solid var(--line, #ded5c6);
+  border: 1px solid var(--line, #e8e8e8);
   background: #edf3ee;
   box-shadow: 0 20px 44px rgba(16, 48, 36, 0.12);
 }

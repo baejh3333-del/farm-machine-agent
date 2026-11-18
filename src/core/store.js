@@ -16,6 +16,8 @@ export const blankFilters = () => ({
   radius: "all",
   date: "",
   dateEnd: "",
+  timeStart: "09:00",
+  timeEnd: "18:00",
 });
 
 const defaults = {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f5efe4" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="초보 농부도 쉽게! 작물과 작업에 맞는 농기계를 가까운 곳에서 찾고 대여하거나 구매하세요." />
   <title>모아농기계 — 초보 농부도 쉬운 우리 동네 농기계 대여·구매</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
@@ -16,14 +16,14 @@
   <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261117" />
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261118" />
+  <link rel="stylesheet" href="/src/styles/home.css?v=20261119" />
   <script type="module" src="/src/main.js?v=20261117"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="sidebar" aria-label="사이트 헤더">
       <button type="button" class="brand brand-moanong" id="brandHome" aria-label="모아농 홈으로 가기">
-        <span class="brand-mark" aria-hidden="true"><span class="brand-circle">모</span><span class="brand-circle">아</span><span class="brand-circle brand-circle-accent">농</span></span>
-        <span class="brand-tagline" aria-hidden="true"><span>E</span><span>A</span><span>S</span><span>Y</span><span class="gap"></span><span>F</span><span>A</span><span>R</span><span>M</span><span class="gap"></span><span>R</span><span>E</span><span>N</span><span>T</span><span>A</span><span>L</span></span>
+        <svg class="brand-wordmark" width="85" height="28" viewBox="0 0 140 46" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111"/><path d="M19 24v10M2 39h34" stroke="#111"/><circle cx="58" cy="21" r="12.5" stroke="#111"/><circle cx="58" cy="21" r="3.2" fill="#1E9B4B" stroke="none"/><path d="M82 3v38M82 21h8" stroke="#111"/><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111"/><circle cx="116" cy="34" r="7.5" stroke="#1E9B4B"/></svg>
       </button>
       <nav class="sidebar-nav" aria-label="주 메뉴">
         <button type="button" class="nav-item active" aria-label="홈" data-view="home" aria-current="page">
@@ -135,61 +135,200 @@
       <main class="main-content">
         <div id="garageView" hidden></div>
         <section id="mapView" class="header-map-view" hidden aria-label="내 주변 농기계 지도"></section>
-        <!-- 홈: 메인 배너 + 빠른 검색 -->
-        <div id="homeView">
-          <section class="banner-carousel" id="bannerCarousel" aria-roledescription="carousel" aria-label="메인 배너">
-            <div class="banner-track" id="bannerTrack">
-              <div class="banner-slide banner-slide-1 is-active" role="group" aria-roledescription="slide" aria-label="1 / 3">
-                <span class="banner-bg" aria-hidden="true"></span>
-                <div class="banner-copy">
-                  <h1 id="heroTitle" class="banner-title">농기계,<br />클릭 한 번으로</h1>
-                  <div class="banner-actions">
-                    <button type="button" class="banner-cta" data-banner-view="browse">농기계 찾기</button>
-                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide">작업 가이드 보기</button>
+        <!-- 홈: 모아농 2.0 (피그마 클린 버전) -->
+        <div id="homeView" class="h2-home">
+          <section class="h2-hero" aria-labelledby="heroTitle">
+            <h1 id="heroTitle" class="h2-hero-title">농기계,<br />클릭 한 번으로.</h1>
+            <p class="h2-hero-sub">위치와 날짜만 고르면, 가까운 곳에서 빌릴 수 있는 농기계를 바로 보여드려요.</p>
+          </section>
+
+          <section class="h2-search" aria-label="농기계 예약">
+            <div class="h2-field-photo" aria-hidden="true"></div>
+            <div class="h2-search-wrap">
+              <div class="h2-search-card" id="homeBooking">
+                <div class="h2-filter">
+                  <div class="h2-switch" role="tablist" aria-label="거래 방식">
+                    <span class="h2-switch-knob" aria-hidden="true"></span>
+                    <button type="button" role="tab" class="h2-switch-btn" data-home-tx="rent">대여</button>
+                    <button type="button" role="tab" class="h2-switch-btn" data-home-tx="sale">중고 구매</button>
                   </div>
-                </div>
-              </div>
-              <div class="banner-slide banner-slide-2" role="group" aria-roledescription="slide" aria-label="2 / 3" aria-hidden="true">
-                <span class="banner-bg" aria-hidden="true"></span>
-                <div class="banner-copy">
-                  <h2 class="banner-title">멀리 갈 필요 없이,<br />가까운 곳에서</h2>
-                  <div class="banner-actions">
-                    <button type="button" class="banner-cta" data-banner-view="browse" tabindex="-1">농기계 찾기</button>
-                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
+
+                  <div class="h2-group">
+                    <span class="h2-label" id="homeLocLabel">위치</span>
+                    <button type="button" class="h2-input" data-home-pop="loc" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="homeLocLabel homeLocText">
+                      <span id="homeLocText">내 동네</span>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="10.6" r="2.3" stroke="currentColor" stroke-width="1.6"/></svg>
+                    </button>
+                    <div class="h2-pop h2-pop-loc" id="homePopLoc" role="dialog" aria-label="위치 선택" hidden></div>
                   </div>
-                </div>
-              </div>
-              <div class="banner-slide banner-slide-3" role="group" aria-roledescription="slide" aria-label="3 / 3" aria-hidden="true">
-                <span class="banner-bg" aria-hidden="true"></span>
-                <div class="banner-copy">
-                  <span class="banner-tag">언제든 편하게</span>
-                  <h2 class="banner-title">시간 걱정 없이,<br />필요할 때</h2>
-                  <p>밤에도 주말에도 예약하고 문의하세요.</p>
-                  <div class="banner-actions">
-                    <button type="button" class="banner-cta" data-banner-view="browse" tabindex="-1">농기계 찾기</button>
-                    <button type="button" class="banner-cta banner-cta-ghost" data-banner-view="guide" tabindex="-1">작업 가이드 보기</button>
+
+                  <div class="h2-group" id="homeDateGroup">
+                    <span class="h2-label" id="homeDateLabel">날짜 · 시간</span>
+                    <div class="h2-row">
+                      <button type="button" class="h2-input h2-input-date" data-home-pop="date" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="homeDateLabel homeDateText"><span id="homeDateText">날짜 선택</span></button>
+                      <button type="button" class="h2-input h2-input-time" data-home-pop="time" aria-haspopup="dialog" aria-expanded="false" aria-label="대여 시간 선택"><span id="homeTimeText">09:00–18:00</span></button>
+                    </div>
+                    <div class="h2-pop h2-pop-date" id="homePopDate" role="dialog" aria-label="날짜 선택" hidden></div>
+                    <div class="h2-pop h2-pop-time" id="homePopTime" role="dialog" aria-label="시간 선택" hidden></div>
                   </div>
+
+                  <div class="h2-group">
+                    <span class="h2-label" id="homeTaskLabel">작업</span>
+                    <button type="button" class="h2-input" data-home-pop="task" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="homeTaskLabel homeTaskText">
+                      <span id="homeTaskText">작업 선택</span>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="h2-pop h2-pop-task" id="homePopTask" role="dialog" aria-label="작업 선택" hidden></div>
+                  </div>
+
+                  <button type="button" class="h2-find" id="homeFindBtn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    농기계 찾기
+                  </button>
+                  <span class="h2-find-note">선택한 조건 그대로 전체 결과로 이동해요</span>
                 </div>
-              </div>
-            </div>
-            <div class="banner-controls">
-              <div class="banner-controls-inner">
-                <div class="banner-dots" role="group" aria-label="배너 선택">
-                  <button type="button" class="banner-dot active" data-slide="0" aria-label="1번 배너 보기" aria-current="true"></button>
-                  <button type="button" class="banner-dot" data-slide="1" aria-label="2번 배너 보기"></button>
-                  <button type="button" class="banner-dot" data-slide="2" aria-label="3번 배너 보기"></button>
+
+                <div class="h2-recs">
+                  <div class="h2-recs-head">
+                    <div>
+                      <strong class="h2-recs-title" id="homeRecTitle">추천 농기계</strong>
+                      <span class="h2-recs-sub"><span id="homeRecCount">조건에 맞는 농기계</span><span class="h2-mini-dot" aria-hidden="true"></span><span class="h2-live"><span class="h2-live-dot" aria-hidden="true"></span>조건을 바꾸면 추천이 바로 바뀌어요</span></span>
+                    </div>
+                    <button type="button" class="h2-link" id="homeSeeAll">전체 보기 →</button>
+                  </div>
+                  <div class="h2-rec-grid" id="homeRecGrid" aria-live="polite"></div>
+                  <span class="h2-rec-note" id="homeRecNote">대여는 요청 후 소유자가 승인하면 확정돼요.</span>
                 </div>
-                <span class="banner-counter"><strong id="bannerCounter">01</strong> / 03</span>
-                <button type="button" class="banner-arrow" id="bannerPrev" aria-label="이전 배너"><span aria-hidden="true">‹</span></button>
-                <button type="button" class="banner-arrow" id="bannerPause" aria-label="자동 넘김 멈추기" aria-pressed="false"><span class="banner-pause-icon" aria-hidden="true"></span></button>
-                <button type="button" class="banner-arrow" id="bannerNext" aria-label="다음 배너"><span aria-hidden="true">›</span></button>
               </div>
             </div>
           </section>
 
+          <section class="h2-keywords" aria-label="모아농의 약속">
+            <div class="h2-kw">
+              <span class="h2-kw-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="10.6" r="2.3" stroke="currentColor" stroke-width="1.6"/></svg></span>
+              <h3>가까운 곳에서</h3><p>내 주변 이웃 농가의 농기계를<br />쉽게 찾고</p>
+            </div>
+            <div class="h2-kw">
+              <span class="h2-kw-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><path d="M8 9l2 7 2-5 2 5 2-7M7.5 12h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <h3>합리적으로</h3><p>사지 않고 필요한 기간만<br />유연하게 빌리고</p>
+            </div>
+            <div class="h2-kw">
+              <span class="h2-kw-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5.5c0 4.3-3 8-7 9.5-4-1.5-7-5.2-7-9.5V6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <h3>안전하게</h3><p>소유자가 승인한 대여로<br />안심하고 거래해요</p>
+            </div>
+          </section>
+
+          <section class="h2-about" id="homeAbout" aria-labelledby="homeAboutTitle">
+            <div class="h2-inner h2-center">
+              <h2 id="homeAboutTitle" class="h2-h2">이웃의 쉬는 농기계를,<br />필요한 사람에게</h2>
+              <p class="h2-lead">‘모아’와 ‘농’을 합친 이름처럼, 동네 농기계를 한곳에 모아<br />빌리고 빌려주는 농기계 대여·중고 거래 서비스예요.</p>
+              <div class="h2-people">
+                <div class="h2-person">
+                  <span class="h2-person-icon" aria-hidden="true"><svg width="48" height="48" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21h28" stroke="#111" stroke-width="2.4"/><path d="M23 21c0-5 4-9 9-9s9 4 9 9" stroke="#111" stroke-width="2.4"/><circle cx="32" cy="27" r="6" stroke="#111" stroke-width="2.4"/><path d="M17 54c0-9 6.5-16 15-16s15 7 15 16" stroke="#111" stroke-width="2.4"/><path d="M51 54V42" stroke="#1E9B4B" stroke-width="2.4"/><path d="M51 45c-4.5 0-7-3-7-7.5 4.5 0 7 3 7 7.5z" fill="#1E9B4B"/><path d="M51 43c0-4.5 3-7 7-7 0 4.5-3 7-7 7z" fill="#1E9B4B"/></svg></span>
+                  <span class="h2-badge">빌리는 분 · 초보 농사꾼</span>
+                  <h3>농사를 처음 시작한다면</h3>
+                  <ul class="h2-checks"><li>사지 않고, 필요한 날만 빌려요</li><li>기계 이름 몰라도 작업으로 찾아요</li></ul>
+                </div>
+                <div class="h2-link-mark" aria-hidden="true"><span></span><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="#111" stroke-width="7"/><circle cx="24" cy="24" r="5" fill="#1E9B4B"/></svg><span></span></div>
+                <div class="h2-person">
+                  <span class="h2-person-icon" aria-hidden="true"><svg width="48" height="48" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="22" r="6" stroke="#111" stroke-width="2.4"/><path d="M6 54c0-9 5.5-16 12-16 4 0 7.5 2.5 9.5 6.5" stroke="#111" stroke-width="2.4"/><path d="M36 30h9a2 2 0 0 1 2 2v6h8a2 2 0 0 1 2 2v6" stroke="#111" stroke-width="2.4"/><path d="M36 30v14" stroke="#111" stroke-width="2.4"/><circle cx="39" cy="50" r="6.5" stroke="#111" stroke-width="2.4"/><circle cx="39" cy="50" r="2" fill="#1E9B4B"/><circle cx="55" cy="52" r="4" stroke="#111" stroke-width="2.4"/><path d="M27 46h6" stroke="#111" stroke-width="2.4"/></svg></span>
+                  <span class="h2-badge">빌려주는 분 · 여유 농기계</span>
+                  <h3>쉬고 있는 농기계가 있다면</h3>
+                  <ul class="h2-checks"><li>안 쓰는 기간에 빌려주고 수익을</li><li>요청을 보고 승인할지 직접 결정</li></ul>
+                </div>
+              </div>
+              <p class="h2-about-note"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6M18 3v4h-4M6 21v-4h4" stroke="#1E9B4B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>놀던 기계는 다시 일하고, 농사의 문턱은 낮아져요.</p>
+            </div>
+          </section>
+
+          <section class="h2-features h2-inner" aria-label="주요 기능">
+            <div class="h2-feature">
+              <div class="h2-feature-text">
+                <span class="h2-kicker">주요 기능 01</span>
+                <h2 class="h2-h2">처음이어도,<br />순서대로 작업 가이드</h2>
+                <dl><dt>작물부터 고르기</dt><dd>키울 작물을 고르면 해야 할 일이 순서대로 나와요.</dd><dt>단계마다 필요한 기계</dt><dd>밭 갈기부터 수확까지, 단계별로 맞는 기계를 알려줘요.</dd><dt>바로 빌리기로 연결</dt><dd>필요한 기계를 누르면 가까운 매물로 이어져요.</dd></dl>
+                <button type="button" class="h2-link" data-view-target="guide">작업 가이드 보기 →</button>
+              </div>
+              <div class="h2-feature-visual">
+                <div class="h2-mock h2-mock-dark" aria-hidden="true">
+                  <div class="h2-chips"><span class="on">감자</span><span>고추</span><span>배추</span></div>
+                  <div class="h2-step"><b class="on">1</b><span><strong>밭 갈기</strong><small>트랙터 + 로터리</small></span></div>
+                  <div class="h2-step"><b>2</b><span><strong>두둑 만들기</strong><small>두둑 성형기</small></span></div>
+                  <div class="h2-step"><b>3</b><span><strong>심기</strong><small>감자 파종기</small></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="h2-feature h2-feature-reverse">
+              <div class="h2-feature-text">
+                <span class="h2-kicker">주요 기능 02</span>
+                <h2 class="h2-h2">전화 없이,<br />간편한 대여 요청</h2>
+                <dl><dt>날짜만 고르면 끝</dt><dd>밤에도 주말에도, 버튼 한 번으로 요청을 보내요.</dd><dt>소유자 승인 후 확정</dt><dd>기계 주인이 직접 확인하고 승인하면 대여가 확정돼요.</dd><dt>진행 상황을 한눈에</dt><dd>요청 보냄, 승인 대기, 확정까지 바로 확인해요.</dd></dl>
+              </div>
+              <div class="h2-feature-visual">
+                <div class="h2-mock" aria-hidden="true">
+                  <div class="h2-mock-item"><img src="/src/images/machines/tractor.jpg" alt="" width="72" height="72" loading="lazy" /><span><strong>트랙터 + 로터리 (50마력)</strong><small>홍천 비발디파크 · 1.3km</small></span></div>
+                  <div class="h2-kv h2-kv-top"><span>대여 기간</span><b>4월 10일 → 4월 11일</b></div>
+                  <div class="h2-kv"><span>대여료</span><b>1일 130,000원</b></div>
+                  <span class="h2-mock-btn">대여 요청 보내기</span>
+                  <span class="h2-status"><i></i>소유자 승인 대기 중</span>
+                </div>
+              </div>
+            </div>
+            <div class="h2-feature">
+              <div class="h2-feature-text">
+                <span class="h2-kicker">주요 기능 03</span>
+                <h2 class="h2-h2">농농이가<br />기계를 골라줘요</h2>
+                <dl><dt>하려는 일로 물어보기</dt><dd>기계 이름을 몰라도 “감자 300평 심을 건데요”처럼 말하면 돼요.</dd><dt>추천 이유와 쓰는 법까지</dt><dd>왜 이 기계인지, 어떻게 쓰는지 쉬운 말로 알려줘요.</dd><dt>필요한 기간도 함께</dt><dd>며칠 빌리면 되는지 알려주고, 바로 대여로 이어져요.</dd></dl>
+                <button type="button" class="h2-link" id="homeAskAi">농농이에게 물어보기 →</button>
+              </div>
+              <div class="h2-feature-visual">
+                <div class="h2-mock" aria-hidden="true">
+                  <div class="h2-chat-head"><svg width="32" height="32" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="#111" stroke-width="7"/><circle cx="24" cy="24" r="5" fill="#1E9B4B"/></svg><strong>농농이</strong><small>AI 농기계 도우미</small></div>
+                  <span class="h2-bubble h2-bubble-me">감자 300평 심을 건데요</span>
+                  <span class="h2-bubble">두둑을 만들고 비닐을 덮어야 해요.<br /><b>관리기 + 두둑 성형기</b>를 추천해요.<br />이틀이면 충분해요.</span>
+                  <div class="h2-mock-item h2-mock-item-soft"><img src="/src/images/machines/cultivator.jpg" alt="" width="56" height="56" loading="lazy" /><span><strong>관리기 (소형)</strong><small>가까운 매물 · 1일 대여</small></span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="h2-howto" aria-labelledby="homeHowTitle">
+            <div class="h2-inner h2-center">
+              <span class="h2-kicker">사용 방법</span>
+              <h2 id="homeHowTitle" class="h2-h2">네 번이면 충분해요</h2>
+              <div class="h2-tabs" role="tablist" aria-label="사용자 유형">
+                <button type="button" role="tab" class="on" data-home-how="borrow" aria-selected="true">빌리는 분</button>
+                <button type="button" role="tab" data-home-how="lend" aria-selected="false">빌려주는 분</button>
+              </div>
+              <ol class="h2-steps" id="homeSteps"></ol>
+            </div>
+          </section>
+
+          <section class="h2-faq h2-inner" aria-labelledby="homeFaqTitle">
+            <div class="h2-faq-side">
+              <span class="h2-kicker">FAQ</span>
+              <h2 id="homeFaqTitle" class="h2-h2">자주 묻는 질문</h2>
+              <p class="h2-muted">더 궁금한 점은 아래 문의하기로<br />편하게 남겨 주세요.</p>
+            </div>
+            <div class="h2-faq-list" id="homeFaq"></div>
+          </section>
+
+          <section class="h2-cta" aria-label="시작하기">
+            <div class="h2-inner">
+              <div class="h2-cta-row">
+                <div><span>농기계가 필요하다면</span><h2>필요한 날,<br />원하는 매물 찾기</h2><button type="button" class="h2-pill h2-pill-solid" data-view-target="browse">농기계 찾기 →</button></div>
+                <div><span>쉬고 있는 농기계가 있다면</span><h2>이웃 농가에<br />빌려주기</h2><button type="button" class="h2-pill" data-view-target="owner">농기계 등록하기 →</button></div>
+              </div>
+              <div class="h2-footer">
+                <svg width="73" height="24" viewBox="0 0 140 46" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><rect x="6" y="3" width="26" height="21" rx="5" stroke="#fff"/><path d="M19 24v10M2 39h34" stroke="#fff"/><circle cx="58" cy="21" r="12.5" stroke="#fff"/><circle cx="58" cy="21" r="3.2" fill="#1E9B4B"/><path d="M82 3v38M82 21h8" stroke="#fff"/><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#fff"/><circle cx="116" cy="34" r="7.5" stroke="#1E9B4B"/></svg>
+                <nav aria-label="하단 메뉴"><button type="button" data-view-target="browse">매물 찾기</button><button type="button" data-view-target="guide">작업 가이드</button><button type="button" data-view-target="map">지도</button><button type="button" data-view-target="about">모아농?</button></nav>
+                <small>© 2026 모아농</small>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <!-- 매물 찾기: 홈 배너 바로 아래로 이어지는 영역 -->
+        <!-- 매물 찾기 -->
         <div id="browseView">
           <section class="search-dock" id="machineSearch" aria-label="농기계 빠른 검색">
               <div class="transaction-switch-large" role="group" aria-label="거래 방식 선택">

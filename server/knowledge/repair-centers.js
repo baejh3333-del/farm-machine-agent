@@ -15,6 +15,8 @@ export const REPAIR_CENTERS = [
     phone: "054-680-5245",
     url: "https://www.yyg.go.kr",
     address: "경상북도 영양군 영양읍 영양창수로 323",
+    // 거리 계산에 쓰는 위치(읍·면 또는 시·군). 위치가 없는 제조사 창구는 전국 A/S 접수로 뒤에 붙는다.
+    location: "영양읍",
     source: { title: "공공데이터포털 · 전국농기계임대정보표준데이터 (영양군농업기술센터)", url: "https://www.data.go.kr/data/15017325/standard.do" },
     checkedAt: CHECKED_AT,
   },

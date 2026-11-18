@@ -1789,6 +1789,12 @@ export function createAiPanel({
       card.className = "ai-center-card";
       const name = document.createElement("strong");
       name.textContent = item.name || "";
+      // 수리센터: 사용자 지역에서의 거리(약 N km) 또는 전국 A/S 접수 표시
+      const where = document.createElement("small");
+      where.className = "ai-center-distance";
+      where.textContent = Number.isFinite(item.distanceKm)
+        ? `📍 약 ${Math.max(1, Math.round(item.distanceKm))}km`
+        : item.nationwide ? "📞 전국 A/S 접수 · 가까운 대리점 연결" : "";
       const services = document.createElement("small");
       services.textContent = item.services || "";
       const actions = document.createElement("div");
@@ -1798,7 +1804,9 @@ export function createAiPanel({
       const checked = document.createElement("small");
       checked.className = "ai-center-checked";
       checked.textContent = `확인일 ${item.checkedAt || "-"}`;
-      card.append(name, services, actions, checked);
+      card.append(name);
+      if (where.textContent) card.append(where);
+      card.append(services, actions, checked);
       wrap.append(card);
     }
     bubble.append(wrap);
@@ -2097,7 +2105,7 @@ export function createAiPanel({
     const listed = result.createdListing || result.updatedListing;
     if (listed) renderCreatedListingButton(bubble, listed);
     if (Array.isArray(result.repairCenters) && result.repairCenters.length) {
-      appendContactCards(bubble, "🔧 수리·상담 연락처", result.repairCenters);
+      appendContactCards(bubble, "🔧 가까운 수리센터", result.repairCenters);
     }
     if (Array.isArray(result.insuranceContacts) && result.insuranceContacts.length) {
       appendContactCards(bubble, "🛡️ 보험 상담 연락처", result.insuranceContacts);

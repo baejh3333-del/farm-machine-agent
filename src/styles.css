@@ -5013,3 +5013,5 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
     height: 120px;
   }
 }
+/* 가까운 수리센터 카드: 거리 표시 */
+.ai-center-distance { display: block; font-weight: 700; color: var(--primary); }

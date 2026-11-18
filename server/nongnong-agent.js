@@ -34,7 +34,7 @@ import {
 } from "./nongnong.js";
 import {
   estimatePrice,
-  findRepairCenters,
+  findNearestRepairCenters,
   getInsuranceInfo,
   getRepairGuide,
   lookupMachineSpec,
@@ -1090,6 +1090,17 @@ const FALLBACK_MACHINE_PATTERNS = [
   ["carrier", /운반차/],
 ];
 
+// 기계 고장·수리 문의인지. 이때는 매물을 추천하지 않고 가까운 수리센터를 보여 준다.
+// "고장난 트랙터 팔래요"처럼 팔기·등록이 목적이면 수리 문의로 보지 않는다.
+const REPAIR_PATTERN = /고장|수리|에이에스|A\s*\/?\s*S|시동|엔진|누유|기름이?\s*새|연기|타는\s*냄새|과열|소음|이상한\s*소리|덜컹|펑크|멈췄|멈춰|꺼져|꺼지|안\s*걸려|안\s*켜|안\s*움직|안\s*돌아|작동(?:이|을)?\s*안|작동\s*(?:불량|이상)|말을\s*안\s*들/i;
+const NOT_REPAIR_PATTERN = /팔고|팔래|팔려|판매|내놓|등록|빌려주|보험/;
+
+export function isRepairRequest(text) {
+  const raw = String(text || "");
+  // 사투리("시동이 안 걸리네예")도 표준어로 풀어 함께 본다.
+  return [raw, normalizeDialect(raw)].some((value) => REPAIR_PATTERN.test(value) && !NOT_REPAIR_PATTERN.test(value));
+}
+
 function inferFallbackSearchInput(rawText, uiCtx) {
   const text = normalizeDialect(rawText);
   if (!text || /(?:팔고|팔래|내놓|등록|빌려주|고장|수리|안\s*걸려|소음|누유|보험|뭐예요|무슨\s*기계)/.test(text)) return null;
@@ -1596,7 +1607,11 @@ async function runTurn(
   const standardText = normalizeDialect(text);
   const dialectHint = standardText !== text ? `\n\n[사용자 말 표준어 풀이(참고)]\n${standardText.slice(0, 300)}` : "";
   const known = collectKnownFacts({ history, text, sessionSlots, uiCtx });
-  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}${dialectHint}`;
+  const repairTurn = isRepairRequest(text);
+  const repairNote = repairTurn
+    ? "\n\n[이번 메시지] 기계 고장·수리 문의다. 매물을 검색하거나 추천하지 않는다. get_repair_guide로 안전 수칙과 점검 단계를 짧게 안내하고, 마지막에 \"아래 가까운 수리센터 3곳에 연락해 보세요\"라고 말한다. 수리센터 카드는 화면이 보여 주니 전화번호를 글로 늘어놓지 않는다."
+    : "";
+  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}${dialectHint}${repairNote}`;
   const selectedTools = selectToolsForTurn({
     text,
     hasImage: Boolean(image?.base64),
@@ -1618,6 +1633,16 @@ async function runTurn(
   let repairGuideCalled = false;
   const texts = [];
   const finish = async (reply, extra = {}) => {
+    // 고장·수리 문의면 매물 대신 사용자가 설정한 지역에서 가까운 수리센터 3곳을 항상 붙인다.
+    if (repairTurn) {
+      out.listingIds = [];
+      delete extra.listingIds;
+      delete out.searchDates;
+      if (!out.repairCenters?.length) {
+        const nearest = await findNearestRepairCenters({ region: effectiveRegion }, fetchOffices ? { fetchOffices } : {}).catch(() => null);
+        if (nearest?.centers?.length) out.repairCenters = nearest.centers;
+      }
+    }
     const learnedSlots = extractLearnedSlots({ text, uiCtx, toolCalls });
     const shownIds = Array.isArray(extra.listingIds) ? extra.listingIds : out.listingIds;
     if (shownIds.length && !out.reservation) learnedSlots.lastShownListingIds = shownIds.slice(0, 5);
@@ -1678,7 +1703,9 @@ async function runTurn(
       const toolStarted = Date.now();
       let output;
 
-      if (block.name === "search_listings") {
+      if (block.name === "search_listings" && repairTurn) {
+        output = { error: "고장·수리 문의에는 매물을 추천하지 않습니다. 점검 단계를 안내하고, 가까운 수리센터는 화면 카드로 보여 줍니다." };
+      } else if (block.name === "search_listings") {
         const gate = gateSearchInput(applyKnownFactsToSearch(block.input, { ...known, text }), {
           text,
           today,
@@ -1862,8 +1889,8 @@ async function runTurn(
         output = getRepairGuide({ machineType: block.input?.machineType, symptom: block.input?.symptom, text });
         addSources(output.guides?.map((guide) => guide.source));
       } else if (block.name === "find_repair_centers") {
-        output = await findRepairCenters(
-          { region: block.input?.region || effectiveRegion, brand: block.input?.brand || undefined },
+        output = await findNearestRepairCenters(
+          { region: effectiveRegion || block.input?.region, brand: block.input?.brand || undefined },
           fetchOffices ? { fetchOffices } : {},
         );
         out.repairCenters = output.centers;
@@ -2175,7 +2202,8 @@ async function runTurn(
     && !out.listingDraft
     && !/도와드릴 수 없|관계없는/.test(texts.at(-1))
   ) {
-    const fallbackCenters = await findRepairCenters(
+    // 가까운 순서로 3곳(PR #36). 지역 창구가 모자라면 같은 제조사 A/S부터 채운다.
+    const fallbackCenters = await findNearestRepairCenters(
       { region: effectiveRegion, brand: inferRepairBrand(text) },
       fetchOffices ? { fetchOffices } : {},
     ).catch(() => null);
@@ -2194,7 +2222,8 @@ async function runTurn(
     || (resolveShownListings(uiCtx.lastShownListingIds, catalog).length > 0 && !wantsNewSearch(text))
     || toolCalls.some(({ tool }) => BOOKING_FLOW_TOOLS.has(tool));
   if (
-    texts.length
+    !repairTurn
+    && texts.length
     && !bookingInProgress
     && !searchedThisTurn
     && !image

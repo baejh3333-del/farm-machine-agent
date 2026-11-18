@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   estimatePrice,
+  findNearestRepairCenters,
   findRepairCenters,
   getInsuranceInfo,
   getRepairGuide,
@@ -109,4 +110,39 @@ test("보험 안내는 역할에 맞는 상품만 준다", () => {
   assert.ok(renter.products.some((product) => product.id === "farmer-safety"));
   const owner = getInsuranceInfo({ role: "owner", machineType: "tractor" });
   assert.ok(owner.products.some((product) => product.id === "farm-machinery-comprehensive"));
+});
+
+test("가까운 수리센터: 사용자 지역 기준 거리순 3곳, 모자라면 제조사 전국 A/S로 채운다", async () => {
+  const noOffices = { fetchOffices: async () => ({ configured: false, items: [] }) };
+  const near = await findNearestRepairCenters({ region: "청기면" }, noOffices);
+  assert.equal(near.centers.length, 3);
+  const [first, ...rest] = near.centers;
+  assert.equal(first.id, "yeongyang-rental-office");
+  assert.ok(first.distanceKm > 0 && first.distanceKm < 30, `청기면→영양읍 거리 ${first.distanceKm}`);
+  for (const center of rest) {
+    assert.equal(center.nationwide, true);
+    assert.equal(center.distanceKm, null);
+  }
+  for (const center of near.centers) assert.ok(center.phone, "전화 버튼에 쓸 번호가 있어야 한다");
+
+  const brand = await findNearestRepairCenters({ region: "영양읍", brand: "얀마" }, noOffices);
+  assert.equal(brand.centers[1].brands[0], "얀마", "같은 제조사 A/S가 먼저 온다");
+
+  const far = await findNearestRepairCenters({ region: "제주특별자치도 제주시" }, noOffices);
+  assert.ok(far.centers.every((center) => center.nationwide), "100km 밖 지역 창구는 가깝다고 하지 않는다");
+});
+
+test("가까운 수리센터: 공공데이터 임대사업소가 있으면 거리순으로 함께 고른다", async () => {
+  const offices = {
+    fetchOffices: async () => ({
+      configured: true,
+      items: [
+        { officeName: "청송군 농기계임대사업소", phone: "054-000-0000", region: "경상북도 청송군", address: "" },
+        { officeName: "부산 사업소", phone: "051-000-0000", region: "부산광역시 강서구", address: "" },
+      ],
+    }),
+  };
+  const { centers } = await findNearestRepairCenters({ region: "영양읍" }, offices);
+  assert.deepEqual(centers.slice(0, 2).map((center) => center.name), ["영양군 농업기술센터 농기계임대사업소", "청송군 농기계임대사업소"]);
+  assert.ok(!centers.some((center) => center.name === "부산 사업소"));
 });

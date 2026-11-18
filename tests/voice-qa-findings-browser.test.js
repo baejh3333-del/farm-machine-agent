@@ -115,3 +115,58 @@ test("F3: 서버가 AI를 쓸 수 없다고(mode: unavailable) 답하면 '확인
     assert.ok(!assistants.some((t) => /말씀하신 내용을 확인했어요/.test(t)), JSON.stringify(assistants));
   }, { agent: async () => ({ mode: "unavailable", timing: { modelCalls: 0 } }) });
 });
+
+async function typeAndSend(page, text) {
+  await page.locator("#aiInput").fill(text);
+  await page.locator("#aiForm").evaluate((form) => form.requestSubmit());
+}
+
+test("F4: 실시간 음성 중 글로 쓴 정정은 진행 중인 음성 조회를 무효로 하고, 늦게 온 트랙터 결과를 말하거나 그리지 않는다", async () => {
+  const holds = { A: deferred() };
+  await withPage(async ({ page, agentRequests }) => {
+    await say(page, "트랙터 찾아줘", "A");
+    await waitFor(() => agentRequests.length === 1);
+    await typeAndSend(page, "아니 콤바인으로");
+    await waitFor(() => agentRequests.length === 2);
+    const typed = agentRequests[1];
+    assert.equal(typed.message, "아니 콤바인으로");
+    assert.ok(typed.history.some((h) => h.role === "user" && h.content === "트랙터 찾아줘"), JSON.stringify(typed.history));
+    await page.locator(".chat-bubble.assistant .ai-rec-card").first().waitFor();
+    const cardsBefore = await page.locator(".ai-rec-card").count();
+    holds.A.resolve();
+    await waitFor(async () => (await page.evaluate(() => window.voiceTest.sent.some((e) => e.event_id?.startsWith("stale_") && e.delegation_id === "A"))));
+    await settle(page, 300);
+    const spokenA = await page.evaluate(() => window.voiceTest.sent.filter((e) => e.type === "session.commentary.append" && e.delegation_id === "A").map((e) => e.content));
+    assert.deepEqual(spokenA, [], "무효가 된 트랙터 결과는 말하지 않는다");
+    assert.equal(await page.locator('.chat-bubble[data-delegation-id="A"]').count(), 0, "트랙터 결과 말풍선을 그리지 않는다");
+    assert.equal(await page.locator(".ai-rec-card").count(), cardsBefore, "트랙터 카드가 콤바인 카드 아래 더해지지 않는다");
+  }, {
+    agent: async (body, index, listings) => {
+      if (body.delegationId === "A") { await holds.A.promise; return { mode: "agent", reply: "트랙터 결과예요.", listingIds: [listings[0].id] }; }
+      return { mode: "agent", reply: "콤바인 결과예요.", listingIds: [listings[1].id] };
+    },
+  });
+});
+
+test("F4: 글로 정정해도 이미 진행 중인 예약(쓰기) 결과는 버리지 않고 알린다", async () => {
+  const holds = { W: deferred() };
+  await withPage(async ({ page, agentRequests }) => {
+    await say(page, "관리기 20일 예약해줘", "W");
+    await waitFor(() => agentRequests.length === 1);
+    await typeAndSend(page, "아니 21일로");
+    await waitFor(() => agentRequests.length === 2);
+    holds.W.resolve();
+    await waitCommentary(page, "W");
+    const spokenW = await page.evaluate(() => window.voiceTest.sent.filter((e) => e.type === "session.commentary.append" && e.delegation_id === "W").map((e) => e.content));
+    assert.match(spokenW[0], /대여 예약 요청이 접수됐어요/);
+    assert.equal(await page.locator('.chat-bubble[data-delegation-id="W"]', { hasText: "R-1" }).count(), 1, "예약 영수증은 그대로 보인다");
+  }, {
+    agent: async (body, index, listings) => {
+      if (body.delegationId === "W") {
+        await holds.W.promise;
+        return { mode: "agent", reply: "", listingIds: [], reservation: { kind: "rental", number: "R-1", listingId: listings[2].id, title: listings[2].title, start: "2026-11-20", end: "2026-11-20" } };
+      }
+      return { mode: "agent", reply: "21일로 바꿀지 확인할게요.", listingIds: [] };
+    },
+  });
+});

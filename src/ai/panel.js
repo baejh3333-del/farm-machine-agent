@@ -3172,6 +3172,12 @@ export function createAiPanel({
         confirmation.approve.click();
         return;
       }
+      // 실시간 음성 중에 글로 정정하면 진행 중인 음성 작업 중 해당하는 것 하나만 무효로 하고(늦은 조회 결과는 말·말풍선 없음),
+      // 그 작업의 원래 말을 이 요청의 history에 붙인다.
+      let correctedVoiceTasks = [];
+      if (!sendingPhoto && typeof liveController?.applyTypedCorrection === "function") {
+        try { correctedVoiceTasks = liveController.applyTypedCorrection(message) || []; } catch { correctedVoiceTasks = []; }
+      }
       pending = appendAiMessage(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…", "assistant");
       pending.classList.add("is-thinking");
       const wave = document.createElement("span");
@@ -3183,7 +3189,7 @@ export function createAiPanel({
       if (gen !== sessionGeneration) return;
       const uiContext = collectUiContext();
       const agentResult = await askAgent(message, {
-        history: agentHistory,
+        history: withCorrectedRequests(agentHistory, correctedVoiceTasks),
         region: uiContext.region,
         inputMode,
         sessionId: agentSessionId,

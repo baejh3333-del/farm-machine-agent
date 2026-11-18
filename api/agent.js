@@ -163,6 +163,39 @@ async function preparePhoto(dataUrl) {
   }
 }
 
+/**
+ * 에이전트 한 턴의 지연 시간 기록. 사용자 말·답변 내용은 담지 않고 요청 수신 기준 ms와 호출 횟수만 남긴다.
+ * firstModelMs: 첫 모델 호출 시작, firstModelDoneMs: 첫 모델 응답, usefulResultMs: 답변 확정, catalogMs: 매물 목록 읽기.
+ */
+export function createTurnTiming(started = Date.now(), now = Date.now) {
+  const t = { modelCalls: 0 };
+  const since = () => Math.max(0, now() - started);
+  return {
+    model({ phase } = {}) {
+      if (phase === "start") {
+        t.modelCalls += 1;
+        t.firstModelMs ??= since();
+      } else if (phase === "end") {
+        t.firstModelDoneMs ??= since();
+      }
+    },
+    useful() { t.usefulResultMs ??= since(); },
+    measureCatalog(promise) {
+      const begin = now();
+      return Promise.resolve(promise).finally(() => { t.catalogMs ??= Math.max(0, now() - begin); });
+    },
+    snapshot() { return { ...t, totalMs: since() }; },
+  };
+}
+
+// 실시간 음성 위임(delegationId가 있는 요청)에만 timing을 붙이고 내용 없는 로그를 남긴다.
+function withTiming(result, body, timing) {
+  if (!result || typeof result !== "object" || typeof body?.delegationId !== "string" || !body.delegationId) return result;
+  const snapshot = timing.snapshot();
+  console.info("agent_turn_timing", JSON.stringify({ inputMode: body.inputMode === "voice" ? "voice" : "text", ...snapshot }));
+  return { ...result, timing: snapshot };
+}
+
 const agentApi = handle(["POST"], async (request) => {
   const started = Date.now();
   const body = await readJson(request, { maxBytes: MAX_UPLOAD_JSON_BYTES });
@@ -186,8 +219,12 @@ const agentApi = handle(["POST"], async (request) => {
       : [null, null];
     const activeSessionId = session?.id ?? null;
     let turnMeta = null;
+    // 지연 시간(내용 없음): 요청을 받은 때부터 첫 모델 호출·쓸모 있는 결과까지 걸린 ms.
+    const timing = createTurnTiming(started);
+    // 같은 요청 안에서는 매물 목록을 한 번만 읽는다(에이전트 턴과 보험 추천이 같은 목록을 다시 읽지 않게).
+    let listingsPromise = null;
     const deps = {
-      fetchListings: () => fetchListings({ viewerId: user?.id ?? null }),
+      fetchListings: () => (listingsPromise ??= timing.measureCatalog(fetchListings({ viewerId: user?.id ?? null }))),
       getWeather: (options) => getWeatherAndMapConfig(options),
       createRentalRequest: (u, payload) => createRentalRequest(u, payload),
       sendPurchaseMessage: (u, payload) => sendMessage(u, payload),
@@ -197,7 +234,8 @@ const agentApi = handle(["POST"], async (request) => {
       toggleFavorite: (u, { listingId, favorite }) => toggleFavorite(u.id, listingId, { favorite }),
       fetchOwnListings: () => (user ? fetchListings({ viewerId: user.id, ownerOnly: true }) : []),
       loadFarmProfile: (userId) => loadFarmProfile(userId),
-      onTurnComplete: (meta) => { turnMeta = meta; },
+      onTurnComplete: (meta) => { turnMeta = meta; timing.useful(); },
+      onModelCall: (event) => timing.model(event),
       beforeWrite: async (toolName) => {
         await assertWritesAllowed();
         await enforceRateLimit(request, CHAT_WRITE_RATE_KIND[toolName] || "rental", { userId: user.id });
@@ -218,7 +256,10 @@ const agentApi = handle(["POST"], async (request) => {
           },
         },
       });
-      if (insurance) return { status: 200, body: insurance };
+      if (insurance) {
+        timing.useful();
+        return { status: 200, body: withTiming(insurance, body, timing) };
+      }
     }
     const pendingRequestId = typeof body.pendingAction?.requestId === "string" && UUID.test(body.pendingAction.requestId)
       ? body.pendingAction.requestId
@@ -251,6 +292,7 @@ const agentApi = handle(["POST"], async (request) => {
       timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)),
       deps,
     });
+    if (confirmed) timing.useful();
     const result = turn?.mode === "agent" ? await attachInsuranceAsk(turn, { asked: insuranceAsked, loadListings: deps.fetchListings }) : turn;
     if (result?.error === "PHOTO_UNAVAILABLE") fail(502, "PHOTO_UNAVAILABLE", "사진을 지금 확인하지 못했어요. 잠시 후 다시 올려 주세요.");
     if (!result) fail(502, "AGENT_UNAVAILABLE", "농농이가 잠시 답할 수 없어요. 잠시 후 다시 시도해 주세요.");
@@ -289,7 +331,7 @@ const agentApi = handle(["POST"], async (request) => {
 
     return {
       status: 200,
-      body: activeSessionId && result?.mode === "agent" ? { ...result, sessionId: activeSessionId } : result,
+      body: withTiming(activeSessionId && result?.mode === "agent" ? { ...result, sessionId: activeSessionId } : result, body, timing),
     };
   }
 

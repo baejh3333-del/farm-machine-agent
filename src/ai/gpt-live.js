@@ -5,8 +5,150 @@
 // onClientDelegation({ delegationId, userText, userTurnCommitted }): userTurnCommitted면 그 발화는 이미 커밋됐다.
 // onError(error, { fatal, source }): fatal이면 세션은 이미 정리 중이고(source: "start"|"connection"),
 // fatal이 아니면 대화는 계속된다(source: "delegation"|"event"|"audio").
+//
+// full-duplex 발화 식별(선택적 메타데이터, 기존 콜백 인자는 그대로 두고 두 번째 인자로 준다):
+// - onUserTranscriptDelta 페이로드에 utteranceId·correction이 붙는다.
+// - onTurnCommitted(turn, meta): user면 meta = utterance 스냅샷
+//   { utteranceId, startMs, endMs, speechRevision, taskRevision, correction },
+//   assistant면 meta = { utteranceId("ast_N"), replyTo, delegationId, startMs, endMs }.
+// - onAssistantTranscriptDelta(payload, meta): meta = { utteranceId, replyTo, delegationId }로, 같은 발화의
+//   부분 delta와 커밋이 같은 utteranceId를 쓴다.
+// - onClientDelegation(payload, meta): meta = utterance 스냅샷 + isStale()(이 작업을 바로잡는 정정이 왔는지).
+//   반환값에 effect: "read"|"write"를 줄 수 있다. 없으면 result.reservation/createdListing/updatedListing
+//   또는 outcome completed|partial이면 write로 본다.
+// 리비전: speechRevision은 새 사용자 발화마다, taskRevision은 정정 발화("아니, …", "…말고")에서만 오른다.
+// 정정은 말한 조건(기종·날씨·날짜·지역·가격·거래)이 맞는 작업 하나만 무효로 한다. 맞는 작업이 여럿이거나
+// 조건 없는 정정에 진행 중인 작업이 여럿이면 어느 요청인지 되묻고, 답이 올 때까지 후보의 조회 결과 낭독만 잡아 둔다.
+// onTaskSuperseded({ delegationId, supersededBy })로 무효가 된 작업을 패널에 알린다. 그 작업의 조회(read) 결과는 도착 시점과 줄에서 꺼내 말할
+// 시점에 다시 확인해 버린다. 관련 없는 다른 작업 결과는 말이 끝난 뒤 그대로 들려준다. 실제로 쓴(write) 결과와
+// 오류 안내는 절대 버리지 않되, 사용자가 말하는 중이면 끝날 때까지 기다렸다가 말한다.
 import { createLiveVoiceSession } from "./recommend-agent.js";
 import { joinSpokenText, tidySpokenText } from "./spoken-text.js";
+
+// 앞선 요청을 바로잡는 말인지 본다. "아니면"(또는)처럼 정정이 아닌 표현은 제외한다.
+const CORRECTION_START = /^(?:(?:아|어|음)+[\s,.!?]*)?(?:아니(?!면)|아뇨|아냐|노노|취소|정정)/;
+const CORRECTION_ANY = /(?:말고|아니라|아니고|그게\s*아니|그거\s*아니|잘못\s*말|다시\s*말할게|취소해|정정할게)/;
+
+export function isCorrectionUtterance(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  return CORRECTION_START.test(t) || CORRECTION_ANY.test(t);
+}
+
+const WRITE_OUTCOMES = new Set(["completed", "partial"]);
+
+// 위임 결과가 실제로 무언가를 쓴(예약·구매·등록·수정) 결과인지 본다. 이런 결과는 정정이 와도 반드시 알린다.
+export function isWriteDelegationResult(result) {
+  if (!result || typeof result !== "object") return false;
+  if (result.effect === "write") return true;
+  if (result.effect === "read") return false;
+  const r = result.result && typeof result.result === "object" ? result.result : result;
+  return Boolean(r.reservation || r.createdListing || r.updatedListing || WRITE_OUTCOMES.has(r.outcome));
+}
+
+// 작업(위임 발화)과 정정 발화에서 명시적인 조건(슬롯)을 뽑는다. 정정이 어느 작업을 바로잡는지 고를 때 쓴다.
+// values: 실제로 말한 낱말(예: "트랙터", "내일"), cats: 그 종류(machine·weather·date·region·price·deal).
+const MACHINE_WORDS = [
+  "트랙터", "콤바인", "이앙기", "관리기", "경운기", "방제기", "드론", "운반차", "파종기", "정식기", "굴취기",
+  "멀칭기", "로터리", "베일러", "탈곡기", "건조기", "선별기", "예초기", "굴착기", "지게차", "스피드스프레이어",
+];
+const MACHINE_RE = new RegExp(MACHINE_WORDS.join("|"), "g");
+const SLOT_PATTERNS = [
+  ["weather", /날씨|비\s*(?:와|오|가|소식)|눈\s*(?:와|오)|바람|기온|강수|맑/g, "날씨"],
+  ["date", /오늘|내일|모레|글피|주말|다음\s*주|이번\s*주|[월화수목금토일]요일|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*일(?![이은는기])/g, null],
+  ["region", /[가-힣]{1,5}(?:읍|면|군)(?=$|[\s,.?!을를에의로으은는이가도])/g, null],
+  ["price", /얼마|가격|비싸|저렴|예산|\d+\s*만\s*원/g, "가격"],
+  ["deal", /대여|빌리|빌려|빌릴|임대|구매|구입|살래|사고\s*싶|판매|팔래|팔고/g, null],
+];
+
+export function extractTaskSlots(text) {
+  const t = String(text || "");
+  const values = new Set();
+  const cats = new Set();
+  for (const m of t.match(MACHINE_RE) || []) { values.add(m); cats.add("machine"); }
+  for (const [cat, re, fixed] of SLOT_PATTERNS) {
+    for (const m of t.match(re) || []) {
+      cats.add(cat);
+      values.add(fixed || m.replace(/\s+/g, ""));
+    }
+  }
+  return { values, cats };
+}
+
+function sharesValue(a, b) { for (const v of a.values) if (b.values.has(v)) return true; return false; }
+function sharesCat(a, b) { for (const c of a.cats) if (b.cats.has(c)) return true; return false; }
+
+/**
+ * 정정 발화가 바로잡는 작업을 고른다. tasks: [{ slots, active }] (오래된 것 → 최근 순, 이미 정정된 작업 제외).
+ * 1) 말한 낱말이 같은 작업이 하나면 그것, 2) 조건 종류가 같은 작업이 하나면 그것,
+ * 3) 그중 아직 결과를 기다리거나 말하지 않은 작업이 하나면 그것. 여럿이면 { ambiguous }로 되묻게 한다.
+ * 조건이 없는 정정("아니 그게 아니라")은 진행 중인 작업이 하나일 때만 그 작업을 고른다.
+ */
+export function pickCorrectionTarget(text, tasks) {
+  const pool = Array.isArray(tasks) ? tasks : [];
+  if (!pool.length) return { none: true };
+  // "트랙터 말고 콤바인"처럼 '말고'·'아니고' 앞에 말한 조건이 바로잡을 작업을 가리킨다.
+  const replaced = /^(.*?)(?:말고|아니고|아니라)/.exec(String(text || ""));
+  const before = replaced ? extractTaskSlots(replaced[1]) : null;
+  const cs = before?.cats.size ? before : extractTaskSlots(text);
+  if (!cs.cats.size) {
+    const active = pool.filter((t) => t.active);
+    if (active.length === 1) return { target: active[0], weak: true };
+    if (active.length > 1) return { ambiguous: active, weak: true };
+    return { target: pool.at(-1), weak: true };
+  }
+  const byValue = pool.filter((t) => sharesValue(cs, t.slots));
+  if (byValue.length === 1) return { target: byValue[0] };
+  const byCat = (byValue.length ? byValue : pool).filter((t) => sharesCat(cs, t.slots));
+  if (byCat.length === 1) return { target: byCat[0] };
+  if (!byCat.length) return { none: true };
+  const active = byCat.filter((t) => t.active);
+  if (active.length === 1) return { target: active[0] };
+  if (!active.length) return { target: byCat.at(-1) };
+  return { ambiguous: active };
+}
+
+// 무엇을 바로잡을지 되물을 때 작업을 짧게 부른다.
+export function describeTask(task) {
+  const slots = task?.slots || extractTaskSlots(task?.text);
+  const machine = [...slots.values].find((v) => MACHINE_WORDS.includes(v));
+  const date = [...slots.values].find((v) => /오늘|내일|모레|글피|주말|주|요일|일$/.test(v));
+  if (slots.cats.has("weather")) return `${date ? `${date} ` : ""}날씨 확인`;
+  if (machine) {
+    const said = String(task?.text || "");
+    const action = slots.cats.has("price") ? "가격 확인"
+      : /예약/.test(said) ? "예약"
+        : /구매|구입|살래|사고s*싶/.test(said) ? "구매"
+          : /빌리|빌려|빌릴|대여|임대/.test(said) ? "대여" : "찾기";
+    return `${machine} ${action}`;
+  }
+  const text = String(task?.text || "").replace(/\s+/g, " ").trim();
+  return text ? `"${text.slice(0, 14)}"` : "앞선 요청";
+}
+
+const CLARIFY_ALL = /둘\s*다|모두|전부|다\s*(?:바꿔|취소|아니)/;
+const CLARIFY_KEEP = /그대로|괜찮아|바꾸지\s*마|아무것도|없어요|없어$/;
+const CLARIFY_FIRST = /첫\s*번째|처음|앞에\s*거|앞\s*거|먼저\s*한/;
+const CLARIFY_LAST = /두\s*번째|나중|뒤에\s*거|뒤\s*거|마지막|방금/;
+
+/** 되물은 뒤 사용자의 답으로 정정할 작업들을 고른다. null이면 아직 모른다. */
+export function resolveClarificationAnswer(text, candidates) {
+  const t = String(text || "").trim();
+  const cands = Array.isArray(candidates) ? candidates : [];
+  if (!t || !cands.length) return null;
+  if (CLARIFY_ALL.test(t)) return cands.slice();
+  if (CLARIFY_KEEP.test(t)) return [];
+  if (CLARIFY_FIRST.test(t)) return [cands[0]];
+  if (CLARIFY_LAST.test(t)) return [cands.at(-1)];
+  const cs = extractTaskSlots(t);
+  if (!cs.cats.size) return null;
+  const byValue = cands.filter((c) => sharesValue(cs, c.slots));
+  if (byValue.length === 1) return byValue;
+  const byCat = (byValue.length ? byValue : cands).filter((c) => sharesCat(cs, c.slots));
+  return byCat.length === 1 ? byCat : null;
+}
+
+const STALE_NOTE = "사용자가 앞선 요청을 정정했다. 이 위임의 조회 결과는 더 이상 유효하지 않으니 말하지 말고 정정된 요청을 기다린다.";
 
 export const GREETING_TEXT = "안녕하세요, 농농이에요. 대여, 구매, 판매 중에 어떤 걸 도와드릴까요?";
 // 연결되자마자 농농이가 먼저 말하게 한다. 사용자가 이미 말하고 있으면 인사를 건너뛴다(말 끊기 방지).
@@ -87,6 +229,8 @@ export function createGptLiveController({
   onAssistantTranscriptDelta = () => {},
   onTurnCommitted = () => {},
   onClientDelegation = async () => ({}),
+  // 정정으로 무효가 된 작업을 알린다({ delegationId, supersededBy }). 패널은 그 결과를 "정정됨"으로 표시한다.
+  onTaskSuperseded = () => {},
   onError = () => {},
 } = {}) {
   let gen = 0;
@@ -106,8 +250,23 @@ export function createGptLiveController({
   let seq = 0;
   let lastUserAudioAt = 0; // 마지막 사용자 전사 delta 시각
   let outputSuppressed = false; // 사용자가 끼어든 뒤 남은 농농이 음성은 끈다.
-  let speechQueue = []; // 사용자가 말하는 동안 미뤄 둔 commentary
+  let speechQueue = []; // 사용자가 말하는 동안 미뤄 둔 commentary: { payload, kind, task, write }
+  let taskSeq = 0;
+  let tasks = []; // 위임 작업 { delegationId, utteranceId, seq, superseded, supersededBy }
+  let lastSpokenDelegationId = null; // 마지막으로 결과 낭독을 보낸 위임(어시스턴트 발화에 붙인다)
+  let assistantSeq = 0;
   let speechTimer = null;
+  let utteranceSeq = 0;
+  let speechRevision = 0; // 새 사용자 발화마다 오른다.
+  let taskRevision = 0; // 정정 발화에서만 오른다(이전 조회 결과를 무효화).
+  let utterance = null; // 진행 중인 사용자 발화 { id, startMs, endMs, speechRevision, taskRevision, correction }
+  let lastUtterance = null; // 마지막으로 끝난(커밋·위임된) 사용자 발화
+  let assistantMeta = null; // 진행 중인 어시스턴트 발화 { replyTo, delegationId, startMs, endMs }
+  let delegationsInFlight = 0; // 아직 결과를 기다리는 위임 수: 모두 끝나야 확인 중 상태를 푼다.
+  // 진행 중인 정정: { utteranceId, resolved }. 대상이 정해질 때까지 후보 작업의 조회 결과 낭독을 잡아 둔다.
+  let correction = null;
+  // 대상을 되물은 상태: { candidates, attempts, askedBy }. 답이 올 때까지 후보의 조회 결과 낭독만 잡아 둔다.
+  let clarification = null;
 
   const setState = (next) => { if (state !== next) { state = next; onState(next); } };
   const idleState = () => (muted ? "muted" : "listening");
@@ -137,15 +296,176 @@ export function createGptLiveController({
     }
     const queued = speechQueue;
     speechQueue = [];
-    for (const payload of queued) send(payload, s);
+    for (const item of queued) {
+      if (isStaleSpeech(item)) continue;
+      if (isHeldSpeech(item)) { speechQueue.push(item); continue; } // 정정 대상이 정해질 때까지 기다린다.
+      sendSpeech(item, s);
+    }
   }
 
-  function speakWhenQuiet(payload, s = session) {
+  // 정정 대상을 아직 모르는 작업의 조회 결과 낭독. 쓰기 결과와 안내는 잡아 두지 않는다.
+  function isHeldSpeech(item) {
+    return item.kind === "result" && !item.write && Boolean(item.task?.held) && !item.task?.superseded;
+  }
+
+  // 정정된 작업의 조회 결과 낭독만 버린다(보낼 때·줄에서 꺼낼 때 다시 확인). UI 안내와 실제 쓰기 결과는 남긴다.
+  function isStaleSpeech(item) {
+    return item.kind === "result" && !item.write && Boolean(item.task?.superseded);
+  }
+
+  function sendSpeech(item, s) {
+    const ok = send(item.payload, s);
+    if (ok && item.kind === "result") lastSpokenDelegationId = item.payload.delegation_id ?? null;
+    return ok;
+  }
+
+  function speakWhenQuiet(payload, s = session, { kind = "ui", task = null, write = false } = {}) {
     if (!s) return false;
-    if (!userSpeakingNow() && !speechQueue.length) return send(payload, s);
-    speechQueue.push(payload);
+    const item = { payload, kind, task, write };
+    if (isStaleSpeech(item)) return false;
+    if (!isHeldSpeech(item) && !userSpeakingNow() && !speechQueue.some((q) => !isHeldSpeech(q))) return sendSpeech(item, s);
+    speechQueue.push(item);
     flushSpeechQueue(s);
     return true;
+  }
+
+  function snapshotUtterance(u) {
+    if (!u) return null;
+    return {
+      utteranceId: u.id,
+      startMs: u.startMs,
+      endMs: u.endMs,
+      speechRevision: u.speechRevision,
+      taskRevision: u.taskRevision,
+      correction: u.correction,
+    };
+  }
+
+  // 사용자 전사 delta로 발화를 시작·갱신한다. 정정 발화로 밝혀지면 taskRevision을 올리고 줄 선 조회 결과를 버린다.
+  function trackUtterance(event) {
+    if (!utterance) {
+      speechRevision += 1;
+      utterance = {
+        id: `utt_${++utteranceSeq}`,
+        startMs: Number.isFinite(event.start_ms) ? event.start_ms : null,
+        endMs: Number.isFinite(event.end_ms) ? event.end_ms : null,
+        speechRevision,
+        taskRevision,
+        correction: false,
+      };
+    } else {
+      if (utterance.startMs == null && Number.isFinite(event.start_ms)) utterance.startMs = event.start_ms;
+      if (Number.isFinite(event.end_ms)) utterance.endMs = event.end_ms;
+    }
+    // 되물은 뒤의 발화는 정정이 아니라 그 물음에 대한 답으로 본다(끝날 때 처리).
+    if (clarification) return;
+    if (!utterance.correction && isCorrectionUtterance(userText)) {
+      utterance.correction = true;
+      taskRevision += 1;
+      utterance.taskRevision = taskRevision;
+      // 어느 작업을 바로잡는지 정해질 때까지, 바로잡힐 수 있는 작업의 조회 결과 낭독을 잡아 둔다.
+      correction = { utteranceId: utterance.id, resolved: false };
+      for (const t of candidateTasks()) if (isActiveTask(t)) t.held = true;
+    }
+    if (utterance.correction && correction && !correction.resolved && correction.utteranceId === utterance.id) {
+      resolveCorrection(userText, { final: false });
+    }
+  }
+
+  // 아직 결과를 기다리거나, 결과가 왔지만 아직 말하지 않은 작업
+  function isActiveTask(t) {
+    return !t.superseded && (!t.settled || speechQueue.some((item) => item.task === t));
+  }
+
+  // 정정할 수 있는 작업: 이미 정정된 작업과 정정 발화 자신의 작업은 뺀다.
+  function candidateTasks(excludeUtteranceId = utterance?.id) {
+    return tasks.filter((t) => !t.superseded && t.utteranceId !== excludeUtteranceId);
+  }
+
+  function supersedeTask(t, byId) {
+    if (!t || t.superseded) return;
+    t.superseded = true;
+    t.supersededBy = byId;
+    t.held = false;
+    speechQueue = speechQueue.filter((item) => !isStaleSpeech(item));
+    if (!speechQueue.length) clearSpeechTimer();
+    // 결과가 이미 와 있으면 지금, 아니면 도착할 때(handleDelegation) 모델에게 무효라고 알린다.
+    if (t.settled && !t.write && !t.staleNoted && session) {
+      t.staleNoted = true;
+      send({ type: "session.thinking.append", event_id: id("stale"), delegation_id: t.delegationId, content: STALE_NOTE }, session);
+    }
+    try { onTaskSuperseded({ delegationId: t.delegationId, supersededBy: byId }); } catch { /* ignore */ }
+  }
+
+  function releaseHeld() {
+    let any = false;
+    for (const t of tasks) if (t.held) { t.held = false; any = true; }
+    if (any && session) flushSpeechQueue(session);
+  }
+
+  // 정정 발화로 바로잡을 작업을 정한다. 확실하면 그 작업만 무효로 하고 나머지는 놓아 준다.
+  // final(발화가 끝남)인데도 애매하면 사용자에게 되묻고, 답이 올 때까지 후보의 조회 결과만 잡아 둔다.
+  function resolveCorrection(text, { final }) {
+    const c = correction;
+    if (!c || c.resolved) return;
+    const pool = candidateTasks(c.utteranceId).map((t) => Object.assign(t, { active: isActiveTask(t) }));
+    const pick = pickCorrectionTarget(text, pool);
+    if (pick.target && (!pick.weak || final)) {
+      c.resolved = true;
+      supersedeTask(pick.target, c.utteranceId);
+      releaseHeld();
+      return;
+    }
+    if (!final) return; // 말이 더 이어질 수 있다. 잡아 둔 채로 기다린다.
+    c.resolved = true;
+    if (pick.ambiguous) {
+      const candidates = pick.ambiguous;
+      for (const t of tasks) t.held = candidates.includes(t);
+      if (session) flushSpeechQueue(session);
+      askClarification(candidates, c.utteranceId);
+      return;
+    }
+    releaseHeld(); // 진행 중인 작업과 관련 없는 정정: 아무것도 무효로 하지 않는다.
+  }
+
+  function askClarification(candidates, askedBy) {
+    clarification = { candidates, attempts: clarification?.attempts ?? 0, askedBy };
+    const labels = candidates.map(describeTask);
+    const question = `${labels.join(", ")} 중에 어느 요청을 바꿀까요?`;
+    speakWhenQuiet({
+      type: "session.commentary.append",
+      event_id: id("clarify"),
+      delegation_id: null,
+      content: `사용자가 정정했지만 어느 요청인지 분명하지 않다. 다른 말은 하지 말고 이 한 문장만 묻는다: "${question}"`,
+    });
+  }
+
+  // 되물은 물음에 대한 답. 고른 작업만 무효로 하고 나머지 잡아 둔 결과는 들려준다.
+  function answerClarification(text, answeredBy) {
+    const c = clarification;
+    if (!c || c.askedBy === answeredBy) return;
+    const candidates = c.candidates.filter((t) => !t.superseded);
+    const chosen = resolveClarificationAnswer(text, candidates);
+    if (chosen === null && c.attempts < 1 && candidates.length > 1) {
+      c.attempts += 1;
+      askClarification(candidates, answeredBy);
+      return;
+    }
+    clarification = null;
+    for (const t of chosen || []) supersedeTask(t, answeredBy);
+    releaseHeld();
+  }
+
+  function endUtterance(text = "") {
+    const ended = utterance;
+    if (ended) lastUtterance = ended;
+    utterance = null;
+    if (ended && clarification && clarification.askedBy !== ended.id) {
+      answerClarification(text, ended.id);
+    } else if (ended?.correction && correction?.utteranceId === ended.id && !correction.resolved) {
+      resolveCorrection(text, { final: true });
+    }
+    return lastUtterance;
   }
 
   function setOutputSuppressed(s, next) {
@@ -165,9 +485,10 @@ export function createGptLiveController({
   function flushUserTurn() {
     const text = userText.trim();
     userText = "";
+    const u = utterance ? endUtterance(text) : null;
     if (text) {
       lastUserCommit = text;
-      onTurnCommitted({ role: "user", text });
+      onTurnCommitted({ role: "user", text }, snapshotUtterance(u || lastUtterance));
     }
   }
 
@@ -175,7 +496,25 @@ export function createGptLiveController({
     clearSpeakingTimer();
     const text = tidySpokenText(assistantText);
     assistantText = "";
-    if (text) onTurnCommitted({ role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) });
+    const meta = assistantMeta;
+    assistantMeta = null;
+    if (text) {
+      onTurnCommitted(
+        { role: "assistant", text, interrupted, ...(delegatedReply ? { delegated: true } : {}) },
+        { ...(meta || newAssistantMeta()) },
+      );
+    }
+  }
+
+  // 어시스턴트 발화 하나에 붙는 안정적인 식별자: 부분 delta와 커밋이 같은 utteranceId를 쓴다.
+  function newAssistantMeta() {
+    return {
+      utteranceId: `ast_${++assistantSeq}`,
+      replyTo: lastUtterance?.id ?? null,
+      delegationId: delegatedReply ? lastSpokenDelegationId : null,
+      startMs: null,
+      endMs: null,
+    };
   }
 
   function scheduleSpeakingIdle(s) {
@@ -231,6 +570,14 @@ export function createGptLiveController({
       pendingUserText = "";
       lastUserCommit = "";
       delegatedReply = false;
+      utterance = null;
+      lastUtterance = null;
+      assistantMeta = null;
+      delegationsInFlight = 0;
+      tasks = [];
+      correction = null;
+      clarification = null;
+      lastSpokenDelegationId = null;
       setState("idle");
     }
   }
@@ -241,32 +588,79 @@ export function createGptLiveController({
     if (s.seen.has(delegationId)) return;
     s.seen.add(delegationId);
     flushAssistantTurn();
-    const utterance = (userText.trim() || pendingUserText).trim();
+    const spokenText = (userText.trim() || pendingUserText).trim();
     // 위임 전에 짧은 맞장구가 먼저 나오면 사용자 발화가 이미 기록됐을 수 있다.
-    const userTurnCommitted = Boolean(utterance) && utterance === lastUserCommit;
-    pendingUserText = utterance;
-    lastUserCommit = utterance; // 패널이 이 발화를 위임 턴으로 기록한다.
+    const userTurnCommitted = Boolean(spokenText) && spokenText === lastUserCommit;
+    pendingUserText = spokenText;
+    lastUserCommit = spokenText; // 패널이 이 발화를 위임 턴으로 기록한다.
     userText = "";
+    const owner = utterance ? endUtterance(spokenText) : lastUtterance;
+    const taskRev = taskRevision;
+    const task = {
+      delegationId, utteranceId: owner?.id ?? null, seq: ++taskSeq, superseded: false, supersededBy: null,
+      text: spokenText, slots: extractTaskSlots(spokenText), settled: false, held: false, write: false, staleNoted: false,
+    };
+    tasks.push(task);
+    if (tasks.length > 20) tasks = tasks.slice(-20); // 정정은 최근 작업만 겨냥하므로 오래된 기록은 필요 없다.
+    // 이 작업을 바로잡는 정정 발화가 왔는지. 다른 작업을 정정한 발화로는 바뀌지 않는다.
+    const isStale = () => task.superseded;
+    const meta = {
+      ...(snapshotUtterance(owner) || {
+        utteranceId: null, startMs: null, endMs: null, speechRevision, taskRevision: taskRev, correction: false,
+      }),
+      isStale,
+    };
     delegatedReply = true;
+    assistantMeta = null;
+    delegationsInFlight += 1;
     setState("thinking");
     send({ type: "session.thinking.append", event_id: id("progress"), delegation_id: delegationId, content: PROGRESS }, s);
     let result = {};
+    let failed = false;
     try {
-      result = (await onClientDelegation({ delegationId, userText: utterance, userTurnCommitted })) || {};
+      result = (await onClientDelegation({ delegationId, userText: spokenText, userTurnCommitted }, meta)) || {};
     } catch (error) {
       if (current(s)) onError(error, { fatal: false, source: "delegation" });
+      failed = true;
       result = { spokenSummary: "죄송해요, 처리 중에 연결 문제가 생겼어요. 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요." };
     }
     if (!current(s)) return;
+    delegationsInFlight = Math.max(0, delegationsInFlight - 1);
+    const leaveThinking = () => { if (state === "thinking" && delegationsInFlight === 0) setState(idleState()); };
     const { spokenSummary, thinkingContext } = result;
+    // 실패 안내는 쓰기가 됐는지 모르므로 쓰기처럼 다룬다(정정이 와도 알린다).
+    const write = failed || isWriteDelegationResult(result);
+    task.settled = true;
+    task.write = write;
+    if (write) {
+      task.held = false; // 실제로 쓴 결과와 실패 안내는 잡아 두지 않는다.
+      // 되묻는 중이면 쓰기 결과는 후보에서 뺀다(되돌릴 수 없는 영수증이라 답으로 무효로 하지 않는다).
+      if (clarification) {
+        clarification.candidates = clarification.candidates.filter((t) => t !== task);
+        if (!clarification.candidates.length) clarification = null;
+      }
+    }
+    if (!write && isStale()) {
+      // 정정된 이전 조회 결과: 말하지 않고, 모델에게만 무효라고 알린다.
+      if (!task.staleNoted) {
+        task.staleNoted = true;
+        send({ type: "session.thinking.append", event_id: id("stale"), delegation_id: delegationId, content: STALE_NOTE }, s);
+      }
+      leaveThinking();
+      return;
+    }
     if (thinkingContext) {
       send({ type: "session.thinking.append", event_id: id("think"), delegation_id: delegationId, content: String(thinkingContext).slice(0, 800) }, s);
     }
     if (spokenSummary) {
       // 결과가 늦게 와도 사용자가 말하는 중이면 끝날 때까지 기다렸다가 말한다.
-      speakWhenQuiet({ type: "session.commentary.append", event_id: id("result"), delegation_id: delegationId, content: String(spokenSummary).slice(0, 800) }, s);
+      speakWhenQuiet(
+        { type: "session.commentary.append", event_id: id("result"), delegation_id: delegationId, content: String(spokenSummary).slice(0, 800) },
+        s,
+        { kind: "result", task, write },
+      );
     }
-    if (state === "thinking") setState(idleState());
+    leaveThinking();
   }
 
   function handleEvent(s, raw) {
@@ -299,7 +693,15 @@ export function createGptLiveController({
         if (!userText) delegatedReply = false; // 새 사용자 턴: 이후 발화는 위임 답변이 아니다.
         userText += event.delta || "";
         pendingUserText = userText;
-        onUserTranscriptDelta({ delta: event.delta || "", text: userText, startMs: event.start_ms, endMs: event.end_ms });
+        trackUtterance(event);
+        onUserTranscriptDelta({
+          delta: event.delta || "",
+          text: userText,
+          startMs: event.start_ms,
+          endMs: event.end_ms,
+          utteranceId: utterance.id,
+          correction: utterance.correction,
+        });
         break;
       case "session.output_transcript.delta":
         if (outputSuppressed) {
@@ -308,9 +710,17 @@ export function createGptLiveController({
           setOutputSuppressed(s, false);
         }
         flushUserTurn();
+        if (!assistantMeta) assistantMeta = newAssistantMeta();
+        if (assistantMeta.startMs == null && Number.isFinite(event.start_ms)) assistantMeta.startMs = event.start_ms;
+        if (Number.isFinite(event.end_ms)) assistantMeta.endMs = event.end_ms;
+        if (event.delegation_id && !assistantMeta.delegationId) assistantMeta.delegationId = event.delegation_id;
         assistantText = joinSpokenText(assistantText, event.delta || "");
         if (state !== "thinking") setState("speaking");
-        onAssistantTranscriptDelta({ delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms });
+        // 두 번째 인자: 같은 어시스턴트 발화의 모든 부분 delta가 같은 utteranceId를 가진다.
+        onAssistantTranscriptDelta(
+          { delta: event.delta || "", startMs: event.start_ms, endMs: event.end_ms },
+          { utteranceId: assistantMeta.utteranceId, replyTo: assistantMeta.replyTo, delegationId: assistantMeta.delegationId },
+        );
         scheduleSpeakingIdle(s);
         break;
       case "session.delegation.created":
@@ -509,5 +919,10 @@ export function createGptLiveController({
     get state() { return state; },
     get ready() { return ready; },
     get muted() { return muted; },
+    get speechRevision() { return speechRevision; },
+    get taskRevision() { return taskRevision; },
+    // 정정 대상을 되물어 답을 기다리는 중이면 후보 위임 ID 목록, 아니면 null.
+    get pendingClarification() { return clarification ? clarification.candidates.map((t) => t.delegationId) : null; },
+    get utteranceId() { return utterance?.id ?? null; },
   };
 }

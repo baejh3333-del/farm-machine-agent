@@ -5,6 +5,15 @@ import { isAffirmative } from "./affirm.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
 import { isUnclearUtterance, joinSpokenText, tidySpokenText } from "./spoken-text.js";
+import {
+  buildSpokenSummary,
+  classifyDispatchResult,
+  createDispatchTimer,
+  describeWriteOutcome,
+  isWriteOutcome,
+  pickServerTiming,
+  uniqueListingIds,
+} from "./voice-dispatch.js";
 
 const MACHINE_LABELS = {
   cultivator: "관리기",
@@ -322,33 +331,7 @@ export async function openCameraCapture({ fallbackInput = null, triggerButton = 
 }
 
 const INLINE_MD_RE = /(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|`[^`\n]+?`|\[[^\]\n]+\]\((?:https?:\/\/|\/)[^)\s]+\))/g;
-const MACHINE_LIST_HEADING_RE = /^(?:#{1,6}\s*|\*\*[^*\n]*)(?:추천\s*매물|매물\s*목록|추천\s*농기계|추천\s*기계|검색\s*결과|추천\s*리스트)/;
-const LIST_ITEM_RE = /^\s*(?:[-*•]|\d+[.)])\s+/;
-
-export function stripDuplicateMachineList(text, listingCount = 0) {
-  const raw = String(text || "").replace(/\r\n?/g, "\n").trim();
-  if (!raw || !listingCount) return raw;
-  const lines = raw.split("\n");
-  let cutIndex = -1;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    if (LIST_ITEM_RE.test(line)) {
-      cutIndex = i;
-      break;
-    }
-    if (MACHINE_LIST_HEADING_RE.test(line)) {
-      const restHasList = lines.slice(i + 1).some((next) => LIST_ITEM_RE.test(next.trim()));
-      if (restHasList) {
-        cutIndex = i;
-        break;
-      }
-    }
-  }
-  if (cutIndex === -1) return raw;
-  const intro = lines.slice(0, cutIndex).join("\n").trim();
-  return intro || `조건에 맞는 매물 ${listingCount}건을 찾았어요. 아래 카드에서 비교해 보세요.`;
-}
+export { stripDuplicateMachineList } from "./voice-dispatch.js";
 
 function appendInlineMarkdown(parent, text) {
   const source = String(text || "");
@@ -553,7 +536,19 @@ export function createAiPanel({
   let pendingInputMode = "text";
   let liveUserBubble = null;
   let liveAssistantBubble = null;
-  const renderedDelegationIds = new Set();
+  // 이미 처리를 시작한 위임 ID(응답 대기 중 포함). 같은 위임이 다시 와도 요청·카드·음성을 한 번만 낸다.
+  const claimedDelegationIds = new Set();
+  // 위임 순번: 결과가 도착했을 때 더 새 위임이 시작됐는지(늦게 온 결과인지) 가린다.
+  let delegationSeq = 0;
+  // 이번 음성 세션에서 마지막으로 기록한 사용자 발화(대화 기록 항목 그대로)와 마지막 전사 시각(epoch ms).
+  let lastLiveUserCommit = null;
+  let lastUserTranscriptAt = 0;
+  // 위임 결과를 읽어 주는 중: 그 전사는 이미 그린 답변과 같아 새 말풍선을 만들지 않는다.
+  let delegatedReadout = null;
+  // 패널이 이미 그리고 읽으라고 넘긴 위임 ID: 그 낭독 전사는 말풍선으로 다시 그리지 않는다.
+  const spokenDelegationIds = new Set();
+  // 정정으로 무효가 된 위임 ID: 결과가 늦게 오면 그릴 때 바로 "정정됨"으로 표시한다.
+  const supersededDelegationIds = new Set();
   const aiDefaultPlaceholder = $("aiInput").placeholder;
 
   function setPlusMenuOpen(nextOpen) {
@@ -2501,62 +2496,160 @@ export function createAiPanel({
     return parts.join(" | ").slice(0, 780);
   }
 
-  async function handleClientDelegation(payload, gen, liveGen) {
+  // 위임 한 건의 지연 시간(내용 없음)을 남긴다. 화면 밖 도구(테스트·성능 점검)가 이벤트로 받아 본다.
+  function reportDispatchTiming(timer, extra) {
+    const detail = timer.snapshot(extra);
+    try { document.dispatchEvent(new CustomEvent("nongnong:voice-dispatch-timing", { detail })); } catch { /* ignore */ }
+    console.debug?.("voice_dispatch_timing", JSON.stringify(detail));
+    return detail;
+  }
+
+  // 위임 직전에 사용자 발화가 이미 대화 기록에 들어갔다면 그 항목의 위치. 같은 말을 두 번 한 경우를 구분하려고
+  // 내용이 아니라 이번 음성 세션에서 기록한 항목(객체 그대로)을 먼저 찾는다.
+  function findCommittedUserTurn(userText, liveGen, utteranceId = null) {
+    const committed = lastLiveUserCommit;
+    // 컨트롤러가 발화 ID를 주면 그 ID가 같을 때만 “이미 기록한 같은 발화”로 본다(같은 말을 두 번 한 경우 구분).
+    if (utteranceId && committed?.utteranceId && committed.utteranceId !== utteranceId) return -1;
+    if (committed && committed.liveGen === liveGen && committed.entry?.content === userText) {
+      const index = agentHistory.lastIndexOf(committed.entry);
+      if (index >= 0) return index;
+    }
+    for (let i = agentHistory.length - 1; i >= 0; i -= 1) {
+      if (agentHistory[i].role === "user" && agentHistory[i].content === userText) return i;
+    }
+    return -1;
+  }
+
+  function delegationErrorSpeech(error, sentPending) {
+    const reason = typeof error?.message === "string" && /[가-힣]/.test(error.message) ? error.message.trim() : "";
+    if (error?.status === 401) return { reason, spoken: "구매나 예약은 로그인한 뒤에 할 수 있어요. 화면에서 로그인하시면 바로 이어서 해 드릴게요." };
+    if (error?.status === 429) return { reason, spoken: "요청이 잠깐 몰렸어요. 조금 뒤에 같은 말씀을 한 번 더 해 주세요." };
+    // 실행을 맡긴 뒤 응답을 못 받았으면 실패라고 단정하지 않는다(서버에서 이미 처리됐을 수 있다).
+    if (sentPending && !(error?.status >= 400 && error?.status < 500)) {
+      return { reason, unknownWrite: true, spoken: "요청 처리 결과를 아직 확인하지 못했어요. \"다시 해줘\"라고 말씀하시면 같은 요청으로 안전하게 다시 확인할게요." };
+    }
+    return { reason, spoken: `죄송해요, ${reason || "처리 중에 연결 문제가 생겼어요."} 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요.` };
+  }
+
+  // 사용자가 정정해 무효가 된 위임의 결과는 지우지 않고 "정정됨"으로 표시한다(쓰기 결과는 컨트롤러가 무효로 하지 않는다).
+  // 무효가 된 매물 목록을 “1번”이 가리키지 않게, 그 목록이 마지막으로 보여 준 목록이면 기억에서 뺀다.
+  function markDelegationSuperseded(delegationId) {
+    if (typeof delegationId !== "string" || !delegationId) return;
+    const bubble = [...document.querySelectorAll("#aiMessages .chat-bubble[data-delegation-id]")]
+      .find((el) => el.dataset.delegationId === delegationId);
+    supersededDelegationIds.add(delegationId);
+    // 실제로 처리된 쓰기 결과(예약 접수 등)는 정정과 상관없이 영수증으로 그대로 둔다.
+    if (!bubble || bubble.dataset.write === "1" || bubble.classList.contains("is-superseded")) return;
+    bubble.classList.add("is-superseded");
+    const note = document.createElement("div");
+    note.className = "ai-superseded-note";
+    note.textContent = "정정하신 요청이라 이 결과는 쓰지 않아요.";
+    bubble.prepend(note);
+    const lastResults = [...document.querySelectorAll("#aiMessages .chat-bubble.assistant.has-results")].at(-1);
+    if (lastResults === bubble) lastShownListingIds = [];
+  }
+
+  async function handleClientDelegation(payload, gen, liveGen, meta = null) {
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+    const timer = createDispatchTimer();
     const delegationId = payload?.delegationId || payload?.id || "";
     const userText = String(payload?.userText || payload?.transcript || payload?.message || "").trim();
     if (!userText) return { spokenSummary: "무슨 작업이나 농기계를 찾으시는지 다시 말씀해 주세요." };
     // 인식이 실패했거나 알아들을 수 없는 조각이면 대충 넘기지 않고 짧게 다시 묻는다(모델 호출도 아낀다).
     if (isUnclearUtterance(userText)) return { spokenSummary: "죄송해요, 잘 못 들었어요. 한 번만 다시 말씀해 주시겠어요?" };
-    if (delegationId && renderedDelegationIds.has(delegationId)) {
-      return null;
-    }
-    if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
-    if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+    // 같은 위임이 다시 와도(재전송·중복 이벤트) 요청·카드·음성은 한 번만 낸다. 응답을 기다리는 동안에도 막는다.
+    if (delegationId && claimedDelegationIds.has(delegationId)) return null;
+    if (delegationId) claimedDelegationIds.add(delegationId);
+    const seq = ++delegationSeq;
+    // 컨트롤러가 발화 종료 시각(epoch ms)을 주면 그것을, 아니면 패널이 받은 마지막 전사 시각을 쓴다.
+    const speechEndedAt = Number(payload?.transcriptEndedAt) || lastUserTranscriptAt || 0;
+    const speechToDispatchMs = speechEndedAt ? Math.max(0, Date.now() - speechEndedAt) : undefined;
+    delegatedReadout = null;
 
+    // 매물 목록(catalog)은 카드를 그릴 때만 필요하다. 요청은 바로 보내고, 목록은 응답을 기다리는 동안 함께 불러온다.
+    // 직전에 보여 준 매물·보고 있는 매물은 ID 그대로 보내므로 목록이 없어도 “1번”, “이거”가 같은 매물을 가리킨다.
+    const catalogPending = runtime.catalogState !== "ready";
+    const catalogWait = catalogPending ? Promise.resolve(runtime.catalogReady).catch(() => {}) : null;
     const uiContext = collectUiContext();
     // 음성 대화 중에 올린 사진이 아직 안 보내졌으면 이 말과 함께 보낸다(예: 고장 부위 사진 + "여기서 연기가 나요").
     const voicePhoto = takeLivePhoto();
     // 위임 전에 맞장구가 먼저 나오면 같은 발화가 이미 기억에 있다: 에이전트에는 그 앞까지만 history로 보낸다.
-    let committedAt = -1;
-    if (payload?.userTurnCommitted) {
-      for (let i = agentHistory.length - 1; i >= 0; i -= 1) {
-        if (agentHistory[i].role === "user" && agentHistory[i].content === userText) { committedAt = i; break; }
-      }
-    }
+    const utteranceId = typeof meta?.utteranceId === "string" ? meta.utteranceId : null;
+    const committedAt = payload?.userTurnCommitted ? findCommittedUserTurn(userText, liveGen, utteranceId) : -1;
+    // 컨트롤러가 정정 여부(isStale)를 알려 주면 그것으로, 아니면 더 새 위임이 시작됐는지로 늦은 결과를 가린다.
+    const superseded = typeof meta?.isStale === "function"
+      ? () => { try { return Boolean(meta.isStale()); } catch { return false; } }
+      : () => seq !== delegationSeq;
+    const utteranceMs = Number.isFinite(meta?.startMs) && Number.isFinite(meta?.endMs) ? Math.max(0, meta.endMs - meta.startMs) : undefined;
+    const sentPending = voicePhoto ? null : takePendingAction();
     let result;
     try {
+      timer.mark("request");
       result = await askAgent(userText, {
-      history: committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory,
-      region: uiContext.region,
-      uiContext,
-      inputMode: "voice",
-      delegationId: delegationId || undefined,
-      sessionId: agentSessionId,
-      savedDraft,
-      insuranceOffer,
-      insuranceAsked,
-      fullDelegation: fullDelegationEnabled,
-      pendingAction: voicePhoto ? null : takePendingAction(),
-      ...(voicePhoto ? { image: voicePhoto } : {}),
-    });
+        history: committedAt >= 0 ? agentHistory.slice(0, committedAt) : agentHistory,
+        region: uiContext.region,
+        uiContext,
+        inputMode: "voice",
+        delegationId: delegationId || undefined,
+        sessionId: agentSessionId,
+        savedDraft,
+        insuranceOffer,
+        insuranceAsked,
+        fullDelegation: fullDelegationEnabled,
+        pendingAction: sentPending,
+        ...(voicePhoto ? { image: voicePhoto } : {}),
+      });
+      timer.mark("response");
     } catch (error) {
-      if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
-      // 무한 대기로 두지 않고, 이유와 다음 방법을 한 문장으로 말한다.
-      const reason = typeof error?.message === "string" && /[가-힣]/.test(error.message) ? error.message.trim() : "";
-      const spoken = error?.status === 401
-        ? "구매나 예약은 로그인한 뒤에 할 수 있어요. 화면에서 로그인하시면 바로 이어서 해 드릴게요."
-        : error?.status === 429
-          ? "요청이 잠깐 몰렸어요. 조금 뒤에 같은 말씀을 한 번 더 해 주세요."
-          : `죄송해요, ${reason || "처리 중에 연결 문제가 생겼어요."} 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요.`;
+      timer.mark("error");
+      const sameSession = gen === sessionGeneration;
+      const { reason, spoken, unknownWrite } = delegationErrorSpeech(error, sentPending);
+      // 실행 결과를 모르면 같은 요청 ID로 다시 시도할 수 있게 승인 대기 작업을 되돌려 둔다(서버가 중복 실행을 막는다).
+      if (unknownWrite && sameSession && !lastPendingAction) lastPendingAction = sentPending;
+      const effect = unknownWrite ? "write" : "read";
+      if (!sameSession || liveGen !== liveVoiceGeneration || (!unknownWrite && superseded())) {
+        reportDispatchTiming(timer, { outcome: "error_stale", speechToDispatchMs, utteranceMs });
+        return { effect };
+      }
       if (reason) toast(reason);
       rememberAgentTurn(...(committedAt >= 0 ? [] : [{ role: "user", content: userText }]), { role: "assistant", content: spoken });
-      appendAiMessage(spoken, "assistant");
-      return { spokenSummary: spoken };
+      const errorBubble = appendAiMessage(spoken, "assistant");
+      delegatedReadout = { liveGen, bubble: errorBubble };
+      if (delegationId) spokenDelegationIds.add(delegationId);
+      reportDispatchTiming(timer, { outcome: "error", speechToDispatchMs, utteranceMs, status: Number(error?.status) || 0 });
+      return { spokenSummary: spoken, effect };
     }
-    if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
+
+    const write = isWriteOutcome(result);
+    const effect = write ? "write" : "read";
+    const decide = () => classifyDispatchResult({
+      sameSession: gen === sessionGeneration,
+      sameLive: liveGen === liveVoiceGeneration,
+      superseded: superseded(),
+      write,
+    });
+    const serverTiming = pickServerTiming(result?.timing);
+    const rawListingIds = result?.reservation || result?.createdListing || result?.updatedListing
+      ? []
+      : uniqueListingIds(result?.listingIds);
+    // 카드를 그려야 하는데 목록이 아직이면 그때만 기다린다(대개 이미 끝나 있다).
+    if (rawListingIds.length && catalogWait && runtime.catalogState !== "ready") {
+      await catalogWait;
+      timer.mark("catalog");
+    }
+    let disposition = decide();
+    if (disposition === "drop") {
+      reportDispatchTiming(timer, { outcome: "stale_dropped", write, catalogPending, speechToDispatchMs, utteranceMs, ...serverTiming });
+      return { effect };
+    }
+    if (disposition === "notify") {
+      // 패널 대화가 초기화된 뒤 도착한 확정 결과: 그려 넣을 대화가 없으니 알림으로만 알린다.
+      toast(describeWriteOutcome(result));
+      if (result?.reservation || result?.createdListing) Promise.all([loadCatalog({ quiet: true }), refreshAuthenticatedData?.()]).catch(() => {});
+      reportDispatchTiming(timer, { outcome: "stale_write_notified", write, catalogPending, speechToDispatchMs, utteranceMs, ...serverTiming });
+      return { effect };
+    }
     if (result?.sessionId) agentSessionId = result.sessionId;
-    if (delegationId) renderedDelegationIds.add(delegationId);
 
     const reply = typeof result?.reply === "string" && result.reply.trim()
       ? result.reply.trim()
@@ -2568,18 +2661,43 @@ export function createAiPanel({
       { role: "assistant", content: [reply, photoNote].filter(Boolean).join("\n") },
     );
 
-    const listingIds = result?.reservation || result?.createdListing || result?.updatedListing
-      ? []
-      : (Array.isArray(result?.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
-    const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result?.searchDates || null });
+    const cardIds = rawListingIds.filter((id) => listingById(id));
+    const bubble = appendAiMessage(reply, "assistant", cardIds, null, { searchDates: result?.searchDates || null });
+    if (delegationId) bubble.dataset.delegationId = delegationId;
+    if (write) bubble.dataset.write = "1";
+    if (delegationId && supersededDelegationIds.has(delegationId)) {
+      supersededDelegationIds.delete(delegationId);
+      markDelegationSuperseded(delegationId);
+    }
+    // 화면에 아직 없는 매물이어도 서버가 정한 순서·ID를 그대로 기억한다(“1번 예약해줘”가 같은 매물을 가리키게).
+    if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
+    else if (result?.reservation) lastShownListingIds = [];
     renderAgentEffects(bubble, result, { reply, includeFollowUp: false });
     scrollAiToEnd();
+    timer.mark("rendered");
 
-    // 답변을 그대로 읽게 한다. 실행은 말로 요청하면 서버가 바로 처리하므로 버튼을 누르라고 덧붙이지 않는다.
-    const spokenSummary = tidySpokenText(reply);
-    const thinkingContext = buildDelegationThinkingContext(result, listingIds);
+    disposition = decide();
+    const speak = disposition === "render_and_speak";
+    // 답변을 그대로 읽되, 카드가 보여 주는 매물 목록과 같은 문장은 다시 읽지 않는다.
+    const spokenSummary = speak ? buildSpokenSummary(reply, { listingCount: cardIds.length, result }) : "";
+    const thinkingContext = speak ? buildDelegationThinkingContext(result, cardIds) : "";
+    // 이 결과를 읽는 동안 들어오는 농농이 전사는 이미 그린 답변과 같으므로 새 말풍선을 만들지 않는다.
+    if (speak && spokenSummary) {
+      delegatedReadout = { liveGen, bubble };
+      if (delegationId) spokenDelegationIds.add(delegationId);
+    }
+    reportDispatchTiming(timer, {
+      outcome: write && superseded() ? "superseded_write" : speak ? "spoken" : "rendered_silent",
+      write,
+      catalogPending,
+      cards: cardIds.length,
+      speechToDispatchMs,
+      utteranceMs,
+      ...serverTiming,
+    });
+    if (!speak) return { effect };
     scheduleHeldLivePhoto();
-    return { spokenSummary, ...(thinkingContext ? { thinkingContext } : {}), result };
+    return { spokenSummary, effect, ...(thinkingContext ? { thinkingContext } : {}), result };
   }
 
   // 음성 대화 중 올린 사진: 위임 턴이 진행 중이면 그 턴이 가져가고, 아니면 바로 보내 음성으로 답하게 한다.
@@ -2639,6 +2757,7 @@ export function createAiPanel({
       renderAgentResult(message, result, { photo: true });
       const spoken = tidySpokenText(result.reply || "");
       if (spoken && isLiveVoiceActive()) {
+        delegatedReadout = null;
         liveController.notifyUiEvent(`사진 확인 결과다. 이 내용을 사용자에게 그대로 짧게 말해 준다: ${spoken}`);
       }
     } catch (error) {
@@ -2658,6 +2777,8 @@ export function createAiPanel({
     try { liveController?.commitPendingTurns?.(); } catch { /* ignore */ }
     liveVoiceGeneration += 1;
     liveVoiceStarting = false;
+    delegatedReadout = null;
+    lastLiveUserCommit = null;
     const controller = liveController;
     liveController = null;
     finalizeLiveTranscriptBubbles();
@@ -2716,26 +2837,50 @@ export function createAiPanel({
           if (nextState === "closed" || nextState === "idle") {
             // 서버가 먼저 세션을 닫아도 다음 대화가 이전 말풍선에 이어 붙지 않게 정리한다.
             finalizeLiveTranscriptBubbles();
+            delegatedReadout = null;
+            lastLiveUserCommit = null;
             syncLiveMuteButton(false);
             if (liveController === controller) liveController = null;
           }
         },
         onUserTranscriptDelta: (payload) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          if (payload?.delta) {
+            lastUserTranscriptAt = Date.now();
+            delegatedReadout = null; // 사용자가 새로 말하기 시작하면 위임 답변 읽기는 끝난 것이다.
+          }
           appendOrUpdateTranscriptBubble("user", payload?.delta || "");
         },
-        onAssistantTranscriptDelta: (payload) => {
+        onAssistantTranscriptDelta: (payload, meta) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          // 위임 결과를 읽는 소리의 전사는 이미 그린 답변(카드·글)과 같으므로 말풍선을 또 만들지 않는다.
+          // 컨트롤러가 어느 위임을 읽는지(meta.delegationId) 알려 주면 그 위임만 가린다.
+          if (meta && typeof meta === "object" && "delegationId" in meta) {
+            if (meta.delegationId && spokenDelegationIds.has(meta.delegationId)) return;
+          } else if (delegatedReadout?.liveGen === liveGen) {
+            return;
+          }
           appendOrUpdateTranscriptBubble("assistant", payload?.delta || "");
         },
-        onTurnCommitted: (turn) => {
+        onTurnCommitted: (turn, meta) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           if (turn?.delegated) return; // 위임 답변은 handleClientDelegation이 이미 기록했다.
           if (turn?.text && (turn.role === "user" || turn.role === "assistant")) {
             rememberAgentTurn({ role: turn.role, content: turn.text });
+            if (turn.role === "user") {
+              const entry = agentHistory.at(-1);
+              lastLiveUserCommit = entry?.role === "user" && entry.content === turn.text.trim()
+                ? { entry, liveGen, utteranceId: typeof meta?.utteranceId === "string" ? meta.utteranceId : null }
+                : null;
+            }
           }
         },
-        onClientDelegation: (payload) => handleClientDelegation(payload, gen, liveGen),
+        // 두 번째 인자(meta)는 선택: { utteranceId, startMs, endMs, speechRevision, taskRevision, correction, isStale() }.
+        onClientDelegation: (payload, meta) => handleClientDelegation(payload, gen, liveGen, meta),
+        onTaskSuperseded: (info) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          markDelegationSuperseded(info?.delegationId);
+        },
         onError: (error, info = {}) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           if (info.fatal === false) {
@@ -3071,7 +3216,12 @@ export function createAiPanel({
 
   function performReset() {
     sessionGeneration += 1;
-    renderedDelegationIds.clear();
+    claimedDelegationIds.clear();
+    spokenDelegationIds.clear();
+    supersededDelegationIds.clear();
+    lastLiveUserCommit = null;
+    lastUserTranscriptAt = 0;
+    delegatedReadout = null;
     liveUserBubble = null;
     liveAssistantBubble = null;
     fallbackVoiceUsed = false;

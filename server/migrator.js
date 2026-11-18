@@ -536,8 +536,8 @@ export function ensureLocalDevReady() {
     const env = resolveExpectedEnv();
     await initEnvironment({ env, pool });
     await runMigrations({ env, pool });
-    const countRes = await pool.query("SELECT count(*)::int AS count FROM listings");
-    if (countRes.rows[0].count === 0 && process.env.MOA_SKIP_DEMO_SEED !== "1") {
+    const countRes = await pool.query("SELECT count(*)::int AS count FROM listings WHERE is_demo = true");
+    if (countRes.rows[0].count < buildMockListings().length && process.env.MOA_SKIP_DEMO_SEED !== "1") {
       await seedDemoListings({ env, pool });
     }
   })().catch((error) => {

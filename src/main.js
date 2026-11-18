@@ -13,7 +13,7 @@ import {
   resetAccountRuntimeState, saveGuestFavorites, readGuestFavorites, clearGuestFavorites,
 } from "./core/store.js";
 import {
-  initBannerCarousel, initRevealOnScroll, trackHeaderHeight, initScrollMotion,
+  initBannerCarousel, initAutoChoreography, trackHeaderHeight,
 } from "./core/motion.js";
 import { createCatalogViews } from "./views/catalog.js";
 import { createTransactionViews } from "./views/transactions.js";
@@ -154,12 +154,9 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     runtime.selectedOwnedMachineId = typeof meData?.selectedOwnedMachineId === "string" ? meData.selectedOwnedMachineId : "";
     runtime.garage?.setExternalOwned(runtime.ownedMachines, runtime.selectedOwnedMachineId);
     setEducationCertificateStatus(meData?.educationCertificate);
-    // 농농이로 닉네임을 바꾼 뒤처럼, 같은 계정의 이름이 바뀌었으면 상단 계정 버튼에도 반영한다.
     const freshName = typeof meData?.user?.name === "string" ? meData.user.name : "";
     if (freshName && runtime.accountUser?.id === meData.user.id && runtime.accountUser.name !== freshName) {
       runtime.accountUser = { ...runtime.accountUser, name: freshName };
-      const accountButton = $("loginButton");
-      if (accountButton) accountButton.textContent = `${freshName} · 내 계정`;
     }
 
     if (reqData) {
@@ -307,8 +304,8 @@ function updateBadges() {
   }
 }
 
-const viewIds = { deals: "dealsView", garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView", about: "aboutView" };
-const MY_PAGE_VIEWS = new Set(["requests", "owner", "ownerLoginRequired", "garage", "about"]);
+const viewIds = { deals: "dealsView", garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView" };
+const MY_PAGE_VIEWS = new Set(["deals", "requests", "owner", "ownerLoginRequired", "garage"]);
 
 // 모아농 2.0: 홈은 예약창·소개만 보여주고, 매물 목록은 '매물 찾기'에서 따로 본다
 const MAIN_PAGE_VIEWS = [];
@@ -316,7 +313,8 @@ let scrollSpyPausedUntil = 0;
 
 function markNav(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
-    const active = button.dataset.view === view;
+    const active = button.dataset.view === view
+      || (view === "ownerLoginRequired" && button.dataset.view === "owner");
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
@@ -340,6 +338,7 @@ function setView(view, options = {}) {
   for (const [name, id] of Object.entries(viewIds)) {
     $(id).hidden = onMainPage ? !MAIN_PAGE_VIEWS.includes(name) : name !== view;
   }
+  $("myPageLayout").hidden = !MY_PAGE_VIEWS.has(view);
   markNav(view);
   persist(updateBadges);
   if (view === "owner") {
@@ -1093,69 +1092,7 @@ function bindEvents() {
   $("buyerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
 
 
-  const myPageDropdown = document.querySelector(".mypage-dropdown");
-  const myPageBtn = $("myPageButton");
-  const myPageMenu = $("myPageMenu");
-  let myPageHoverTimer = null;
-  let myPageClosedByClick = false;
-  let myPageOpenedByHoverAt = 0;
-  const setMyPageOpen = (open, { returnFocus = false } = {}) => {
-    if (!myPageMenu || !myPageBtn) return;
-    myPageMenu.hidden = !open;
-    myPageBtn.setAttribute("aria-expanded", String(open));
-    myPageDropdown?.classList.toggle("is-open", open);
-    if (!open) {
-      myPageOpenedByHoverAt = 0;
-      if (returnFocus) myPageBtn.focus({ preventScroll: true });
-    }
-  };
-  if (myPageBtn && myPageMenu) {
-    myPageBtn.addEventListener("click", () => {
-      if (!myPageMenu.hidden && Date.now() - myPageOpenedByHoverAt < 350) {
-        myPageOpenedByHoverAt = 0;
-        myPageClosedByClick = false;
-        return;
-      }
-      const nextOpen = myPageMenu.hidden;
-      myPageOpenedByHoverAt = 0;
-      myPageClosedByClick = !nextOpen;
-      setMyPageOpen(nextOpen);
-    });
-    if (myPageDropdown && window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) {
-      myPageDropdown.addEventListener("pointerenter", () => {
-        clearTimeout(myPageHoverTimer);
-        if (!myPageClosedByClick && myPageMenu.hidden) {
-          myPageOpenedByHoverAt = Date.now();
-          setMyPageOpen(true);
-        }
-      });
-      myPageDropdown.addEventListener("pointerleave", () => {
-        myPageClosedByClick = false;
-        clearTimeout(myPageHoverTimer);
-        myPageHoverTimer = setTimeout(() => setMyPageOpen(false), 140);
-      });
-    }
-    myPageMenu.addEventListener("click", (event) => {
-      if (event.target.closest("[data-view], [data-action]")) {
-        setMyPageOpen(false);
-      }
-    });
-    document.addEventListener("pointerdown", (event) => {
-      if (myPageMenu.hidden) return;
-      if (event.target instanceof Element && event.target.closest(".mypage-dropdown")) return;
-      setMyPageOpen(false);
-    });
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !event.isComposing && !myPageMenu.hidden) {
-        setMyPageOpen(false, { returnFocus: true });
-      }
-    });
-  }
-
-  $("headerAiOpen")?.addEventListener("click", () => {
-    setMyPageOpen(false);
-    aiPanel.openAiPanel();
-  });
+  $("headerAiOpen")?.addEventListener("click", aiPanel.openAiPanel);
   for (const id of ["filterBackdrop", "detailBackdrop", "formBackdrop", "regionPickerDialog"]) {
     const el = $(id);
     if (el) el.style.zIndex = "1300";
@@ -1248,7 +1185,9 @@ function initLoginForm() {
   function renderAccount(user) {
     runtime.accountUser = user ?? null;
     const loggedIn = isLoggedIn();
-    headerButton.textContent = loggedIn ? `${runtime.accountUser.name} · 내 계정` : "로그인";
+    headerButton.hidden = loggedIn;
+    $("myPageButton").hidden = !loggedIn;
+    logout.hidden = !loggedIn;
     updateBadges();
   }
 
@@ -1330,6 +1269,10 @@ function initLoginForm() {
   }
 
   headerButton.addEventListener("click", openLogin);
+  $("myPageButton").addEventListener("click", () => {
+    setView("owner");
+    document.querySelector('#myPageMenu [data-view="owner"]')?.focus({ preventScroll: true });
+  });
   $("ownerLoginGoButton").addEventListener("click", openLogin);
   switchButton.addEventListener("click", () => setMode(!signup));
 
@@ -1548,8 +1491,7 @@ syncServerTime().then(() => { catalogViews.syncQuickSearchInputs(); renderAll();
 trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));
 initBannerCarousel(setView);
-initRevealOnScroll();
-initScrollMotion();
+initAutoChoreography();
 initMainPageScrollSpy();
 catalogViews.setTransaction(state.transaction);
 dealsView.bind();

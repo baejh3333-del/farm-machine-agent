@@ -202,7 +202,7 @@
 .deals-crosslink { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--primary-light); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px; font-size: 0.88rem; }
 .chat-open-deal { margin: -4px 0 8px; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1240px) {
   .deals-view.has-detail { grid-template-columns: minmax(0, 1fr); }
   .deals-view.has-detail .deals-list-pane { display: none; }
   .deals-detail { position: static; }

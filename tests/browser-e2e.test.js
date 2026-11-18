@@ -75,11 +75,12 @@ after(async () => {
 async function openMyPageAndClick(page, selector) {
   const menu = page.locator("#myPageMenu");
   if (await menu.isHidden()) {
-    await page.locator("#myPageButton").click();
+    const button = page.locator("#myPageButton");
+    await (await button.isVisible() ? button : page.locator('.sidebar-nav [data-view="deals"]')).click();
     await menu.waitFor({ state: "visible" });
   }
   await menu.locator(selector).click();
-  await menu.waitFor({ state: "hidden" });
+  await menu.waitFor({ state: "visible" });
 }
 
 async function signupOnLoginView(page, { username, name, password = "Password123!" }) {
@@ -112,6 +113,8 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageA.locator("#loginButton").click();
     await signupOnLoginView(pageA, { username: "e2e_owner_a", name: "소유자A" });
     await pageA.locator("#ownerView").waitFor({ state: "visible" });
+    assert.equal(await pageA.locator("#loginButton").isHidden(), true);
+    await pageA.locator("#myPageButton").waitFor({ state: "visible" });
 
     await pageA.locator("#newListingButton").click();
     await pageA.locator("#listingEditorForm").waitFor({ state: "visible" });
@@ -153,13 +156,11 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
 
     // Favorite before login (guest storage)
     await matchingCard.locator("[data-favorite]").click();
-    await pageB.locator("#myPageNotifDot").waitFor({ state: "visible" });
-    assert.equal(await pageB.locator("#favNavBadge").textContent(), "1");
-
-    // Verify Toss-style MyPage dropdown opens, closes on Escape, and #headerAiOpen opens AI panel
-    await pageB.locator("#myPageButton").click();
+    assert.equal(await pageB.locator("#myPageButton").isHidden(), true);
+    await pageB.locator('.sidebar-nav [data-view="deals"]').click();
     await pageB.locator("#myPageMenu").waitFor({ state: "visible" });
-    await pageB.keyboard.press("Escape");
+    assert.equal(await pageB.locator("#favNavBadge").textContent(), "1");
+    await pageB.locator('.sidebar-nav [data-view="browse"]').click();
     await pageB.locator("#myPageMenu").waitFor({ state: "hidden" });
 
     await pageB.locator("#headerAiOpen").click();

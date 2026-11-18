@@ -3130,6 +3130,18 @@ img {
   object-fit: contain;
 }
 
+.mypage-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #2d7a47);
+  flex-shrink: 0;
+}
+.mypage-dot[hidden] {
+  display: none;
+}
+
 .machine-example-label {
   position: absolute;
   right: 8px;
@@ -5128,4 +5140,16 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   border-radius: 12px;
   border: 1px solid var(--line);
   object-fit: contain;
+}
+
+.mypage-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #2d7a47);
+  flex-shrink: 0;
+}
+.mypage-dot[hidden] {
+  display: none;
 }

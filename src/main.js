@@ -1219,10 +1219,6 @@ function initLoginForm() {
     runtime.accountUser = user ?? null;
     const loggedIn = isLoggedIn();
     headerButton.textContent = loggedIn ? `${runtime.accountUser.name} · 내 계정` : "로그인";
-    const myPageDropdown = document.querySelector(".mypage-dropdown");
-    if (myPageDropdown) {
-      myPageDropdown.hidden = !loggedIn;
-    }
     updateBadges();
   }
 

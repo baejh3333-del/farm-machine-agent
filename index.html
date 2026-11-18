@@ -9,15 +9,16 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
-  <link rel="stylesheet" href="/src/styles.css?v=20261119-2" />
+  <link rel="stylesheet" href="/src/styles.css?v=20261119-3" />
   <link rel="stylesheet" href="/src/garage.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261119-2" />
-  <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261117" />
+  <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261119" />
+  <link rel="stylesheet" href="/src/styles/map-layout.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/home.css?v=20261119-3" />
-  <script type="module" src="/src/main.js?v=20261119-4"></script>
+  <script type="module" src="/src/main.js?v=20261119-5"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -687,6 +688,11 @@
         <button type="button" id="aiPhotoRemove" aria-label="사진 빼기">✕</button>
       </div>
       <div class="ai-voice-live-bar" id="aiVoiceLiveBar" data-voice-state="idle" hidden>
+        <div class="ai-voice-orb" aria-hidden="true">
+          <span class="ai-voice-orb-ring"></span>
+          <span class="ai-voice-orb-ring is-late"></span>
+          <span class="ai-voice-orb-face"><img src="./src/nongnong-icon.png" width="64" height="64" alt="" /></span>
+        </div>
         <div class="ai-voice-live-info">
           <span class="ai-voice-wave" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
           <span class="ai-voice-live-status" id="aiVoiceLiveStatus">농농이와 실시간 음성 대화 중 (듣는 중…)</span>

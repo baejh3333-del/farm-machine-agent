@@ -22,7 +22,7 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createHomeView } from "./views/home.js?v=20261119-2";
+import { createHomeView } from "./views/home.js?v=20261119-3";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
 initFontScale();

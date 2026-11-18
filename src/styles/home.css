@@ -62,10 +62,27 @@
 .h2-pop::before { content: ""; position: absolute; top: -7px; left: 32px; width: 14px; height: 14px; background: #fff; transform: rotate(45deg); border-radius: 3px 0 0 0; }
 .h2-pop-loc { width: 420px; }
 .h2-pop-date { width: min(1060px, calc(100vw - 96px)); padding: 32px 40px; border-radius: 24px; }
-.h2-home .h2-date-time { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; }
-.h2-home .h2-pop-time { width: min(340px, calc(100vw - 32px)); }
-.h2-home .h2-pop-time .h2-input { margin-top: 6px; }
-.h2-home .h2-pop-time p { font-size: 13px; color: var(--h2-soft); }
+.h2-input-date { flex: 1.3 1 0; min-width: 0; padding: 0 12px; font-size: 14px; }
+.h2-input-time { flex: 1 1 0; min-width: 0; padding: 0 10px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.h2-pop-time { width: 620px; padding: 24px 28px; }
+.h2-pop-time::before { left: 210px; }
+.h2-time { display: flex; gap: 28px; }
+.h2-vline { width: 1px; background: #eee; }
+.h2-time-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.h2-time-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.h2-time-head b { font-size: 16px; }
+.h2-time-head small { font-size: 13px; color: var(--h2-soft); }
+.h2-time-input { height: 48px; border: 1.5px solid #e2e2e2; border-radius: 12px; padding: 0 14px; font-size: 20px; font-weight: 700; text-align: center; letter-spacing: 0.04em; color: var(--h2-ink); font-variant-numeric: tabular-nums; }
+.h2-time-input:focus { outline: none; border-color: var(--h2-ink); }
+.h2-time-input.is-bad { border-color: #d93025; }
+.h2-wheel { position: relative; height: 220px; }
+.h2-wheel-band { position: absolute; left: 0; right: 0; top: 88px; height: 44px; border-radius: 12px; background: #f2f2f2; }
+.h2-wheel-list { position: relative; list-style: none; margin: 0; padding: 88px 0; height: 220px; box-sizing: border-box; overflow-y: scroll; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; -webkit-mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent); mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent); }
+.h2-wheel-list::-webkit-scrollbar { display: none; }
+.h2-wheel-list:focus-visible { outline: 2px solid var(--h2-ink); outline-offset: 2px; border-radius: 12px; }
+.h2-wheel-list li { height: 44px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 17px; font-weight: 500; color: #9a9a9a; cursor: pointer; font-variant-numeric: tabular-nums; }
+.h2-wheel-list li.is-on { font-size: 22px; font-weight: 700; color: var(--h2-ink); }
+.h2-warn { margin: 14px 0 0; font-size: 14px; font-weight: 500; color: #d93025; }
 .h2-pop-task { width: 560px; padding: 22px; }
 .h2-pop-title { display: block; font-size: 16px; margin-bottom: 14px; }
 .h2-pop-title small { margin-left: 6px; font-size: 13px; font-weight: 500; color: var(--h2-soft); }
@@ -241,7 +258,7 @@
 @media (max-width: 1080px) {
   .h2-search-card { flex-direction: column; }
   .h2-filter { flex-basis: auto; width: 100%; }
-  .h2-pop-date, .h2-pop-task, .h2-pop-loc { width: min(calc(100vw - 96px), 720px); }
+  .h2-pop-date, .h2-pop-time, .h2-pop-task, .h2-pop-loc { width: min(calc(100vw - 96px), 720px); }
   .h2-people { flex-direction: column; gap: 16px; }
   .h2-link-mark { transform: rotate(90deg); width: 80px; }
   .h2-person { width: min(460px, 100%); }
@@ -258,6 +275,7 @@
   .h2-rec-grid > :nth-child(3) { display: none; }
   .h2-pop { position: fixed; left: 12px; right: 12px; top: auto; bottom: 12px; width: auto !important; max-height: 80vh; overflow-y: auto; }
   .h2-pop::before { display: none; }
+  .h2-time { flex-direction: column; gap: 16px; }
   .h2-cal { flex-wrap: wrap; gap: 12px; }
   .h2-cal .h2-month + .h2-month { display: none; }
   /* 말풍선이 열리면 예약창을 농농이 버튼·상단바 위로 올리고, 뒤를 어둡게 덮는다(바깥을 누르면 닫힘) */

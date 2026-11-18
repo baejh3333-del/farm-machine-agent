@@ -272,9 +272,11 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     // 로그아웃 처리가 끝나면 홈으로 이동한다. 그 전에 로그인 버튼을 누르면 늦게 도착한 홈 이동이 로그인 화면을 덮는다.
     await pageB.locator("#homeView").waitFor({ state: "visible" });
     await pageB.locator('[data-home-pop="time"]').click();
-    await pageB.locator('#homeTimeForm [name="start"]').fill("10:30");
-    await pageB.locator('#homeTimeForm button[type="submit"]').click();
-    await pageB.locator('#homeTimeText:has-text("10:30–18:00")').waitFor({ state: "visible" });
+    await pageB.locator('[data-home-time-input="start"]').fill("1030");
+    await pageB.locator('[data-home-wheel="end"]').press("ArrowDown");
+    await pageB.locator('[data-home-slot="end:18:30"][aria-selected="true"]').waitFor({ state: "visible" });
+    await pageB.locator('[data-home-time="apply"]').click();
+    await pageB.locator('#homeTimeText:has-text("10:30–18:30")').waitFor({ state: "visible" });
 
     await pageB.locator("#loginButton").click();
     await signupOnLoginView(pageB, { username: "e2e_user_c", name: "사용자C" });

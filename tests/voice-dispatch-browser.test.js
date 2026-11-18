@@ -1,111 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 import { listListings } from "../server/listings-db.js";
+import { commentaryFor, deferred, openLivePage, say, settle, startStaticServer, waitCommentary, waitFor } from "./helpers/live-voice-page.js";
 
 // Real panel + controller modules in a real browser; WebRTC, microphone and /api/* are simulated.
-// VOICE_CONTROLLER_REF=<git ref> serves src/ai/gpt-live.js from that ref (to check the panel against a
-// controller branch without editing the controller here).
-const CONTROLLER_REF = process.env.VOICE_CONTROLLER_REF || "";
-
-function startStaticServer() {
-  const server = createServer(async (req, res) => {
-    try {
-      const path = new URL(req.url, "http://localhost").pathname;
-      const file = path === "/" ? "index.html" : path.slice(1);
-      if (file.includes("..")) throw new Error("invalid path");
-      const bytes = CONTROLLER_REF && file === "src/ai/gpt-live.js"
-        ? execFileSync("git", ["show", `${CONTROLLER_REF}:src/ai/gpt-live.js`])
-        : await readFile(new URL(`../${file}`, import.meta.url));
-      res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html");
-      res.end(bytes);
-    } catch { res.writeHead(404); res.end(); }
-  });
-  return new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve(server)));
-}
-
-function deferred() {
-  let resolve;
-  const promise = new Promise(r => { resolve = r; });
-  return { promise, resolve };
-}
-
-// agent(body, index) => Promise<json>; holdListings: a promise the /api/listings response waits for.
-async function openLivePage(browser, port, { agent, holdListings = null }) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  page.setDefaultTimeout(10000);
-  const errors = [];
-  const agentRequests = [];
-  page.on("pageerror", e => errors.push(e.message));
-  const listings = listListings();
-  await page.route("**/api/**", async route => {
-    const req = route.request();
-    const path = new URL(req.url()).pathname;
-    if (path === "/api/agent") {
-      const body = req.postDataJSON();
-      const index = agentRequests.push(body) - 1;
-      const { __status: status = 200, ...json } = await agent(body, index, listings);
-      return route.fulfill({ status, json }).catch(() => {});
-    }
-    if (path === "/api/listings") {
-      if (holdListings) await holdListings;
-      return route.fulfill({ json: { listings } }).catch(() => {});
-    }
-    let data = {};
-    if (path === "/api/me") data = { user: null };
-    if (path === "/api/voice") data = req.method() === "GET"
-      ? { liveAvailable: true, serverStt: false }
-      : { session: { id: "test-live" }, transport: { type: "webrtc", sdp: "answer" } };
-    await route.fulfill({ json: data }).catch(() => {});
-  });
-  await page.addInitScript(() => {
-    window.voiceTest = { sent: [], timings: [], toasts: [] };
-    document.addEventListener("nongnong:voice-dispatch-timing", (e) => window.voiceTest.timings.push(e.detail));
-    document.addEventListener("DOMContentLoaded", () => {
-      const toastEl = document.getElementById("toast");
-      new MutationObserver(() => window.voiceTest.toasts.push(toastEl.textContent))
-        .observe(toastEl, { childList: true, characterData: true, subtree: true });
-    });
-    const track = { enabled: true, stop() {} };
-    Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) });
-    class Channel extends EventTarget {
-      readyState = "open";
-      send(raw) {
-        const event = JSON.parse(raw);
-        window.voiceTest.sent.push(event);
-        if (event.type === "session.close") queueMicrotask(() => this.emit({ type: "session.closed" }));
-      }
-      emit(event) { this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(event) })); }
-      close() { this.readyState = "closed"; }
-    }
-    window.RTCPeerConnection = class extends EventTarget {
-      iceGatheringState = "complete";
-      addTrack() {}
-      createDataChannel() { return window.voiceTest.channel = new Channel(); }
-      async createOffer() { return { type: "offer", sdp: "offer" }; }
-      async setLocalDescription(offer) { this.localDescription = offer; }
-      async setRemoteDescription() { setTimeout(() => window.voiceTest.channel.emit({ type: "session.started" }), 0); }
-      close() {}
-    };
-  });
-  await page.goto(`http://127.0.0.1:${port}`);
-  await page.locator("#aiLauncher").click();
-  await page.locator("#aiPanel.is-fullscreen").waitFor({ state: "visible" });
-  await page.locator("#aiLiveVoiceButton").click();
-  await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
-  return { page, errors, agentRequests };
-}
-
-const say = (page, text, id) => page.evaluate(([t, d]) => {
-  window.voiceTest.channel.emit({ type: "session.input_transcript.delta", delta: t, start_ms: 100, end_ms: 900 });
-  window.voiceTest.channel.emit({ type: "session.delegation.created", delegation: { id: d, target: "client" } });
-}, [text, id]);
-const commentaryFor = (page, id) => page.evaluate((d) => window.voiceTest.sent.filter(e => e.type === "session.commentary.append" && e.delegation_id === d).map(e => e.content), id);
-const waitCommentary = (page, id) => page.waitForFunction((d) => window.voiceTest.sent.some(e => e.type === "session.commentary.append" && e.delegation_id === d), id);
-const settle = (page, ms = 150) => page.evaluate((t) => new Promise(r => setTimeout(r, t)), ms);
 
 test("voice dispatch: request is sent before the catalog loads; server listing order is kept for follow-ups", async () => {
   const server = await startStaticServer();
@@ -278,11 +177,3 @@ test("voice dispatch: a lost response after sending an approved action does not 
     await new Promise(resolve => server.close(resolve));
   }
 });
-
-async function waitFor(check, timeoutMs = 10000) {
-  const until = Date.now() + timeoutMs;
-  while (!(await check())) {
-    if (Date.now() > until) throw new Error("waitFor timed out");
-    await new Promise(r => setTimeout(r, 20));
-  }
-}

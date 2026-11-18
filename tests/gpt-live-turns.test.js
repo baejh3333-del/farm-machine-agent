@@ -332,8 +332,8 @@ test("정정은 바로 앞 작업만 무효로 하고, 관련 없는 이전 작�
   assert.equal(meta.a.isStale(), false);
 });
 
-test("줄에서 꺼내 말할 때 다시 확인한다: 줄 서 있는 동안 정정된 조회 결과는 버리고 관련 없는 결과는 말한다", async () => {
-  const { live, emit, spoken } = makeLive({ options: { userQuietMs: 60 } });
+test("줄에서 꺼내 말할 때 다시 확인한다: 어느 기종인지 애매한 정정은 되묻고, 답한 작업만 버리고 나머지는 말한다", async () => {
+  const { live, emit, spoken, sent } = makeLive({ options: { userQuietMs: 60 } });
   await live.start();
   emit({ type: "session.started" });
   emit({ type: "session.input_transcript.delta", delta: "트랙터 찾아줘" });
@@ -343,9 +343,19 @@ test("줄에서 꺼내 말할 때 다시 확인한다: 줄 서 있는 동안 정
   emit({ type: "session.input_transcript.delta", delta: "음" }); // 사용자가 계속 말하는 중 → 두 결과 모두 줄을 선다.
   await tick();
   assert.deepEqual(spoken(), []);
-  emit({ type: "session.input_transcript.delta", delta: " 아니 이앙기로" }); // 바로 앞 작업(y)만 정정
+  emit({ type: "session.input_transcript.delta", delta: " 아니 이앙기로" }); // 트랙터·콤바인 둘 다 기종 조건이 맞는다.
   await tick(120);
-  assert.deepEqual(spoken(), ["결과:트랙터 찾아줘"]);
+  assert.deepEqual(spoken(), [], "대상이 정해질 때까지 두 조회 결과 모두 잡아 둔다");
+  emit({ type: "session.delegation.created", delegation: { id: "z", target: "client" } }); // 정정 발화가 끝난다.
+  await tick(120);
+  assert.deepEqual(live.pendingClarification, ["x", "y"]);
+  assert.ok(sent.some((m) => m.event_id?.startsWith("clarify_") && /트랙터 찾기, 콤바인 찾기 중에 어느 요청을 바꿀까요/.test(m.content)));
+  assert.deepEqual(spoken(), ["결과:음 아니 이앙기로"], "정정 발화 자신의 결과는 잡아 두지 않는다");
+  emit({ type: "session.input_transcript.delta", delta: "콤바인이요" });
+  emit({ type: "session.output_transcript.delta", delta: "네" }); // 답 발화가 끝난다.
+  await tick(120);
+  assert.equal(live.pendingClarification, null);
+  assert.deepEqual(spoken(), ["결과:음 아니 이앙기로", "결과:트랙터 찾아줘"]);
   await live.stop();
 });
 

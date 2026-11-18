@@ -547,6 +547,8 @@ export function createAiPanel({
   let delegatedReadout = null;
   // 패널이 이미 그리고 읽으라고 넘긴 위임 ID: 그 낭독 전사는 말풍선으로 다시 그리지 않는다.
   const spokenDelegationIds = new Set();
+  // 정정으로 무효가 된 위임 ID: 결과가 늦게 오면 그릴 때 바로 "정정됨"으로 표시한다.
+  const supersededDelegationIds = new Set();
   const aiDefaultPlaceholder = $("aiInput").placeholder;
 
   function setPlusMenuOpen(nextOpen) {
@@ -2529,6 +2531,24 @@ export function createAiPanel({
     return { reason, spoken: `죄송해요, ${reason || "처리 중에 연결 문제가 생겼어요."} 같은 말씀을 한 번 더 해 주시면 바로 다시 할게요.` };
   }
 
+  // 사용자가 정정해 무효가 된 위임의 결과는 지우지 않고 "정정됨"으로 표시한다(쓰기 결과는 컨트롤러가 무효로 하지 않는다).
+  // 무효가 된 매물 목록을 “1번”이 가리키지 않게, 그 목록이 마지막으로 보여 준 목록이면 기억에서 뺀다.
+  function markDelegationSuperseded(delegationId) {
+    if (typeof delegationId !== "string" || !delegationId) return;
+    const bubble = [...document.querySelectorAll("#aiMessages .chat-bubble[data-delegation-id]")]
+      .find((el) => el.dataset.delegationId === delegationId);
+    supersededDelegationIds.add(delegationId);
+    // 실제로 처리된 쓰기 결과(예약 접수 등)는 정정과 상관없이 영수증으로 그대로 둔다.
+    if (!bubble || bubble.dataset.write === "1" || bubble.classList.contains("is-superseded")) return;
+    bubble.classList.add("is-superseded");
+    const note = document.createElement("div");
+    note.className = "ai-superseded-note";
+    note.textContent = "정정하신 요청이라 이 결과는 쓰지 않아요.";
+    bubble.prepend(note);
+    const lastResults = [...document.querySelectorAll("#aiMessages .chat-bubble.assistant.has-results")].at(-1);
+    if (lastResults === bubble) lastShownListingIds = [];
+  }
+
   async function handleClientDelegation(payload, gen, liveGen, meta = null) {
     if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return null;
     const timer = createDispatchTimer();
@@ -2644,6 +2664,11 @@ export function createAiPanel({
     const cardIds = rawListingIds.filter((id) => listingById(id));
     const bubble = appendAiMessage(reply, "assistant", cardIds, null, { searchDates: result?.searchDates || null });
     if (delegationId) bubble.dataset.delegationId = delegationId;
+    if (write) bubble.dataset.write = "1";
+    if (delegationId && supersededDelegationIds.has(delegationId)) {
+      supersededDelegationIds.delete(delegationId);
+      markDelegationSuperseded(delegationId);
+    }
     // 화면에 아직 없는 매물이어도 서버가 정한 순서·ID를 그대로 기억한다(“1번 예약해줘”가 같은 매물을 가리키게).
     if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
     else if (result?.reservation) lastShownListingIds = [];
@@ -2852,6 +2877,10 @@ export function createAiPanel({
         },
         // 두 번째 인자(meta)는 선택: { utteranceId, startMs, endMs, speechRevision, taskRevision, correction, isStale() }.
         onClientDelegation: (payload, meta) => handleClientDelegation(payload, gen, liveGen, meta),
+        onTaskSuperseded: (info) => {
+          if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+          markDelegationSuperseded(info?.delegationId);
+        },
         onError: (error, info = {}) => {
           if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
           if (info.fatal === false) {
@@ -3189,6 +3218,7 @@ export function createAiPanel({
     sessionGeneration += 1;
     claimedDelegationIds.clear();
     spokenDelegationIds.clear();
+    supersededDelegationIds.clear();
     lastLiveUserCommit = null;
     lastUserTranscriptAt = 0;
     delegatedReadout = null;

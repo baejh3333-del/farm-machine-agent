@@ -1,0 +1,138 @@
+<!-- 모아농 디자인 캔버스에서 옮긴 화면 템플릿. 화면 모양은 캔버스와 같게 유지해요. -->
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+body{margin:0}
+body, body *{font-family:'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif !important}
+a{color:#111111}a:hover{color:#1E9B4B}
+[data-rail]{scrollbar-width:none}
+[data-rail]::-webkit-scrollbar{display:none}
+[data-card] img, [data-card] [data-ph]{transition:transform 0.3s ease}
+[data-card]:hover img, [data-card]:hover [data-ph]{transform:scale(1.03)}
+[data-chip]:hover{background:#F2F2F2 !important}
+[data-field]:hover{background:#F6F6F6 !important}
+[data-arrow]:hover{border-color:#111111 !important}
+[data-cta]:hover{background:#178A40 !important}
+</style>
+</helmet>
+<div style="background: #FFFFFF; color: #111111; letter-spacing: -0.01em">
+
+<sc-if value="{{ anyOpen }}" hint-placeholder-val="{{ false }}"><div onClick="{{ closePop }}" style="position: fixed; inset: 0; z-index: 30"></div></sc-if>
+
+<header style="position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid #EEEEEE">
+<div style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px">
+<a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a>
+<div style="display: flex; align-items: center; gap: 28px">
+<nav aria-label="주 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap"><a href="#" aria-current="page" style="text-decoration: none; font-weight: 700; box-shadow: inset 0 -2px 0 #1E9B4B; padding-bottom: 4px">매물 찾기</a><a href="#" style="text-decoration: none">지도</a><a href="#" style="text-decoration: none">마이페이지</a></nav>
+<a href="#" style="height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid #DDDDDD; display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">농기계 등록하기</a>
+<a href="#" style="height: 38px; padding: 0 18px; border-radius: 999px; background: #111111; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 600; text-decoration: none">로그인</a>
+</div>
+</div>
+<div aria-hidden="{{ miniHidden }}" style="max-height: {{ miniH }}; opacity: {{ miniOp }}; overflow: hidden; transition: max-height 0.35s ease, opacity 0.25s ease">
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px 12px; display: flex; justify-content: center">
+<div role="search" aria-label="검색 조건" style="width: 100%; max-width: 760px; height: 50px; padding: 0 5px 0 6px; box-sizing: border-box; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; box-shadow: 0 6px 18px rgba(0,0,0,0.07); display: flex; align-items: center">
+<sc-for list="{{ miniSegs }}" as="g" hint-placeholder-count="4"><button type="button" onClick="{{ g.pick }}" style="flex: {{ g.flex }}; min-width: 0; height: 40px; padding: 0 16px; border: none; border-left: {{ g.line }}; background: transparent; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 14px; font-weight: 500; color: {{ g.color }}; text-align: left; white-space: nowrap; overflow: hidden; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="{{ g.icon }}"></path></svg><span style="overflow: hidden; text-overflow: ellipsis">{{ g.text }}</span></button></sc-for>
+<button type="button" data-cta="" onClick="{{ toTop }}" aria-label="검색 조건 바꾸기" style="flex: none; width: 40px; height: 40px; border: none; border-radius: 50%; background: #1E9B4B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></button>
+</div>
+</div>
+</div>
+</header>
+
+<section style="max-width: 1200px; margin: 24px auto 0; padding: 0 24px">
+<div style="position: relative; z-index: 31; border-radius: 28px; overflow: visible; background: #2B4A36">
+<div style="position: absolute; inset: 0; border-radius: 28px; overflow: hidden"><img src="/src/design/assets/field.jpg" alt="" aria-hidden="true" style="width: 100%; height: 100%; object-fit: cover; object-position: center 55%"><div style="position: absolute; inset: 0; background: linear-gradient(rgba(10,36,22,0.55), rgba(10,36,22,0.30) 55%, rgba(10,36,22,0.55))"></div></div>
+<div style="position: relative; padding: 64px 40px 40px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; color: #FFFFFF">
+<h1 style="margin: 0; font-size: 40px; line-height: 1.25; font-weight: 800; letter-spacing: -0.03em">필요한 날, 필요한 농기계</h1>
+<p style="margin: 0; font-size: 17px; opacity: 0.92">이웃의 쉬는 농기계를 하루 단위로 빌려요.</p>
+
+<div role="search" aria-label="매물 검색" ref="{{ searchRef }}" style="position: relative; margin-top: 26px; width: 100%; max-width: 980px; height: 72px; padding: 0 8px 0 8px; box-sizing: border-box; border-radius: 18px; background: #FFFFFF; box-shadow: 0 16px 40px rgba(0,0,0,0.18); display: flex; align-items: center; color: #111111; text-align: left">
+<button type="button" data-field="" onClick="{{ openLoc }}" aria-expanded="{{ locOpen }}" style="flex: 1.3 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: {{ locBg }}; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">어디서</span><span style="font-size: 15px; font-weight: 500; color: {{ locColor }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ locText }}</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 32px; background: #E6E6E6"></span>
+<button type="button" data-field="" onClick="{{ openStart }}" aria-expanded="{{ startOpen }}" style="flex: 1 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: {{ startBg }}; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">빌리는 날</span><span style="font-size: 15px; font-weight: 500; color: {{ startColor }}; white-space: nowrap">{{ startText }}</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 32px; background: #E6E6E6"></span>
+<button type="button" data-field="" onClick="{{ openEnd }}" aria-expanded="{{ endOpen }}" style="flex: 1 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: {{ endBg }}; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">돌려주는 날</span><span style="font-size: 15px; font-weight: 500; color: {{ endColor }}; white-space: nowrap">{{ endText }}</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 32px; background: #E6E6E6"></span>
+<button type="button" data-field="" onClick="{{ openType }}" aria-expanded="{{ typeOpen }}" style="flex: 1 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: {{ typeBg }}; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">농기계 종류</span><span style="font-size: 15px; font-weight: 500; color: {{ typeColor }}; white-space: nowrap">{{ typeText }}</span></button>
+<button type="button" data-cta="" onClick="{{ closePop }}" aria-label="찾기" style="flex: none; margin-left: 6px; width: 56px; height: 56px; border: none; border-radius: 14px; background: #1E9B4B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></button>
+
+<sc-if value="{{ locOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; top: calc(100% + 10px); left: 0; width: 400px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 14px">
+<div style="height: 46px; border-radius: 12px; background: #F4F4F4; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; color: #9A9A9A"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>동네나 주소 검색</div>
+<div style="margin-top: 6px; display: flex; flex-direction: column"><sc-for list="{{ locs }}" as="l" hint-placeholder-count="5"><button type="button" onClick="{{ l.pick }}" style="padding: 12px 10px; border: none; border-radius: 12px; background: {{ l.bg }}; display: flex; flex-direction: column; gap: 2px; text-align: left; font-family: inherit; cursor: pointer"><span style="font-size: 15px; font-weight: 600; color: {{ l.color }}">{{ l.name }}</span><span style="font-size: 13px; color: #767676">{{ l.sub }}</span></button></sc-for></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ dateOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%); width: 760px; box-sizing: border-box; background: #FFFFFF; border-radius: 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 22px 26px">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px"><b style="font-size: 16px">{{ rangeHint }}</b><span style="display: flex; gap: 6px"><sc-for list="{{ times }}" as="t" hint-placeholder-count="6"><button type="button" onClick="{{ t.pick }}" style="height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid {{ t.border }}; background: {{ t.bg }}; color: {{ t.color }}; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer">{{ t.label }}</button></sc-for></span></div>
+<div style="display: flex; align-items: flex-start; gap: 36px">
+<button type="button" onClick="{{ prevMonth }}" aria-label="이전 달" style="flex: none; width: 34px; height: 34px; border: 1px solid #E2E2E2; border-radius: 10px; background: #FFFFFF; font-size: 18px; cursor: pointer; color: {{ prevColor }}; margin-right: -18px">‹</button>
+<div style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 16px; line-height: 34px; margin-bottom: 6px">{{ m1.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 13px; color: #767676; margin-bottom: 4px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m1.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
+<div style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 16px; line-height: 34px; margin-bottom: 6px">{{ m2.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 13px; color: #767676; margin-bottom: 4px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m2.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
+<button type="button" onClick="{{ nextMonth }}" aria-label="다음 달" style="flex: none; width: 34px; height: 34px; border: 1px solid #E2E2E2; border-radius: 10px; background: #FFFFFF; font-size: 18px; cursor: pointer; margin-left: -18px">›</button>
+</div>
+<div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #EEEEEE"><button type="button" onClick="{{ resetDate }}" style="padding: 8px 16px; border: none; background: transparent; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">지우기</button><button type="button" onClick="{{ applyDate }}" style="padding: 8px 20px; border: none; border-radius: 12px; background: #111111; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">적용</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ typeOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; top: calc(100% + 10px); right: 0; width: 400px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 20px">
+<b style="display: block; font-size: 16px; margin-bottom: 12px">어떤 기계가 필요해요?</b>
+<div style="display: flex; flex-wrap: wrap; gap: 8px"><sc-for list="{{ types }}" as="t" hint-placeholder-count="8"><button type="button" onClick="{{ t.pick }}" style="padding: 10px 15px; border-radius: 999px; border: 1px solid {{ t.border }}; background: {{ t.bg }}; color: {{ t.color }}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer">{{ t.label }}</button></sc-for></div>
+<div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #EEEEEE; font-size: 14px; color: #555555">모르면 <b style="color: #111111; text-decoration: underline">농농이에게 물어보기</b></div>
+</div>
+</sc-if>
+</div>
+</div>
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 28px 24px 0; display: flex; flex-direction: column; align-items: center; gap: 22px">
+<div role="tablist" aria-label="찾는 방법" style="display: flex; gap: 8px">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6"><button type="button" role="tab" data-chip="" onClick="{{ t.pick }}" aria-selected="{{ t.sel }}" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: {{ t.bg }}; color: {{ t.color }}; display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ t.color }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ t.icon }}"></path></svg>{{ t.label }}</button></sc-for>
+</div>
+<a href="#" style="width: 100%; max-width: 560px; box-sizing: border-box; padding: 14px 18px; border-radius: 16px; border: 1px solid #E6E6E6; display: flex; align-items: center; gap: 14px; text-decoration: none"><span style="flex: none; width: 40px; height: 40px; border-radius: 12px; background: #EDF6F0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#13773A" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 15px">{{ keepTitle }}</b><span style="font-size: 13px; color: #767676">{{ keepSub }}</span></span><span aria-hidden="true" style="font-size: 20px; color: #9A9A9A">›</span></a>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 0">
+<h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">최근 검색으로 골라 봤어요</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{ recent }}" as="r" hint-placeholder-count="6"><a href="#" onClick="{{ r.open }}" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><sc-if value="{{ r.hasImg }}" hint-placeholder-val="{{ true }}"><img src="{{ r.img }}" alt="" style="flex: none; width: 104px; height: 72px; border-radius: 10px; object-fit: cover"></sc-if><sc-if value="{{ r.noImg }}" hint-placeholder-val="{{ false }}"><span style="flex: none; width: 104px; height: 72px; border-radius: 10px; background: linear-gradient(135deg, #E9F1EB, #DCE8DF); display: flex; align-items: center; justify-content: center"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8FA394" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ r.icon }}"></path></svg></span></sc-if><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ r.name }}</b><span style="font-size: 13px; color: #555555">{{ r.meta }}</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a></sc-for>
+</div>
+</section>
+
+<sc-for list="{{ rows }}" as="row" hint-placeholder-count="6">
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">{{ row.title }}</h2><span style="font-size: 14px; color: #767676">{{ row.sub }}</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" onClick="{{ row.prev }}" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" onClick="{{ row.next }}" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" ref="{{ row.ref }}" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+<sc-for list="{{ row.items }}" as="m" hint-placeholder-count="6">
+<article data-card="" onClick="{{ m.open }}" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<sc-if value="{{ m.hasImg }}" hint-placeholder-val="{{ true }}"><img src="{{ m.img }}" alt="{{ m.name }}" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: {{ m.pos }}"></sc-if>
+<sc-if value="{{ m.noImg }}" hint-placeholder-val="{{ false }}"><span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="{{ m.icon }}"></path></svg>사진 준비 중</span></sc-if>
+<button type="button" onClick="{{ m.fav }}" aria-pressed="{{ m.favSel }}" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="{{ m.favFill }}" stroke="{{ m.favStroke }}" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ m.name }}</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">{{ m.year }}<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">{{ m.rating }}</span>({{ m.reviews }})</span>
+<span style="font-size: 13px; color: #767676">{{ m.place }}</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">{{ m.price }}</b><span style="font-size: 13px; color: #767676">{{ m.total }}</span></span>
+</div>
+</article>
+</sc-for>
+</div>
+</section>
+</sc-for>
+
+<footer style="margin-top: 96px; background: #F6F6F6">
+<div style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px">
+<nav aria-label="하단 메뉴" style="display: flex; flex-wrap: wrap; gap: 28px; font-size: 14px"><a href="#" style="text-decoration: none; color: #555555">매물 찾기</a><a href="#" style="text-decoration: none; color: #555555">지도</a><a href="#" style="text-decoration: none; color: #555555">마이페이지</a><a href="#" style="text-decoration: none; color: #555555">개인정보처리방침</a></nav>
+<span style="font-size: 13px; color: #767676">info@moanong.co.kr · 1577-1106 · © 2026 모아농</span>
+</div>
+</footer>
+</div>
+</x-dc>

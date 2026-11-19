@@ -132,25 +132,16 @@ function toConversationDto(row, lastMessage = null, options = {}) {
 // 협상(trade-negotiation.js) 연동. 순환 import를 피하려고 동적으로 불러온다.
 // 모듈 누락을 숨기지 않는다. TRADE_NEGOTIATION_OPTIONAL=1(개발·이행 테스트 전용)일 때만 생략한다.
 
-const peerModuleCache = new Map();
-
-async function loadPeerModule(specifier) {
-  if (!peerModuleCache.has(specifier)) {
-    peerModuleCache.set(specifier, import(specifier));
-  }
+export async function loadTradeModule() {
   try {
-    return await peerModuleCache.get(specifier);
+    // Vercel이 대화 API 번들에 이 모듈을 포함할 수 있도록 경로를 명시한다.
+    return await import("./trade-negotiation.js");
   } catch (error) {
-    peerModuleCache.delete(specifier);
     if (process.env.TRADE_NEGOTIATION_OPTIONAL === "1" && error?.code === "ERR_MODULE_NOT_FOUND") {
       return null;
     }
     throw error;
   }
-}
-
-export function loadTradeModule() {
-  return loadPeerModule("./trade-negotiation.js");
 }
 
 async function fetchTradeSummary(db, convRow, viewerId, { inTransaction = false, detail = true } = {}) {

@@ -22,7 +22,7 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createHomeView } from "./views/home.js?v=20261119-3";
+import { createDesignApp } from "./design/app.js?v=20261120-1";
 import { createHeaderNav } from "./views/header-nav.js";
 import { createCartCheckout } from "./views/cart-checkout.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
@@ -46,6 +46,7 @@ const appDeps = {
   addToCart: (...args) => cartCheckout.addToCart(...args),
   openCheckout: (...args) => cartCheckout.openCheckout(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
+  openListingPage: (id) => openListingPage(id),
   renderListings: (...args) => catalogViews.renderListings(...args),
   openDeal: (conversationId) => setView("deals", { conversationId }),
   onConversationRead: (...args) => dealsView.onConversationRead(...args),
@@ -70,16 +71,30 @@ function getOwnedMachinesSnapshot() {
 
 const catalogViews = createCatalogViews(appDeps);
 const txViews = createTransactionViews(appDeps);
-const homeView = createHomeView({
-  machineVisual: (...args) => machineVisual(...args),
-  renderAll: (...args) => renderAll(...args),
+// 홈·매물 찾기·매물 상세는 모아농 2.1·2.2 디자인 화면을 그대로 쓴다
+const designApp = createDesignApp({
   setView: (...args) => setView(...args),
-  updateBadges: (...args) => updateBadges(...args),
-  renderListings: (...args) => catalogViews.renderListings(...args),
-  openDetail: (...args) => catalogViews.openDetail(...args),
-  filteredListings: () => catalogViews.filteredListings(),
-  setTransaction: (type) => catalogViews.setTransaction(type),
+  openDetail: (id) => openListingPage(id),
+  listingById,
+  favorites: () => activeFavorites(),
+  isFavorite: (id) => activeFavorites().includes(id),
+  toggleFavorite: (id) => toggleFavorite(id),
+  rentalForm: (...args) => txViews.rentalForm(...args),
+  chatForm: (...args) => txViews.chatForm(...args),
+  openNewListing: () => txViews.openNewListing(),
+  openMyPage: () => $("myPageButton")?.click(),
+  openLogin: () => (isLoggedIn() ? $("myPageButton")?.click() : setView("login")),
+  askAi: (prompt) => (prompt ? aiPanel.submitPrompt(prompt) : aiPanel.openAiPanel()),
+  openMap: (id) => setView("map", { focusListingId: id }),
+  browseType: (type) => { designApp.browseType(type); setView("browse"); },
+  goBrowse: () => setView("browse"),
+  scrollHome: (section) => designApp.scrollHome(section),
 });
+
+function openListingPage(id) {
+  if (!listingById(id)) return;
+  setView("detail", { id });
+}
 const dealsView = createDealsView({
   setView: (...args) => setView(...args),
   refreshAuthenticatedData: (...args) => refreshAuthenticatedData(...args),
@@ -120,6 +135,7 @@ const headerNav = createHeaderNav({
   openFilters: () => catalogViews.openFilters(),
   openAiPanel: () => aiPanel.openAiPanel(),
   submitAiPrompt: (prompt) => aiPanel.submitPrompt(prompt),
+  scrollHome: (section) => designApp.scrollHome(section),
 });
 const cartCheckout = createCartCheckout({
   setView: (...args) => setView(...args),
@@ -334,6 +350,7 @@ const viewIds = {
   map: "mapView",
   home: "homeView",
   browse: "browseView",
+  detail: "detailView",
   guide: "guideView",
   requests: "requestsView",
   requestsLoginRequired: "requestsLoginRequiredView",
@@ -353,6 +370,7 @@ const MY_PAGE_VIEWS = new Set([
 
 // 모아농 2.0: 홈은 예약창·소개만 보여주고, 매물 목록은 '매물 찾기'에서 따로 본다
 const MAIN_PAGE_VIEWS = [];
+const DESIGN_VIEWS = new Set(["home", "browse", "detail"]);
 let scrollSpyPausedUntil = 0;
 
 function markNav(view) {
@@ -385,6 +403,7 @@ function setView(view, options = {}) {
     view = "requestsLoginRequired";
   }
   if (view === "owner" && !isLoggedIn()) view = "ownerLoginRequired";
+  if (view === "detail" && !listingById(options.id || state.detailId)) view = "browse";
   if (view !== "deals" && view !== "dealsLoginRequired") {
     dealsView.hide();
     if (parseDealsHash(location.hash)) history.replaceState(null, "", location.pathname + location.search);
@@ -428,7 +447,11 @@ function setView(view, options = {}) {
   }
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
   scrollSpyPausedUntil = Date.now() + 1000;
-  homeView.closePop();
+  designApp.closePop();
+  document.body.classList.toggle("design-page", DESIGN_VIEWS.has(view));
+  if (view === "browse") designApp.showBrowse();
+  if (view === "detail") designApp.showDetail(options.id || state.detailId);
+  if (view === "detail" && options.id) state.detailId = options.id;
   window.scrollTo({ top: 0 });
 }
 
@@ -459,7 +482,7 @@ function renderAll() {
   catalogViews.renderMachineCategoryBar();
   catalogViews.renderListings();
   catalogViews.renderFavoritesView();
-  homeView.render();
+  designApp.refresh();
   txViews.renderBuyerRequests();
   updateBadges();
   if (state.view === "map") {
@@ -1657,7 +1680,6 @@ $("detailContent").addEventListener("click", (event) => {
 headerNav.bind();
 cartCheckout.bind();
 bindEvents();
-homeView.bind();
 syncServerTime().then(() => { catalogViews.syncQuickSearchInputs(); renderAll(); });
 trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));

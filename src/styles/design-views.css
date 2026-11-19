@@ -1,0 +1,10 @@
+/* 모아농 2.1·2.2 디자인 화면(홈·매물 찾기·매물 상세)
+   화면 안의 모양은 src/design/*.html 이 맡고, 여기서는 앱 틀만 비켜 준다. */
+.design-view[hidden] { display: none !important; }
+.design-view { display: block; width: 100%; margin: 0; }
+
+/* 디자인 화면에는 자체 머리말이 있어서 예전 머리말과 여백을 숨긴다 */
+body.design-page .sidebar { display: none; }
+body.design-page .main-content { padding: 0; }
+body.design-page #homeView { margin-top: 0; }
+body.design-page { background: #FFFFFF; }

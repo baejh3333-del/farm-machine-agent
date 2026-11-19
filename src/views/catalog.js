@@ -1,3 +1,4 @@
+import { deliveryLine, deliveryOf } from "../data/delivery.js";
 import { SPEC_BY_ID } from "../data/machine-specifications.js";
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "../data/farm-machines.js";
 import { available, compareListings } from "../data/recommendation.js";
@@ -1335,7 +1336,7 @@ function openDetail(id) {
 
         <div class="detail-box">
           <b> 포함 구성품 및 인수 방법</b>
-          <p>포함 작업기/부속: <strong>${escapeHtml(item.included)}</strong><br>인수 방식: <strong>${escapeHtml(item.pickup)}</strong></p>
+          <p>포함 작업기/부속: <strong>${escapeHtml(item.included)}</strong><br>운송 방식: <strong>${escapeHtml(deliveryLine(deliveryOf(item), { type: item.type }) || item.pickup || "문의")}</strong></p>
         </div>
 
         <div class="detail-box">

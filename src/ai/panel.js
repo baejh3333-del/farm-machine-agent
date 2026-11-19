@@ -2,6 +2,7 @@ import { CROP_BY_ID, OPERATION_BY_ID, REGION_COORDS } from "../data/farm-machine
 import { activeFavorites } from "../core/store.js";
 import { $, addDays, areaLabel, getListingPhotoSrc, machineImage, money, today, toast } from "../core/utils.js";
 import { isAffirmative } from "./affirm.js";
+import { cleanDeliveryMethods, deliveryLine, deliveryOf, pickupLabel } from "../data/delivery.js";
 import { SETUP_CHANGED_EVENT, applyInitialSetup, buildInitialSetupFields, isInitialSetupDone } from "../views/initial-setup.js";
 import { listingDraftToFormValues } from "./photo.js";
 import { askAgent, executeAgentAction, fetchWeatherForecast } from "./recommend-agent.js";
@@ -1088,6 +1089,19 @@ export function createAiPanel({
     refreshAuthenticatedData?.({ includeRequests: true, includeConversations: true }).catch(() => {});
   }
 
+  /** 추천 카드용 짧은 운송 표시: "직접 운송·픽업", "직접 운송", "직접 픽업" */
+  function shortDeliveryText(item) {
+    const methods = deliveryOf(item).methods;
+    if (methods.length === 2) return "직접 운송·픽업";
+    return methods[0] === "owner_delivery" ? "직접 운송" : "직접 픽업";
+  }
+
+  /** 매물의 운송 방식 한 줄(확인 카드·신청 완료 박스용). 매물을 모르면 빈 문자열. */
+  function listingDeliveryText(listingId, type) {
+    const listing = listingId ? listingById(listingId) : null;
+    return listing ? deliveryLine(deliveryOf(listing), { type: listing.type || type }) : "";
+  }
+
   function renderReservationBox(bubble, done) {
     if (!done) return;
     const box = document.createElement("div");
@@ -1098,6 +1112,7 @@ export function createAiPanel({
       ["지역", done.region],
       done.kind === "rental" ? ["기간", `${formatReservationDate(done.start)} ~ ${formatReservationDate(done.end)}`] : null,
       Number.isFinite(done.totalPrice) ? [done.kind === "rental" ? "내야 하는 돈" : "판매가", money(done.totalPrice)] : null,
+      ["운송", listingDeliveryText(done.listingId, done.kind === "purchase" ? "sale" : "rent")],
       ["상태", done.kind === "rental" ? "소유 농가 승인 대기 · 결제 전" : "판매자 확인 대기"],
     ].filter((row) => row && row[1]);
     for (const [label, value] of rows) {
@@ -1141,11 +1156,17 @@ export function createAiPanel({
     onBusy?.();
     if (triggerButton) triggerButton.disabled = true;
     try {
-      const result = await executeAgentAction(pendingAction, requestId, { insuranceAsked });
+      // 직전에 보여준 목록의 번호를 함께 보내 완료 답변을 "n번 매물 …"로 말하게 한다.
+      const shownNo = lastShownListingIds.indexOf(pendingAction?.listingId) + 1;
+      const actionToRun = shownNo > 0 && (pendingAction?.type === "rental_request" || pendingAction?.type === "purchase_request")
+        ? { ...pendingAction, shownNo }
+        : pendingAction;
+      const result = await executeAgentAction(actionToRun, requestId, { insuranceAsked });
       if (gen !== sessionGeneration) return;
       if (result?.outcome === "completed") {
         const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
         if (result.reservation) renderReservationBox(bubble, result.reservation);
+        if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
         if (result.delegatedTransaction) renderDelegatedTransactionBox(bubble, result.delegatedTransaction);
         appendInsuranceAsk(result);
         if (result.createdListing) {
@@ -1544,7 +1565,7 @@ export function createAiPanel({
         const infoMeta = document.createElement("small");
         infoMeta.textContent = `${item.region || ""} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}`;
         const infoSub = document.createElement("small");
-        infoSub.textContent = `${areaLabel(item.areaMin, item.areaMax)} · ${item.pickup || "인수 방법 문의"}`;
+        infoSub.textContent = `${areaLabel(item.areaMin, item.areaMax)} · ${shortDeliveryText(item)}`;
         info.append(infoTitle, infoMeta, infoSub);
         const compatSummary = formatCompatibilitySummary(item);
         if (compatSummary) {
@@ -1667,6 +1688,7 @@ export function createAiPanel({
             ["매물", action.title],
             ["지역", action.region],
             ["판매가", money(action.price)],
+            ["운송", listingDeliveryText(action.listingId, "sale")],
             ["메모", action.note],
           ]
         : [
@@ -1674,6 +1696,7 @@ export function createAiPanel({
             ["지역", action.region],
             ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
             ["대여료", `${money(action.dailyPrice)}/일 × ${action.days}일 = ${money(action.totalPrice)}`],
+            ["운송", listingDeliveryText(action.listingId, "rent")],
             ["메모", action.note],
           ];
     for (const [label, value] of rows) {
@@ -1939,21 +1962,109 @@ export function createAiPanel({
     const actions = document.createElement("div");
     actions.className = "ai-confirm-actions";
 
+    // 운송 방식 체크(판매·대여 공통). 카드에서 바꾼 값이 농농이 채운 값보다 우선한다.
+    const cardDelivery = {
+      methods: cleanDeliveryMethods(draft.delivery?.methods),
+      fee: Number.isSafeInteger(draft.delivery?.fee) ? draft.delivery.fee : null,
+      area: typeof draft.delivery?.area === "string" ? draft.delivery.area : "",
+      pickupPlace: typeof draft.delivery?.pickupPlace === "string" ? draft.delivery.pickupPlace : "",
+    };
+    const uid = `d${Math.random().toString(36).slice(2, 8)}`;
+    const deliveryBox = document.createElement("fieldset");
+    deliveryBox.className = "ai-draft-delivery";
+    const legend = document.createElement("legend");
+    legend.textContent = "운송 방식 (하나 이상, 둘 다 가능)";
+    const missing = document.createElement("p");
+    missing.className = "ai-draft-delivery-missing";
+    missing.setAttribute("role", "status");
+    missing.textContent = "[확인 필요] 운송 방식을 골라 주세요.";
+    const makeToggle = (method, labelText, fieldsBuilder) => {
+      const label = document.createElement("label");
+      label.className = "ai-draft-delivery-toggle";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = cardDelivery.methods.includes(method);
+      const fields = document.createElement("div");
+      fields.className = "ai-draft-delivery-fields";
+      fields.id = `${uid}-${method}`;
+      box.setAttribute("aria-controls", fields.id);
+      fieldsBuilder(fields);
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      label.append(box, text);
+      const sync = () => {
+        fields.hidden = !box.checked;
+        box.setAttribute("aria-expanded", String(box.checked));
+      };
+      box.addEventListener("change", () => {
+        const set = new Set(cardDelivery.methods);
+        if (box.checked) set.add(method); else set.delete(method);
+        cardDelivery.methods = cleanDeliveryMethods([...set]);
+        sync();
+        syncMissing();
+      });
+      sync();
+      return [label, fields];
+    };
+    const makeInput = (labelText, attrs, value, onInput) => {
+      const label = document.createElement("label");
+      label.className = "ai-draft-delivery-input";
+      const input = document.createElement("input");
+      Object.entries(attrs).forEach(([k, v]) => input.setAttribute(k, v));
+      input.value = value ?? "";
+      input.addEventListener("input", () => onInput(input.value));
+      label.append(document.createTextNode(labelText), input);
+      return label;
+    };
+    const [ownerLabel, ownerFields] = makeToggle("owner_delivery", "직접 운송 (내가 가져다드려요)", (fields) => {
+      fields.append(
+        makeInput("운송비(원, 비우면 협의)", { type: "number", min: "0", step: "1000", inputmode: "numeric", placeholder: "예: 30000" }, cardDelivery.fee ?? "", (v) => {
+          const n = Number(v);
+          cardDelivery.fee = v.trim() !== "" && Number.isSafeInteger(n) && n >= 0 ? n : null;
+        }),
+        makeInput("운송 가능 범위", { maxlength: "80", placeholder: "예: 영양군 안" }, cardDelivery.area, (v) => { cardDelivery.area = v.trim(); }),
+      );
+    });
+    const [pickupToggle, pickupFields] = makeToggle("self_pickup", pickupLabel(draft.type), (fields) => {
+      fields.append(makeInput("픽업 장소 (동네까지만)", { maxlength: "120", placeholder: "예: 영양읍 창고" }, cardDelivery.pickupPlace, (v) => { cardDelivery.pickupPlace = v.trim(); }));
+    });
+    const syncMissing = () => {
+      const empty = !cardDelivery.methods.length;
+      missing.hidden = !empty;
+      quickRegister.disabled = empty;
+      quickRegister.title = empty ? "운송 방식을 골라 주세요" : "";
+    };
+    deliveryBox.append(legend, ownerLabel, ownerFields, pickupToggle, pickupFields, missing);
+    const draftWithDelivery = () => ({
+      ...draft,
+      delivery: {
+        methods: [...cardDelivery.methods],
+        fee: cardDelivery.methods.includes("owner_delivery") ? cardDelivery.fee : null,
+        area: cardDelivery.methods.includes("owner_delivery") ? cardDelivery.area : "",
+        pickupPlace: cardDelivery.methods.includes("self_pickup") ? cardDelivery.pickupPlace : "",
+      },
+    });
+
     const quickRegister = document.createElement("button");
     quickRegister.type = "button";
     quickRegister.className = "button button-primary";
     quickRegister.textContent = "⚡ 채팅에서 바로 등록";
     quickRegister.addEventListener("click", () => {
+      if (!cardDelivery.methods.length) {
+        syncMissing();
+        toast("운송 방식을 하나 이상 골라 주세요.");
+        return;
+      }
       if (!(Number.isFinite(draft.price) && draft.price > 0)) {
         toast("가격이 정해지지 않았어요. 상세 화면에서 가격을 입력해 주세요.");
         if (savedDraft?.listingId === draft.listingId) savedDraft = null;
-        openNewListing?.(listingDraftToFormValues(draft, photoDataUrl));
+        openNewListing?.(listingDraftToFormValues(draftWithDelivery(), photoDataUrl));
         return;
       }
       rememberAgentTurn({ role: "user", content: "초안 내용대로 매물을 바로 등록해 주세요." });
       executeOneTapAction({
         pendingAction: {
-          ...draft,
+          ...draftWithDelivery(),
           listingType: draft.type === "sale" ? "sale" : "rent",
           type: "create_listing",
           ...(photoDataUrl ? { photoDataUrl } : {}),
@@ -1963,10 +2074,13 @@ export function createAiPanel({
         onBusy: () => { quickRegister.textContent = "등록하는 중…"; },
         onDone: (outcome) => {
           card.dataset.state = outcome;
-          if (outcome === "completed") quickRegister.remove();
-          else {
+          if (outcome === "completed") {
+            quickRegister.remove();
+            deliveryBox.disabled = true;
+          } else {
             quickRegister.disabled = false;
             quickRegister.textContent = "⚡ 채팅에서 바로 등록";
+            syncMissing();
           }
         },
         onError: (_outcome, error) => {
@@ -1985,7 +2099,7 @@ export function createAiPanel({
     register.textContent = "📝 상세 수정 후 등록";
     register.addEventListener("click", () => {
       if (savedDraft?.listingId === draft.listingId) savedDraft = null;
-      openNewListing?.(listingDraftToFormValues(draft, photoDataUrl));
+      openNewListing?.(listingDraftToFormValues(draftWithDelivery(), photoDataUrl));
     });
 
     const copy = document.createElement("button");
@@ -2002,7 +2116,8 @@ export function createAiPanel({
     });
 
     actions.append(quickRegister, register, copy);
-    card.append(name, price, desc, notice, actions);
+    card.append(name, price, desc, deliveryBox, notice, actions);
+    syncMissing();
     bubble.append(card);
   }
 
@@ -2154,10 +2269,20 @@ export function createAiPanel({
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "ai-chat-cta-btn";
-    btn.textContent = `💬 ${chatTarget.title || "매물"} 소유자와 1:1 채팅 열기`;
+    const who = chatTarget.kind === "purchase" ? "판매자" : "소유자";
+    btn.textContent = `💬 ${chatTarget.title || "매물"} ${who}와 1:1 채팅 열기`;
     btn.addEventListener("click", () => {
       handleOpenChat({ listingId: chatTarget.listingId, draftBody: chatTarget.prefill || "" });
     });
+    // 신청 직후 버튼: 메시지는 사용자가 직접 보내므로 대리 채팅 버튼은 두지 않는다.
+    if (chatTarget.afterRequest) {
+      const hint = document.createElement("p");
+      hint.className = "ai-chat-cta-hint";
+      hint.textContent = "버튼을 누르면 인사말이 미리 채워져요. 확인하고 직접 보내 주세요.";
+      wrap.append(btn, hint);
+      bubble.append(wrap);
+      return;
+    }
     const autoBtn = document.createElement("button");
     autoBtn.type = "button";
     autoBtn.className = "ai-chat-cta-btn ai-chat-auto-btn";

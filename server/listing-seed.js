@@ -1,3 +1,4 @@
+import { inferDeliveryMethods } from "../src/data/delivery.js";
 import { applyModelSpecification } from "../src/data/machine-specifications.js";
 
 // 사전 조합 완료된 정적 시드 데이터 (총 1084건: 실제 농가 적용 영양읍·청기면·입암면·수비면·팔봉리 310건 + 155개 지역별 5건 실제 농가 매물 774건)
@@ -1089,5 +1090,9 @@ const seed = [
 ];
 
 export function buildMockListings() {
-  return seed.map((item, index) => applyModelSpecification({ ...item, status: item.status || "open" }, index));
+  return seed.map((item, index) => {
+    const listing = applyModelSpecification({ ...item, status: item.status || "open" }, index);
+    // 데모 매물의 운송 방식은 기존 인수·전달 방법 글로 정한다(운반 협의 → 직접 운송, 직접 인수 → 직접 픽업).
+    return { ...listing, delivery: listing.delivery || { methods: inferDeliveryMethods(listing.pickup), fee: null, area: "", pickupPlace: listing.pickup || "" } };
+  });
 }

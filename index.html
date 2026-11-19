@@ -11,14 +11,14 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
   <link rel="stylesheet" href="/src/styles.css?v=20261119-3" />
   <link rel="stylesheet" href="/src/garage.css?v=20261119" />
-  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261119-2" />
+  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261119-4" />
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/map-layout.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/home.css?v=20261119-3" />
-  <script type="module" src="/src/main.js?v=20261119-5"></script>
+  <script type="module" src="/src/main.js?v=20261119-6"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -27,29 +27,18 @@
         <svg class="brand-wordmark" width="85" height="28" viewBox="0 0 140 46" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111"/><path d="M19 24v10M2 39h34" stroke="#111"/><circle cx="58" cy="21" r="12.5" stroke="#111"/><circle cx="58" cy="21" r="3.2" fill="#1E9B4B" stroke="none"/><path d="M82 3v38M82 21h8" stroke="#111"/><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111"/><circle cx="116" cy="34" r="7.5" stroke="#1E9B4B"/></svg>
       </button>
       <nav class="sidebar-nav" aria-label="주 메뉴">
-        <button type="button" class="nav-item active" aria-label="홈" data-view="home" aria-current="page">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">홈</span>
-        </button>
-        <button type="button" class="nav-item" aria-label="매물 찾기" data-view="browse">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">매물 찾기</span>
-        </button>
-        <button type="button" class="nav-item" aria-label="동네 지도" data-view="map">
-          <span class="nav-icon" aria-hidden="true"></span>
+        <button type="button" class="nav-item" aria-label="지도" data-view="map">
           <span class="nav-label">지도</span>
         </button>
-        <button type="button" class="nav-item" aria-label="작업 가이드" data-view="guide">
-          <span class="nav-icon" aria-hidden="true"></span>
-          <span class="nav-label">작업 가이드</span>
+        <button type="button" class="nav-item" aria-label="매물 찾기" data-view="browse">
+          <span class="nav-label">매물 찾기</span>
         </button>
-        <button type="button" class="nav-item" id="headerAiOpen" aria-label="AI 농농이 열기">
-          <span class="nav-label">AI 농농이</span>
+        <button type="button" class="nav-item" aria-label="농기계 호환" data-view="garage">
+          <span class="nav-label">농기계 호환</span>
         </button>
-        <button type="button" class="nav-item nav-deals" aria-label="거래 관리" data-view="deals">
-          <span class="nav-label">거래 관리</span>
-          <span class="nav-badge nav-badge-alert" id="dealsNavBadge" hidden>0</span>
-          <span class="mypage-dot" id="dealsNavDot" hidden aria-label="안 읽은 메시지 있음"></span>
+        <button type="button" class="nav-item" id="topFavoritesButton" aria-label="찜 목록">
+          <span class="nav-label">찜 목록</span>
+          <span id="favNavBadge" class="nav-badge" hidden>0</span>
         </button>
       </nav>
 
@@ -75,9 +64,19 @@
             <option value="수비면">수비면</option>
           </select>
           <button type="button" class="login-button" id="loginButton">로그인</button>
-          <button type="button" class="login-button" id="myPageButton" hidden>
-            마이페이지 <span class="mypage-dot" id="myPageNotifDot" hidden aria-label="확인할 알림 있음"></span>
-          </button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <button type="button" class="login-button account-menu-trigger" id="myPageButton" aria-haspopup="true" aria-expanded="false" aria-controls="accountDropdown">
+              <span id="myPageName">내 계정</span>
+              <span class="account-menu-caret" aria-hidden="true">▾</span>
+              <span class="mypage-dot" id="myPageNotifDot" hidden aria-label="확인할 알림 있음"></span>
+            </button>
+            <div class="account-dropdown" id="accountDropdown" aria-label="계정 메뉴">
+              <button type="button" class="account-dropdown-item" data-view="deals">거래 관리 <span class="nav-badge nav-badge-alert" id="dealsNavBadge" hidden>0</span></button>
+              <button type="button" class="account-dropdown-item" data-view="requests">대여 요청</button>
+              <button type="button" class="account-dropdown-item" data-view="owner">내 기계 관리 <span id="ownerBadge" class="nav-badge" hidden>0</span></button>
+              <button type="button" class="account-dropdown-item account-dropdown-logout" id="accountLogoutButton">로그아웃</button>
+            </div>
+          </div>
       </div>
     </header>
 
@@ -453,16 +452,7 @@
         <div class="mypage-layout" id="myPageLayout" hidden>
           <nav class="mypage-menu" id="myPageMenu" aria-label="마이페이지 메뉴">
             <h2>마이페이지</h2>
-            <button type="button" class="mypage-menu-item" data-action="favorites" aria-haspopup="dialog">
-              찜 목록 <span id="favNavBadge" class="nav-badge" hidden>0</span>
-            </button>
-            <button type="button" class="mypage-menu-item" data-view="deals">거래 관리</button>
-            <button type="button" class="mypage-menu-item" data-view="requests">대여 요청</button>
-            <button type="button" class="mypage-menu-item" data-view="owner">
-              내 기계 관리 <span id="ownerBadge" class="nav-badge" hidden>0</span>
-            </button>
-            <button type="button" class="mypage-menu-item" data-view="garage">내 농기계·호환</button>
-            <button type="button" class="mypage-menu-item mypage-logout" id="accountLogoutButton" hidden>로그아웃</button>
+            <p>상단 계정 메뉴에서 거래와 보유 기계를 관리할 수 있어요.</p>
           </nav>
           <div id="garageView" hidden></div>
         <section id="dealsView" class="deals-view" aria-labelledby="dealsTitle" hidden>

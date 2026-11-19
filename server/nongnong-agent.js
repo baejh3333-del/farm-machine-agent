@@ -2652,8 +2652,6 @@ export function rentalTermsOf(action) {
   return { negotiatedDailyPrice, operatorWanted: operatorWanted === true };
 }
 
-const won = (value) => `${Number(value).toLocaleString("ko-KR")}원`;
-
 function rentalTermsLines(terms, listedDailyPrice) {
   const listed = Number(listedDailyPrice) > 0 ? Number(listedDailyPrice) : null;
   return [

@@ -1663,6 +1663,7 @@ export function createAiPanel({
       : isPurchase
         ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
         : "승인하면 게시자에게 대여 요청과 아래 희망 조건이 채팅으로 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+    card.append(notice);
 
     // 대여 요청: 희망 네고 가격(1일)·대리운용 희망 여부를 받아 요청과 함께 게시자 채팅으로 보낸다.
     const isRental = action.type === "rental_request";
@@ -1739,7 +1740,7 @@ export function createAiPanel({
     cancel.className = "button button-secondary";
     cancel.textContent = "취소";
     actions.append(approve, cancel);
-    card.append(notice, actions);
+    card.append(actions);
     bubble.append(card);
     scrollAiToEnd();
 

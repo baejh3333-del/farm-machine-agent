@@ -36,8 +36,13 @@ export function listingDraftToFormValues(draft, photoDataUrl) {
     title: draft?.title || "",
     price: Number.isFinite(draft?.price) && draft.price > 0 ? draft.price : "",
     description: draft?.description || "",
-    ...(saved
-      ? { draftPhotoKey: draft.photoKey, draftPhotoUrl: draft.photoUrl || undefined }
-      : (photoDataUrl ? { photoDataUrl } : {})),
+    ...(draft?.region ? { region: draft.region } : {}),
+    ...(draft?.condition ? { condition: draft.condition } : {}),
+    ...(draft?.cropIds?.length ? { cropIds: draft.cropIds } : {}),
+    ...(draft?.operations?.length ? { operations: draft.operations } : {}),
+    ...(Number.isFinite(draft?.areaMin) ? { areaMin: draft.areaMin } : {}),
+    ...(Number.isFinite(draft?.areaMax) ? { areaMax: draft.areaMax } : {}),
+    ...(saved ? { draftPhotoKey: draft.photoKey, draftPhotoUrl: draft.photoUrl || undefined } : {}),
+    ...(photoDataUrl ? { photoDataUrl } : {}),
   };
 }

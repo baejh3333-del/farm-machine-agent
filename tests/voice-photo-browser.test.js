@@ -85,7 +85,7 @@ async function openLivePage(browser, port, agent) {
 
 const photoReply = { mode: "agent", reply: "사진으로 보면 관리기 엔진 아래에서 기름이 새는 것으로 보여요.", listingIds: [], photoSummary: { machineType: "cultivator", confidence: "medium", observations: ["누유"] } };
 
-test("문제7: 음성 대화 중 사진을 고르면 미리보기만 띄우고, 전송을 눌러야 입력한 글과 함께 보내 음성으로 답한다", async () => {
+test("음성 대화 중 전송 버튼은 사진만 보내고, 답을 음성으로 읽는다", async () => {
   const server = await startStatic();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -103,7 +103,8 @@ test("문제7: 음성 대화 중 사진을 고르면 미리보기만 띄우고, 
     await page.waitForFunction(() => window.voiceTest.sent.some((e) => e.type === "session.commentary.append" && e.content.includes("기름이 새는")));
     assert.equal(agentRequests.length, 1);
     assert.equal(agentRequests[0].inputMode, "voice");
-    assert.equal(agentRequests[0].message, "엔진 아래가 젖어 있어요");
+    assert.equal(agentRequests[0].message, undefined);
+    assert.equal(await page.locator("#aiInput").inputValue(), "엔진 아래가 젖어 있어요");
     assert.match(agentRequests[0].image, /^data:image\//);
     assert.equal(await page.locator("#aiPhotoPreview").isHidden(), true, "보낸 사진은 첨부에서 빠진다");
     assert.equal(await page.evaluate(() => window.voiceTest.sent.some((e) => e.type === "session.input_audio.mute")), false, "사진을 보내도 마이크를 끄지 않는다");
@@ -130,7 +131,7 @@ test("문제7: 음성 대화 중 사진만 보내다 실패하면 사진을 첨�
     await page.locator("#aiForm [type=submit]").click();
     await page.locator(".chat-bubble.assistant", { hasText: "사진은 그대로 두었어요" }).waitFor();
     assert.equal(agentRequests.length, 1);
-    assert.equal(agentRequests[0].message, "이 사진을 보고 기계 상태를 알려 주세요.", "사진만 보낼 때의 기본 질문");
+    assert.equal(agentRequests[0].message, undefined);
     assert.equal(await page.locator("#aiPhotoPreview").isVisible(), true, "실패하면 사진을 다시 첨부해 둔다");
 
     await page.locator("#aiForm [type=submit]").click();

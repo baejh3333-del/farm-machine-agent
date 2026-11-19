@@ -211,6 +211,13 @@ body.ai-fullscreen .ai-launcher {
   z-index: 1100;
 }
 
+@media (min-width: 960px) {
+  body.ai-open:not(.ai-fullscreen) #mapView {
+    padding-right: min(454px, 44vw);
+    box-sizing: border-box;
+  }
+}
+
 /* Fullscreen Mode (left: auto kept consistent with docked so width/inset morphs smoothly) */
 #aiPanel.is-fullscreen,
 #aiPanel.is-expanded,
@@ -2399,3 +2406,27 @@ body.ai-fullscreen .ai-launcher {
   border: 1px solid #e5e5e5;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
+
+.ai-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.ai-voice-control {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #202020;
+  color: #f4f4f4;
+  cursor: pointer;
+}
+.ai-voice-control[hidden] { display: none; }
+.ai-voice-control:hover { background: #393939; }
+.ai-voice-control:focus-visible { outline: 3px solid #26844d; outline-offset: 2px; }
+.ai-voice-control[aria-pressed="true"] { background: #16613c; }

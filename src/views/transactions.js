@@ -5,7 +5,23 @@ import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictu
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
 import { openCameraCapture, shrinkPhoto } from "../ai/panel.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
-import { senderState, SENDER_LABEL, roleOf, readSeqFor } from "../data/deals-model.js";
+import {
+  senderState, SENDER_LABEL, roleOf, readSeqFor,
+  presetsForListingType, getDelegationPreset, buildQuickDelegationPolicy,
+} from "../data/deals-model.js";
+
+export const DELEGATED_TRADE_EVENT = "moa:start-delegated-trade";
+
+let _activeStartDelegatedTrade = null;
+let _delegatedEventListener = null;
+let _delegatedClickListener = null;
+
+export function startDelegatedTradeForListing(listingId, options = {}) {
+  if (typeof _activeStartDelegatedTrade === "function") {
+    return _activeStartDelegatedTrade(listingId, options);
+  }
+  return false;
+}
 
 export function createTransactionViews(deps) {
 function openForm(html) {
@@ -17,6 +33,7 @@ function openForm(html) {
 const REQUEST_STATE_LABEL = {
   approvable: "승인 대기",
   conflict: "일정 충돌 (승인 불가)",
+  operator_conflict: "작업자 일정 겹침",
   expired: "기간 경과",
   upcoming: "예약 확정",
   active: "대여 중",
@@ -28,6 +45,17 @@ const REQUEST_STATE_LABEL = {
 function renderRequestBadge(req) {
   const label = REQUEST_STATE_LABEL[req.derivedState] || req.status;
   return `<span class="step-pill req-pill req-pill-${escapeHtml(req.derivedState || req.status)}">${escapeHtml(label)}</span>`;
+}
+
+function renderRentalOperator(req) {
+  const operator = req.rentalOperator;
+  if (!operator) return "";
+  const assigned = ["upcoming", "active", "completed"].includes(req.derivedState);
+  const label = assigned ? "배치된 작업자" : "요청한 작업자";
+  return `<details class="rental-operator">
+    <summary>${label} · ${escapeHtml(operator.name)} · ${money(operator.dailyPrice)}/일</summary>
+    <small class="rental-operator-experience">${escapeHtml(operator.experience)}</small>
+  </details>`;
 }
 
 function rentalForm(id, draftValues = null) {
@@ -45,6 +73,13 @@ function rentalForm(id, draftValues = null) {
   const initialStart = draftValues?.start || (state.filters.date >= minToday ? state.filters.date : minToday);
   const initialEnd = draftValues?.end || (state.filters.dateEnd >= initialStart ? state.filters.dateEnd : initialStart);
   const initialNote = draftValues?.note || "";
+  const operator = item.rentalOperator;
+  const savedOperator = draftValues?.rentalOperator;
+  const restoreOperator = Boolean(operator && savedOperator &&
+    operator.name === savedOperator.name &&
+    operator.experience === savedOperator.experience &&
+    operator.dailyPrice === savedOperator.dailyPrice);
+  const getRequestedOperator = () => $("rentWithOperator")?.checked ? operator : null;
   let draftRequestId = draftValues?.requestId || crypto.randomUUID();
 
   openForm(`
@@ -57,6 +92,17 @@ function rentalForm(id, draftValues = null) {
         <label>반납 예정일<input type="date" id="rentEnd" min="${escapeHtml(initialStart)}" value="${escapeHtml(initialEnd)}" required></label>
       </div>
       <div id="rentalBookingWeather" class="rental-booking-weather" hidden aria-live="polite"></div>
+      ${operator ? `<div class="rental-operator rental-operator-option">
+        <label class="rental-operator-toggle">
+          <input type="checkbox" id="rentWithOperator" ${restoreOperator ? "checked" : ""}>
+          <span>작업자 동반 <strong>+${money(operator.dailyPrice)}/일</strong></span>
+        </label>
+        <details>
+          <summary>${escapeHtml(operator.name)} 작업자 이력 보기</summary>
+          <p class="rental-operator-experience">${escapeHtml(operator.experience)}</p>
+        </details>
+        <small>소유 농가가 대여를 승인하면 작업자 배치도 확정돼요.</small>
+      </div>` : ""}
       <p id="rentalEstimate" aria-live="polite"></p>
       <label>작업 내용 · 방문 메모 (선택)
         <textarea id="rentNote" maxlength="500" placeholder="예: 고추밭 300평 두둑 작업 예정입니다. 오전 9시에 직접 방문해 인수하겠습니다.">${escapeHtml(initialNote)}</textarea>
@@ -94,8 +140,13 @@ function rentalForm(id, draftValues = null) {
     const valid = Number.isInteger(days) && days > 0 && start >= minToday;
     const button = $("rentalSubmitButton");
     if (valid) {
-      const totalPrice = item.price * days;
-      $("rentalEstimate").textContent = "운송비와 보증금은 소유 농가에 확인해 주세요.";
+      const machineTotal = item.price * days;
+      const operatorTotal = (getRequestedOperator()?.dailyPrice ?? 0) * days;
+      const totalPrice = machineTotal + operatorTotal;
+      const extras = "운송비와 보증금은 소유 농가에 확인해 주세요.";
+      $("rentalEstimate").textContent = operatorTotal
+        ? `농기계 ${money(machineTotal)} + 작업자 ${money(operatorTotal)} = ${money(totalPrice)}. ${extras}`
+        : extras;
       button.textContent = `${days}일 · ${money(totalPrice)} 대여 신청하기`;
       if (!busy) button.disabled = false;
     } else {
@@ -106,7 +157,7 @@ function rentalForm(id, draftValues = null) {
     updateBookingWeather(start, end, valid);
   };
   $("rentalForm").addEventListener("input", () => {
-    const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}`;
+    const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}|${Boolean(getRequestedOperator())}`;
     if (lastPayloadFingerprint && fp !== lastPayloadFingerprint) {
       draftRequestId = crypto.randomUUID();
       lastPayloadFingerprint = null;
@@ -114,6 +165,10 @@ function rentalForm(id, draftValues = null) {
     updateEstimate();
   });
   updateEstimate();
+  if (savedOperator && !restoreOperator) {
+    draftRequestId = crypto.randomUUID();
+    toast("작업자 옵션이 변경됐어요. 새 요금과 이력을 확인해 주세요.");
+  }
 
   $("rentalForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -124,14 +179,15 @@ function rentalForm(id, draftValues = null) {
     if (end < start || start < today()) return toast("대여 시작일과 반납일을 다시 확인하세요.");
     if (!available(listingById(id), start, end)) return toast("해당 기간에는 이미 확정된 예약이 있어 대여할 수 없습니다.");
 
-    lastPayloadFingerprint = `${start}|${end}|${note}`;
+    const rentalOperator = getRequestedOperator();
+    lastPayloadFingerprint = `${start}|${end}|${note}|${Boolean(rentalOperator)}`;
     busy = true;
     const button = $("rentalSubmitButton");
     button.disabled = true;
     try {
       await apiFetch("/api/requests", {
         method: "POST",
-        json: { action: "create", id: draftRequestId, listingId: id, start, end, note },
+        json: { action: "create", id: draftRequestId, listingId: id, start, end, note, rentalOperator },
       });
       hideDialog($("formBackdrop"));
       await Promise.all([deps.loadCatalog({ quiet: true }), deps.refreshAuthenticatedData()]);
@@ -140,15 +196,20 @@ function rentalForm(id, draftValues = null) {
       if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
       if (error?.status === 401) {
         deps.savePendingIntentAndRedirectLogin(
-          { type: "rental", listingId: id, draftValues: { start, end, note, requestId: draftRequestId } },
+          { type: "rental", listingId: id, draftValues: { start, end, note, rentalOperator, requestId: draftRequestId } },
           "세션이 만료되었습니다. 로그인 후 이어서 신청할 수 있어요."
         );
+        return;
+      }
+      if (error?.code === "OPERATOR_OPTION_CHANGED") {
+        await deps.loadCatalog({ quiet: true });
+        if ($("rentalSubmitButton") === button) rentalForm(id, { start, end, note, rentalOperator });
         return;
       }
       toast(error?.message || "대여 요청을 보내지 못했습니다.");
     } finally {
       busy = false;
-      if ($("rentalSubmitButton")) updateEstimate();
+      if ($("rentalSubmitButton") === button) updateEstimate();
     }
   });
 }
@@ -244,6 +305,10 @@ function chatForm(target) {
   let conversationId = opts.conversationId || null;
   const draftBody = typeof opts.draftBody === "string" ? opts.draftBody : "";
   const item = listingId ? listingById(listingId) : null;
+  const quickDelegation = Boolean(opts.quickDelegation);
+  const listingType = item?.type === "sale" ? "sale" : "rent";
+  const presets = presetsForListingType(listingType);
+  let selectedPresetId = opts.preset || presets[0]?.id || "quick_rental";
   const incomingPolicy = opts.policy && typeof opts.policy === "object"
     ? opts.policy
     : (opts.aiPolicy && typeof opts.aiPolicy === "object" ? opts.aiPolicy : null);
@@ -259,7 +324,15 @@ function chatForm(target) {
             }
           : {}),
       }
-    : null;
+    : (quickDelegation
+      ? buildQuickDelegationPolicy({
+          listing: item,
+          role: item?.ownerId && item.ownerId === runtime.accountUser?.id ? "owner" : "buyer",
+          presetId: selectedPresetId,
+          filters: state.filters || {},
+          overrides: { fullDelegation: false },
+        })
+      : null);
 
   if (!isLoggedIn()) {
     deps.savePendingIntentAndRedirectLogin({
@@ -267,9 +340,10 @@ function chatForm(target) {
       listingId,
       conversationId,
       draftBody,
-      ...(requestedAiMode !== "off" ? { aiMode: requestedAiMode } : {}),
-      ...(requestedFullDelegation ? { fullDelegation: true } : {}),
-      ...(initialPolicyOverride ? { policy: initialPolicyOverride } : {}),
+      ...(quickDelegation ? { quickDelegation: true, preset: selectedPresetId } : {}),
+      ...(requestedAiMode !== "off" ? { aiMode: requestedAiMode } : (quickDelegation ? { aiMode: "autonomous" } : {})),
+      ...(requestedFullDelegation || quickDelegation ? { fullDelegation: true } : {}),
+      ...(initialPolicyOverride ? { policy: initialPolicyOverride, aiPolicy: initialPolicyOverride } : {}),
     });
     return;
   }
@@ -283,19 +357,56 @@ function chatForm(target) {
     : "";
   const filterArea = Number(state.filters?.areaPyeong) > 0 ? String(Number(state.filters.areaPyeong)) : "";
 
+  const initialDelegationOpen = Boolean(quickDelegation || requestedFullDelegation || (requestedAiMode && requestedAiMode !== "off"));
+  const initialPolicyPanelOpen = Boolean(requestedFullDelegation || quickDelegation);
+  const activePreset = getDelegationPreset(selectedPresetId, listingType);
+
   openForm(`
-    <span class="step-pill">1:1 농기계 채팅 문의</span>
+    <span class="step-pill">${quickDelegation ? "🤖 AI 농농이 거래전담 · 1:1 대화" : "1:1 농기계 채팅 문의"}</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
-    <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
-    <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
-    <section id="chatAiControlBar" class="chat-ai-bar" aria-label="농농이 대리 응대 설정">
+    <p id="chatSubtitle">${quickDelegation ? "원하는 조건을 고르고 버튼 한 번으로 AI 농농이에게 자동 대화·협상을 맡기세요." : "대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요."}</p>
+    <div class="chat-load-older-wrap">
+      <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
+    </div>
+    <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
+    <div id="chatPausedBanner" class="chat-paused-banner" role="status" hidden></div>
+    <div id="chatDraftBar" class="chat-draft-bar" hidden></div>
+    <form id="chatForm" class="chat-send">
+      <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
+      <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
+    </form>
+    <div class="chat-secondary-actions">
+      <button type="button" id="chatDelegationTrigger" class="button button-secondary button-sm chat-delegation-trigger${initialDelegationOpen ? " is-open" : ""}" aria-expanded="${initialDelegationOpen ? "true" : "false"}" aria-controls="chatAiControlBar">
+        <span>농농이 거래 전담</span>
+        <span id="chatDelegationTriggerStatus" class="chat-delegation-trigger-status" hidden></span>
+      </button>
+      <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
+    </div>
+    <section id="chatAiControlBar" class="chat-ai-bar${quickDelegation ? " is-quick-start" : ""}" aria-label="농농이 거래 전담 설정" ${initialDelegationOpen ? "" : "hidden"}>
+      <div id="chatQuickDelegationCard" class="delegated-quickstart-card">
+        <div class="delegated-quickstart-head">
+          <strong>⚡ 빠른 거래전담 프리셋</strong>
+          <small>목적을 고르면 조건이 자동 채워져요</small>
+        </div>
+        <div class="delegated-preset-list" role="group" aria-label="거래전담 빠른 프리셋">
+          ${presets.map((p) => `<button type="button" class="delegated-preset-btn${p.id === selectedPresetId ? " is-selected" : ""}" data-delegation-preset="${escapeHtml(p.id)}" aria-pressed="${p.id === selectedPresetId ? "true" : "false"}" title="${escapeHtml(p.desc)}">${escapeHtml(p.label)}</button>`).join("")}
+        </div>
+        <p id="chatQuickPresetDesc" class="delegated-quickstart-desc">${escapeHtml(activePreset?.desc || "")}</p>
+        <div class="delegated-quickstart-cta">
+          <label id="chatQuickSendFirstWrap" class="delegated-quickstart-check">
+            <input type="checkbox" id="chatQuickSendFirst" checked>
+            <span>첫 문의 메시지도 자동으로 보내기</span>
+          </label>
+          <button type="button" id="chatQuickStartAiBtn" class="button btn-delegated-trade button-sm">🤖 AI 거래전담 바로 시작</button>
+        </div>
+      </div>
       <div class="chat-ai-bar-head">
         <span class="chat-ai-title">🤖 농농이 대리 응대</span>
         <div class="chat-ai-modes" role="group" aria-label="대리 응대 모드">
           <button type="button" class="chat-ai-mode-btn active" data-ai-mode="off" aria-pressed="true">끄기</button>
           <button type="button" class="chat-ai-mode-btn" data-ai-mode="autonomous" aria-pressed="false">자동 응대</button>
         </div>
-        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${requestedFullDelegation ? "true" : "false"}">${requestedFullDelegation ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
+        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${initialPolicyPanelOpen ? "true" : "false"}">${initialPolicyPanelOpen ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
       </div>
       <div class="delegated-full-panel">
         <label class="chat-full-delegation-toggle" for="chatFullDelegationToggle">
@@ -308,7 +419,7 @@ function chatForm(target) {
         </label>
         <div id="chatDelegationSummary" class="chat-delegation-summary" hidden></div>
       </div>
-      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel${requestedFullDelegation ? " is-open" : ""}" ${requestedFullDelegation ? "" : "hidden"}>
+      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel${initialPolicyPanelOpen ? " is-open" : ""}" ${initialPolicyPanelOpen ? "" : "hidden"}>
         <div class="chat-ai-policy-inner">
           <div class="delegated-policy-grid">
             <label>희망 대여 시작일
@@ -341,16 +452,6 @@ function chatForm(target) {
         </div>
       </div>
     </section>
-    <div style="margin-bottom:8px">
-      <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
-    </div>
-    <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
-    <div id="chatPausedBanner" class="chat-paused-banner" role="status" hidden></div>
-    <div id="chatDraftBar" class="chat-draft-bar" hidden></div>
-    <form id="chatForm" class="chat-send">
-      <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
-      <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
-    </form>
   `);
 
   const epoch = runtime.authEpoch;
@@ -492,11 +593,47 @@ function chatForm(target) {
       fullBadge.textContent = isFullActive ? "ON" : "OFF";
       fullBadge.classList.toggle("is-active", isFullActive);
     }
+    const triggerBtn = $("chatDelegationTrigger");
+    const triggerStatus = $("chatDelegationTriggerStatus");
+    const isAiActive = currentAiMode !== "off";
+    if (triggerBtn) {
+      triggerBtn.classList.toggle("is-active", isAiActive);
+    }
+    if (triggerStatus) {
+      if (isFullActive) {
+        triggerStatus.textContent = "전담 ON";
+        triggerStatus.hidden = false;
+      } else if (isAiActive) {
+        triggerStatus.textContent = "대리 ON";
+        triggerStatus.hidden = false;
+      } else {
+        triggerStatus.textContent = "";
+        triggerStatus.hidden = true;
+      }
+    }
     bar.querySelector(".delegated-full-panel")?.classList.toggle("is-active", isFullActive);
     if ($("chatPolicyAllowNegotiation")) {
       $("chatPolicyAllowNegotiation").checked = !activeChips.has("noNegotiation");
     }
     if ($("chatAiSavePolicy")) $("chatAiSavePolicy").disabled = aiBusy;
+    const quickStartBtn = $("chatQuickStartAiBtn");
+    if (quickStartBtn) {
+      quickStartBtn.disabled = aiBusy;
+      quickStartBtn.classList.toggle("is-active", isFullActive);
+      quickStartBtn.textContent = isFullActive
+        ? "✓ AI 거래전담 진행 중 (조건 다시 저장)"
+        : "🤖 AI 거래전담 바로 시작";
+    }
+    const quickSendWrap = $("chatQuickSendFirstWrap");
+    if (quickSendWrap) {
+      const hasMessages = bySeq.size > 0;
+      quickSendWrap.hidden = hasMessages;
+    }
+    bar.querySelectorAll("[data-delegation-preset]").forEach((btn) => {
+      const active = btn.dataset.delegationPreset === selectedPresetId;
+      btn.classList.toggle("is-selected", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
     updateDelegationSummary();
   }
 
@@ -784,6 +921,9 @@ function chatForm(target) {
         }).join("")
       : `<div class="chat-empty">아직 나눈 대화가 없어요. 기계 상태와 인수 조건을 먼저 물어보세요!</div>`;
     $("chatLoadOlder").hidden = !hasMoreOlder;
+    if ($("chatQuickSendFirstWrap")) {
+      $("chatQuickSendFirstWrap").hidden = bySeq.size > 0;
+    }
     if (keepScroll) {
       log.scrollTop += log.scrollHeight - prevHeight;
     } else {
@@ -999,7 +1139,25 @@ function chatForm(target) {
 
   syncAiControlUi();
 
-  let policyPanelOpen = requestedFullDelegation;
+  let delegationPanelOpen = initialDelegationOpen;
+  const setDelegationPanelOpen = (open) => {
+    const bar = $("chatAiControlBar");
+    const trigger = $("chatDelegationTrigger");
+    if (!bar) return;
+    delegationPanelOpen = Boolean(open);
+    bar.hidden = !delegationPanelOpen;
+    if (trigger) {
+      trigger.setAttribute("aria-expanded", String(delegationPanelOpen));
+      trigger.classList.toggle("is-open", delegationPanelOpen);
+    }
+  };
+
+  $("chatDelegationTrigger")?.addEventListener("click", () => {
+    // 설정 패널을 여는 동작만으로 대리 응대나 거래 전담을 켜지 않는다.
+    setDelegationPanelOpen(!delegationPanelOpen);
+  });
+
+  let policyPanelOpen = initialPolicyPanelOpen;
   let policyCollapseTimer = null;
   const setPolicyPanelOpen = (open) => {
     const panel = $("chatAiPolicyPanel");
@@ -1023,6 +1181,43 @@ function chatForm(target) {
       }, 280);
     }
   };
+
+  $("chatAiControlBar")?.querySelectorAll("[data-delegation-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pid = btn.dataset.delegationPreset;
+      const preset = getDelegationPreset(pid, listingType);
+      if (!preset) return;
+      selectedPresetId = preset.id;
+      instructionsDirty = true;
+      activeChips.clear();
+      for (const c of preset.policy.chips || []) activeChips.add(c);
+      if (preset.policy.allowNegotiation === false) activeChips.add("noNegotiation");
+      else activeChips.delete("noNegotiation");
+      if ($("chatQuickPresetDesc")) $("chatQuickPresetDesc").textContent = preset.desc || "";
+      syncAiControlUi();
+    });
+  });
+
+  $("chatQuickStartAiBtn")?.addEventListener("click", async () => {
+    if (aiBusy) return;
+    const preset = getDelegationPreset(selectedPresetId, listingType);
+    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
+    fullDelegationEnabled = true;
+    instructionsDirty = true;
+    if ($("chatFullDelegationToggle")) $("chatFullDelegationToggle").checked = true;
+    const policy = {
+      ...collectPolicy(),
+      fullDelegation: true,
+      autoExecuteTransaction: isBuyer ? Boolean(preset?.policy?.autoExecuteTransaction ?? true) : false,
+    };
+    await saveAiPolicy("autonomous", policy, { resume: true });
+    const shouldSendStarter = Boolean($("chatQuickSendFirst")?.checked) && bySeq.size === 0;
+    if (shouldSendStarter && preset?.starterTemplate && !busy) {
+      const title = currentConv?.listingTitle || item?.title || "농기계";
+      const starter = ($("chatMessage")?.value.trim()) || preset.starterTemplate(title);
+      await sendMessageBody(starter, { fromForm: Boolean($("chatMessage")?.value.trim()) });
+    }
+  });
 
   $("chatAiPolicyToggle")?.addEventListener("click", () => {
     const panel = $("chatAiPolicyPanel");
@@ -1125,6 +1320,77 @@ function chatForm(target) {
   });
 
   loadInitialMessages();
+  if (quickDelegation) {
+    requestAnimationFrame(() => {
+      $("chatQuickDelegationCard")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    });
+  }
+}
+
+function startDelegatedTrade(target, options = {}) {
+  const opts = typeof target === "object" && target !== null
+    ? { ...target, ...options }
+    : { listingId: target || null, ...options };
+  const listingId = opts.listingId || null;
+  const conversationId = opts.conversationId || null;
+  if (!listingId && !conversationId) return false;
+  if ($("detailBackdrop") && !$("detailBackdrop").hidden) {
+    hideDialog($("detailBackdrop"));
+  }
+  const item = listingId ? listingById(listingId) : null;
+  const preset = opts.preset || (item?.type === "sale" ? "purchase_inquiry" : "quick_rental");
+  const autoActivate = Boolean(opts.autoActivate);
+  chatForm({
+    listingId,
+    conversationId,
+    draftBody: typeof opts.draftBody === "string" ? opts.draftBody : "",
+    quickDelegation: true,
+    preset,
+    autoActivate,
+    ...(autoActivate ? { aiMode: "autonomous", fullDelegation: true } : {}),
+    ...(opts.policy && typeof opts.policy === "object" ? { policy: opts.policy } : {}),
+  });
+  return true;
+}
+
+_activeStartDelegatedTrade = startDelegatedTrade;
+if (typeof window !== "undefined") {
+  window.startDelegatedTradeForListing = startDelegatedTradeForListing;
+  if (_delegatedEventListener) {
+    window.removeEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
+  }
+  _delegatedEventListener = (event) => {
+    const detail = event?.detail || {};
+    startDelegatedTrade(detail.listingId || null, detail);
+  };
+  window.addEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
+}
+if (typeof document !== "undefined") {
+  if (_delegatedClickListener) {
+    document.removeEventListener("click", _delegatedClickListener);
+  }
+  _delegatedClickListener = (event) => {
+    if (event.defaultPrevented) return;
+    const delegatedBtn = event.target?.closest?.("[data-delegated-trade]");
+    if (delegatedBtn) {
+      event.preventDefault();
+      startDelegatedTrade(delegatedBtn.dataset.delegatedTrade || null, {
+        conversationId: delegatedBtn.dataset.delegatedConv || null,
+        preset: delegatedBtn.dataset.delegatedPreset || undefined,
+        autoActivate: delegatedBtn.dataset.delegatedAuto === "true",
+      });
+      return;
+    }
+    const directChatBtn = event.target?.closest?.("[data-direct-chat]");
+    if (directChatBtn) {
+      event.preventDefault();
+      if ($("detailBackdrop") && !$("detailBackdrop").hidden) {
+        hideDialog($("detailBackdrop"));
+      }
+      chatForm({ listingId: directChatBtn.dataset.directChat || null });
+    }
+  };
+  document.addEventListener("click", _delegatedClickListener);
 }
 
 async function handleRequestAction(action, requestId, button) {
@@ -1171,8 +1437,8 @@ function renderBuyerRequests() {
   if (!listEl) return;
 
   if (!isLoggedIn()) {
-    listEl.innerHTML = `<div class="empty-panel">로그인하면 내가 보낸 대여 요청과 확정된 예약을 확인할 수 있어요.</div>`;
-    if (convEl) convEl.innerHTML = `<div class="empty-panel">로그인하면 내 1:1 채팅 문의 내역을 확인할 수 있어요.</div>`;
+    listEl.innerHTML = "";
+    if (convEl) convEl.innerHTML = "";
     return;
   }
 
@@ -1186,9 +1452,13 @@ function renderBuyerRequests() {
           </div>
           <strong>${escapeHtml(req.listingTitle || "농기계 매물")}</strong>
           <small>대여 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)} · 소유자 ${escapeHtml(req.listingOwnerName || "-")}${req.note ? `<br>내 메모: ${escapeHtml(req.note)}` : ""}</small>
+          ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
-          <button type="button" class="button button-secondary button-sm" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 채팅</button>
+          <div class="trade-action-pair">
+            <button type="button" class="button button-secondary button-sm btn-direct-chat" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 대화</button>
+            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(req.listingId)}">🤖 거래전담</button>
+          </div>
           ${req.canCancel ? `<button type="button" class="button button-secondary button-sm" data-req-cancel="${escapeHtml(req.id)}">요청 취소</button>` : ""}
         </div>
       </div>`).join("")
@@ -1199,18 +1469,18 @@ function renderBuyerRequests() {
     const dealsLink = `<div class="deals-crosslink"><span>농농이가 보낸 메시지·제안·확인할 일은 거래 관리에서 한눈에 볼 수 있어요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="buyer">거래 관리 열기 ›</button></div>`;
     convEl.innerHTML = buyerConvs.length
       ? buyerConvs.map((c) => `
-        <div class="request-row">
-          <div class="owner-row-info">
-            <div class="owner-row-badges">
+        <div class="request-row conv-list-row">
+          <button type="button" class="owner-row-info conv-row-open" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">
+            <span class="owner-row-badges">
               <span class="step-pill">판매자: ${escapeHtml(c.ownerName)}</span>
               ${renderConvAiBadges(c, "buyer")}
-            </div>
-            <strong>${escapeHtml(c.listingTitle)}</strong>
-            <small>${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
-          </div>
+            </span>
+            <strong class="conv-row-title">${escapeHtml(c.listingTitle)}</strong>
+            <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
+          </button>
           <div class="owner-row-actions">
+            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(c.listingId)}" data-delegated-conv="${escapeHtml(c.id)}">🤖 거래전담</button>
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
-            <button type="button" class="button button-primary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화 보기</button>
           </div>
         </div>`).join("")
       : `<div class="empty-panel">아직 시작한 채팅 문의가 없습니다.</div>`;
@@ -1309,6 +1579,7 @@ function renderOwner() {
           </div>
           <strong>${escapeHtml(req.listingTitle || "농기계")}</strong>
           <small>요청자: ${escapeHtml(req.requesterName)} · 희망 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)}${req.note ? `<br>메모: ${escapeHtml(req.note)}` : ""}</small>
+          ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
           ${renderRequestActionsHtml(req)}
@@ -1321,18 +1592,18 @@ function renderOwner() {
     const ownerConvs = runtime.userConversations.filter((c) => c.ownerId === runtime.accountUser?.id);
     ownerConvsEl.innerHTML = ownerConvs.length
       ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div><div class="deals-crosslink"><span>농농이 응대 내역·받은 제안은 거래 관리에서 확인하세요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="owner">거래 관리 열기 ›</button></div>` + ownerConvs.map((c) => `
-        <div class="request-row">
-          <div class="owner-row-info">
-            <div class="owner-row-badges">
+        <div class="request-row conv-list-row">
+          <button type="button" class="owner-row-info conv-row-open" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">
+            <span class="owner-row-badges">
               <span class="step-pill">문의자: ${escapeHtml(c.buyerName)}</span>
               ${renderConvAiBadges(c, "owner")}
-            </div>
-            <strong>${escapeHtml(c.listingTitle)}</strong>
-            <small>${c.lastMessage ? `"${escapeHtml(c.lastMessage.body)}"` : "새 대화"}</small>
-          </div>
+            </span>
+            <strong class="conv-row-title">${escapeHtml(c.listingTitle)}</strong>
+            <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "새 대화"}</small>
+          </button>
           <div class="owner-row-actions">
+            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(c.listingId)}" data-delegated-conv="${escapeHtml(c.id)}">🤖 거래전담</button>
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
-            <button type="button" class="button button-secondary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화하기</button>
           </div>
         </div>`).join("")
       : "";
@@ -1366,6 +1637,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
     || (state.selectedCrop && state.selectedCrop !== "all" ? state.selectedCrop : CROPS[0].id);
   const initialOp = (Array.isArray(val("operations", null)) ? val("operations", null)[0] : null) || OPERATIONS[0].id;
   const initialPrice = val("price", "");
+  const initialOperator = val("rentalOperator", null);
   const initialAreaMin = val("areaMin", 300);
   const initialAreaMax = val("areaMax", 1500);
   const initialRegion = val("region", state.region || "영양읍");
@@ -1454,6 +1726,20 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
         <label>포함 작업기·부속품<input id="editIncluded" maxlength="120" required value="${escapeHtml(initialIncluded)}" placeholder="예: 로터리, 두둑성형기 포함"></label>
         <label>인수·전달 방법<input id="editPickup" maxlength="120" required value="${escapeHtml(initialPickup)}" placeholder="예: 영양읍 창고 직접 방문 인수"></label>
       </div>
+      <div id="editOperatorOption" class="rental-operator rental-operator-option">
+        <label class="rental-operator-toggle">
+          <input type="checkbox" id="editOperatorEnabled" ${initialOperator ? "checked" : ""}>
+          작업자 동반 대여 제공
+        </label>
+        <fieldset id="editOperatorFields" class="rental-operator-fields">
+          <legend>공개 작업자 프로필</legend>
+          <div class="form-row-2">
+            <label>이름<input id="editOperatorName" maxlength="40" value="${escapeHtml(initialOperator?.name ?? "")}" required></label>
+            <label>일당(원)<input id="editOperatorPrice" type="number" min="1" max="500000000" value="${escapeHtml(initialOperator?.dailyPrice ?? "")}" required></label>
+          </div>
+          <label>작업 이력<textarea id="editOperatorExperience" maxlength="300" placeholder="예: 트랙터 경운·로터리 작업 7년, 농기계 안전교육 수료" required>${escapeHtml(initialOperator?.experience ?? "")}</textarea></label>
+        </fieldset>
+      </div>
       <label>상세 설명 및 초보자 안내<textarea id="editDescription" maxlength="1000" required placeholder="기계 작동 상태와 초보 농부님이 사용할 때 주의할 점을 적어주세요.">${escapeHtml(initialDescription)}</textarea></label>
       <button class="button button-primary button-large" type="submit" id="listingSubmitButton">${isEdit ? "수정 내용 저장하기" : "+ 매물 등록 완료하기"}</button>
     </form>
@@ -1510,6 +1796,16 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   $("editModelId").addEventListener("change", syncModelLock);
 
   let busy = false;
+  const syncOperatorFields = () => {
+    const isRental = $("editType").value === "rent";
+    const enabled = isRental && $("editOperatorEnabled").checked;
+    $("editOperatorOption").hidden = !isRental;
+    $("editOperatorFields").hidden = !enabled;
+    $("editOperatorFields").disabled = !enabled;
+  };
+  syncOperatorFields();
+  $("editType").addEventListener("change", syncOperatorFields);
+  $("editOperatorEnabled").addEventListener("change", syncOperatorFields);
   let lastSubmitHash = null;
   let capturedPhotoDataUrl = null;
 
@@ -1554,7 +1850,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   });
 
   $("listingEditorForm").addEventListener("input", () => {
-    if (!isEdit && lastSubmitHash !== null) {
+    if (!isEdit && !draftValues?.draftPhotoKey && lastSubmitHash !== null) {
       draftListingId = crypto.randomUUID();
       lastSubmitHash = null;
     }
@@ -1592,6 +1888,11 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       action: isEdit ? "update" : "create",
       id: draftListingId,
       type: $("editType").value,
+      rentalOperator: $("editOperatorFields").disabled ? null : {
+        name: $("editOperatorName").value.trim(),
+        dailyPrice: Number($("editOperatorPrice").value),
+        experience: $("editOperatorExperience").value.trim(),
+      },
       modelId,
       brand: spec ? spec.brand : $("editBrand").value.trim(),
       machineType: spec ? spec.machineType : $("editMachine").value,
@@ -1607,7 +1908,8 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       included: $("editIncluded").value.trim(),
       pickup: $("editPickup").value.trim(),
       description: $("editDescription").value.trim(),
-      ...(draftPhotoKey ? { draftPhotoKey } : (photoDataUrl ? { photoDataUrl } : {})),
+      ...(draftPhotoKey ? { draftPhotoKey } : {}),
+      ...(photoDataUrl ? { photoDataUrl } : {}),
       ...(isEdit && $("editRemovePhoto")?.checked && !file && !capturedPhotoDataUrl ? { removePhoto: true } : {}),
     };
 
@@ -1616,7 +1918,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
     $("listingSubmitButton").disabled = true;
 
     try {
-      await apiFetch("/api/listings", { method: "POST", json: payload });
+      await apiFetch("/api/listings", { method: "POST", json: payload, timeoutMs: 45000 });
       hideDialog($("formBackdrop"));
       await Promise.all([deps.loadCatalog({ quiet: true }), deps.refreshAuthenticatedData()]);
       renderOwner();
@@ -1652,6 +1954,7 @@ function openEditListing(item, draftValues = null) {
     renderRequestBadge,
     rentalForm,
     chatForm,
+    startDelegatedTradeForListing: startDelegatedTrade,
     handleRequestAction,
     renderRequestActionsHtml,
     renderBuyerRequests,

@@ -228,7 +228,7 @@ test("S7. 미적용 마이그레이션으로 없는 테이블·열은 500이 아
   }
 });
 
-test("S8. 마지막 운영 배포 스키마(0001~0007, 레거시 데이터 포함)에서 0008~0010 업그레이드 후 준비 완료", async () => {
+test("S8. 운영 배포 스키마(0001~0007, 레거시 데이터 포함)에서 현재 스키마로 업그레이드 후 준비 완료", async () => {
   const all = readdirSync(DEFAULT_MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
   const released = all.filter((f) => f < "0008");
   assert.deepEqual(released.at(-1), "0007_insurance_consult_unique.sql");
@@ -242,13 +242,7 @@ test("S8. 마지막 운영 배포 스키마(0001~0007, 레거시 데이터 포�
     const before = migrationReadiness(await inspectDatabase({ pool: legacyPool }));
     assert.equal(before.ready, false);
     assert.deepEqual(before.problems, ["PENDING_MIGRATIONS"]);
-    assert.deepEqual(before.pendingMigrations, [
-      "0008_education_certificates.sql",
-      "0008_role_scoped_ai_state.sql",
-      "0009_trade_offers.sql",
-      "0010_delegation_jobs.sql",
-      "0011_insurance_consult_repair_kind.sql",
-    ]);
+    assert.deepEqual(before.pendingMigrations, all.slice(released.length));
 
     // 레거시 공유 상태(일시정지·초안)와 기존 대여 신청이 있는 운영 데이터를 흉내 낸다.
     const { conversationId, buyer, listingId } = await makeConversation(legacyPool);

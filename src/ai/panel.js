@@ -501,6 +501,7 @@ export function createAiPanel({
   isFavorite,
   openChat,
   openDeal,
+  focusMapListing = () => {},
   getOwnedMachines = () => ({ owned: [], selectedId: "" }),
 }) {
   let recommendationPending = false;
@@ -793,7 +794,7 @@ export function createAiPanel({
     if (labelEl) labelEl.textContent = photoLabel || "첨부한 기계 사진";
     // 사진은 고르기만 해서는 보내지 않는다: 사용자가 전송(또는 음성 대화 중 말하기)해야 함께 간다.
     const hint = preview.querySelector(".ai-photo-meta span");
-    if (hint) hint.textContent = isLiveVoiceActive() ? "전송을 누르거나 말씀하시면 함께 보내요" : "전송을 누르면 함께 보내요";
+    if (hint) hint.textContent = isLiveVoiceActive() ? "전송을 누르면 사진만 보내요. 말하면 사진과 함께 전달돼요." : "전송을 누르면 사진만 보내요.";
   }
 
   function clearPhoto() {
@@ -948,7 +949,7 @@ export function createAiPanel({
         listingType: draft.type === "sale" ? "sale" : "rent",
         type: "create_listing",
         requestId: crypto.randomUUID(),
-        ...(!draft.photoKey && lastPhotoDataUrl ? { photoDataUrl: lastPhotoDataUrl } : {}),
+        ...(lastPhotoDataUrl ? { photoDataUrl: lastPhotoDataUrl } : {}),
       };
     } else {
       lastPendingAction = null;
@@ -1109,6 +1110,7 @@ export function createAiPanel({
         appendInsuranceAsk(result);
         if (result.createdListing) {
           savedDraft = null;
+          lastPhotoDataUrl = null;
           clearPhoto();
           renderCreatedListingButton(bubble, result.createdListing);
         }
@@ -1173,7 +1175,7 @@ export function createAiPanel({
         } else if (pendingAction.type === "create_listing") {
           const formDraft = { ...pendingAction, type: pendingAction.listingType || "rent" };
           savePendingIntentAndRedirectLogin?.(
-            { type: "newListing", draftValues: listingDraftToFormValues(formDraft, lastPhotoDataUrl) },
+            { type: "newListing", draftValues: listingDraftToFormValues(formDraft, pendingAction.photoDataUrl) },
             "로그인 후 매물 등록을 이어서 완료할 수 있어요.",
           );
         }
@@ -1428,7 +1430,7 @@ export function createAiPanel({
     const cardsOnly = role === "assistant" && listingIds.length > 0;
     if (role === "assistant" && !cardsOnly) {
       bubble.append(renderMarkdownElement(text));
-    } else if (!cardsOnly) {
+    } else if (!cardsOnly && text) {
       const textNode = document.createElement("div");
       textNode.textContent = text;
       bubble.append(textNode);
@@ -1792,14 +1794,15 @@ export function createAiPanel({
   }
 
   function appendListingDraft(bubble, draft) {
-    const requestId = crypto.randomUUID();
+    const requestId = lastPendingAction?.type === "create_listing" ? lastPendingAction.requestId : crypto.randomUUID();
+    const photoDataUrl = lastPhotoDataUrl;
     const card = document.createElement("div");
     card.className = "ai-confirm ai-draft";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
     title.textContent = draft.type === "sale" ? "🏷️ 판매 글 초안" : "🤝 대여 글 초안";
     card.append(title);
-    const photoSrc = draft.photoUrl || lastPhotoDataUrl;
+    const photoSrc = photoDataUrl || draft.photoUrl;
     if (photoSrc) {
       const img = document.createElement("img");
       img.className = "ai-draft-photo";
@@ -1830,7 +1833,7 @@ export function createAiPanel({
       if (!(Number.isFinite(draft.price) && draft.price > 0)) {
         toast("가격이 정해지지 않았어요. 상세 화면에서 가격을 입력해 주세요.");
         if (savedDraft?.listingId === draft.listingId) savedDraft = null;
-        openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl));
+        openNewListing?.(listingDraftToFormValues(draft, photoDataUrl));
         return;
       }
       rememberAgentTurn({ role: "user", content: "초안 내용대로 매물을 바로 등록해 주세요." });
@@ -1839,7 +1842,7 @@ export function createAiPanel({
           ...draft,
           listingType: draft.type === "sale" ? "sale" : "rent",
           type: "create_listing",
-          ...(!draft.photoKey && lastPhotoDataUrl ? { photoDataUrl: lastPhotoDataUrl } : {}),
+          ...(photoDataUrl ? { photoDataUrl } : {}),
         },
         requestId,
         triggerButton: quickRegister,
@@ -1852,10 +1855,12 @@ export function createAiPanel({
             quickRegister.textContent = "⚡ 채팅에서 바로 등록";
           }
         },
-        onError: () => {
+        onError: (_outcome, error) => {
           quickRegister.disabled = false;
           quickRegister.textContent = "다시 시도";
-          toast("매물을 등록하지 못했어요. 다시 시도해 주세요.");
+          toast(error?.name === "AbortError"
+            ? "등록 응답이 늦어지고 있어요. 다시 시도해 주세요."
+            : error?.message || "매물을 등록하지 못했어요. 다시 시도해 주세요.");
         },
       });
     });
@@ -1866,7 +1871,7 @@ export function createAiPanel({
     register.textContent = "📝 상세 수정 후 등록";
     register.addEventListener("click", () => {
       if (savedDraft?.listingId === draft.listingId) savedDraft = null;
-      openNewListing?.(listingDraftToFormValues(draft, lastPhotoDataUrl));
+      openNewListing?.(listingDraftToFormValues(draft, photoDataUrl));
     });
 
     const copy = document.createElement("button");
@@ -2129,6 +2134,7 @@ export function createAiPanel({
     openConfirmation = null;
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
+    if (listingIds.length) focusMapListing?.(listingIds[0], listingIds);
     if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
     if (fallbackVoiceUsed) {
@@ -2191,7 +2197,7 @@ export function createAiPanel({
     if (capCard.dataset.aiPhotoTrigger === "true") {
       if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
       const bubble = appendAiMessage(
-        "농기계 사진을 올려주시면 기종·고장 의심 부위·적정 시세까지 바로 분석해 드려요! 카메라로 찍거나 이미지를 첨부해 보세요.",
+        "농기계 전체가 보이는 사진을 올려 주세요. 모델명이 적힌 명판도 보이면 기종을 확인하는 데 도움이 돼요.",
         "assistant",
       );
       const ctaWrap = document.createElement("div");
@@ -2210,9 +2216,6 @@ export function createAiPanel({
       bubble.append(ctaWrap);
       scrollAiToEnd();
       return;
-    }
-    if (capCard.dataset.aiEnableDelegation === "true") {
-      setFullDelegation(true);
     }
     if (capCard.dataset.prompt) {
       submitPrompt(capCard.dataset.prompt);
@@ -2722,6 +2725,7 @@ export function createAiPanel({
     if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
     else if (result?.reservation) lastShownListingIds = [];
     renderAgentEffects(bubble, result, { reply, includeFollowUp: false });
+    if (cardIds.length) focusMapListing?.(cardIds[0], cardIds);
     scrollAiToEnd();
     timer.mark("rendered");
 
@@ -2769,16 +2773,15 @@ export function createAiPanel({
     showPhotoPreview();
   }
 
-  // 음성 대화 중 사용자가 전송을 눌러 사진(과 입력한 글)을 보낸다. 답은 화면에 그리고 음성으로도 읽어 준다.
-  async function sendPhotoDuringLiveVoice(typedText = "") {
+  // 음성 대화 중 사진을 보내면 답을 화면에 표시하고 음성으로 읽어 준다.
+  async function sendPhotoDuringLiveVoice() {
     if (livePhotoInFlight) return false;
     const photo = takeLivePhoto();
     if (!photo) return false;
     const gen = sessionGeneration;
     const liveGen = liveVoiceGeneration;
     livePhotoInFlight = true;
-    const typed = String(typedText || "").trim();
-    const message = typed || "이 사진을 보고 기계 상태를 알려 주세요.";
+    const message = "";
     appendAiMessage(message, "user", [], photo);
     const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
     pending.classList.add("is-thinking");
@@ -2808,9 +2811,7 @@ export function createAiPanel({
     } catch (error) {
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
       pending.remove();
-      // 사진은 첨부 상태로 되돌리고 입력한 글도 돌려놓아, 전송만 다시 누르면 같은 내용으로 다시 보낸다.
       restorePendingPhoto(photo);
-      if (typed && $("aiInput") && !$("aiInput").value.trim()) $("aiInput").value = typed;
       const msg = error?.message && /[가-힣]/.test(error.message) ? error.message : "사진을 지금 확인하지 못했어요.";
       appendAiMessage(`${msg} 사진은 그대로 두었어요. 전송을 다시 누르시거나 말로 설명해 주세요.`, "assistant");
       if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진은 그대로 두었으니 다시 보내 주시거나 말로 설명해 주세요.`);
@@ -3143,14 +3144,13 @@ export function createAiPanel({
     event.preventDefault();
     const sendingPhoto = photoIsNew && agentPhoto ? agentPhoto : null;
     const typedText = $("aiInput").value.trim();
-    const message = typedText || (sendingPhoto ? "이 기계 사진이에요." : "");
-    if (!message || recommendationPending) return;
+    const message = sendingPhoto ? "" : typedText;
+    if ((!message && !sendingPhoto) || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
-    // 음성 대화 중에 사진을 보내면 답을 음성으로도 읽어 주는 사진 경로로 보낸다(입력한 글과 함께).
+    // 음성 대화 중에는 사진 응답도 음성으로 읽어 준다.
     if (sendingPhoto && isLiveVoiceActive()) {
       if (livePhotoInFlight) return toast("앞서 보낸 사진을 확인하고 있어요. 잠시만 기다려 주세요.");
-      $("aiInput").value = "";
-      sendPhotoDuringLiveVoice(typedText);
+      sendPhotoDuringLiveVoice();
       return;
     }
     if (sendingPhoto) lastPhotoDataUrl = sendingPhoto;
@@ -3161,7 +3161,7 @@ export function createAiPanel({
     recommendationPending = true;
     const submit = $("aiForm").querySelector('[type="submit"]');
     submit.disabled = true;
-    $("aiInput").value = "";
+    if (!sendingPhoto) $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
     $("aiStarters").hidden = true;
@@ -3224,11 +3224,15 @@ export function createAiPanel({
       pending = undefined;
       if (agentResult?.mode === "agent") {
         if (!agentResult.insuranceAsk) trackInsurance(agentResult);
-        if (sendingPhoto) {
+        if (sendingPhoto && agentPhoto === sendingPhoto) {
           photoIsNew = false;
           showPhotoPreview();
         }
-        if (agentResult.createdListing) clearPhoto();
+        if (agentResult.createdListing) {
+          savedDraft = null;
+          lastPhotoDataUrl = null;
+          clearPhoto();
+        }
         renderAgentResult(message, agentResult, { photo: Boolean(sendingPhoto) });
         return;
       }
@@ -3237,8 +3241,7 @@ export function createAiPanel({
     } catch (error) {
       if (gen !== sessionGeneration) return;
       console.error("AI 상담 호출 실패", error);
-      // 실패하면 입력한 글을 되돌려 둔다(사진은 아직 첨부 상태라 전송만 다시 누르면 같은 내용으로 다시 보낸다).
-      if (typedText && !$("aiInput").value.trim()) $("aiInput").value = typedText;
+      if (message && !$("aiInput").value.trim()) $("aiInput").value = message;
       appendAiMessage(error?.message || "AI 상담을 호출할 수 없습니다. 잠시 후 다시 시도해 주세요.", "assistant");
       if ($("aiModeLabel")) $("aiModeLabel").textContent = "AI 상담 · 연결 불가";
     } finally {

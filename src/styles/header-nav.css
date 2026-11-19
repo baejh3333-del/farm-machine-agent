@@ -14,7 +14,8 @@
 .sidebar-nav {
   display: flex;
   align-items: center;
-  gap: clamp(4px, 0.9vw, 12px);
+  justify-content: center;
+  gap: clamp(8px, 1.25vw, 24px);
   overflow: visible;
 }
 
@@ -24,8 +25,8 @@
   padding: 0 12px;
   border-bottom: 2.5px solid transparent;
   color: var(--text-body, #2c4237);
-  font-size: 0.96875rem;
-  font-weight: 600;
+  font-size: 1.125rem;
+  font-weight: 500;
   letter-spacing: -0.015em;
   transition:
     color var(--dur-fast, 160ms) ease,
@@ -64,7 +65,7 @@
 
 .nav-item.active {
   color: var(--forest, #174233);
-  font-weight: 800;
+  font-weight: 600;
   border-bottom-color: transparent;
 }
 
@@ -75,6 +76,130 @@
 
 .nav-item:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+.nav-submenu {
+  position: absolute;
+  inset: 100% 0 auto;
+  z-index: 45;
+  isolation: isolate;
+  animation: nav-panel-enter 180ms ease-out;
+}
+
+/* The visual fade extends beyond the menu without intercepting the page. */
+.nav-submenu::before {
+  content: "";
+  position: absolute;
+  inset: -1px 0 calc(-1 * clamp(90px, 18vh, 220px));
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, #fff 0%, rgb(255 255 255 / 96%) 28%, rgb(255 255 255 / 85%) 55%, rgb(255 255 255 / 50%) 74%, rgb(255 255 255 / 13%) 91%, transparent 100%);
+}
+
+.nav-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(16px, 3vw, 56px);
+  padding: clamp(32px, 4vw, 64px) max(var(--gutter, 24px), calc((100% - 1080px) / 2)) 4px;
+}
+
+@keyframes nav-panel-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.nav-submenu[hidden] { display: none; }
+
+.nav-column { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.nav-column h2 { margin: 0 0 16px; color: #53675c; font-size: .88rem; font-weight: 550; }
+.nav-submenu-item {
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #25382d;
+  font: inherit;
+  font-size: clamp(.94rem, 1.2vw, 1.125rem);
+  font-weight: 600;
+  text-align: left;
+  word-break: keep-all;
+  cursor: pointer;
+}
+.nav-submenu-item:hover, .nav-submenu-item:focus-visible {
+  color: var(--forest, #174233);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.nav-submenu-item:focus-visible {
+  outline: 2px solid var(--forest, #174233);
+  outline-offset: -2px;
+}
+
+/* 찜 목록 인페이지 뷰 */
+.favorites-view {
+  display: grid;
+  gap: 16px;
+}
+
+.favorites-view[hidden] {
+  display: none;
+}
+
+.favorites-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.favorites-head h1 {
+  margin: 8px 0 4px;
+  font-size: 1.5rem;
+  line-height: 1.25;
+  color: var(--forest-deep, #132c22);
+}
+
+.favorites-count {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary, #1e9b4b);
+}
+
+.favorites-sub {
+  margin: 0;
+  color: var(--text-muted, #5c6f65);
+  font-size: 0.9375rem;
+}
+
+.favorites-guest-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #f3f8f4;
+  border: 1px solid rgba(23, 66, 51, 0.14);
+  font-size: 0.875rem;
+  color: var(--text-body, #2c4237);
+}
+
+.favorites-guest-notice[hidden] {
+  display: none;
+}
+
+.favorites-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.favorites-empty p {
+  margin: 0;
 }
 
 .mypage-layout:not([hidden]) {
@@ -127,7 +252,8 @@
 }
 
 .mypage-menu-item:focus-visible,
-#myPageButton:focus-visible {
+#myPageButton:focus-visible,
+.header-icon-btn:focus-visible {
   outline: 2px solid var(--forest, #174233);
   outline-offset: 2px;
 }
@@ -136,12 +262,102 @@
   margin-top: 8px;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-icon-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.header-icon-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(23, 66, 51, 0.14);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--forest-deep, #132c22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition:
+    background-color var(--dur-fast, 160ms) ease,
+    border-color var(--dur-fast, 160ms) ease,
+    color var(--dur-fast, 160ms) ease,
+    transform var(--dur-fast, 160ms) var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.header-icon-btn:hover {
+  background: #eef6f0;
+  border-color: var(--forest, #174233);
+  color: var(--forest, #174233);
+}
+
+.header-icon-btn.active {
+  background: var(--forest, #174233);
+  border-color: var(--forest, #174233);
+  color: #ffffff;
+}
+
+.header-cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #1e9b4b;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  border: 2px solid #ffffff;
+  pointer-events: none;
+}
+
+.header-cart-badge[hidden] {
+  display: none;
+}
+
 #myPageButton .mypage-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: #f7c548;
-  margin-left: 4px;
+  border: 1.5px solid #ffffff;
+  margin-left: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 1241px) {
+  .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: 16px;
+  }
+  .sidebar > .brand { justify-self: start; }
+  .sidebar > .topbar-left { justify-self: end; min-width: 0; }
 }
 
 @media (max-width: 1240px) {
+  .sidebar-nav {
+    overflow: visible;
+    flex-wrap: wrap;
+  }
   .nav-item { min-height: 48px; }
 }
 
@@ -169,11 +385,21 @@
     right: 6px;
     height: 2.5px;
   }
+
+  .nav-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 20px var(--gutter, 16px) 4px;
+    gap: 16px;
+    max-height: 55dvh;
+    overflow-y: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .nav-submenu { animation: none; }
   .nav-item,
-  .nav-item::after {
+  .nav-item::after,
+  .nav-submenu-item {
     transition-duration: 0.01ms !important;
   }
 }

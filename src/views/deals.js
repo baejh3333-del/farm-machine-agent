@@ -5,12 +5,24 @@ import { state, runtime, isLoggedIn, apiFetch, stopChatPolling } from "../core/s
 import {
   normalizeDeal, normalizeOffer, aiStatus, senderState, roleOf, roleLabel, counterpartLabel,
   SENDER_LABEL, SENDER_ICON, AI_STATUS_LABEL, STAGE_LABEL, stageSteps, describeOffer, formatWon,
-  offerAcceptedBy, DEAL_FILTERS, matchesFilter, filterCounts, sortDeals, dealsBadge, filterMessages,
+  offerAcceptedBy, DEAL_FILTERS, matchesFilter, filterCounts, dealsBadge, filterMessages,
   readSeqFor, buildPolicyFromForm, validatePolicy, buildOfferBody, rentalDays, dealsHash,
+  presetsForListingType, getDelegationPreset,
 } from "../data/deals-model.js";
 
 const LIST_POLL_MS = 20000;
 const DETAIL_POLL_MS = 4000;
+
+export function sortInboxDeals(deals) {
+  return [...deals].sort((a, b) => {
+    const ta = Date.parse(a.updatedAt || "") || 0;
+    const tb = Date.parse(b.updatedAt || "") || 0;
+    if (tb !== ta) return tb - ta;
+    const cmp = String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+    if (cmp !== 0) return cmp;
+    return (Number(b.lastSeq) || 0) - (Number(a.lastSeq) || 0);
+  });
+}
 
 const UNAVAILABLE_CODES = new Set(["TRADE_NEGOTIATION_UNAVAILABLE", "UNKNOWN_ACTION", "NOT_IMPLEMENTED"]);
 
@@ -57,10 +69,12 @@ export function createDealsView(deps) {
     conv: null,
     messages: new Map(),
     pending: new Map(),
+    drafts: new Map(),
+    delegationOpen: false,
     tab: "conversation",
     msgTab: "all",
     offerFormOpen: false,
-    composerOpen: false,
+    composing: false,
     busy: false,
     listTimer: null,
     detailTimer: null,
@@ -114,21 +128,10 @@ export function createDealsView(deps) {
     }).join("");
   }
 
-  function miniStepper(deal) {
-    return `<ol class="deal-mini-steps" aria-label="진행 단계: ${escapeHtml(deal.stageLabel)}">${stageSteps(deal.stage, deal.listingType)
-      .map((s) => `<li class="is-${s.state}">${escapeHtml(s.label)}</li>`).join("")}</ol>`;
-  }
-
-  function offerLine(deal) {
-    const offers = deal.offers.length ? deal.offers : (deal.currentOffer ? [deal.currentOffer] : []);
-    const theirs = [...offers].reverse().find((o) => o.fromRole && o.fromRole !== deal.myRole);
-    const mine = [...offers].reverse().find((o) => o.fromRole === deal.myRole);
-    if (deal.agreed) return `<p class="deal-card-offer"><b>합의 조건</b> ${escapeHtml(describeOffer(deal.agreed))}</p>`;
-    if (!theirs && !mine) return "";
-    return `<p class="deal-card-offer">
-      ${theirs ? `<span><b>상대 제안</b> ${escapeHtml(describeOffer(theirs))}</span>` : ""}
-      ${mine ? `<span><b>내 제안</b> ${escapeHtml(describeOffer(mine))}</span>` : ""}
-    </p>`;
+  function lastMessagePreview(deal) {
+    const body = String(deal.lastMessage?.body || "").replace(/\s+/g, " ").trim();
+    if (body) return body;
+    return "아직 주고받은 메시지가 없어요.";
   }
 
   function aiBadge(ai) {
@@ -142,24 +145,20 @@ export function createDealsView(deps) {
     return `<span class="deal-role-chip role-${deal.myRole || "none"}">${escapeHtml(deal.roleLabel)}</span>`;
   }
 
-  function renderCard(deal) {
-    const last = deal.lastMessage;
+  function renderInboxRow(deal) {
     const unread = (deal.unreadCount || 0) > 0;
-    const next = deal.nextActions[0];
-    return `<article class="deal-card${deal.needsAttention ? " is-attention" : ""}${unread ? " is-unread" : ""}${ui.detailId === deal.id ? " is-selected" : ""}" data-deal-open="${escapeHtml(deal.id)}" tabindex="0" aria-label="${escapeHtml(`${deal.listingTitle}, ${deal.roleLabel}, ${deal.stageLabel}`)}">
-      <header class="deal-card-head">
-        ${roleChip(deal)}
-        <span class="deal-type-chip">${deal.listingType === "sale" ? "중고 거래" : "대여"}</span>
-        ${unread ? `<span class="deal-unread-dot" aria-label="안 읽은 메시지 ${deal.unreadCount}개">${deal.unreadCount}</span>` : ""}
-        <span class="deal-card-time">${escapeHtml(relTime(deal.updatedAt))}</span>
-      </header>
-      <h3 class="deal-card-title">${escapeHtml(deal.listingTitle)}</h3>
-      <p class="deal-card-sub">${escapeHtml(deal.counterpartRoleLabel)} ${escapeHtml(deal.counterpartName)} 님 · ${escapeHtml(deal.stageLabel)} ${aiBadge(deal.ai)}</p>
-      ${miniStepper(deal)}
-      ${last ? `<p class="deal-card-last sender-${deal.lastSender}"><span class="deal-sender-tag">${SENDER_ICON[deal.lastSender] || ""} ${escapeHtml(SENDER_LABEL[deal.lastSender] || "")}</span> ${escapeHtml(String(last.body || "").slice(0, 90))}</p>` : `<p class="deal-card-last">아직 주고받은 메시지가 없어요.</p>`}
-      ${deal.ai.draft ? `<p class="deal-card-last sender-draft"><span class="deal-sender-tag">📝 ${SENDER_LABEL.draft}</span> ${escapeHtml(deal.ai.draft.body.slice(0, 80))}</p>` : ""}
-      ${offerLine(deal)}
-      ${next ? `<p class="deal-card-next${next.attention ? " is-attention" : ""}">다음 할 일 · ${escapeHtml(next.label)}</p>` : ""}
+    const selected = ui.detailId === deal.id;
+    const preview = lastMessagePreview(deal);
+    const time = relTime(deal.updatedAt);
+    return `<article class="deal-card deal-inbox-row${unread ? " is-unread" : ""}${selected ? " is-selected" : ""}" data-deal-open="${escapeHtml(deal.id)}" role="button" tabindex="0" aria-current="${selected ? "true" : "false"}" aria-label="${escapeHtml(`${deal.listingTitle}, ${preview}`)}">
+      <div class="deal-row-top">
+        <h3 class="deal-card-title">${escapeHtml(deal.listingTitle)}</h3>
+        <div class="deal-row-meta">
+          ${unread ? `<span class="deal-unread-dot" aria-label="안 읽은 메시지 ${deal.unreadCount}개">${deal.unreadCount}</span>` : ""}
+          ${time ? `<span class="deal-card-time">${escapeHtml(time)}</span>` : ""}
+        </div>
+      </div>
+      <p class="deal-card-last">${escapeHtml(preview)}</p>
     </article>`;
   }
 
@@ -167,16 +166,16 @@ export function createDealsView(deps) {
     const listEl = $("dealsList");
     if (!listEl) return;
     if (!isLoggedIn()) {
-      listEl.innerHTML = `<div class="empty-panel deals-empty"><p>로그인하면 농농이가 대신 진행 중인 거래를 확인할 수 있어요.</p><div class="deals-empty-actions"><button type="button" class="button button-primary button-sm" data-deals-goto="login">로그인</button></div></div>`;
+      listEl.innerHTML = "";
       if ($("dealsFilters")) $("dealsFilters").innerHTML = "";
       return;
     }
     const deals = allDeals();
     renderFilters(deals);
-    const visible = sortDeals(deals.filter((d) => matchesFilter(d, ui.filter)));
+    const visible = sortInboxDeals(deals.filter((d) => matchesFilter(d, ui.filter)));
     if (!deals.length) {
       listEl.innerHTML = `<div class="empty-panel deals-empty">
-        <p>아직 진행 중인 거래가 없어요. 매물에서 문의하거나 AI 농농이에게 거래를 맡겨 보세요.</p>
+        <p>아직 진행 중인 거래 대화가 없어요. 매물에서 문의하거나 AI 농농이에게 거래를 맡겨 보세요.</p>
         <div class="deals-empty-actions"><button type="button" class="button button-primary button-sm" data-deals-goto="browse">매물 찾기</button>
         <button type="button" class="button button-secondary button-sm" data-deals-goto="owner">내 매물 자동응대 설정</button></div>
       </div>`;
@@ -191,12 +190,7 @@ export function createDealsView(deps) {
       listEl.innerHTML = `<div class="empty-panel">${escapeHtml(msg)}</div>`;
       return;
     }
-    const attention = visible.filter((d) => d.needsAttention);
-    const rest = visible.filter((d) => !d.needsAttention);
-    listEl.innerHTML = [
-      attention.length ? `<h2 class="deals-group-title is-alert">⚠ 내 확인 필요 <small>${attention.length}</small></h2>${attention.map(renderCard).join("")}` : "",
-      rest.length ? `<h2 class="deals-group-title">진행 중·최근 <small>${rest.length}</small></h2>${rest.map(renderCard).join("")}` : "",
-    ].join("");
+    listEl.innerHTML = visible.map(renderInboxRow).join("");
   }
 
   // ---------- 상세 ----------
@@ -246,31 +240,40 @@ export function createDealsView(deps) {
     </div>`;
   }
 
-  function renderConversation(deal) {
+  function renderMessageBody(deal) {
     const all = sortedMessages();
-    const tabs = [["all", "전체"], ["sent", "보낸 메시지"], ["received", "받은 메시지"], ["drafts", "초안"]];
-    let body;
     if (ui.msgTab === "drafts") {
-      body = deal.ai.draft ? renderDraft(deal) : `<div class="deal-empty-line">보내지 않은 초안이 없어요.</div>`;
-    } else {
-      const list = filterMessages(all, ui.msgTab, msgCtx());
-      body = list.length ? list.map(renderMessage).join("") : `<div class="deal-empty-line">표시할 메시지가 없어요.</div>`;
-      if (ui.msgTab === "all") body += renderDraft(deal);
+      return deal.ai.draft ? renderDraft(deal) : `<div class="deal-empty-line">보내지 않은 초안이 없어요.</div>`;
     }
+    const list = filterMessages(all, ui.msgTab, msgCtx());
+    let body = list.length ? list.map(renderMessage).join("") : `<div class="deal-empty-line">표시할 메시지가 없어요.</div>`;
+    if (ui.msgTab === "all") body += renderDraft(deal);
+    return body;
+  }
+
+  function renderNewPill() {
     const pendingCount = ui.pending.size;
+    return pendingCount ? `<button type="button" class="deal-new-pill" data-deal-show-new>새 메시지 ${pendingCount}개 보기</button>` : "";
+  }
+
+  function renderConversation(deal) {
+    const tabs = [["all", "전체"], ["sent", "보낸 메시지"], ["received", "받은 메시지"], ["drafts", "초안"]];
     const takeoverNote = deal.ai.mode !== "off" && deal.ai.key !== "takeover"
       ? `<p class="deal-composer-note">직접 보내면 이 거래는 ‘직접 진행 중’으로 바뀌고, ‘다시 맡기기’를 누르기 전까지 농농이가 자동으로 보내지 않아요.</p>` : "";
+    const draftValue = ui.drafts.get(ui.detailId) || "";
     return `<section class="deal-section deal-conversation" aria-labelledby="dealConvTitle">
       <div class="deal-section-head">
         <h3 id="dealConvTitle">주고받은 메시지</h3>
         <div class="deal-msg-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${ui.msgTab === k}" class="deal-msg-tab${ui.msgTab === k ? " is-active" : ""}" data-deal-msgtab="${k}">${l}</button>`).join("")}</div>
       </div>
-      <div class="deal-msg-log" id="dealMsgLog" aria-live="polite">${body}</div>
-      ${pendingCount ? `<button type="button" class="deal-new-pill" data-deal-show-new>새 메시지 ${pendingCount}개 보기</button>` : ""}
-      <form class="deal-composer${ui.composerOpen ? " is-open" : ""}" id="dealComposer">
-        ${ui.composerOpen ? `${takeoverNote}<textarea id="dealComposerInput" maxlength="500" rows="2" placeholder="상대에게 직접 보낼 메시지" aria-label="직접 보낼 메시지"></textarea>
-        <div class="deal-composer-actions"><button type="button" class="button button-secondary button-sm" data-deal-composer-close>닫기</button><button type="submit" class="button button-primary button-sm">직접 보내기</button></div>`
-          : `<button type="button" class="button button-secondary button-sm" data-deal-composer-open>✍️ 직접 답장</button>`}
+      <div class="deal-msg-log" id="dealMsgLog" aria-live="polite">${renderMessageBody(deal)}</div>
+      <div id="dealNewPillSlot">${renderNewPill()}</div>
+      <form class="deal-composer is-open" id="dealComposer">
+        ${takeoverNote}
+        <div class="deal-composer-row">
+          <textarea id="dealComposerInput" maxlength="500" rows="2" placeholder="메시지를 입력하세요 (Enter 전송 · Shift+Enter 줄바꿈)" aria-label="직접 보낼 메시지">${escapeHtml(draftValue)}</textarea>
+          <button type="submit" class="button button-primary button-sm deal-composer-send">보내기</button>
+        </div>
       </form>
     </section>`;
   }
@@ -420,8 +423,18 @@ export function createDealsView(deps) {
     const limit = buyer ? p.maxBudget : p.minPrice;
     const transportKnown = p.transportFee !== null && p.transportFee !== undefined;
     const rq = Array.isArray(p.requiredQuestions) ? p.requiredQuestions.join("\n") : (p.requiredQuestions || "");
+    const presets = presetsForListingType(deal.listingType);
     return `<section class="deal-section deal-policy" aria-labelledby="dealPolicyTitle">
-      <h3 id="dealPolicyTitle">위임 조건 <small>🔒 나에게만 보여요 · 상대에게 공개되지 않아요</small></h3>
+      <div class="deal-section-head">
+        <h3 id="dealPolicyTitle">위임 조건 <small>🔒 나에게만 보여요 · 상대에게 공개되지 않아요</small></h3>
+        <button type="button" class="button button-secondary button-sm" data-deal-delegation-close>닫기</button>
+      </div>
+      <div class="deal-preset-bar" role="group" aria-label="거래전담 빠른 프리셋">
+        <span class="deal-preset-label">⚡ 빠른 설정</span>
+        <div class="deal-preset-list">
+          ${presets.map((pr) => `<button type="button" class="deal-preset-btn" data-deal-preset="${escapeHtml(pr.id)}" title="${escapeHtml(pr.desc)}">${escapeHtml(pr.label)}</button>`).join("")}
+        </div>
+      </div>
       <form id="dealPolicyForm" class="deal-policy-form">
         <fieldset class="deal-mode-group"><legend>농농이 역할</legend>
           ${[["off", "끄기", "농농이가 아무것도 보내지 않아요"], ["copilot", "초안만", "답장 초안을 만들고 내가 보내요"], ["autonomous", "자동 응대·협상", "조건 안에서 대신 보내고 협상해요"]]
@@ -446,19 +459,35 @@ export function createDealsView(deps) {
         ${buyer ? `<label class="deal-check"><input type="checkbox" id="dealPolicyAutoApply"${p.autoExecuteTransaction ? " checked" : ""}> 양측이 같은 조건에 합의하면 내 명의로 ${rent ? "대여" : "구매"} 신청까지 맡기기</label>` : `<p class="deal-hint">판매자 쪽 농농이는 구매자 명의로 신청하지 않으며, 최종 승인은 직접 해요.</p>`}
         <label class="deal-check"><input type="checkbox" id="dealPolicyFull"${p.fullDelegation ? " checked" : ""}> 거래 전담(부재 중에도 위 범위 안에서 계속 진행)</label>
         <p class="deal-hint">한도를 비워 두면 매물 정가로 채우지 않고, 금액 결정이 필요할 때 내게 확인해요.</p>
-        <div class="deal-form-actions"><button type="submit" class="button button-primary button-sm">조건 저장</button></div>
+        <div class="deal-form-actions">
+          <button type="button" class="button btn-delegated-trade button-sm" data-deal-quick-start>🤖 거래전담 바로 시작</button>
+          <button type="submit" class="button button-primary button-sm">조건 저장</button>
+        </div>
       </form>
     </section>`;
   }
 
   function renderControls(deal) {
     const ai = deal.ai;
-    const btns = [];
+    const activeDelegation = ai.mode !== "off";
+    const btns = [
+      `<div class="trade-action-pair">`,
+      `<button type="button" class="button button-secondary button-sm btn-direct-chat" data-deal-open-chat>1:1 대화 창 ↗</button>`,
+      `<button type="button" class="button ${ui.delegationOpen ? "button-primary" : "btn-delegated-trade"} button-sm deal-delegation-btn${ui.delegationOpen ? " is-open" : ""}${activeDelegation ? " is-delegating" : ""}" data-deal-delegation-toggle aria-expanded="${ui.delegationOpen}" aria-controls="dealDelegationPanel">농농이 거래 전담</button>`,
+      `</div>`,
+    ];
     if (ai.canTakeover) btns.push(`<button type="button" class="button button-secondary button-sm" data-deal-takeover>✋ 직접 이어받기</button>`);
     if (ai.canResume && ai.mode !== "off") btns.push(`<button type="button" class="button button-primary button-sm" data-arm-key="resume" data-deal-resume>▶ 다시 맡기기</button>`);
-    if (ai.mode === "off") btns.push(`<button type="button" class="button button-primary button-sm" data-deal-tab-go="terms">🤖 농농이에게 맡기기</button>`);
-    btns.push(`<button type="button" class="button button-secondary button-sm" data-deal-open-chat>대화 전체 보기 ↗</button>`);
     return `<div class="deal-controls">${btns.join("")}</div>`;
+  }
+
+  function syncDraftFromDom() {
+    if (!ui.detailId) return;
+    const input = $("dealComposerInput");
+    if (!input) return;
+    const value = input.value;
+    if (value) ui.drafts.set(ui.detailId, value);
+    else ui.drafts.delete(ui.detailId);
   }
 
   function renderDetail() {
@@ -468,6 +497,7 @@ export function createDealsView(deps) {
     if (!ui.detailId) {
       pane.hidden = true;
       pane.innerHTML = "";
+      delete pane.dataset.convId;
       view?.classList.remove("has-detail");
       return;
     }
@@ -477,9 +507,14 @@ export function createDealsView(deps) {
       pane.innerHTML = `<div class="deal-loading">거래를 불러오는 중…</div>`;
       return;
     }
+    const sameConv = pane.dataset.convId === String(ui.detailId);
+    if (sameConv) syncDraftFromDom();
     const deal = detailDeal();
-    const scroll = $("dealMsgLog")?.scrollTop;
-    const focusedId = document.activeElement?.id;
+    const prevScroll = sameConv ? $("dealMsgLog")?.scrollTop : null;
+    const activeEl = document.activeElement;
+    const focusedId = sameConv && activeEl && pane.contains(activeEl) ? activeEl.id : null;
+    const selStart = focusedId === "dealComposerInput" ? activeEl.selectionStart : null;
+    const selEnd = focusedId === "dealComposerInput" ? activeEl.selectionEnd : null;
     pane.innerHTML = `
       <header class="deal-detail-head">
         <button type="button" class="deal-back" data-deal-back aria-label="거래 목록으로">← 거래 목록</button>
@@ -493,20 +528,27 @@ export function createDealsView(deps) {
         <p id="dealConfirmNote" class="deal-confirm-note" role="status" hidden></p>
       </header>
       ${renderException(deal)}
+      <div id="dealDelegationPanel" class="deal-delegation-panel"${ui.delegationOpen ? "" : " hidden"}>${ui.delegationOpen ? renderPolicy(deal) : ""}</div>
       <nav class="deal-tabs" role="tablist" aria-label="거래 상세 보기">
-        ${[["conversation", "대화"], ["progress", "진행·제안"], ["terms", "조건"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${ui.tab === k}" class="deal-tab${ui.tab === k ? " is-active" : ""}" data-deal-tab="${k}">${l}</button>`).join("")}
+        ${[["conversation", "대화"], ["progress", "진행·제안"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${ui.tab === k}" class="deal-tab${ui.tab === k ? " is-active" : ""}" data-deal-tab="${k}">${l}</button>`).join("")}
       </nav>
       <div class="deal-detail-body" data-active-tab="${ui.tab}">
         <div class="deal-col deal-col-main" data-tab-panel="conversation">${renderConversation(deal)}</div>
         <div class="deal-col deal-col-side">
           <div data-tab-panel="progress">${renderProgress(deal)}${renderNegotiation(deal)}</div>
-          <div data-tab-panel="terms">${renderPolicy(deal)}</div>
         </div>
       </div>`;
+    pane.dataset.convId = String(ui.detailId);
     applyArmedState();
     const log = $("dealMsgLog");
-    if (log) log.scrollTop = Number.isFinite(scroll) ? scroll : log.scrollHeight;
-    if (focusedId && $(focusedId)) $(focusedId).focus({ preventScroll: true });
+    if (log) log.scrollTop = Number.isFinite(prevScroll) ? prevScroll : log.scrollHeight;
+    if (focusedId && $(focusedId)) {
+      const nextEl = $(focusedId);
+      nextEl.focus({ preventScroll: true });
+      if (focusedId === "dealComposerInput" && Number.isInteger(selStart) && Number.isInteger(selEnd)) {
+        try { nextEl.setSelectionRange(selStart, selEnd); } catch { /* 선택 영역 복원 불가 시 무시 */ }
+      }
+    }
   }
 
   function patchConvFromResponse(conv) {
@@ -574,6 +616,32 @@ export function createDealsView(deps) {
     }
   }
 
+  function patchMessagesInPlace() {
+    const deal = detailDeal();
+    const log = $("dealMsgLog");
+    if (!deal || !log) return false;
+    const wasNearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    const prevScroll = log.scrollTop;
+    log.innerHTML = renderMessageBody(deal);
+    const pillSlot = $("dealNewPillSlot");
+    if (pillSlot) pillSlot.innerHTML = renderNewPill();
+    log.scrollTop = wasNearBottom ? log.scrollHeight : prevScroll;
+    return true;
+  }
+
+  function isFormEditing() {
+    const el = document.activeElement;
+    if (ui.offerFormOpen) return true;
+    if (!el || !$("dealsDetail")?.contains(el)) return false;
+    if (el.id === "dealComposerInput") return false;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
+  }
+
+  function isComposerActive() {
+    const el = document.activeElement;
+    return ui.composing || Boolean(el && el.id === "dealComposerInput");
+  }
+
   async function pollDetail() {
     if (!ui.detailId || !isActive() || document.visibilityState !== "visible" || ui.busy) return;
     const id = ui.detailId;
@@ -594,12 +662,17 @@ export function createDealsView(deps) {
       const before = JSON.stringify([ui.conv?.myAiState, ui.conv?.stage, ui.conv?.negotiation?.currentOffer, ui.conv?.order]);
       if (data.conversation) patchConvFromResponse(data.conversation);
       const after = JSON.stringify([ui.conv?.myAiState, ui.conv?.stage, ui.conv?.negotiation?.currentOffer, ui.conv?.order]);
-      if (changed || before !== after) {
-        if (before !== after && ui.conv?.negotiation?.currentOffer && !Array.isArray(data.conversation?.negotiation?.offers)) {
+      const metaChanged = before !== after;
+      if (changed || metaChanged) {
+        if (metaChanged && ui.conv?.negotiation?.currentOffer && !Array.isArray(data.conversation?.negotiation?.offers)) {
           // 제안이 바뀌었으면 이력까지 다시 받는다(읽음 처리 없음).
           refreshDetailMeta(id);
         }
-        if (!isEditing()) renderDetail();
+        if (isFormEditing() || ui.composing || (isComposerActive() && !metaChanged)) {
+          patchMessagesInPlace();
+        } else {
+          renderDetail();
+        }
         renderList();
         deps.updateBadges?.();
       }
@@ -613,14 +686,8 @@ export function createDealsView(deps) {
       const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(id)}&limit=1`);
       if (ui.detailId !== id || !data.conversation) return;
       patchConvFromResponse(data.conversation);
-      if (!isEditing()) renderDetail();
+      if (!isFormEditing() && !ui.composing) renderDetail();
     } catch { /* 무시 */ }
-  }
-
-  function isEditing() {
-    const el = document.activeElement;
-    return Boolean(el && $("dealsDetail")?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT"))
-      || ui.offerFormOpen || ui.composerOpen;
   }
 
   function startDetailPolling() {
@@ -654,27 +721,28 @@ export function createDealsView(deps) {
       // 로그인 후 main.js가 같은 해시로 다시 show()를 호출한다.
       ui.detailId = null;
       ui.conv = null;
+      ui.delegationOpen = false;
       renderDetail();
       return;
     }
     startListPolling();
     if (conversationId) {
-      if (ui.detailId !== conversationId) {
-        ui.detailId = conversationId;
-        ui.conv = (runtime.userConversations || []).find((c) => String(c.id) === String(conversationId)) || null;
+      const nextId = String(conversationId);
+      if (String(ui.detailId || "") !== nextId) {
+        syncDraftFromDom();
+        ui.detailId = nextId;
+        ui.conv = (runtime.userConversations || []).find((c) => String(c.id) === nextId) || null;
         ui.messages = new Map();
         ui.pending = new Map();
         ui.offerFormOpen = false;
-        ui.composerOpen = false;
+        ui.delegationOpen = false;
+        ui.composing = false;
+        ui.armed = null;
         ui.msgTab = "all";
         ui.tab = "conversation";
-        if (ui.conv) {
-          // 메시지 없이 메타만 먼저 보여주고 상세를 불러온다.
-          renderDetail();
-        } else {
-          renderDetail();
-        }
-        loadDetail(conversationId);
+        renderDetail();
+        renderList();
+        loadDetail(nextId);
       } else {
         renderDetail();
       }
@@ -684,14 +752,19 @@ export function createDealsView(deps) {
   }
 
   function hide() {
+    syncDraftFromDom();
     stopListPolling();
     stopDetailPolling();
   }
 
   function closeDetail({ updateHash = true } = {}) {
+    syncDraftFromDom();
     stopDetailPolling();
     ui.detailId = null;
     ui.conv = null;
+    ui.delegationOpen = false;
+    ui.offerFormOpen = false;
+    ui.composing = false;
     ui.messages = new Map();
     ui.pending = new Map();
     renderDetail();
@@ -780,17 +853,40 @@ export function createDealsView(deps) {
 
   async function sendHuman(text, button) {
     const body = String(text || "").trim();
-    if (!body) return;
+    const targetId = ui.detailId;
+    if (!body || !targetId) return;
     await run(button, async () => {
       try {
-        const res = await post("send", { id: crypto.randomUUID(), conversationId: ui.detailId, body });
+        const res = await post("send", { id: crypto.randomUUID(), conversationId: targetId, body });
+        ui.drafts.delete(targetId);
+        if (ui.detailId !== targetId) {
+          if (res?.conversation) {
+            const idx = (runtime.userConversations || []).findIndex((c) => String(c.id) === String(targetId));
+            if (idx >= 0) runtime.userConversations.splice(idx, 1, { ...runtime.userConversations[idx], ...res.conversation });
+          }
+          renderList();
+          return;
+        }
         if (res?.message) ui.messages.set(res.message.seq, res.message);
         if (res?.conversation) patchConvFromResponse(res.conversation);
-        ui.composerOpen = false;
+        else if (ui.conv && res?.message) {
+          patchConvFromResponse({
+            ...ui.conv,
+            lastSeq: Math.max(Number(ui.conv.lastSeq) || 0, Number(res.message.seq) || 0),
+            lastMessage: res.message,
+            updatedAt: res.message.createdAt || new Date().toISOString(),
+          });
+        }
+        const input = $("dealComposerInput");
+        if (input) input.value = "";
         // 직접 답장했다는 것은 그 앞의 상대 메시지를 봤다는 뜻이므로 표시 중인 메시지까지 읽음 처리.
         for (const [seq, m] of ui.pending) ui.messages.set(seq, m);
         ui.pending = new Map();
         renderDetail();
+        const log = $("dealMsgLog");
+        if (log) log.scrollTop = log.scrollHeight;
+        $("dealComposerInput")?.focus({ preventScroll: true });
+        renderList();
         await markRead();
         toast(ui.conv && aiStatus(ui.conv, roleOf(ui.conv, meId())).key === "takeover"
           ? "직접 보냈어요. 다시 맡기기 전까지 농농이는 자동으로 보내지 않아요."
@@ -879,11 +975,40 @@ export function createDealsView(deps) {
       if (t.closest("[data-deal-back]")) return closeDetail();
       const tab = t.closest("[data-deal-tab]");
       if (tab) { ui.tab = tab.dataset.dealTab; return renderDetail(); }
-      const tabGo = t.closest("[data-deal-tab-go]");
-      if (tabGo) {
-        ui.tab = tabGo.dataset.dealTabGo;
+      if (t.closest("[data-deal-delegation-toggle]")) {
+        ui.delegationOpen = !ui.delegationOpen;
         renderDetail();
-        return $("dealPolicyTitle")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (ui.delegationOpen) {
+          $("dealDelegationPanel")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+        }
+        return;
+      }
+      if (t.closest("[data-deal-delegation-close]")) {
+        ui.delegationOpen = false;
+        renderDetail();
+        return;
+      }
+      const presetBtn = t.closest("[data-deal-preset]");
+      if (presetBtn) {
+        const deal = detailDeal();
+        const preset = deal ? getDelegationPreset(presetBtn.dataset.dealPreset, deal.listingType) : null;
+        if (preset) {
+          const autoRadio = root.querySelector('input[name="dealPolicyMode"][value="autonomous"]');
+          if (autoRadio) autoRadio.checked = true;
+          if ($("dealPolicyNegotiate")) $("dealPolicyNegotiate").checked = preset.policy.allowNegotiation !== false;
+          if ($("dealPolicyAutoApply") && deal.myRole === "buyer") $("dealPolicyAutoApply").checked = Boolean(preset.policy.autoExecuteTransaction);
+          if ($("dealPolicyFull")) $("dealPolicyFull").checked = true;
+          root.querySelectorAll("[data-deal-preset]").forEach((b) => b.classList.toggle("is-selected", b === presetBtn));
+          toast(`'${preset.label}' 조건을 채웠어요. 바로 시작하거나 조건을 저장하세요.`);
+        }
+        return;
+      }
+      const quickStartBtn = t.closest("[data-deal-quick-start]");
+      if (quickStartBtn) {
+        const autoRadio = root.querySelector('input[name="dealPolicyMode"][value="autonomous"]');
+        if (autoRadio) autoRadio.checked = true;
+        if ($("dealPolicyFull")) $("dealPolicyFull").checked = true;
+        return savePolicy(quickStartBtn);
       }
       const msgTab = t.closest("[data-deal-msgtab]");
       if (msgTab) { ui.msgTab = msgTab.dataset.dealMsgtab; return renderDetail(); }
@@ -896,12 +1021,10 @@ export function createDealsView(deps) {
         return markRead();
       }
       if (t.closest("[data-deal-composer-open]")) {
-        ui.composerOpen = true;
         ui.tab = "conversation";
         renderDetail();
         return $("dealComposerInput")?.focus();
       }
-      if (t.closest("[data-deal-composer-close]")) { ui.composerOpen = false; return renderDetail(); }
       const draftSend = t.closest("[data-deal-draft-send]");
       if (draftSend) {
         const deal = detailDeal();
@@ -910,10 +1033,9 @@ export function createDealsView(deps) {
       }
       if (t.closest("[data-deal-draft-edit]")) {
         const deal = detailDeal();
-        ui.composerOpen = true;
         ui.tab = "conversation";
+        if (ui.detailId && deal?.ai.draft) ui.drafts.set(ui.detailId, deal.ai.draft.body);
         renderDetail();
-        if ($("dealComposerInput") && deal?.ai.draft) $("dealComposerInput").value = deal.ai.draft.body;
         return $("dealComposerInput")?.focus();
       }
       const dismiss = t.closest("[data-deal-draft-dismiss]");
@@ -954,7 +1076,41 @@ export function createDealsView(deps) {
       }
     });
 
+    root.addEventListener("input", (event) => {
+      if (event.target?.id === "dealComposerInput" && ui.detailId) {
+        const value = event.target.value;
+        if (value) ui.drafts.set(ui.detailId, value);
+        else ui.drafts.delete(ui.detailId);
+      }
+    });
+
+    root.addEventListener("compositionstart", (event) => {
+      if (event.target?.id === "dealComposerInput") ui.composing = true;
+    });
+
+    root.addEventListener("compositionend", (event) => {
+      if (event.target?.id === "dealComposerInput") {
+        ui.composing = false;
+        syncDraftFromDom();
+      }
+    });
+
     root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && ui.delegationOpen && $("dealsDetail")?.contains(event.target)) {
+        event.preventDefault();
+        ui.delegationOpen = false;
+        renderDetail();
+        root.querySelector("[data-deal-delegation-toggle]")?.focus();
+        return;
+      }
+      if (event.target?.id === "dealComposerInput") {
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing && !ui.composing) {
+          event.preventDefault();
+          const submitter = $("dealComposer")?.querySelector('[type="submit"]');
+          sendHuman(event.target.value, submitter);
+        }
+        return;
+      }
       if (event.key !== "Enter" && event.key !== " ") return;
       const card = event.target.closest?.("[data-deal-open]");
       if (card && event.target === card) {

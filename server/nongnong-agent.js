@@ -1089,9 +1089,12 @@ export function cleanSavedDraft(draft) {
 
 // 사진만으로는 알 수 없는 사실. 사용자가 그 주제를 말한 적이 없으면 소개글·제목에 쓰지 않는다.
 const UNVERIFIED_FACTS = [
-  { label: "연식", claim: /\d{2,4}\s*년(?:식|형)|연식|년식|연형|신형|구형/, said: /\d{2,4}\s*년|신형|구형/ },
-  { label: "사용시간", claim: /사용\s*시간|\d+\s*시간|최근\s*(?:까지\s*)?(?:사용|씀|썼)|(?:거의|별로)\s*안\s*(?:쓴|썼|씀)|적게\s*(?:쓴|썼)|사용감|운행/, said: /\d+\s*시간|최근|안\s*(?:썼|쓴|씀)|조금\s*(?:썼|쓴)|많이\s*(?:썼|쓴)|적게\s*(?:썼|쓴)|사용감|운행/ },
-  { label: "포함 작업기", claim: /작업기|부속|로터리|쟁기|베일러|탈부착|부착|포함/, said: /작업기|부속|로터리|쟁기|베일러|포함|달려|붙어|부착/ },
+  // said: "2016년식"뿐 아니라 "2016, 400시간"처럼 '년' 없이 연도만 말한 답도 연식으로 본다(시간·금액·면적 숫자는 제외).
+  { label: "연식", claim: /\d{2,4}\s*년(?:식|형)|연식|년식|연형|신형|구형/, said: /\d{2,4}\s*년|(?<![\d,.])(?:19[89]\d|20[0-4]\d)(?!\d|[.,]\d|\s*(?:시간|원|만|천|평|대|개|키로|km))|신형|구형/ },
+  // said: "400시간" 외에 "400h·400hr·400아워", "천 시간·삼백오십시간", "500 정도 탔어요·1,200 썼어요"도 사용시간 답으로 본다.
+  { label: "사용시간", claim: /사용\s*시간|\d+\s*시간|최근\s*(?:까지\s*)?(?:사용|씀|썼)|(?:거의|별로)\s*안\s*(?:쓴|썼|씀)|적게\s*(?:쓴|썼)|사용감|운행/, said: /\d+\s*시간|\d\s*(?:hrs?|h|아워)(?![a-z])|(?:[일이삼사오육칠팔구]?\s*[천백십])+\s*시간|(?<![\d,.])(?!(?:19[89]|20[0-4])\d(?!\d))\d[\d,]*\s*(?:정도|쯤|가량)?\s*(?:탔|썼|돌렸|운전했)|최근|안\s*(?:썼|쓴|씀)|조금\s*(?:썼|쓴)|많이\s*(?:썼|쓴)|적게\s*(?:썼|쓴)|사용감|운행/i },
+  // said: "2016, 400시간, 없어요"처럼 목록 끝에 홀로 붙은 '없어요'는 작업기 질문에 대한 답으로 본다("고장 없어요"는 제외).
+  { label: "포함 작업기", claim: /작업기|부속|로터리|쟁기|베일러|탈부착|부착|포함/, said: /작업기|부속|로터리|쟁기|베일러|포함|달려|붙어|부착|(?:^|[,，·/]\s*)없(?:어요?|음|습니다|다)?\s*[.!]?\s*$/m },
   { label: null, claim: /정비|수리\s*(?:완료|이력|했|받)|교체|점검\s*(?:완료|받|했)|관리\s*(?:잘|받|했)|무사고|고장\s*(?:없|이\s*없|난\s*적\s*없)/, said: /정비|수리|교체|점검|관리|고장|사고/ },
   { label: null, claim: /상태\s*(?:가\s*)?(?:양호|좋|최상|깨끗|훌륭|멀쩡)|양호|깨끗|최상|멀쩡|새\s*것|새것|신품/, said: /상태|양호|깨끗|좋아|좋습|멀쩡|새\s*것|새것|신품/ },
 ];
@@ -1133,8 +1136,34 @@ export function groundListingDescription(description, { saidText = "", observati
 // "몰라요", "그냥 만들어 줘"처럼 더 말하지 않겠다는 답이면 남은 항목은 [확인 필요]로 두고 초안을 만든다.
 const SKIP_DETAILS = /모르|몰라|모름|기억\s*(?:이\s*)?안|그냥\s*(?:만들|올려|보여|해|진행)|넘어가|건너뛰|나중에|생략/;
 
-/** 초안을 만들기 전에 사용자에게 물어볼 항목(연식·사용시간·포함 작업기). 이미 말했거나 건너뛰겠다고 하면 빈 배열. */
-export function missingListingDetails(saidText, latestText = "") {
+/**
+ * 세부사항 질문에 대한 답("2016, 400, 없어요")에서 단위 없는 숫자 하나를 사용시간으로 추정한다.
+ * 이미 시간 단위가 있거나, 연도·단위 붙은 숫자를 빼고 남은 숫자가 정확히 1개가 아니면 null.
+ */
+export function inferBareUsageHours(text) {
+  const value = String(text || "");
+  if (UNVERIFIED_FACTS[1].said.test(value)) return null;
+  const numbers = [...value.matchAll(/(?<![\d,.~\-])(\d{1,3}(?:,\d{3})+|\d{1,5})(?![\d.,~\-]?\d)(?!\s*(?:년|월|일|원|만|천|백|평|대|개|마력|키로|km|kg|%|살|세|명|번|등|호))/gi)]
+    .map((match) => match[1])
+    .filter((num) => !/^(?:19[89]\d|20[0-4]\d)$/.test(num));
+  return numbers.length === 1 ? numbers[0] : null;
+}
+
+/** 앞 턴에서 농농이가 이미 연식·사용시간·작업기를 물어봤으면 true. 세부사항은 한 번만 묻는다. */
+export function listingDetailsAlreadyAsked(history) {
+  return (Array.isArray(history) ? history : []).some((item) => {
+    if (item?.role !== "assistant") return false;
+    const content = String(item.content || "");
+    return [/연식/, /사용\s*시간/, /작업기/].filter((re) => re.test(content)).length >= 2;
+  });
+}
+
+/**
+ * 초안을 만들기 전에 사용자에게 물어볼 항목(연식·사용시간·포함 작업기).
+ * 이미 말했거나, 건너뛰겠다고 하거나, 앞 턴에서 한 번 물어봤으면 빈 배열(남은 항목은 초안에 [확인 필요]로 남는다).
+ */
+export function missingListingDetails(saidText, latestText = "", { alreadyAsked = false } = {}) {
+  if (alreadyAsked) return [];
   if (SKIP_DETAILS.test(String(latestText || ""))) return [];
   return UNVERIFIED_FACTS.filter((fact) => fact.label && !fact.said.test(String(saidText || ""))).map((fact) => fact.label);
 }
@@ -1745,7 +1774,10 @@ async function runTurn(
   const saleIntent = SALE_RE.test(intentTurn) && !RENT_RE.test(intentTurn);
   const effectiveRegion = cleanRegion(region) || uiCtx.region;
   // 매물 소개글에 쓸 수 있는 사실의 근거: 이 대화에서 사용자가 직접 한 말.
-  const saidText = [...(Array.isArray(history) ? history : []).filter((item) => item?.role === "user").map((item) => String(item.content || "")), text].join("\n");
+  // 직전 답변에서 연식·사용시간·작업기를 물었다면 "2016, 400, 없어요"의 400처럼 단위 없는 숫자를 사용시간으로 본다.
+  const lastAssistant = [...(Array.isArray(history) ? history : [])].reverse().find((item) => item?.role === "assistant");
+  const bareUsageHours = lastAssistant && listingDetailsAlreadyAsked([lastAssistant]) ? inferBareUsageHours(text) : null;
+  const saidText = [...(Array.isArray(history) ? history : []).filter((item) => item?.role === "user").map((item) => String(item.content || "")), text, ...(bareUsageHours ? [`사용시간 ${bareUsageHours}시간`] : [])].join("\n");
   // 앞 턴에서 본 사진의 인식 결과(사진은 첫 턴에만 보낸다). 세부사항을 물은 뒤 초안을 만들 때 쓴다.
   const priorPhotoRaw = !image && carriedPhotoSummary && typeof carriedPhotoSummary === "object" ? cleanPhotoSummary(carriedPhotoSummary) : null;
   const priorPhoto = priorPhotoRaw && (priorPhotoRaw.machineType || priorPhotoRaw.observations.length) ? priorPhotoRaw : null;
@@ -1769,7 +1801,8 @@ async function runTurn(
 
   const knownFacts = summarizeKnownFacts({ history, text, sessionSlots, uiCtx });
   const standardText = normalizeDialect(text);
-  const dialectHint = standardText !== text ? `\n\n[사용자 말 표준어 풀이(참고)]\n${standardText.slice(0, 300)}` : "";
+  const dialectHint = (standardText !== text ? `\n\n[사용자 말 표준어 풀이(참고)]\n${standardText.slice(0, 300)}` : "")
+    + (bareUsageHours ? `\n\n[사용자 답 해석] 연식·사용시간·작업기 질문에 대한 답이다. ${bareUsageHours} → 사용시간 ${bareUsageHours}시간. 초안 소개글에 "사용시간 ${bareUsageHours}시간"으로 쓴다.` : "");
   const known = collectKnownFacts({ history, text, sessionSlots, uiCtx });
   const repairTurn = isRepairRequest(text);
   const repairNote = repairTurn
@@ -1798,7 +1831,7 @@ async function runTurn(
   // 초안을 만들기 전에 아직 묻지 않은 세부사항이 있으면 초안 대신 이것을 돌려줘 먼저 묻게 한다.
   const askDetailsFirst = () => {
     if (editingDraft) return null;
-    const needsDetails = missingListingDetails(saidText, text);
+    const needsDetails = missingListingDetails(saidText, text, { alreadyAsked: listingDetailsAlreadyAsked(history) });
     if (!needsDetails.length) return null;
     const photo = listingPhoto();
     return {

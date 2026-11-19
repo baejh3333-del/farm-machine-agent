@@ -321,7 +321,7 @@ function markNav(view) {
   }
   const myPageBtn = $("myPageButton");
   if (myPageBtn) {
-    myPageBtn.classList.toggle("active", MY_PAGE_VIEWS.has(view));
+    myPageBtn.classList.toggle("active", MY_PAGE_VIEWS.has(view) && view !== "garage");
   }
 }
 
@@ -1125,7 +1125,7 @@ function bindEvents() {
     button.addEventListener("click", () => aiPanel.submitPrompt(button.dataset.prompt));
   });
 
-  document.querySelector('[data-action="favorites"]').addEventListener("click", catalogViews.openFavoritesModal);
+  $("topFavoritesButton")?.addEventListener("click", catalogViews.openFavoritesModal);
 }
 
 // 초기 상태 동기화
@@ -1186,7 +1186,8 @@ function initLoginForm() {
     runtime.accountUser = user ?? null;
     const loggedIn = isLoggedIn();
     headerButton.hidden = loggedIn;
-    $("myPageButton").hidden = !loggedIn;
+    $("accountMenu").hidden = !loggedIn;
+    $("myPageName").textContent = user?.name || user?.username || "내 계정";
     logout.hidden = !loggedIn;
     updateBadges();
   }
@@ -1269,9 +1270,29 @@ function initLoginForm() {
   }
 
   headerButton.addEventListener("click", openLogin);
-  $("myPageButton").addEventListener("click", () => {
-    setView("owner");
-    document.querySelector('#myPageMenu [data-view="owner"]')?.focus({ preventScroll: true });
+  const accountMenu = $("accountMenu");
+  const accountTrigger = $("myPageButton");
+  accountTrigger.addEventListener("click", () => {
+    const open = accountMenu.classList.toggle("is-open");
+    accountTrigger.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (event) => {
+    if (!accountMenu.contains(event.target)) {
+      accountMenu.classList.remove("is-open");
+      accountTrigger.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      accountMenu.classList.remove("is-open");
+      accountTrigger.setAttribute("aria-expanded", "false");
+    }
+  });
+  accountMenu.querySelectorAll(".account-dropdown-item[data-view]").forEach((item) => {
+    item.addEventListener("click", () => {
+      accountMenu.classList.remove("is-open");
+      accountTrigger.setAttribute("aria-expanded", "false");
+    });
   });
   $("ownerLoginGoButton").addEventListener("click", openLogin);
   switchButton.addEventListener("click", () => setMode(!signup));

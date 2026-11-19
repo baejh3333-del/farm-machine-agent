@@ -2124,6 +2124,11 @@ export function createAiPanel({
     appendInsuranceAsk(result);
   }
 
+  function resultListingIds(result) {
+    if (!result || result.reservation || result.createdListing || result.updatedListing) return [];
+    return uniqueListingIds(result.listingIds);
+  }
+
   function renderAgentResult(message, result, { photo = false } = {}) {
     const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
     const summary = photoSummaryText(result.photoSummary);
@@ -2131,14 +2136,14 @@ export function createAiPanel({
       { role: "user", content: photo ? `[사진 첨부] ${message}`.trim() : message },
       { role: "assistant", content: [reply, summary].filter(Boolean).join("\n") },
     );
-    const listingIds = result.reservation || result.createdListing || result.updatedListing
-      ? []
-      : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
-    if (listingIds.length) lastShownListingIds = listingIds.slice(0, 6);
-    if (result.reservation) lastShownListingIds = [];
+    const rawListingIds = resultListingIds(result);
+    const listingIds = rawListingIds.filter((id) => listingById(id));
     // 새 답이 오면 이전 확인 카드는 "방금 물어본 것"이 아니므로 채팅 "네"로 실행하지 않는다(버튼은 그대로 쓸 수 있다).
     openConfirmation = null;
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
+    // 화면에 아직 없는 매물이어도 서버가 정한 순서·ID를 그대로 기억한다(“1번 자세히 알려줘”가 같은 매물을 가리키게).
+    if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
+    else if (result.reservation) lastShownListingIds = [];
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
     if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
@@ -2794,6 +2799,9 @@ export function createAiPanel({
     const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
     pending.classList.add("is-thinking");
     try {
+      const catalogWait = runtime.catalogState !== "ready"
+        ? Promise.resolve(runtime.catalogReady).catch(() => {})
+        : null;
       const uiContext = collectUiContext();
       const result = await askAgent(message, {
         history: agentHistory,
@@ -2806,6 +2814,10 @@ export function createAiPanel({
         fullDelegation: fullDelegationEnabled,
       });
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      if (result?.mode === "agent" && resultListingIds(result).length && catalogWait && runtime.catalogState !== "ready") {
+        await catalogWait;
+        if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      }
       pending.remove();
       if (result?.sessionId) agentSessionId = result.sessionId;
       if (result?.mode !== "agent") throw new Error("사진을 지금 확인하지 못했어요.");
@@ -3205,8 +3217,10 @@ export function createAiPanel({
       }
       pending = appendThinkingBubble(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…");
       const pendingBubble = pending;
-      if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
-      if (gen !== sessionGeneration) return;
+      // 매물 목록(catalog)은 카드를 그릴 때만 필요하다. 요청은 바로 보내고, 목록은 응답을 기다리는 동안 함께 불러온다.
+      const catalogWait = runtime.catalogState !== "ready"
+        ? Promise.resolve(runtime.catalogReady).catch(() => {})
+        : null;
       const uiContext = collectUiContext();
       const agentResult = await askAgent(message, {
         history: withCorrectedRequests(agentHistory, correctedVoiceTasks),
@@ -3228,6 +3242,11 @@ export function createAiPanel({
         },
       });
       if (gen !== sessionGeneration) return;
+      // 카드를 그려야 하는데 목록이 아직이면 그때만 기다린다(비매물 답변은 기다리지 않는다).
+      if (agentResult?.mode === "agent" && resultListingIds(agentResult).length && catalogWait && runtime.catalogState !== "ready") {
+        await catalogWait;
+        if (gen !== sessionGeneration) return;
+      }
       if (agentResult?.sessionId) agentSessionId = agentResult.sessionId;
       pending.remove();
       pending = undefined;

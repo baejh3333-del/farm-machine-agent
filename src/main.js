@@ -1144,7 +1144,6 @@ function bindEvents() {
   $("buyerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
 
 
-  $("headerAiOpen")?.addEventListener("click", aiPanel.openAiPanel);
   for (const id of ["filterBackdrop", "detailBackdrop", "formBackdrop", "regionPickerDialog"]) {
     const el = $(id);
     if (el) el.style.zIndex = "1300";

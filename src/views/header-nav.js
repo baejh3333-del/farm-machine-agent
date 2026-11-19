@@ -3,62 +3,8 @@ import { $ } from "../core/utils.js";
 const CLOSE_DELAY_MS = 140;
 
 export function createHeaderNav(deps) {
-  let openGroup = null;
-  let closeTimer = 0;
-  let lastPointerType = "mouse";
-  let suppressFocusOpenTarget = null;
-
-  function getGroups() {
-    return [...document.querySelectorAll(".sidebar-nav .nav-group")];
-  }
-
-  function clearCloseTimer() {
-    if (closeTimer) {
-      clearTimeout(closeTimer);
-      closeTimer = 0;
-    }
-  }
-
-  function closeGroup(group) {
-    if (!group) return;
-    const trigger = group.querySelector(":scope > .nav-item");
-    const menu = group.querySelector(":scope > .nav-submenu");
-    group.classList.remove("is-open");
-    if (trigger) trigger.setAttribute("aria-expanded", "false");
-    if (menu) menu.hidden = true;
-    if (openGroup === group) openGroup = null;
-  }
-
-  function closeAll() {
-    clearCloseTimer();
-    for (const group of getGroups()) {
-      closeGroup(group);
-    }
-    openGroup = null;
-  }
-
-  function openNavGroup(group) {
-    if (!group) return;
-    clearCloseTimer();
-    if (openGroup && openGroup !== group) {
-      closeGroup(openGroup);
-    }
-    const trigger = group.querySelector(":scope > .nav-item");
-    const menu = group.querySelector(":scope > .nav-submenu");
-    if (!menu) return;
-    group.classList.add("is-open");
-    if (trigger) trigger.setAttribute("aria-expanded", "true");
-    menu.hidden = false;
-    openGroup = group;
-  }
-
-  function scheduleClose(group) {
-    clearCloseTimer();
-    closeTimer = setTimeout(() => {
-      closeTimer = 0;
-      if (openGroup === group) closeGroup(group);
-    }, CLOSE_DELAY_MS);
-  }
+  let closePanel = () => {};
+  function closeAll() { closePanel(); }
 
   function scrollHomeSection(sectionId) {
     deps.setView("home");
@@ -132,128 +78,80 @@ export function createHeaderNav(deps) {
 
   function bind() {
     const nav = document.querySelector(".sidebar-nav");
-    if (!nav) return;
-
-    nav.addEventListener("pointerdown", (event) => {
-      lastPointerType = event.pointerType || "mouse";
-    }, true);
-
-    for (const group of getGroups()) {
-      const trigger = group.querySelector(":scope > .nav-item");
-      const menu = group.querySelector(":scope > .nav-submenu");
-      if (!trigger || !menu) continue;
-
-      group.addEventListener("pointerenter", (event) => {
-        if (event.pointerType === "touch") return;
-        openNavGroup(group);
+    const panel = $("headerFeatures");
+    if (!nav || !panel) return;
+    const triggers = [...nav.querySelectorAll(".nav-item")];
+    let activeTrigger;
+    let touch = false;
+    let restoringFocus = false;
+    let timer;
+    function show(trigger) {
+      clearTimeout(timer);
+      panel.hidden = false;
+      activeTrigger = trigger;
+      triggers.forEach(button => button.setAttribute("aria-expanded", "true"));
+    }
+    closePanel = () => {
+      clearTimeout(timer);
+      panel.hidden = true;
+      triggers.forEach(button => button.setAttribute("aria-expanded", "false"));
+    };
+    nav.addEventListener("pointerenter", () => clearTimeout(timer));
+    nav.addEventListener("pointerleave", event => {
+      if (event.pointerType !== "touch") timer = setTimeout(closeAll, CLOSE_DELAY_MS);
+    });
+    nav.addEventListener("focusout", event => {
+      if (!nav.contains(event.relatedTarget)) closeAll();
+    });
+    for (const trigger of triggers) {
+      trigger.addEventListener("pointerenter", event => {
+        if (event.pointerType !== "touch") show(trigger);
       });
-
-      group.addEventListener("pointerleave", (event) => {
-        if (event.pointerType === "touch") return;
-        scheduleClose(group);
+      trigger.addEventListener("pointerdown", event => { touch = event.pointerType === "touch"; });
+      trigger.addEventListener("focus", () => {
+        if (!touch && !restoringFocus && trigger.matches(":focus-visible")) show(trigger);
       });
-
-      group.addEventListener("focusin", (event) => {
-        if (event.target === suppressFocusOpenTarget) {
-          suppressFocusOpenTarget = null;
-          return;
-        }
-        if (event.target === trigger && !trigger.matches(":focus-visible")) return;
-        openNavGroup(group);
-      });
-
-      group.addEventListener("focusout", (event) => {
-        const next = event.relatedTarget;
-        if (next instanceof Node && group.contains(next)) return;
-        closeGroup(group);
-      });
-
-      // Capture phase so first touch tap opens submenu before primary click handler runs
-      trigger.addEventListener("click", (event) => {
-        if (lastPointerType === "touch") {
-          lastPointerType = "mouse";
-          if (!group.classList.contains("is-open")) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            openNavGroup(group);
-            return;
-          }
-        }
-        closeAll();
+      trigger.addEventListener("click", event => {
+        if (touch && (panel.hidden || activeTrigger !== trigger)) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+          show(trigger);
+        } else closeAll();
+        touch = false;
       }, true);
-
-      trigger.addEventListener("keydown", (event) => {
-        const items = [...menu.querySelectorAll(".nav-submenu-item")];
-        if (!items.length) return;
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          openNavGroup(group);
-          items[0].focus();
-        } else if (event.key === "ArrowUp") {
-          event.preventDefault();
-          openNavGroup(group);
-          items[items.length - 1].focus();
-        } else if (event.key === "Escape" && group.classList.contains("is-open")) {
-          event.preventDefault();
-          event.stopPropagation();
-          closeGroup(group);
-        }
-      });
-
-      menu.addEventListener("keydown", (event) => {
-        const items = [...menu.querySelectorAll(".nav-submenu-item")];
-        if (!items.length) return;
-        const idx = items.indexOf(document.activeElement);
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          items[(idx + 1 + items.length) % items.length].focus();
-        } else if (event.key === "ArrowUp") {
-          event.preventDefault();
-          items[(idx - 1 + items.length) % items.length].focus();
-        } else if (event.key === "Home") {
-          event.preventDefault();
-          items[0].focus();
-        } else if (event.key === "End") {
-          event.preventDefault();
-          items[items.length - 1].focus();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          closeGroup(group);
-          suppressFocusOpenTarget = trigger;
-          trigger.focus();
-        }
-      });
-
-      menu.addEventListener("click", (event) => {
-        const item = event.target.closest(".nav-submenu-item[data-nav-dest]");
-        if (!item) return;
-        runDestination(item.dataset.navDest);
+      trigger.addEventListener("keydown", event => {
+        if (event.key !== "ArrowDown") return;
+        event.preventDefault();
+        show(trigger);
+        panel.querySelector('[data-column="' + trigger.dataset.view + '"] button').focus();
       });
     }
-
-    document.addEventListener("pointerdown", (event) => {
-      if (!openGroup) return;
-      const target = event.target;
-      if (target instanceof Node && openGroup.contains(target)) return;
-      closeAll();
+    panel.addEventListener("click", event => {
+      const item = event.target.closest("[data-nav-dest]");
+      if (item) runDestination(item.dataset.navDest);
     });
-
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && openGroup) {
-        const trigger = openGroup.querySelector(":scope > .nav-item");
-        const hadFocusInside = openGroup.contains(document.activeElement);
-        closeAll();
-        if (hadFocusInside && trigger) {
-          suppressFocusOpenTarget = trigger;
-          trigger.focus();
-        }
+    panel.addEventListener("keydown", event => {
+      if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+      const column = event.target.closest(".nav-column");
+      if (!column) return;
+      const items = [...column.querySelectorAll("button")];
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      event.preventDefault();
+      items[(items.indexOf(event.target) + step + items.length) % items.length].focus();
+    });
+    document.addEventListener("pointerdown", event => {
+      if (!nav.contains(event.target)) closeAll();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || panel.hidden) return;
+      closeAll();
+      if (nav.contains(document.activeElement)) {
+        restoringFocus = true;
+        activeTrigger?.focus();
+        restoringFocus = false;
       }
     });
   }
 
-  return {
-    bind,
-    closeAll,
-  };
+  return { bind, closeAll };
 }

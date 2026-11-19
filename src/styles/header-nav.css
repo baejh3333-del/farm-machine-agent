@@ -14,7 +14,8 @@
 .sidebar-nav {
   display: flex;
   align-items: center;
-  gap: clamp(4px, 0.9vw, 12px);
+  justify-content: center;
+  gap: clamp(8px, 1.25vw, 24px);
   overflow: visible;
 }
 
@@ -24,8 +25,8 @@
   padding: 0 12px;
   border-bottom: 2.5px solid transparent;
   color: var(--text-body, #2c4237);
-  font-size: 0.96875rem;
-  font-weight: 600;
+  font-size: 1.125rem;
+  font-weight: 500;
   letter-spacing: -0.015em;
   transition:
     color var(--dur-fast, 160ms) ease,
@@ -64,7 +65,7 @@
 
 .nav-item.active {
   color: var(--forest, #174233);
-  font-weight: 800;
+  font-weight: 600;
   border-bottom-color: transparent;
 }
 
@@ -77,78 +78,57 @@
   transform: scale(0.97);
 }
 
-.nav-group {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.nav-group.is-open > .nav-item {
-  color: var(--forest, #174233);
-}
-
-.nav-group.is-open > .nav-item::after {
-  opacity: 0.7;
-  transform: scaleX(0.8);
-}
-
 .nav-submenu {
   position: absolute;
-  top: calc(100% - 2px);
-  left: 0;
+  inset: 100% 0 auto;
   z-index: 45;
-  min-width: 228px;
-  padding: 8px;
-  border-radius: 16px;
-  background: var(--bg-surface, #ffffff);
-  border: 1px solid rgba(23, 66, 51, 0.14);
-  box-shadow: 0 16px 36px rgba(17, 38, 29, 0.14), 0 2px 6px rgba(17, 38, 29, 0.06);
+  isolation: isolate;
+  animation: nav-panel-enter 180ms ease-out;
+}
+
+/* The visual fade extends beyond the menu without intercepting the page. */
+.nav-submenu::before {
+  content: "";
+  position: absolute;
+  inset: -1px 0 calc(-1 * clamp(90px, 18vh, 220px));
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, #fff 0%, rgb(255 255 255 / 96%) 28%, rgb(255 255 255 / 85%) 55%, rgb(255 255 255 / 50%) 74%, rgb(255 255 255 / 13%) 91%, transparent 100%);
+}
+
+.nav-columns {
   display: grid;
-  gap: 2px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: clamp(16px, 3vw, 56px);
+  padding: clamp(32px, 4vw, 64px) max(var(--gutter, 24px), calc((100% - 1080px) / 2)) 4px;
 }
 
-.nav-submenu[hidden] {
-  display: none;
+@keyframes nav-panel-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.nav-group-align-end > .nav-submenu {
-  left: auto;
-  right: 0;
-}
+.nav-submenu[hidden] { display: none; }
 
+.nav-column { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.nav-column h2 { margin: 0 0 16px; color: #53675c; font-size: .88rem; font-weight: 550; }
 .nav-submenu-item {
-  display: grid;
-  gap: 2px;
-  width: 100%;
-  padding: 10px 12px;
+  padding: 8px 0;
   border: 0;
-  border-radius: 10px;
   background: transparent;
-  color: var(--text-body, #2c4237);
+  color: #25382d;
   font: inherit;
+  font-size: clamp(.94rem, 1.2vw, 1.125rem);
+  font-weight: 600;
   text-align: left;
+  word-break: keep-all;
   cursor: pointer;
-  transition: background-color var(--dur-fast, 160ms) ease, color var(--dur-fast, 160ms) ease;
 }
-
-.nav-submenu-item strong {
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--forest-deep, #132c22);
-  line-height: 1.3;
-}
-
-.nav-submenu-item small {
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--text-muted, #5c6f65);
-  line-height: 1.35;
-}
-
-.nav-submenu-item:hover,
-.nav-submenu-item:focus-visible {
-  background: #e6f3e7;
+.nav-submenu-item:hover, .nav-submenu-item:focus-visible {
   color: var(--forest, #174233);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .nav-submenu-item:focus-visible {
@@ -286,6 +266,16 @@
   margin-left: 4px;
 }
 
+@media (min-width: 1241px) {
+  .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: 16px;
+  }
+  .sidebar > .brand { justify-self: start; }
+  .sidebar > .topbar-left { justify-self: end; min-width: 0; }
+}
+
 @media (max-width: 1240px) {
   .sidebar-nav {
     overflow: visible;
@@ -319,13 +309,17 @@
     height: 2.5px;
   }
 
-  .nav-submenu {
-    min-width: 204px;
-    max-width: calc(100vw - 24px);
+  .nav-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 20px var(--gutter, 16px) 4px;
+    gap: 16px;
+    max-height: 55dvh;
+    overflow-y: auto;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .nav-submenu { animation: none; }
   .nav-item,
   .nav-item::after,
   .nav-submenu-item {

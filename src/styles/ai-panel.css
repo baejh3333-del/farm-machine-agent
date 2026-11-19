@@ -2099,7 +2099,7 @@ body.ai-fullscreen .ai-launcher {
   bottom: calc(100% + 10px);
   left: 0;
   z-index: 30;
-  min-width: 176px;
+  min-width: 148px;
   padding: 6px;
   display: grid;
   gap: 4px;

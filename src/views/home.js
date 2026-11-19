@@ -21,16 +21,16 @@ const ROW = 44;
 
 const STEPS = {
   borrow: [
-    ["조건 고르기", "위치·날짜·작업만 고르면\n맞는 기계가 보여요", "filter"],
-    ["기계 확인하기", "사진과 대여료를 보고\n궁금하면 농농이에게", "eye"],
-    ["대여 요청하기", "버튼 한 번으로\n소유자에게 요청", "send"],
-    ["승인 후 사용하기", "승인되면 확정,\n쓰고 돌려주면 끝", "check"],
+    ["조건 고르기", "위치·날짜·작업", "filter"],
+    ["기계 확인하기", "사진과 대여료", "eye"],
+    ["대여 요청하기", "버튼 한 번", "send"],
+    ["쓰고 돌려주기", "승인되면 시작", "check"],
   ],
   lend: [
-    ["기계 등록하기", "사진과 대여료,\n빌려줄 날짜를 올려요", "plus"],
-    ["요청 확인하기", "이웃의 대여 요청을\n알림으로 받아요", "bell"],
-    ["승인하기", "괜찮은 요청만\n직접 골라 승인해요", "send"],
-    ["돌려받기", "사용이 끝나면\n기계를 돌려받아요", "check"],
+    ["기계 등록하기", "사진과 대여료", "plus"],
+    ["요청 확인하기", "알림으로 받아요", "bell"],
+    ["승인하기", "직접 골라요", "send"],
+    ["돌려받기", "쓰고 나면 끝", "check"],
   ],
 };
 const STEP_ICONS = {
@@ -42,10 +42,10 @@ const STEP_ICONS = {
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
 };
 const FAQS = [
-  ["대여는 언제 확정되나요?", "대여 요청을 보내면 기계 소유자에게 알림이 가요. 소유자가 승인하면 그때 대여가 확정되고, 승인 전에는 요청을 취소할 수 있어요."],
-  ["기계 이름을 몰라도 찾을 수 있나요?", "네. 예약창에서 '밭 갈기'처럼 하려는 작업을 고르면 그 작업에 맞는 기계를 보여드려요. 그래도 어렵다면 농농이에게 말로 물어보세요."],
-  ["가까운 공공 임대사업소도 볼 수 있나요?", "지도에서 전국 공공 농기계 임대사업소 위치를 함께 볼 수 있어요. 이웃 매물과 함께 비교해 보세요."],
-  ["제 농기계를 빌려주거나 팔려면 어떻게 하나요?", "로그인한 뒤 내 기계를 등록하고 사진과 대여료·판매가를 올리면 돼요. 들어온 요청은 내 페이지에서 확인하고 직접 승인해요."],
+  ["대여는 언제 확정되나요?", "요청을 보내면 소유주에게 알림이 가요. 소유주가 승인하면 확정되고, 그 전에는 취소할 수 있어요."],
+  ["기계 이름을 몰라도 찾을 수 있나요?", "네. '밭 갈기'처럼 하려는 작업을 고르면 맞는 기계를 보여드려요. 어려우면 농농이에게 물어보세요."],
+  ["가까운 공공 임대사업소도 볼 수 있나요?", "지도에서 전국 공공 임대사업소를 함께 볼 수 있어요."],
+  ["제 농기계를 빌려주거나 팔려면 어떻게 하나요?", "로그인하고 기계 사진과 가격을 올리면 돼요. 들어온 요청은 마이페이지에서 승인해요."],
 ];
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -70,6 +70,7 @@ export function createHomeView(deps) {
   let monthOffset = null; // 달력 첫 달 (yyyy*12+mm)
   let howTab = "borrow";
   let faqOpen = 0;
+  const touched = { loc: false }; // 상단 검색 바: 직접 고른 칸만 값으로 보여 준다
   const homeTimes = { start: "09:00", end: "18:00" };
   const drafts = { start: null, end: null };
   const times = () => homeTimes;
@@ -411,6 +412,59 @@ export function createHomeView(deps) {
       btn.setAttribute("aria-selected", String(on));
     }
     document.querySelector(".h2-switch")?.classList.toggle("is-sale", !rent);
+    syncScrollBar(dateText, op);
+  }
+
+  // ---------- 스크롤 시 상단 검색 바 ----------
+  function syncScrollBar(dateText, op) {
+    const f = state.filters;
+    const rent = state.transaction === "rent";
+    const set = (id, value, empty) => {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = value ?? empty;
+      el.classList.toggle("is-empty", value == null);
+    };
+    const radius = f.radius && f.radius !== "all" ? ` · ${f.radius}km` : "";
+    set("sbLoc", touched.loc ? `${state.region}${radius}` : null, "동네 검색");
+    set("sbDate", f.date && f.dateEnd ? dateText : null, "날짜 추가");
+    set("sbTask", op ? op.label : f.operations.length > 1 ? `작업 ${f.operations.length}개` : null, "작업 추가");
+    for (const el of document.querySelectorAll("[data-sb-rent]")) el.hidden = !rent;
+  }
+
+  function bindScrollBar() {
+    const bar = $("homeScrollBar");
+    const about = $("homeAbout");
+    if (!bar || !about) return;
+    const show = (on) => {
+      bar.classList.toggle("is-on", on);
+      bar.setAttribute("aria-hidden", String(!on));
+      bar.inert = !on;
+    };
+    show(false);
+    // '이웃의 쉬는 농기계를' 섹션이 화면에 들어오는 순간부터 보여 준다
+    if ("IntersectionObserver" in window) {
+      const io = new IntersectionObserver(([entry]) => {
+        const vh = entry.rootBounds ? entry.rootBounds.height : window.innerHeight;
+        show(entry.boundingClientRect.top < vh - 40);
+      }, { threshold: [0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1] });
+      io.observe(about);
+    }
+    bar.addEventListener("click", (event) => {
+      const key = event.target.closest("[data-sb]")?.dataset.sb;
+      if (!key) return;
+      if (key === "top") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      if (key === "go") {
+        goBrowse();
+        return;
+      }
+      // 예약창으로 부드럽게 올라간 뒤, 예약창의 같은 말풍선을 연다
+      $("homeBooking")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (openPop !== key) setTimeout(() => setPop(key), 380);
+    });
   }
 
   function pickRecs(items, limit = 3) {
@@ -452,11 +506,11 @@ export function createHomeView(deps) {
     if (op) bits.push(op.label);
     else if (f.operations.length > 1) bits.push(`작업 ${f.operations.length}개`);
     $("homeRecTitle").textContent = bits.join(" · ");
-    $("homeRecCount").textContent = `조건에 맞는 ${state.transaction === "rent" ? "농기계" : "중고 매물"} ${all.length}대`;
-    $("homeRecNote").textContent = state.transaction === "rent" ? "대여는 요청 후 소유자가 승인하면 확정돼요." : "구매는 판매자와 대화로 조건을 맞춰요.";
+    $("homeRecCount").textContent = `${state.transaction === "rent" ? "농기계" : "중고 매물"} ${all.length}대`;
+    $("homeRecNote").textContent = state.transaction === "rent" ? "소유주가 승인하면 대여가 확정돼요." : "판매자와 대화로 조건을 맞춰요.";
     $("homeRecGrid").innerHTML = items.length
       ? items.map(recCard).join("")
-      : `<div class="h2-rec-empty"><strong>조건에 맞는 농기계가 아직 없어요</strong><p>거리를 넓히거나 날짜·작업을 바꿔 보세요.</p><button type="button" class="h2-text-btn" data-home-widen>거리 전체로 넓히기</button></div>`;
+      : `<div class="h2-rec-empty"><strong>아직 맞는 농기계가 없어요</strong><p>거리를 넓혀 볼까요?</p><button type="button" class="h2-text-btn" data-home-widen>거리 전체로 넓히기</button></div>`;
   }
 
   // ---------- 사용 방법 · FAQ ----------
@@ -512,7 +566,10 @@ export function createHomeView(deps) {
         deps.setTransaction(tx);
         return;
       }
-      if (t.closest("#homePopLoc")) return onLocClick(t);
+      if (t.closest("#homePopLoc")) {
+        touched.loc = true;
+        return onLocClick(t);
+      }
       if (t.closest("#homePopDate")) return onDateClick(t);
       if (t.closest("#homePopTime")) return onTimeClick(t);
       if (t.closest("#homePopTask")) return onTaskClick(t);
@@ -564,6 +621,13 @@ export function createHomeView(deps) {
         renderFaq();
       }
     });
+    for (const btn of document.querySelectorAll("[data-home-account]")) {
+      btn.addEventListener("click", () => {
+        const my = $("myPageButton");
+        (my && !my.hidden ? my : $("loginButton"))?.click();
+      });
+    }
+    bindScrollBar();
     renderSteps();
     renderFaq();
   }

@@ -478,7 +478,7 @@ function bindEvents() {
   }
   const cropSelect = $("cropSelect");
   cropSelect.add(new Option("전체 작물", "all"));
-  for (const { id, name, emoji } of CROPS) cropSelect.add(new Option(emoji + " " + name, id));
+  for (const { id, name } of CROPS) cropSelect.add(new Option(name, id));
   cropSelect.hidden = true;
   cropSelect.tabIndex = -1;
 
@@ -569,15 +569,14 @@ function bindEvents() {
   $("rentTab").addEventListener("click", () => catalogViews.setTransaction("rent"));
   $("saleTab").addEventListener("click", () => catalogViews.setTransaction("sale"));
 
+  state.viewMode = "list";
   $("viewModeList")?.addEventListener("click", () => {
     state.viewMode = "list";
     persist(updateBadges);
     catalogViews.renderListings();
   });
   $("viewModeMap")?.addEventListener("click", () => {
-    state.viewMode = "map";
-    persist(updateBadges);
-    catalogViews.renderListings();
+    setView("map");
   });
 
   const syncRegionSelect = (regionName) => {
@@ -908,6 +907,71 @@ function bindEvents() {
     renderAll();
     refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
   });
+
+  // 빠른 검색바 시간 선택 (홈·지도와 동기화)
+  const quickTimeBtn = $("quickTimeBtn");
+  const quickTimePop = $("quickTimePopover");
+  const quickStartSel = $("quickStartTimeSelect");
+  const quickEndSel = $("quickEndTimeSelect");
+  const quickTimeText = $("quickTimeText");
+  if (quickStartSel && quickEndSel) {
+    const slots = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+    for (const slot of slots) {
+      quickStartSel.add(new Option(slot, slot));
+      quickEndSel.add(new Option(slot, slot));
+    }
+    const syncQuickTimeUi = () => {
+      const start = state.filters.startTime || "09:00";
+      const end = state.filters.endTime || "18:00";
+      quickStartSel.value = start;
+      quickEndSel.value = end;
+      if (quickTimeText) quickTimeText.textContent = `${start}–${end}`;
+    };
+    const closeQuickTime = () => {
+      if (!quickTimePop || quickTimePop.hidden) return;
+      quickTimePop.hidden = true;
+      quickTimeBtn?.setAttribute("aria-expanded", "false");
+    };
+    syncQuickTimeUi();
+    quickTimeBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const willOpen = quickTimePop.hidden;
+      if (willOpen) syncQuickTimeUi();
+      quickTimePop.hidden = !willOpen;
+      quickTimeBtn.setAttribute("aria-expanded", String(willOpen));
+    });
+    $("quickTimeResetBtn")?.addEventListener("click", () => {
+      state.filters.startTime = "09:00";
+      state.filters.endTime = "18:00";
+      syncQuickTimeUi();
+      persist(updateBadges);
+      window.dispatchEvent(new CustomEvent("moanong:time-change", {
+        detail: { startTime: "09:00", endTime: "18:00", source: "browse" },
+      }));
+      closeQuickTime();
+    });
+    $("quickTimeApplyBtn")?.addEventListener("click", () => {
+      const start = quickStartSel.value || "09:00";
+      const end = quickEndSel.value || "18:00";
+      state.filters.startTime = start;
+      state.filters.endTime = end;
+      syncQuickTimeUi();
+      persist(updateBadges);
+      window.dispatchEvent(new CustomEvent("moanong:time-change", {
+        detail: { startTime: start, endTime: end, source: "browse" },
+      }));
+      closeQuickTime();
+    });
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".qs-time-wrap")) closeQuickTime();
+    });
+    window.addEventListener("moanong:time-change", (event) => {
+      const detail = event.detail || {};
+      if (detail.startTime) state.filters.startTime = detail.startTime;
+      if (detail.endTime) state.filters.endTime = detail.endTime;
+      syncQuickTimeUi();
+    });
+  }
   $("quickRadiusSelect")?.addEventListener("change", (event) => {
     state.filters.radius = event.target.value;
     persist(updateBadges);

@@ -765,3 +765,279 @@
     justify-content: space-between;
   }
 }
+
+/* =========================================================
+   Inline Map Removal, Time Picker & Collapsible Folder Filters
+   ========================================================= */
+
+.catalog-split-active .view-mode-switch,
+.catalog-split-active #listingMapPanel {
+  display: none !important;
+}
+
+/* Top Search Bar Time Picker (매물찾기) */
+.qs-time-field {
+  position: relative;
+}
+
+.qs-time-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  min-width: 108px;
+}
+
+.qs-time-kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-soft);
+  line-height: 1.1;
+}
+
+.qs-time-trigger strong {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.qs-time-pop,
+.header-map-time-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  min-width: 248px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: #ffffff;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qs-time-presets,
+.hmt-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qs-time-preset,
+.hmt-preset {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.qs-time-preset:hover,
+.hmt-preset:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--forest);
+}
+
+.qs-time-selects,
+.hmt-selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.qs-time-selects label,
+.hmt-selects label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.qs-time-selects select,
+.hmt-selects select {
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+/* Unified Map View Time Picker */
+.header-map-time-wrap {
+  position: relative;
+}
+
+.header-map-time-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Nested Collapsible Sidebar Folders (농기계 기종 / 작물) */
+.csf-folder {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.csf-folder + .csf-folder {
+  margin-top: 4px;
+}
+
+.csf-folder-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--text-strong);
+  background: #fafbfa;
+}
+
+.csf-folder-summary::-webkit-details-marker {
+  display: none;
+}
+
+.csf-folder-summary:hover {
+  background: var(--bg-subtle);
+}
+
+.csf-folder-caret {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: var(--text-soft);
+  transition: transform 0.16s ease;
+}
+
+.csf-folder[open] > .csf-folder-summary .csf-folder-caret {
+  transform: rotate(90deg);
+  color: var(--primary);
+}
+
+.csf-folder-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csf-folder-sel {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.csf-folder-count {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.csf-folder-body {
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.csf-folder-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 6px;
+}
+
+/* Detail Filter Modal Folderized Groups */
+.is-folderized {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.filter-folder {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.filter-folder-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--text-strong);
+  background: var(--bg-warm);
+}
+
+.filter-folder-summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-folder-caret {
+  font-size: 0.75rem;
+  color: var(--text-soft);
+  transition: transform 0.16s ease;
+}
+
+.filter-folder[open] > .filter-folder-summary .filter-folder-caret {
+  transform: rotate(90deg);
+  color: var(--primary);
+}
+
+.filter-folder-title {
+  flex: 1;
+}
+
+.filter-folder-sel {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.filter-folder-count {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.filter-folder-options {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

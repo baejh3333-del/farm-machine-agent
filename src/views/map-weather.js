@@ -757,11 +757,54 @@ async function renderKakaoMap(container, items, appKey, { onOpenDetail, onRetry,
   }
 }
 
+const DEFAULT_USER_SCALE_LEVEL = 6; // Kakao Map ~500m scale around user location
+const MAP_TIME_OPTIONS = [
+  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00",
+];
+
+function bindMapRelayout(map, containerEl, getCenter) {
+  if (!map || !containerEl) return () => {};
+  const trigger = () => {
+    if (!containerEl.isConnected) return;
+    const rect = containerEl.getBoundingClientRect?.();
+    if (!rect || rect.width < 10 || rect.height < 10) return;
+    map.relayout?.();
+    const center = typeof getCenter === "function" ? getCenter() : null;
+    if (center && typeof map.setCenter === "function") {
+      map.setCenter(center);
+    }
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(trigger);
+  }
+  const timer = setTimeout(trigger, 160);
+
+  containerEl._mapResizeObserver?.disconnect?.();
+  let ro = null;
+  if (typeof ResizeObserver === "function") {
+    let rafId = 0;
+    ro = new ResizeObserver(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(trigger);
+    });
+    ro.observe(containerEl);
+    containerEl._mapResizeObserver = ro;
+  }
+
+  return () => {
+    clearTimeout(timer);
+    ro?.disconnect?.();
+  };
+}
+
 export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
   const host = $("listingMapPanel");
   if (!host) return;
-  if (state.viewMode !== "map") {
+  if ($("market")?.classList.contains("catalog-split-active") || state.viewMode !== "map") {
     host.hidden = true;
+    host.innerHTML = "";
     return;
   }
 
@@ -1265,6 +1308,23 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     <div class="header-map-stage${selectedItem ? " has-floating-card" : ""}" id="headerMapStage">
       <div class="header-map-floating-top">
         <div class="header-map-top-actions">
+          <div class="header-map-time-wrap">
+            <button type="button" class="header-map-pill-btn header-map-time-btn" id="headerMapTimeBtn" aria-haspopup="dialog" aria-expanded="false">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+              <span id="headerMapTimeLabel">${escapeHtml(state.filters.startTime || "09:00")}–${escapeHtml(state.filters.endTime || "18:00")}</span>
+            </button>
+            <div class="header-map-time-pop" id="headerMapTimePop" role="dialog" aria-label="대여 시간 선택" hidden>
+              <div class="hmt-presets">
+                <button type="button" class="hmt-preset" data-map-time-preset="08:00,12:00">오전 (08~12)</button>
+                <button type="button" class="hmt-preset" data-map-time-preset="13:00,18:00">오후 (13~18)</button>
+                <button type="button" class="hmt-preset" data-map-time-preset="09:00,18:00">종일 (09~18)</button>
+              </div>
+              <div class="hmt-selects">
+                <label><span>시작</span><select id="headerMapStartTime">${MAP_TIME_OPTIONS.map((t) => `<option value="${t}"${(state.filters.startTime || "09:00") === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+                <label><span>종료</span><select id="headerMapEndTime">${MAP_TIME_OPTIONS.map((t) => `<option value="${t}"${(state.filters.endTime || "18:00") === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+              </div>
+            </div>
+          </div>
           <button type="button" class="header-map-pill-btn header-map-all-btn" id="headerMapShowAllBtn">
             전체 ${allItems.length.toLocaleString()}건 보기
           </button>
@@ -1616,6 +1676,63 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     });
   });
 
+  const mapTimeBtn = $("headerMapTimeBtn");
+  const mapTimePop = $("headerMapTimePop");
+  const syncMapTimeLabel = () => {
+    const start = state.filters.startTime || "09:00";
+    const end = state.filters.endTime || "18:00";
+    const label = $("headerMapTimeLabel");
+    if (label) label.textContent = `${start}–${end}`;
+    if ($("headerMapStartTime")) $("headerMapStartTime").value = start;
+    if ($("headerMapEndTime")) $("headerMapEndTime").value = end;
+    const catalogLabel = $("catalogTimeLabel");
+    if (catalogLabel) catalogLabel.textContent = `${start}–${end}`;
+    const homeLabel = $("homeTimeText");
+    if (homeLabel) homeLabel.textContent = `${start}–${end}`;
+  };
+  const notifyTimeChange = (startTime, endTime) => {
+    window.dispatchEvent(new CustomEvent("moanong:time-change", { detail: { startTime, endTime } }));
+  };
+  mapTimeBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!mapTimePop) return;
+    const nextOpen = mapTimePop.hidden;
+    mapTimePop.hidden = !nextOpen;
+    mapTimeBtn.setAttribute("aria-expanded", String(nextOpen));
+  });
+  mapTimePop?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const presetBtn = e.target.closest("[data-map-time-preset]");
+    if (!presetBtn) return;
+    const [s, en] = presetBtn.dataset.mapTimePreset.split(",");
+    state.filters.startTime = s;
+    state.filters.endTime = en;
+    persist();
+    syncMapTimeLabel();
+    notifyTimeChange(s, en);
+    mapTimePop.hidden = true;
+    mapTimeBtn?.setAttribute("aria-expanded", "false");
+    toast(`대여 시간을 ${s}–${en}(으)로 설정했습니다.`);
+  });
+  const onMapTimeSelectChange = () => {
+    const s = $("headerMapStartTime")?.value || "09:00";
+    let en = $("headerMapEndTime")?.value || "18:00";
+    if (en <= s) en = s;
+    state.filters.startTime = s;
+    state.filters.endTime = en;
+    persist();
+    syncMapTimeLabel();
+    notifyTimeChange(s, en);
+  };
+  $("headerMapStartTime")?.addEventListener("change", onMapTimeSelectChange);
+  $("headerMapEndTime")?.addEventListener("change", onMapTimeSelectChange);
+  host.addEventListener("click", () => {
+    if (mapTimePop && !mapTimePop.hidden) {
+      mapTimePop.hidden = true;
+      mapTimeBtn?.setAttribute("aria-expanded", "false");
+    }
+  });
+
   const canvasEl = $("headerMapCanvas");
   const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
   let activeMap = null;
@@ -1953,6 +2070,15 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     if (pendingOffice) locateOffice(pendingOffice);
     else if (pendingFocusListingId) applyFocusListing(pendingFocusListingId);
     else syncOverlays(true);
+
+    bindMapRelayout(activeMap, mapStageEl, () => {
+      if (selectedItem) {
+        const c = listingCoords(selectedItem, selectedItem.id);
+        return new maps.LatLng(Number(c.lat), Number(c.lng));
+      }
+      return originLatLng;
+    });
+
     maps.event.addListener(activeMap, "click", hideFloatingCard);
     maps.event.addListener(activeMap, "zoom_changed", () => syncOverlays(true));
     maps.event.addListener(activeMap, "idle", () => syncOverlays(false));
@@ -2047,20 +2173,16 @@ function renderCatalogMiniMapFallback(canvasEl, origin, items, selectedId, { onS
     return { item, lat: Number(c.lat), lng: Number(c.lng) };
   });
 
-  const allLats = [Number(origin.lat), ...points.map((p) => p.lat)].filter(Number.isFinite);
-  const allLngs = [Number(origin.lng), ...points.map((p) => p.lng)].filter(Number.isFinite);
-  const minLat = Math.min(...allLats);
-  const maxLat = Math.max(...allLats);
-  const minLng = Math.min(...allLngs);
-  const maxLng = Math.max(...allLngs);
-  const latSpan = Math.max(0.03, (maxLat - minLat) * 1.35);
-  const lngSpan = Math.max(0.04, (maxLng - minLng) * 1.35);
-  const centerLat = (minLat + maxLat) / 2;
-  const centerLng = (minLng + maxLng) / 2;
+  // Default to user's location at local ~500m-2km neighborhood scale (never nationwide stretch)
+  const selectedPt = selectedId ? points.find((p) => p.item.id === selectedId) : null;
+  const centerLat = Number(selectedPt ? selectedPt.lat : origin.lat);
+  const centerLng = Number(selectedPt ? selectedPt.lng : origin.lng);
+  const latSpan = 0.024;
+  const lngSpan = 0.032;
 
   const project = (lat, lng) => {
-    const x = Math.max(10, Math.min(90, 50 + ((lng - centerLng) / lngSpan) * 76));
-    const y = Math.max(16, Math.min(82, 50 - ((lat - centerLat) / latSpan) * 66));
+    const x = Math.max(8, Math.min(92, 50 + ((lng - centerLng) / lngSpan) * 76));
+    const y = Math.max(14, Math.min(84, 50 - ((lat - centerLat) / latSpan) * 66));
     return { x, y };
   };
 
@@ -2171,7 +2293,7 @@ export async function renderCatalogMiniMap(host, items, { selectedId = "", onSel
       canvasEl.appendChild(stageEl);
       const map = new maps.Map(stageEl, {
         center: originLatLng,
-        level: 7,
+        level: DEFAULT_USER_SCALE_LEVEL,
       });
       mapState = {
         canvasEl,
@@ -2179,7 +2301,9 @@ export async function renderCatalogMiniMap(host, items, { selectedId = "", onSel
         map,
         overlays: [],
         pinMap: new Map(),
+        targetCenter: originLatLng,
       };
+      bindMapRelayout(map, stageEl, () => mapState.targetCenter || originLatLng);
       host._miniMapState = mapState;
     }
 
@@ -2279,13 +2403,24 @@ export async function renderCatalogMiniMap(host, items, { selectedId = "", onSel
       });
     }
 
-    if (list.length > 0) {
-      map.setBounds(bounds, 24, 24, 36, 24);
+    const selectedItem = selectedId ? list.find((it) => it.id === selectedId) : null;
+    if (selectedItem) {
+      const sc = listingCoords(selectedItem, selectedItem.id);
+      mapState.targetCenter = new maps.LatLng(Number(sc.lat), Number(sc.lng));
     } else {
-      map.setCenter(originLatLng);
-      map.setLevel(7);
+      mapState.targetCenter = originLatLng;
     }
-    map.relayout?.();
+    map.setLevel(DEFAULT_USER_SCALE_LEVEL);
+    map.setCenter(mapState.targetCenter);
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        if (!mapState.stageEl?.isConnected) return;
+        map.relayout?.();
+        map.setCenter(mapState.targetCenter);
+      });
+    } else {
+      map.relayout?.();
+    }
   } catch {
     if (seq !== catalogMiniMapRenderSeq || !host.isConnected) return;
     host._miniMapState = null;

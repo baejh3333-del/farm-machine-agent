@@ -860,6 +860,220 @@
   accent-color: #23533a;
 }
 
+/* Sticky Listing Context Header in 1:1 Chat */
+.chat-listing-context {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: rgba(248, 251, 249, 0.96);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(23, 66, 51, 0.14);
+  box-shadow: 0 4px 14px rgba(19, 44, 34, 0.06);
+}
+
+.chat-context-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chat-context-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  object-fit: cover;
+  flex: none;
+  border: 1px solid rgba(23, 66, 51, 0.1);
+  background: #eef3ef;
+}
+
+.chat-context-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.chat-context-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.chat-context-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: #e6f5ec;
+  color: #166534;
+}
+
+.chat-context-status.is-reserved,
+.chat-context-status.is-sold {
+  background: #f1f5f2;
+  color: #5c6f65;
+}
+
+.chat-context-price {
+  font-size: 0.92rem;
+  color: var(--forest-deep, #132c22);
+}
+
+.chat-context-title {
+  font-size: 0.78rem;
+  color: var(--text-muted, #5c6f65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-context-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-context-pill {
+  border: 1px solid rgba(23, 66, 51, 0.18);
+  background: #ffffff;
+  color: var(--forest, #174233);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+
+.chat-context-pill:hover {
+  background: #eef8f1;
+  border-color: var(--primary, #1e9b4b);
+}
+
+.chat-context-pill:active {
+  transform: scale(0.97);
+}
+
+.chat-context-pill.is-primary {
+  background: var(--primary, #1e9b4b);
+  border-color: var(--primary, #1e9b4b);
+  color: #ffffff;
+}
+
+.chat-context-pill.is-primary:hover {
+  background: #17823d;
+}
+
+.chat-context-pill.is-ai {
+  background: linear-gradient(135deg, #1b4d38 0%, #246145 100%);
+  border-color: #174233;
+  color: #f4fce3;
+}
+
+.chat-context-pill.is-ai:hover {
+  background: linear-gradient(135deg, #153e2d 0%, #1d5139 100%);
+}
+
+/* Structured Order/Payment Confirmation Card inside Chat Thread */
+.chat-line.has-order-card,
+.deal-msg.has-order-card {
+  max-width: 92%;
+}
+
+.chat-order-card {
+  margin-top: 4px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1.5px solid rgba(30, 155, 75, 0.38);
+  color: var(--forest-deep, #132c22);
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  box-shadow: 0 4px 12px rgba(19, 44, 34, 0.08);
+}
+
+.chat-order-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-order-card-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6f5ec;
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.chat-order-card-num {
+  font-size: 0.72rem;
+  color: var(--text-muted, #5c6f65);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.chat-order-card-title {
+  font-size: 0.88rem;
+  line-height: 1.35;
+  color: var(--forest-deep, #132c22);
+}
+
+.chat-order-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.76rem;
+  color: var(--text-muted, #5c6f65);
+}
+
+.chat-order-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px dashed rgba(23, 66, 51, 0.14);
+}
+
+.chat-order-card-total {
+  font-size: 0.96rem;
+  color: var(--forest, #174233);
+}
+
+.chat-order-card-btn {
+  border: 1px solid rgba(23, 66, 51, 0.2);
+  background: #f5f9f6;
+  color: var(--forest, #174233);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-order-card-btn:hover {
+  background: #e6f5ec;
+  border-color: var(--primary, #1e9b4b);
+}
+
 @media (max-width: 600px) {
   .trade-action-pair {
     width: 100%;

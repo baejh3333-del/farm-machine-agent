@@ -71,7 +71,10 @@ export function createHomeView(deps) {
   let howTab = "borrow";
   let faqOpen = 0;
   const touched = { loc: false }; // 상단 검색 바: 직접 고른 칸만 값으로 보여 준다
-  const homeTimes = { start: "09:00", end: "18:00" };
+  const homeTimes = {
+    start: state.filters.startTime || "09:00",
+    end: state.filters.endTime || "18:00",
+  };
   const drafts = { start: null, end: null };
   const times = () => homeTimes;
   function commit({ weather = false } = {}) {
@@ -80,10 +83,18 @@ export function createHomeView(deps) {
     if (weather) refreshWeatherAndMapConfig({ onUpdate: () => deps.renderListings() });
   }
 
-  // 홈 예약창에 보이는 조건(위치 범위·날짜·작업)만 남긴 필터. 매물 찾기에서 고른 다른 조건은 홈 추천에 숨어 들지 않는다.
+  // 홈 예약창에 보이는 조건(위치 범위·날짜·시간·작업)만 남긴 필터. 매물 찾기에서 고른 다른 조건은 홈 추천에 숨어 들지 않는다.
   function visibleFilters() {
     const f = state.filters;
-    return { ...blankFilters(), radius: f.radius || "all", date: f.date, dateEnd: f.dateEnd, operations: [...f.operations] };
+    return {
+      ...blankFilters(),
+      radius: f.radius || "all",
+      date: f.date,
+      dateEnd: f.dateEnd,
+      startTime: homeTimes.start,
+      endTime: homeTimes.end,
+      operations: [...f.operations],
+    };
   }
 
   // 시작일만 고르고 닫으면 매물 찾기 날짜 입력과 같이 다음 날을 반납일로 잡는다.
@@ -281,9 +292,20 @@ export function createHomeView(deps) {
       <div class="h2-pop-foot h2-pop-foot-end"><button type="button" class="h2-apply" data-home-time="apply">적용</button></div>`;
   }
 
-  function setTime(which, value, { rerender = true } = {}) {
+  function setTime(which, value, { rerender = true, notify = true } = {}) {
     homeTimes[which] = value;
-    $("homeTimeText").textContent = `${homeTimes.start}–${homeTimes.end}`;
+    state.filters.startTime = homeTimes.start;
+    state.filters.endTime = homeTimes.end;
+    const label = `${homeTimes.start}–${homeTimes.end}`;
+    if ($("homeTimeText")) $("homeTimeText").textContent = label;
+    if ($("sbTime")) $("sbTime").textContent = label;
+    if ($("quickTimeText")) $("quickTimeText").textContent = label;
+    persist(deps.updateBadges);
+    if (notify) {
+      window.dispatchEvent(new CustomEvent("moanong:time-change", {
+        detail: { startTime: homeTimes.start, endTime: homeTimes.end, source: "home" },
+      }));
+    }
     if (rerender) renderPops();
   }
 
@@ -372,7 +394,7 @@ export function createHomeView(deps) {
   function onTaskClick(target) {
     if (target.closest("[data-home-ask]")) {
       closePop();
-      $("headerAiOpen")?.click();
+      $("aiLauncher")?.click();
       return;
     }
     if (target.closest('[data-home-task="apply"]')) {
@@ -428,6 +450,7 @@ export function createHomeView(deps) {
     const radius = f.radius && f.radius !== "all" ? ` · ${f.radius}km` : "";
     set("sbLoc", touched.loc ? `${state.region}${radius}` : null, "동네 검색");
     set("sbDate", f.date && f.dateEnd ? dateText : null, "날짜 추가");
+    set("sbTime", `${homeTimes.start}–${homeTimes.end}`, "09:00–18:00");
     set("sbTask", op ? op.label : f.operations.length > 1 ? `작업 ${f.operations.length}개` : null, "작업 추가");
     for (const el of document.querySelectorAll("[data-sb-rent]")) el.hidden = !rent;
   }
@@ -606,7 +629,16 @@ export function createHomeView(deps) {
     });
     $("homeFindBtn")?.addEventListener("click", goBrowse);
     $("homeSeeAll")?.addEventListener("click", goBrowse);
-    $("homeAskAi")?.addEventListener("click", () => $("headerAiOpen")?.click());
+    $("homeAskAi")?.addEventListener("click", () => $("aiLauncher")?.click());
+    window.addEventListener("moanong:time-change", (event) => {
+      const detail = event.detail || {};
+      if (detail.source === "home") return;
+      if (detail.startTime) homeTimes.start = detail.startTime;
+      if (detail.endTime) homeTimes.end = detail.endTime;
+      const label = `${homeTimes.start}–${homeTimes.end}`;
+      if ($("homeTimeText")) $("homeTimeText").textContent = label;
+      if ($("sbTime")) $("sbTime").textContent = label;
+    });
     document.querySelector(".h2-tabs")?.addEventListener("click", (event) => {
       const how = event.target.closest("[data-home-how]")?.dataset.homeHow;
       if (how) {

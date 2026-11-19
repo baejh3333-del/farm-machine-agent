@@ -1260,8 +1260,8 @@ function renderBuyerRequests() {
   if (!listEl) return;
 
   if (!isLoggedIn()) {
-    listEl.innerHTML = `<div class="empty-panel">로그인하면 내가 보낸 대여 요청과 확정된 예약을 확인할 수 있어요.</div>`;
-    if (convEl) convEl.innerHTML = `<div class="empty-panel">로그인하면 내 1:1 채팅 문의 내역을 확인할 수 있어요.</div>`;
+    listEl.innerHTML = "";
+    if (convEl) convEl.innerHTML = "";
     return;
   }
 

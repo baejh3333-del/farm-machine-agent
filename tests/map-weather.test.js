@@ -4,7 +4,16 @@ import { REGION_COORDS, listingCoords, distanceKm } from "../src/data/farm-machi
 import { KOREA_REGIONS, latLngToKmaGrid, getRegionCoords, findNearestRegion } from "../src/data/korea-regions.js";
 import { getWeatherAndMapConfig } from "../server/weather.js";
 import { runtime } from "../src/core/store.js";
-import { clusterListingsByZoom, getClusterThresholdKm, getHeaderMapAllItems } from "../src/views/map-weather.js";
+import {
+  CLUSTER_SCALE_THRESHOLD_METERS,
+  HEADER_CLUSTER_STEPS,
+  clusterListingsByZoom,
+  getClusterThresholdKm,
+  getScaleMetersForZoomLevel,
+  measureMapScaleMeters,
+  shouldClusterAtScale,
+  getHeaderMapAllItems,
+} from "../src/views/map-weather.js";
 
 test("listingCoords와 distanceKm는 결정적 좌표 기반 직선거리를 계산한다", () => {
   const c1 = listingCoords("영양읍", "rent-1");
@@ -199,4 +208,66 @@ test("getHeaderMapAllItems는 DB 매물이 있으면 홍천 강제 선택·덧�
     runtime.catalog = prevCatalog;
     runtime.selectedMapListingId = prevSelected;
   }
+});
+
+test("25m 축척 경계까지는 개별 매물을 유지하고 25m 초과 축소에서만 그룹화하며 통합 문구를 쓰지 않는다", () => {
+  const origin = { lat: 37.6538, lng: 127.6942 };
+  const closeItems = [
+    { id: "near-1", region: "서면 팔봉리", title: "트랙터 A", lat: 37.6538, lng: 127.6942, status: "open" },
+    { id: "near-2", region: "서면 팔봉리", title: "트랙터 B", lat: 37.65405, lng: 127.69435, status: "open" },
+    { id: "other-1", region: "홍천읍", title: "관리기 C", lat: 37.6541, lng: 127.6945, status: "open" },
+  ];
+
+  assert.equal(CLUSTER_SCALE_THRESHOLD_METERS, 25);
+  assert.equal(getScaleMetersForZoomLevel(1), 25);
+  assert.equal(getScaleMetersForZoomLevel(2), 50);
+  assert.equal(shouldClusterAtScale(10), false);
+  assert.equal(shouldClusterAtScale(25), false);
+  assert.equal(shouldClusterAtScale(26), true);
+  assert.equal(shouldClusterAtScale(50), true);
+
+  // 25m 이하(실제 축척 및 Lv.1 폴백)에서는 매우 가까운 매물도 개별 유지
+  const at10m = clusterListingsByZoom(closeItems, 1, origin, { scaleMeters: 10 });
+  assert.equal(at10m.length, 3);
+  assert.ok(at10m.every((c) => c.count === 1));
+
+  const at25m = clusterListingsByZoom(closeItems, 1, origin, { scaleMeters: 25 });
+  assert.equal(at25m.length, 3);
+  assert.ok(at25m.every((c) => c.count === 1));
+
+  const fallbackLv1 = clusterListingsByZoom(closeItems, 1, origin);
+  assert.equal(fallbackLv1.length, 3);
+  assert.ok(fallbackLv1.every((c) => c.count === 1));
+
+  // 25m 초과(26m / Lv.2 50m)에서는 가까운 매물이 그룹화됨
+  const at26m = clusterListingsByZoom(closeItems, 1, origin, { scaleMeters: 26 });
+  assert.equal(at26m.length, 1);
+  assert.equal(at26m[0].count, 3);
+  assert.doesNotMatch(at26m[0].label, /통합/);
+
+  const fallbackLv2 = clusterListingsByZoom(closeItems, 2, origin);
+  assert.equal(fallbackLv2.length, 1);
+  assert.equal(fallbackLv2[0].count, 3);
+  assert.doesNotMatch(fallbackLv2[0].label, /통합/);
+
+  // 전국 클러스터 및 모든 단계 라벨에도 '통합' 문구가 없어야 함
+  const allKr = clusterListingsByZoom(closeItems, 12, origin);
+  assert.doesNotMatch(allKr[0].label, /통합/);
+  for (const step of HEADER_CLUSTER_STEPS) {
+    assert.doesNotMatch(step.label, /통합/);
+  }
+
+  // measureMapScaleMeters는 실제 지도 bounds/폭 기반 축척을 계산하고 미제공 시 레벨 폴백을 반환한다
+  const fakeMapAt25m = {
+    getLevel: () => 2,
+    getBounds: () => ({
+      getSouthWest: () => ({ getLat: () => 37.6528, getLng: () => 127.69278 }),
+      getNorthEast: () => ({ getLat: () => 37.6548, getLng: () => 127.69562 }),
+    }),
+  };
+  const measured25m = measureMapScaleMeters(fakeMapAt25m, { clientWidth: 1000 });
+  assert.equal(measured25m, 25);
+
+  const fallbackOnlyMap = { getLevel: () => 2 };
+  assert.equal(measureMapScaleMeters(fallbackOnlyMap, { clientWidth: 0 }), 50);
 });

@@ -23,7 +23,8 @@ import { initEducationCertificate, renderEducationCertificate, setEducationCerti
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
 import { createHomeView } from "./views/home.js?v=20261119-3";
-import { refreshWeatherAndMapConfig, renderHeaderMapView, ensureHongcheonRandomListing } from "./views/map-weather.js";
+import { createHeaderNav } from "./views/header-nav.js";
+import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
 initFontScale();
 
@@ -102,7 +103,20 @@ const aiPanel = createAiPanel({
   isFavorite: (id) => activeFavorites().includes(id),
   openChat: (target) => txViews.chatForm(target),
   openDeal: (conversationId) => setView("deals", conversationId ? { conversationId } : {}),
+  focusMapListing: (listingId) => {
+    if (!listingId) return;
+    if (state.view === "map" && focusHeaderMapListing(listingId)) return;
+    setView("map", { preserveAiPanel: true, focusListingId: listingId });
+  },
   getOwnedMachines: () => getOwnedMachinesSnapshot(),
+});
+
+const headerNav = createHeaderNav({
+  setView: (...args) => setView(...args),
+  setTransaction: (type) => catalogViews.setTransaction(type),
+  openFilters: () => catalogViews.openFilters(),
+  openAiPanel: () => aiPanel.openAiPanel(),
+  submitAiPrompt: (prompt) => aiPanel.submitPrompt(prompt),
 });
 
 async function loadCatalog({ quiet = false } = {}) {
@@ -171,6 +185,7 @@ async function refreshAuthenticatedData({ includeRequests = true, includeConvers
     txViews.renderGuestImportBanner();
     updateBadges();
     catalogViews.renderListings();
+    catalogViews.renderFavoritesView();
     if (state.view === "requests") txViews.renderBuyerRequests();
     if (state.view === "owner") txViews.renderOwner();
     if (state.view === "deals") dealsView.renderList();
@@ -224,8 +239,8 @@ async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
     saveGuestFavorites(nextFav ? [...runtime.guestFavorites, id] : runtime.guestFavorites.filter((v) => v !== id));
     syncFavoriteButtons(id, nextFav);
     updateBadges();
+    catalogViews.renderFavoritesView();
     toast(nextFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
-    if (fromModal) catalogViews.openFavoritesModal();
     return;
   }
 
@@ -241,8 +256,8 @@ async function toggleFavorite(id, { favorite, fromModal = false } = {}) {
     const actualFav = runtime.serverFavorites.includes(id);
     syncFavoriteButtons(id, actualFav);
     updateBadges();
+    catalogViews.renderFavoritesView();
     toast(actualFav ? "찜한 농기계 목록에 담았습니다." : "찜 목록에서 제외했습니다.");
-    if (fromModal) catalogViews.openFavoritesModal();
   } catch (error) {
     if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
     if (error?.status === 401) {
@@ -304,8 +319,31 @@ function updateBadges() {
   }
 }
 
-const viewIds = { deals: "dealsView", garage: "garageView", map: "mapView", home: "homeView", browse: "browseView", guide: "guideView", requests: "requestsView", owner: "ownerView", ownerLoginRequired: "ownerLoginRequiredView", login: "loginView" };
-const MY_PAGE_VIEWS = new Set(["deals", "requests", "owner", "ownerLoginRequired", "garage"]);
+const viewIds = {
+  favorites: "favoritesView",
+  deals: "dealsView",
+  dealsLoginRequired: "dealsLoginRequiredView",
+  garage: "garageView",
+  map: "mapView",
+  home: "homeView",
+  browse: "browseView",
+  guide: "guideView",
+  requests: "requestsView",
+  requestsLoginRequired: "requestsLoginRequiredView",
+  owner: "ownerView",
+  ownerLoginRequired: "ownerLoginRequiredView",
+  login: "loginView",
+};
+const MY_PAGE_VIEWS = new Set([
+  "favorites",
+  "deals",
+  "dealsLoginRequired",
+  "requests",
+  "requestsLoginRequired",
+  "owner",
+  "ownerLoginRequired",
+  "garage",
+]);
 
 // 모아농 2.0: 홈은 예약창·소개만 보여주고, 매물 목록은 '매물 찾기'에서 따로 본다
 const MAIN_PAGE_VIEWS = [];
@@ -314,7 +352,9 @@ let scrollSpyPausedUntil = 0;
 function markNav(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
     const active = button.dataset.view === view
-      || (view === "ownerLoginRequired" && button.dataset.view === "owner");
+      || (view === "ownerLoginRequired" && button.dataset.view === "owner")
+      || (view === "dealsLoginRequired" && button.dataset.view === "deals")
+      || (view === "requestsLoginRequired" && button.dataset.view === "requests");
     button.classList.toggle("active", active);
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
@@ -326,13 +366,23 @@ function markNav(view) {
 }
 
 function setView(view, options = {}) {
-  closeAiPanel({ returnFocus: false });
+  headerNav.closeAll();
+  if (!options.preserveAiPanel) closeAiPanel({ returnFocus: false });
   if (!Object.hasOwn(viewIds, view)) view = "home";
-  if (view !== "deals") {
+  if (view === "deals" && !isLoggedIn()) {
+    runtime.pendingIntent = { type: "deal", conversationId: options.conversationId || null };
+    dealsView.hide();
+    view = "dealsLoginRequired";
+  }
+  if (view === "requests" && !isLoggedIn()) {
+    runtime.pendingIntent = { type: "requests" };
+    view = "requestsLoginRequired";
+  }
+  if (view === "owner" && !isLoggedIn()) view = "ownerLoginRequired";
+  if (view !== "deals" && view !== "dealsLoginRequired") {
     dealsView.hide();
     if (parseDealsHash(location.hash)) history.replaceState(null, "", location.pathname + location.search);
   }
-  if (view === "owner" && !isLoggedIn()) view = "ownerLoginRequired";
   state.view = view;
   const onMainPage = MAIN_PAGE_VIEWS.includes(view);
   for (const [name, id] of Object.entries(viewIds)) {
@@ -341,6 +391,9 @@ function setView(view, options = {}) {
   $("myPageLayout").hidden = !MY_PAGE_VIEWS.has(view);
   markNav(view);
   persist(updateBadges);
+  if (view === "favorites") {
+    catalogViews.renderFavoritesView();
+  }
   if (view === "owner") {
     txViews.renderOwner();
     refreshAuthenticatedData();
@@ -355,18 +408,16 @@ function setView(view, options = {}) {
       const next = dealsHash(target);
       if (location.hash !== next) history.pushState(null, "", next);
     }
-    if (!isLoggedIn()) {
-      runtime.pendingIntent = { type: "deal", conversationId: target.conversationId };
-    }
     dealsView.show(target);
     if (isLoggedIn()) refreshAuthenticatedData();
   }
   if (view === "garage") runtime.garage?.refresh();
   if (view === "map") {
-    runtime.selectedMapListingId = "";
+    runtime.selectedMapListingId = options.focusListingId || "";
     renderHeaderMapView({
       onOpenDetail: (id) => catalogViews.openDetail(id),
       onRent: (id) => txViews.rentalForm(id),
+      focusListingId: options.focusListingId || "",
     });
   }
   // 메뉴를 눌러 스크롤하는 동안에는 스크롤 표시가 중간에 바뀌지 않게 잠깐 멈춘다
@@ -401,6 +452,7 @@ function renderAll() {
   catalogViews.renderQuickWizard();
   catalogViews.renderMachineCategoryBar();
   catalogViews.renderListings();
+  catalogViews.renderFavoritesView();
   homeView.render();
   txViews.renderBuyerRequests();
   updateBadges();
@@ -1108,6 +1160,7 @@ function bindEvents() {
   // (상담창에서 연 매물 상세·필터 창 안을 누를 때는 닫지 않는다)
   document.addEventListener("pointerdown", (event) => {
     if ($("aiPanel").hidden) return;
+    if (state.view === "map") return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest("#aiPanel, #aiLauncher, #headerAiOpen, .dialog-backdrop, #toast")) return;
@@ -1125,7 +1178,17 @@ function bindEvents() {
     button.addEventListener("click", () => aiPanel.submitPrompt(button.dataset.prompt));
   });
 
-  document.querySelector('[data-action="favorites"]').addEventListener("click", catalogViews.openFavoritesModal);
+  $("favoritesList")?.addEventListener("click", (event) => {
+    const detailBtn = event.target.closest("[data-favorite-detail]");
+    if (detailBtn) return catalogViews.openDetail(detailBtn.dataset.favoriteDetail);
+    const removeBtn = event.target.closest("[data-fav-remove]");
+    if (removeBtn) return toggleFavorite(removeBtn.dataset.favRemove, { favorite: false });
+    if (event.target.closest("[data-favorites-browse]")) setView("browse");
+  });
+
+  document.querySelectorAll('[data-action="favorites"]:not([data-view])').forEach((button) => {
+    button.addEventListener("click", () => setView("favorites"));
+  });
 }
 
 // 초기 상태 동기화
@@ -1217,6 +1280,9 @@ function initLoginForm() {
     resetAccountRuntimeState();
     renderAccount(null);
     runtime.garage?.resetToGuest();
+    if (state.view === "deals" || state.view === "requests" || state.view === "owner") {
+      setView(state.view);
+    }
   };
 
   function resumePendingIntentIfAny() {
@@ -1240,6 +1306,14 @@ function initLoginForm() {
     }
     if (intent.type === "deal") {
       setView("deals", intent.conversationId ? { conversationId: intent.conversationId } : {});
+      return true;
+    }
+    if (intent.type === "requests") {
+      setView("requests");
+      return true;
+    }
+    if (intent.type === "favorites") {
+      setView("favorites");
       return true;
     }
     if (intent.type === "inbound") {
@@ -1274,6 +1348,20 @@ function initLoginForm() {
     document.querySelector('#myPageMenu [data-view="owner"]')?.focus({ preventScroll: true });
   });
   $("ownerLoginGoButton").addEventListener("click", openLogin);
+  $("dealsLoginGoButton")?.addEventListener("click", () => {
+    if (runtime.pendingIntent?.type !== "deal") {
+      runtime.pendingIntent = { type: "deal", conversationId: null };
+    }
+    openLogin();
+  });
+  $("requestsLoginGoButton")?.addEventListener("click", () => {
+    runtime.pendingIntent = { type: "requests" };
+    openLogin();
+  });
+  $("favoritesLoginGoButton")?.addEventListener("click", () => {
+    runtime.pendingIntent = { type: "favorites" };
+    openLogin();
+  });
   switchButton.addEventListener("click", () => setMode(!signup));
 
   eye.addEventListener("click", () => {
@@ -1434,7 +1522,10 @@ function initLoginForm() {
     .then(async (result) => {
       await applyAccountTransition(result.user);
       if (isLoggedIn() && state.view === "ownerLoginRequired") setView("owner");
-      if (isLoggedIn() && state.view === "deals") setView("deals", { ...(parseDealsHash(location.hash) || {}), fromHistory: true });
+      if (isLoggedIn() && (state.view === "deals" || state.view === "dealsLoginRequired")) {
+        setView("deals", { ...(parseDealsHash(location.hash) || {}), fromHistory: true });
+      }
+      if (isLoggedIn() && state.view === "requestsLoginRequired") setView("requests");
       if (isLoggedIn() && isPlaceholderNickname(result.user?.name)) {
         openNicknameModal({ required: true });
       }
@@ -1485,6 +1576,7 @@ $("detailContent").addEventListener("click", (event) => {
     $("ownedModel").focus();
   }
 });
+headerNav.bind();
 bindEvents();
 homeView.bind();
 syncServerTime().then(() => { catalogViews.syncQuickSearchInputs(); renderAll(); });
@@ -1504,7 +1596,7 @@ dealsView.bind();
 window.addEventListener("popstate", () => {
   const target = parseDealsHash(location.hash);
   if (target) setView("deals", { ...target, fromHistory: true });
-  else if (state.view === "deals") setView("home");
+  else if (state.view === "deals" || state.view === "dealsLoginRequired") setView("home");
 });
 // 채팅 밖에서도 확인 필요·안 읽음 배지가 갱신되도록 대화 목록만 주기적으로 조회한다(GET은 읽음 처리하지 않음).
 setInterval(() => {

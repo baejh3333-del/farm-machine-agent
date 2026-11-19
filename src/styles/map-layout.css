@@ -348,3 +348,7 @@
     transition: none;
   }
 }
+
+body:has(#aiPanel[hidden]) .header-map-zoom-controls {
+  right: 92px;
+}

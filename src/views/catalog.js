@@ -2,7 +2,7 @@ import { SPEC_BY_ID } from "../data/machine-specifications.js";
 import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, OPERATION_BY_ID, MACHINE_BY_ID, distanceKm } from "../data/farm-machines.js";
 import { available, compareListings } from "../data/recommendation.js";
 import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, addDays, koreanDateParts, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog, machineImage } from "../core/utils.js";
-import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites } from "../core/store.js";
+import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites, isLoggedIn } from "../core/store.js";
 import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
 
 export function createCatalogViews(deps) {
@@ -663,52 +663,43 @@ function openDetail(id) {
   showDialog($("detailBackdrop"));
 }
 
-function openFavoritesModal() {
+function renderFavoritesView() {
+  const listEl = $("favoritesList");
+  const countEl = $("favoritesCount");
+  const guestNotice = $("favoritesGuestNotice");
+  if (!listEl) return;
+
   const favIds = activeFavorites();
   const items = allListings().filter((item) => favIds.includes(item.id));
-  deps.openForm(`
-    <span class="step-pill">관심 농기계 보관함</span>
-    <h2 id="formTitle"> 내가 찜한 농기계 (${items.length}대)</h2>
-    <p>비교해 보고 싶은 농기계를 모아두었어요. 버튼을 눌러 상세 조건을 확인하세요.</p>
-    <div class="fav-modal-list">
-      ${
-        items.length
-          ? items
-              .map(
-                (item) => `
-          <div class="fav-modal-item">
-            <button type="button" class="fav-thumb" data-favorite-detail="${item.id}" aria-label="${escapeHtml(item.title)} 상세 보기">${deps.machineVisual(item)}</button>
-            <div class="fav-item-info">
-              <span class="spec-tag">${item.type === "rent" ? "일일 대여" : "중고 판매"} · ${escapeHtml(item.region)}</span>
-              <strong>${escapeHtml(item.title)}</strong>
-              <span class="fav-item-price">${money(item.price)}${item.type === "rent" ? " / 1일" : ""}</span>
-            </div>
-            <div class="fav-item-actions">
-              <button type="button" class="button button-secondary button-sm" data-fav-remove="${item.id}">찜 해제</button>
-              <button type="button" class="button button-primary button-sm" data-favorite-detail="${item.id}">상세 보기 ›</button>
-            </div>
-          </div>`
-              )
-              .join("")
-          : `<div class="empty-panel">아직 찜한 농기계가 없습니다. 마음에 드는 농기계 카드 우측 상단의 찜 버튼을 눌러보세요!</div>`
-      }
-    </div>
-  `);
-  $("formContent")
-    .querySelectorAll("[data-favorite-detail]")
-    .forEach((button) =>
-      button.addEventListener("click", () => {
-        hideDialog($("formBackdrop"));
-        openDetail(button.dataset.favoriteDetail);
-      })
-    );
-  $("formContent")
-    .querySelectorAll("[data-fav-remove]")
-    .forEach((button) =>
-      button.addEventListener("click", () => {
-        deps.toggleFavorite(button.dataset.favRemove, { favorite: false, fromModal: true });
-      })
-    );
+  if (countEl) countEl.textContent = `(${items.length}대)`;
+  if (guestNotice) guestNotice.hidden = isLoggedIn();
+
+  listEl.innerHTML = items.length
+    ? items
+        .map(
+          (item) => `
+      <div class="fav-modal-item" data-favorite-item="${escapeHtml(item.id)}">
+        <button type="button" class="fav-thumb" data-favorite-detail="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 상세 보기">${deps.machineVisual(item)}</button>
+        <div class="fav-item-info">
+          <span class="spec-tag">${item.type === "rent" ? "일일 대여" : "중고 판매"} · ${escapeHtml(item.region)}</span>
+          <strong>${escapeHtml(item.title)}</strong>
+          <span class="fav-item-price">${money(item.price)}${item.type === "rent" ? " / 1일" : ""}</span>
+        </div>
+        <div class="fav-item-actions">
+          <button type="button" class="button button-secondary button-sm" data-fav-remove="${escapeHtml(item.id)}">찜 해제</button>
+          <button type="button" class="button button-primary button-sm" data-favorite-detail="${escapeHtml(item.id)}">상세 보기 ›</button>
+        </div>
+      </div>`
+        )
+        .join("")
+    : `<div class="empty-panel favorites-empty">
+        <p>아직 찜한 농기계가 없습니다. 마음에 드는 농기계 카드 우측 상단의 찜 버튼을 눌러보세요!</p>
+        <button type="button" class="button button-primary button-sm" data-favorites-browse>매물 둘러보기</button>
+      </div>`;
+}
+
+function openFavoritesModal() {
+  deps.setView("favorites");
 }
 
 function resetAllFilters() {
@@ -740,6 +731,7 @@ function resetAllFilters() {
     card,
     renderListings,
     openDetail,
+    renderFavoritesView,
     openFavoritesModal,
     resetAllFilters,
   };

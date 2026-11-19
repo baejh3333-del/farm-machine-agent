@@ -211,6 +211,13 @@ body.ai-fullscreen .ai-launcher {
   z-index: 1100;
 }
 
+@media (min-width: 960px) {
+  body.ai-open:not(.ai-fullscreen) #mapView {
+    padding-right: min(454px, 44vw);
+    box-sizing: border-box;
+  }
+}
+
 /* Fullscreen Mode (left: auto kept consistent with docked so width/inset morphs smoothly) */
 #aiPanel.is-fullscreen,
 #aiPanel.is-expanded,

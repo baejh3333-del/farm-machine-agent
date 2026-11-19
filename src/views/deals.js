@@ -165,7 +165,7 @@ export function createDealsView(deps) {
     const listEl = $("dealsList");
     if (!listEl) return;
     if (!isLoggedIn()) {
-      listEl.innerHTML = `<div class="empty-panel deals-empty"><p>로그인하면 거래 메시지를 확인하고 바로 대화할 수 있어요.</p><div class="deals-empty-actions"><button type="button" class="button button-primary button-sm" data-deals-goto="login">로그인</button></div></div>`;
+      listEl.innerHTML = "";
       if ($("dealsFilters")) $("dealsFilters").innerHTML = "";
       return;
     }

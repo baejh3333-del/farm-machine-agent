@@ -501,6 +501,7 @@ export function createAiPanel({
   isFavorite,
   openChat,
   openDeal,
+  focusMapListing = () => {},
   getOwnedMachines = () => ({ owned: [], selectedId: "" }),
 }) {
   let recommendationPending = false;
@@ -2145,6 +2146,7 @@ export function createAiPanel({
     if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
     else if (result.reservation) lastShownListingIds = [];
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
+    if (listingIds.length) focusMapListing?.(listingIds[0], listingIds);
     if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
     scrollAiToEnd();
     if (fallbackVoiceUsed) {
@@ -2736,6 +2738,7 @@ export function createAiPanel({
     if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
     else if (result?.reservation) lastShownListingIds = [];
     renderAgentEffects(bubble, result, { reply, includeFollowUp: false });
+    if (cardIds.length) focusMapListing?.(cardIds[0], cardIds);
     scrollAiToEnd();
     timer.mark("rendered");
 

@@ -1,7 +1,8 @@
 // 거래 관리: 채팅 모달 밖에서 농농이 대리 거래의 발신 이력·제안·확인할 일·위임 조건을 다룬다.
 // 실제 /api/conversations(worker1 계약 v2, worker2 협상 v3)만 호출한다. 목업 데이터 없음.
-import { $, escapeHtml, toast, showDialog } from "../core/utils.js";
-import { state, runtime, isLoggedIn, apiFetch, stopChatPolling } from "../core/store.js";
+import { $, escapeHtml, toast, showDialog, money } from "../core/utils.js";
+import { state, runtime, isLoggedIn, apiFetch, stopChatPolling, listingById } from "../core/store.js";
+import { parseOrderChatMessage } from "./cart-checkout.js";
 import {
   normalizeDeal, normalizeOffer, aiStatus, senderState, roleOf, roleLabel, counterpartLabel,
   SENDER_LABEL, SENDER_ICON, AI_STATUS_LABEL, STAGE_LABEL, stageSteps, describeOffer, formatWon,
@@ -220,9 +221,28 @@ export function createDealsView(deps) {
       : s === "other_ai" ? `${escapeHtml(msg.senderName || "상대")} 님의 농농이`
         : s === "me_ai" ? "내 농농이" : "나";
     const conf = s === "me_ai" && msg.aiConfidence ? ` · 확신 ${msg.aiConfidence === "high" ? "높음" : msg.aiConfidence === "medium" ? "보통" : "낮음"}` : "";
-    return `<div class="deal-msg ${mine ? "is-mine" : "is-theirs"} sender-${s}" data-sender-state="${s}">
+    const parsedOrder = parseOrderChatMessage(msg.body);
+    const bodyHtml = parsedOrder
+      ? `<div class="chat-order-card deal-order-card" data-order-number="${escapeHtml(parsedOrder.orderNumber)}">
+          <div class="chat-order-card-head">
+            <span class="chat-order-card-badge">🛡️ 안전결제 완료</span>
+            <span class="chat-order-card-num">${escapeHtml(parsedOrder.orderNumber)}</span>
+          </div>
+          <strong class="chat-order-card-title">${escapeHtml(parsedOrder.itemSummary)}</strong>
+          <div class="chat-order-card-meta">
+            <span>${escapeHtml(parsedOrder.deliveryMethod)}</span>
+            <span>·</span>
+            <span>${escapeHtml(parsedOrder.paymentMethod)}</span>
+          </div>
+          <div class="chat-order-card-foot">
+            <strong class="chat-order-card-total">${escapeHtml(parsedOrder.totalText)}</strong>
+            <button type="button" class="chat-order-card-btn" data-deal-open-orders>🧾 결제 내역 보기</button>
+          </div>
+        </div>`
+      : `<p>${escapeHtml(msg.body)}</p>`;
+    return `<div class="deal-msg ${mine ? "is-mine" : "is-theirs"} sender-${s}${parsedOrder ? " has-order-card" : ""}" data-sender-state="${s}">
       <span class="deal-msg-label">${SENDER_ICON[s]} ${who} <small>${escapeHtml(SENDER_LABEL[s])}${conf} · ${escapeHtml(clock(msg.createdAt))}</small></span>
-      <p>${escapeHtml(msg.body)}</p>
+      ${bodyHtml}
     </div>`;
   }
 
@@ -470,8 +490,18 @@ export function createDealsView(deps) {
   function renderControls(deal) {
     const ai = deal.ai;
     const activeDelegation = ai.mode !== "off";
+    const listing = deal.listingId ? listingById(deal.listingId) : null;
+    const priceBadge = listing?.price != null
+      ? `<span class="deal-context-price">${escapeHtml(money(listing.price))}${deal.listingType === "rent" ? "/일" : ""}</span>`
+      : "";
+    const buyerCommerceBtns = deal.myRole === "buyer" && deal.listingId
+      ? `<button type="button" class="button button-secondary button-sm deal-commerce-pill" data-deal-cart-add="${escapeHtml(deal.listingId)}">🛒 장바구니 담기</button>
+         <button type="button" class="button button-primary button-sm deal-commerce-pill" data-deal-checkout="${escapeHtml(deal.listingId)}">🛡️ 바로 결제/예약</button>`
+      : "";
     const btns = [
+      priceBadge,
       `<div class="trade-action-pair">`,
+      buyerCommerceBtns,
       `<button type="button" class="button button-secondary button-sm btn-direct-chat" data-deal-open-chat>1:1 대화 창 ↗</button>`,
       `<button type="button" class="button ${ui.delegationOpen ? "button-primary" : "btn-delegated-trade"} button-sm deal-delegation-btn${ui.delegationOpen ? " is-open" : ""}${activeDelegation ? " is-delegating" : ""}" data-deal-delegation-toggle aria-expanded="${ui.delegationOpen}" aria-controls="dealDelegationPanel">농농이 거래 전담</button>`,
       `</div>`,
@@ -1059,6 +1089,27 @@ export function createDealsView(deps) {
       if (retry) return act("retry_ai_job", { triggerSeq: ui.conv?.lastSeq }, "다시 시도를 요청했어요.", retry);
       if (t.closest("[data-deal-open-chat]")) {
         return deps.chatForm({ conversationId: ui.detailId, listingId: ui.conv?.listingId || null });
+      }
+      const dealCartBtn = t.closest("[data-deal-cart-add]");
+      if (dealCartBtn) {
+        window.dispatchEvent(new CustomEvent("moanong:cart-add", {
+          detail: { listingId: dealCartBtn.dataset.dealCartAdd },
+        }));
+        return;
+      }
+      const dealCheckoutBtn = t.closest("[data-deal-checkout]");
+      if (dealCheckoutBtn) {
+        window.dispatchEvent(new CustomEvent("moanong:checkout-open", {
+          detail: {
+            listingId: dealCheckoutBtn.dataset.dealCheckout,
+            options: { conversationId: ui.detailId || null, source: "chat" },
+          },
+        }));
+        return;
+      }
+      if (t.closest("[data-deal-open-orders]")) {
+        window.dispatchEvent(new CustomEvent("moanong:cart-open", { detail: { tab: "orders" } }));
+        return;
       }
       if (t.closest("[data-deal-offer-open]")) { ui.offerFormOpen = true; ui.tab = "progress"; renderDetail(); return $("dealOfferAmount")?.focus(); }
       if (t.closest("[data-deal-offer-cancel]")) { ui.offerFormOpen = false; return renderDetail(); }

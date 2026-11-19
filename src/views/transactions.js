@@ -9,12 +9,17 @@ import {
   senderState, SENDER_LABEL, roleOf, readSeqFor,
   presetsForListingType, getDelegationPreset, buildQuickDelegationPolicy,
 } from "../data/deals-model.js";
+import { formatOrderChatMessage, parseOrderChatMessage } from "./cart-checkout.js";
 
 export const DELEGATED_TRADE_EVENT = "moa:start-delegated-trade";
 
 let _activeStartDelegatedTrade = null;
+let _activeOpenChat = null;
 let _delegatedEventListener = null;
+let _openChatEventListener = null;
+let _orderCompletedListener = null;
 let _delegatedClickListener = null;
+const _syncedOrderNumbers = new Set();
 
 export function startDelegatedTradeForListing(listingId, options = {}) {
   if (typeof _activeStartDelegatedTrade === "function") {
@@ -299,11 +304,71 @@ function renderConvAiBadges(conv, role) {
   return badges.join("");
 }
 
+function renderChatOrderCard(parsed) {
+  return `
+    <div class="chat-order-card" data-order-number="${escapeHtml(parsed.orderNumber)}">
+      <div class="chat-order-card-head">
+        <span class="chat-order-card-badge">🛡️ 안전결제 완료</span>
+        <span class="chat-order-card-num">${escapeHtml(parsed.orderNumber)}</span>
+      </div>
+      <strong class="chat-order-card-title">${escapeHtml(parsed.itemSummary)}</strong>
+      <div class="chat-order-card-meta">
+        <span>${escapeHtml(parsed.deliveryMethod)}</span>
+        <span>·</span>
+        <span>${escapeHtml(parsed.paymentMethod)}</span>
+      </div>
+      <div class="chat-order-card-foot">
+        <strong class="chat-order-card-total">${escapeHtml(parsed.totalText)}</strong>
+        <button type="button" class="chat-order-card-btn" data-chat-open-orders>🧾 결제 내역 보기</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderChatListingContextHtml(listing, conv = null) {
+  const effective = listing || (conv?.listingId ? listingById(conv.listingId) : null);
+  const title = effective?.title || conv?.listingTitle || "농기계 매물";
+  const type = effective?.type || conv?.listingType || "rent";
+  const priceText = effective?.price != null
+    ? `${money(effective.price)}${type === "rent" ? "/일" : ""}`
+    : (type === "sale" ? "중고 거래" : "일일 대여");
+  const statusText = effective ? statusLabel(effective) : (type === "sale" ? "판매 중" : "예약 가능");
+  const statusCls = effective ? statusClass(effective) : "open";
+  const photoSrc = effective ? getListingPhotoSrc(effective) : "";
+  const isOwner = Boolean(
+    (effective?.ownerId && effective.ownerId === runtime.accountUser?.id) ||
+    (conv?.ownerId && conv.ownerId === runtime.accountUser?.id)
+  );
+  const targetListingId = effective?.id || conv?.listingId || "";
+
+  return `
+    <div class="chat-context-main">
+      ${photoSrc ? `<img class="chat-context-thumb" src="${escapeHtml(photoSrc)}" alt="${escapeHtml(title)}" />` : ""}
+      <div class="chat-context-copy">
+        <div class="chat-context-top">
+          <span class="chat-context-status is-${escapeHtml(statusCls)}">${escapeHtml(statusText)}</span>
+          <strong class="chat-context-price">${escapeHtml(priceText)}</strong>
+        </div>
+        <span class="chat-context-title">${escapeHtml(title)}${effective?.region ? ` · ${escapeHtml(effective.region)}` : ""}</span>
+      </div>
+    </div>
+    <div class="chat-context-pills" role="group" aria-label="매물 빠른 실행">
+      ${!isOwner && targetListingId ? `
+        <button type="button" id="chatQuickAddCart" class="chat-context-pill" data-chat-cart-add="${escapeHtml(targetListingId)}">🛒 장바구니 담기</button>
+        <button type="button" id="chatQuickCheckout" class="chat-context-pill is-primary" data-chat-checkout="${escapeHtml(targetListingId)}">🛡️ 바로 결제/예약</button>
+      ` : ""}
+      <button type="button" id="chatQuickDelegationPill" class="chat-context-pill is-ai" aria-controls="chatAiControlBar">🤖 거래전담</button>
+    </div>
+  `;
+}
+
 function chatForm(target) {
   const opts = typeof target === "string" ? { listingId: target } : (target || {});
   const listingId = opts.listingId || null;
   let conversationId = opts.conversationId || null;
   const draftBody = typeof opts.draftBody === "string" ? opts.draftBody : "";
+  const pendingOrderReceipt = opts.orderReceipt || null;
+  const autoSendReceipt = Boolean(opts.autoSendReceipt && pendingOrderReceipt);
   const item = listingId ? listingById(listingId) : null;
   const quickDelegation = Boolean(opts.quickDelegation);
   const listingType = item?.type === "sale" ? "sale" : "rent";
@@ -365,6 +430,7 @@ function chatForm(target) {
     <span class="step-pill">${quickDelegation ? "🤖 AI 농농이 거래전담 · 1:1 대화" : "1:1 농기계 채팅 문의"}</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
     <p id="chatSubtitle">${quickDelegation ? "원하는 조건을 고르고 버튼 한 번으로 AI 농농이에게 자동 대화·협상을 맡기세요." : "대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요."}</p>
+    <div id="chatListingContext" class="chat-listing-context">${renderChatListingContextHtml(item, null)}</div>
     <div class="chat-load-older-wrap">
       <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
     </div>
@@ -914,9 +980,13 @@ function chatForm(target) {
           const mine = sstate === "me_human" || sstate === "me_ai";
           const isAiProxy = msg.senderKind === "ai_proxy";
           const aiBadge = isAiProxy ? `<span class="chat-ai-badge" data-sender-state="${sstate}">🤖 ${escapeHtml(SENDER_LABEL[sstate])}</span>` : "";
-          return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}${enterClass}"${staggerStyle}>
+          const parsedOrder = parseOrderChatMessage(msg.body);
+          const bodyHtml = parsedOrder
+            ? renderChatOrderCard(parsedOrder)
+            : `<div>${escapeHtml(msg.body)}</div>`;
+          return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}${parsedOrder ? " has-order-card" : ""}${enterClass}"${staggerStyle}>
             <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}${aiBadge}</b>
-            <div>${escapeHtml(msg.body)}</div>
+            ${bodyHtml}
           </div>`;
         }).join("")
       : `<div class="chat-empty">아직 나눈 대화가 없어요. 기계 상태와 인수 조건을 먼저 물어보세요!</div>`;
@@ -940,6 +1010,9 @@ function chatForm(target) {
     const peerLabel = isBuyer ? `소유 농가 ${conv.ownerName}` : `문의 농가 ${conv.buyerName}`;
     if ($("formTitle")) $("formTitle").textContent = `${conv.listingTitle || item?.title || "농기계"} · 1:1 대화`;
     if ($("chatSubtitle")) $("chatSubtitle").textContent = `${peerLabel}님과의 대화`;
+    if ($("chatListingContext")) {
+      $("chatListingContext").innerHTML = renderChatListingContextHtml(item, conv);
+    }
     const openDealBtn = $("chatOpenDeal");
     if (openDealBtn && deps.openDeal && openDealBtn.hidden) {
       openDealBtn.hidden = false;
@@ -1062,6 +1135,21 @@ function chatForm(target) {
       // 사용자가 직접 연 채팅에서 메시지가 화면에 그려진 뒤에만 읽음 처리한다(폴링은 읽음 처리하지 않음).
       markVisibleMessagesRead();
       startPolling();
+      if (autoSendReceipt && pendingOrderReceipt) {
+        const orderNo = pendingOrderReceipt.orderNumber || pendingOrderReceipt.id || "";
+        const alreadySent = orderNo && (
+          _syncedOrderNumbers.has(orderNo) ||
+          sortedMessages().some((m) => typeof m.body === "string" && m.body.includes(orderNo))
+        );
+        if (!alreadySent) {
+          const receiptBody = formatOrderChatMessage(pendingOrderReceipt);
+          if (receiptBody) {
+            if (orderNo) _syncedOrderNumbers.add(orderNo);
+            await sendMessageBody(receiptBody);
+            toast("결제 완료 내역을 1:1 대화에 전달했습니다.");
+          }
+        }
+      }
       if (pendingInitialAi) {
         const init = pendingInitialAi;
         pendingInitialAi = null;
@@ -1155,6 +1243,52 @@ function chatForm(target) {
   $("chatDelegationTrigger")?.addEventListener("click", () => {
     // 설정 패널을 여는 동작만으로 대리 응대나 거래 전담을 켜지 않는다.
     setDelegationPanelOpen(!delegationPanelOpen);
+  });
+
+  $("chatListingContext")?.addEventListener("click", (event) => {
+    const cartBtn = event.target.closest("[data-chat-cart-add]");
+    if (cartBtn) {
+      const targetId = cartBtn.dataset.chatCartAdd || listingId || currentConv?.listingId;
+      if (targetId) {
+        if (typeof deps.addToCart === "function") {
+          deps.addToCart(targetId);
+        } else {
+          window.dispatchEvent(new CustomEvent("moanong:cart-add", { detail: { listingId: targetId } }));
+        }
+      }
+      return;
+    }
+    const checkoutBtn = event.target.closest("[data-chat-checkout]");
+    if (checkoutBtn) {
+      const targetId = checkoutBtn.dataset.chatCheckout || listingId || currentConv?.listingId;
+      if (targetId) {
+        stopChatPolling();
+        hideDialog($("formBackdrop"));
+        window.dispatchEvent(new CustomEvent("moanong:checkout-open", {
+          detail: {
+            listingId: targetId,
+            options: { conversationId: conversationId || null, source: "chat" },
+          },
+        }));
+      }
+      return;
+    }
+    if (event.target.closest("#chatQuickDelegationPill")) {
+      setDelegationPanelOpen(!delegationPanelOpen);
+      if (delegationPanelOpen) {
+        requestAnimationFrame(() => {
+          $("chatAiControlBar")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+        });
+      }
+    }
+  });
+
+  $("chatLog")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-chat-open-orders]")) {
+      stopChatPolling();
+      hideDialog($("formBackdrop"));
+      window.dispatchEvent(new CustomEvent("moanong:cart-open", { detail: { tab: "orders" } }));
+    }
   });
 
   let policyPanelOpen = initialPolicyPanelOpen;
@@ -1354,6 +1488,7 @@ function startDelegatedTrade(target, options = {}) {
 }
 
 _activeStartDelegatedTrade = startDelegatedTrade;
+_activeOpenChat = chatForm;
 if (typeof window !== "undefined") {
   window.startDelegatedTradeForListing = startDelegatedTradeForListing;
   if (_delegatedEventListener) {
@@ -1364,6 +1499,48 @@ if (typeof window !== "undefined") {
     startDelegatedTrade(detail.listingId || null, detail);
   };
   window.addEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
+
+  if (_openChatEventListener) {
+    window.removeEventListener("moanong:open-chat", _openChatEventListener);
+  }
+  _openChatEventListener = (event) => {
+    const detail = event?.detail || {};
+    if (typeof _activeOpenChat === "function") {
+      _activeOpenChat(detail);
+    }
+  };
+  window.addEventListener("moanong:open-chat", _openChatEventListener);
+
+  if (_orderCompletedListener) {
+    window.removeEventListener("moanong:order-completed", _orderCompletedListener);
+  }
+  _orderCompletedListener = async (event) => {
+    const { order, conversationId: convId, source } = event?.detail || {};
+    if (!order || source !== "chat" || !isLoggedIn()) return;
+    const orderNo = order.orderNumber || order.id || "";
+    const listingId = order.items?.[0]?.listingId || null;
+    if (!convId && !listingId) return;
+    if (orderNo && _syncedOrderNumbers.has(orderNo)) return;
+    const body = formatOrderChatMessage(order);
+    if (!body) return;
+    if (orderNo) _syncedOrderNumbers.add(orderNo);
+    try {
+      await apiFetch("/api/conversations", {
+        method: "POST",
+        json: {
+          action: "send",
+          id: crypto.randomUUID(),
+          ...(convId ? { conversationId: convId } : {}),
+          ...(listingId ? { listingId } : {}),
+          body,
+        },
+      });
+      deps.refreshAuthenticatedData?.({ includeRequests: false, includeConversations: true });
+    } catch {
+      if (orderNo) _syncedOrderNumbers.delete(orderNo);
+    }
+  };
+  window.addEventListener("moanong:order-completed", _orderCompletedListener);
 }
 if (typeof document !== "undefined") {
   if (_delegatedClickListener) {

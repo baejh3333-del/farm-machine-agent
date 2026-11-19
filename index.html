@@ -110,6 +110,8 @@
                 <button type="button" class="h2-sb-seg" data-sb="loc"><b>위치</b><span id="sbLoc" class="is-empty">동네 검색</span></button>
                 <i class="h2-sb-div" data-sb-rent aria-hidden="true"></i>
                 <button type="button" class="h2-sb-seg" data-sb="date" data-sb-rent><b>날짜</b><span id="sbDate" class="is-empty">날짜 추가</span></button>
+                <i class="h2-sb-div" data-sb-rent aria-hidden="true"></i>
+                <button type="button" class="h2-sb-seg" data-sb="time" data-sb-rent><b>시간</b><span id="sbTime">09:00–18:00</span></button>
                 <i class="h2-sb-div" aria-hidden="true"></i>
                 <button type="button" class="h2-sb-seg" data-sb="task"><b>작업</b><span id="sbTask" class="is-empty">작업 추가</span></button>
                 <button type="button" class="h2-sb-go" data-sb="go" aria-label="농기계 찾기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2.2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
@@ -322,7 +324,7 @@
               </div>
 
               <div class="quick-search-bar">
-                <div class="qs-field qs-dates" id="quickDateBox" role="group" aria-label="대여일과 반납일">
+                <div class="qs-field qs-dates" id="quickDateBox" role="group" aria-label="대여일과 반납일 및 시간">
                   <label class="qs-date" title="대여일">
                     <span class="qs-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"></rect><path d="M3.5 9.5h17M8 3v4M16 3v4"></path><path d="M7 14.5h6M11 12.5l2 2-2 2"></path></svg></span>
                     <span class="qs-date-text"><strong id="quickDateLabel">대여일</strong><small id="quickDateDay"></small></span>
@@ -334,6 +336,29 @@
                     <span class="qs-date-text"><strong id="quickDateEndLabel">반납일</strong><small id="quickDateEndDay"></small></span>
                     <input id="quickDateEndInput" type="date" aria-label="반납일 선택" />
                   </label>
+                  <span class="qs-date-divider" aria-hidden="true"></span>
+                  <div class="qs-time-wrap">
+                    <button type="button" class="qs-time-btn" id="quickTimeBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="quickTimePopover" title="대여 시간 선택">
+                      <span class="qs-icon" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+                      <span class="qs-date-text"><strong>시간 선택</strong><small id="quickTimeText">09:00–18:00</small></span>
+                    </button>
+                    <div class="qs-time-popover" id="quickTimePopover" role="dialog" aria-label="대여 시간 선택" hidden>
+                      <div class="qs-time-pop-grid">
+                        <label>
+                          <span>받는 시간</span>
+                          <select id="quickStartTimeSelect" aria-label="받는 시간"></select>
+                        </label>
+                        <label>
+                          <span>반납 시간</span>
+                          <select id="quickEndTimeSelect" aria-label="반납 시간"></select>
+                        </label>
+                      </div>
+                      <div class="qs-time-pop-actions">
+                        <button type="button" class="button button-secondary button-sm" id="quickTimeResetBtn">초기화</button>
+                        <button type="button" class="button button-primary button-sm" id="quickTimeApplyBtn">적용</button>
+                      </div>
+                    </div>
+                  </div>
                   <button type="button" class="qs-clear" id="clearQuickDate" title="날짜 초기화" aria-label="날짜 초기화" hidden>×</button>
                 </div>
 
@@ -374,12 +399,8 @@
               </div>
 
               <div class="market-controls">
-                <div class="view-mode-switch" role="group" aria-label="보기 방식 선택">
-                  <button type="button" class="view-mode-btn active" id="viewModeList" aria-pressed="true">목록 보기</button>
-                  <button type="button" class="view-mode-btn" id="viewModeMap" aria-pressed="false">지도 보기</button>
-                </div>
                 <button type="button" class="filter-trigger-btn" id="openFilters" aria-haspopup="dialog">
-                  <img class="picture-icon" src="./src/images/icons/sliders.jpg" alt="" width="32" height="32">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2" fill="#fff"></circle><circle cx="15" cy="12" r="2" fill="#fff"></circle><circle cx="11" cy="18" r="2" fill="#fff"></circle></svg>
                   <strong>상세 필터 · 평수/예산</strong>
                   <span id="filterCount" class="filter-count" hidden>0</span>
                 </button>
@@ -416,9 +437,6 @@
 
             <!-- 대여일 기상 예보 안내 배너 -->
             <div id="rentalWeatherBanner" class="rental-weather-banner" hidden aria-live="polite"></div>
-
-            <!-- 매물 위치 지도 패널 -->
-            <div id="listingMapPanel" class="listing-map-panel" hidden></div>
 
             <!-- 매물 카드 그리드 -->
             <div id="listingGrid" class="listing-grid" aria-live="polite"></div>
@@ -825,119 +843,135 @@
       </div>
 
       <div class="filter-body">
-        <div class="filter-table">
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>재배 작물</h3>
-              <small>중복 선택 가능</small>
+        <div class="filter-table filter-folder-list">
+          <details class="filter-group filter-folder" open>
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>농기계 기종</strong><small>카테고리별 폴더에서 선택</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="option-grid" id="filterMachines"></div>
             </div>
-            <div class="option-grid" id="filterCrops"></div>
-          </div>
+          </details>
 
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>농사 단계</h3>
-              <small>작업 시기별</small>
+          <details class="filter-group filter-folder" open>
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>재배 작물</strong><small>중복 선택 가능</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="option-grid" id="filterCrops"></div>
             </div>
-            <div class="option-grid" id="filterStages"></div>
-          </div>
+          </details>
 
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>세부 작업</h3>
-              <small>할 일 선택</small>
+          <details class="filter-group filter-folder">
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>농사 단계</strong><small>작업 시기별</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="option-grid" id="filterStages"></div>
             </div>
-            <div class="option-grid" id="filterOperations"></div>
-          </div>
+          </details>
 
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>농기계 종류</h3>
-              <small>기종 직접 선택</small>
+          <details class="filter-group filter-folder">
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>세부 작업</strong><small>할 일 선택</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="option-grid" id="filterOperations"></div>
             </div>
-            <div class="option-grid" id="filterMachines"></div>
-          </div>
+          </details>
 
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>작업할 농지 크기</h3>
-              <small>권장 면적과 비교</small>
-            </div>
-            <div class="filter-control-stack">
-              <div class="preset-chips" id="areaPresets">
-                <button type="button" class="preset-chip" data-area-preset="">전체 면적</button>
-                <button type="button" class="preset-chip" data-area-preset="100">소규모 · 약 100평</button>
-                <button type="button" class="preset-chip" data-area-preset="300">중규모 · 약 300평</button>
-                <button type="button" class="preset-chip" data-area-preset="600">대규모 · 약 600평</button>
+          <details class="filter-group filter-folder">
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>작업할 농지 크기</strong><small>권장 면적과 비교</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="filter-control-stack">
+                <div class="preset-chips" id="areaPresets">
+                  <button type="button" class="preset-chip" data-area-preset="">전체 면적</button>
+                  <button type="button" class="preset-chip" data-area-preset="100">소규모 · 약 100평</button>
+                  <button type="button" class="preset-chip" data-area-preset="300">중규모 · 약 300평</button>
+                  <button type="button" class="preset-chip" data-area-preset="600">대규모 · 약 600평</button>
+                </div>
+                <div class="range-fields">
+                  <label class="input-box-label">
+                    <span>직접 입력 (평)</span>
+                    <input id="areaInput" type="number" min="1" inputmode="numeric" placeholder="예: 300" />
+                  </label>
+                  <p class="helper-text">입력하신 평수(1평 ≈ 3.3㎡)에 알맞은 크기의 농기계를 추려드려요.</p>
+                </div>
               </div>
+            </div>
+          </details>
+
+          <details class="filter-group filter-folder">
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>예산 범위</strong><small id="budgetUnit">1일 대여료 기준</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="filter-control-stack">
+                <div class="preset-chips" id="pricePresets"></div>
+                <div class="range-fields">
+                  <label class="input-box-label">
+                    <span>최소 금액(원)</span>
+                    <input id="minPrice" type="number" min="0" step="10000" inputmode="numeric" placeholder="0" />
+                  </label>
+                  <span class="range-tilde">~</span>
+                  <label class="input-box-label">
+                    <span>최대 금액(원)</span>
+                    <input id="maxPrice" type="number" min="0" step="10000" inputmode="numeric" placeholder="제한 없음" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="filter-group filter-folder">
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>거리 · 희망 날짜</strong><small>내 동네 기준</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
               <div class="range-fields">
                 <label class="input-box-label">
-                  <span>직접 입력 (평)</span>
-                  <input id="areaInput" type="number" min="1" inputmode="numeric" placeholder="예: 300" />
+                  <span>이동 반경</span>
+                  <select id="radiusInput">
+                    <option value="all">전체 거리</option>
+                    <option value="10">10km 이내 (가까운 동네)</option>
+                    <option value="15">15km 이내</option>
+                    <option value="20">20km 이내</option>
+                    <option value="30">30km 이내</option>
+                  </select>
                 </label>
-                <p class="helper-text">입력하신 평수(1평 ≈ 3.3㎡)에 알맞은 크기의 농기계를 추려드려요.</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>예산 범위</h3>
-              <small id="budgetUnit">1일 대여료 기준</small>
-            </div>
-            <div class="filter-control-stack">
-              <div class="preset-chips" id="pricePresets"></div>
-              <div class="range-fields">
-                <label class="input-box-label">
-                  <span>최소 금액(원)</span>
-                  <input id="minPrice" type="number" min="0" step="10000" inputmode="numeric" placeholder="0" />
+                <label class="input-box-label" id="dateFilterLabel">
+                  <span>대여 시작일</span>
+                  <input id="dateInput" type="date" />
                 </label>
-                <span class="range-tilde">~</span>
-                <label class="input-box-label">
-                  <span>최대 금액(원)</span>
-                  <input id="maxPrice" type="number" min="0" step="10000" inputmode="numeric" placeholder="제한 없음" />
+                <label class="input-box-label" id="dateEndFilterLabel">
+                  <span>반납일 (선택)</span>
+                  <input id="dateEndInput" type="date" />
                 </label>
               </div>
             </div>
-          </div>
+          </details>
 
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>거리 · 희망 날짜</h3>
-              <small>내 동네 기준</small>
+          <details class="filter-group filter-folder">
+            <summary class="filter-group-label filter-folder-summary">
+              <span><strong>제조사 · 상태</strong><small>기계 컨디션</small></span>
+              <span class="filter-folder-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="filter-folder-body">
+              <div class="filter-control-stack">
+                <div class="option-grid" id="filterConditions"></div>
+                <div class="option-grid" id="filterBrands"></div>
+              </div>
             </div>
-            <div class="range-fields">
-              <label class="input-box-label">
-                <span>이동 반경</span>
-                <select id="radiusInput">
-                  <option value="all">전체 거리</option>
-                  <option value="10">10km 이내 (가까운 동네)</option>
-                  <option value="15">15km 이내</option>
-                  <option value="20">20km 이내</option>
-                  <option value="30">30km 이내</option>
-                </select>
-              </label>
-              <label class="input-box-label" id="dateFilterLabel">
-                <span>대여 시작일</span>
-                <input id="dateInput" type="date" />
-              </label>
-              <label class="input-box-label" id="dateEndFilterLabel">
-                <span>반납일 (선택)</span>
-                <input id="dateEndInput" type="date" />
-              </label>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <div class="filter-group-label">
-              <h3>제조사 · 상태</h3>
-              <small>기계 컨디션</small>
-            </div>
-            <div class="filter-control-stack">
-              <div class="option-grid" id="filterConditions"></div>
-              <div class="option-grid" id="filterBrands"></div>
-            </div>
-          </div>
+          </details>
         </div>
       </div>
 

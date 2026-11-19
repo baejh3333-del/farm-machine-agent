@@ -13,12 +13,57 @@ const SORT_LABELS = {
   inspection: "최근 점검순",
 };
 
+const CATALOG_TIME_OPTIONS = [
+  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00",
+];
+
+const MACHINE_FOLDER_DEFS = [
+  { id: "power", label: "동력기·경운", ids: ["tractor", "cultivator", "ridingCultivator", "tiller"] },
+  { id: "soil", label: "밭·논 준비 작업기", ids: ["rotavator", "plow", "ridgeMulcher", "ridger", "spreader"] },
+  { id: "plant", label: "파종·이식기", ids: ["ricePlanter", "transplanter", "potatoPlanter", "garlicOnionPlanter", "seeder"] },
+  { id: "care", label: "방제·제초·관리", ids: ["speedSprayer", "agriDrone", "sprayer", "mower", "shredder"] },
+  { id: "harvest", label: "수확·탈곡·가공", ids: ["combine", "potatoHarvester", "rootHarvester", "forageHarvester", "thresher", "baler", "dryer", "sorter"] },
+  { id: "transport", label: "운반·굴착·과수", ids: ["carrier", "excavator", "aerialLift", "loader"] },
+];
+
+function groupMachineTypes() {
+  const assigned = new Set();
+  const groups = MACHINE_FOLDER_DEFS.map((def) => {
+    const items = def.ids
+      .map((id) => MACHINE_BY_ID[id])
+      .filter(Boolean);
+    items.forEach((m) => assigned.add(m.id));
+    return { id: def.id, label: def.label, items };
+  }).filter((g) => g.items.length > 0);
+  const rest = MACHINE_TYPES.filter((m) => !assigned.has(m.id));
+  if (rest.length) groups.push({ id: "other", label: "기타 기종", items: rest });
+  return groups;
+}
+
+function groupCropsByCategory() {
+  const map = new Map();
+  for (const crop of CROPS) {
+    const cat = crop.category || "기타 작물";
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat).push(crop);
+  }
+  return [...map.entries()].map(([label, items], idx) => ({
+    id: `crop-cat-${idx}`,
+    label,
+    items,
+  }));
+}
+
 export function createCatalogViews(deps) {
 let lastPreviewCount = null;
 let previewCountRaf = 0;
 let splitLayoutInitialized = false;
 let selectedMiniMapId = "";
 let mobileFiltersOpen = false;
+const openMachineFolders = new Set();
+const openCropFolders = new Set();
+const openModalFolders = new Set();
 
 function ensureSortOptions() {
   if (typeof document === "undefined") return;
@@ -185,17 +230,118 @@ function ensureSplitLayout() {
   mainCol.id = "catalogMain";
 
   // Move existing market result elements into the right main column, preserving IDs & listeners
+  // Do NOT render the large inline map (#listingMapPanel) inside #market; only the left sidebar mini-map is used.
   const toolbar = market.querySelector(".toolbar");
   const weatherBanner = $("rentalWeatherBanner");
   const mapPanel = $("listingMapPanel");
+  if (mapPanel) {
+    mapPanel.hidden = true;
+    mapPanel.innerHTML = "";
+  }
 
   if (toolbar) mainCol.appendChild(toolbar);
   if (weatherBanner) mainCol.appendChild(weatherBanner);
-  if (mapPanel) mainCol.appendChild(mapPanel);
   mainCol.appendChild(listingGrid);
 
   splitShell.append(sidebar, mainCol);
   market.appendChild(splitShell);
+
+  // Inject Time Picker button right alongside dates only if index.html does not already provide #quickTimeBtn
+  const quickDateBox = $("quickDateBox");
+  if (quickDateBox && !$("quickTimeBtn") && !$("catalogTimeBox")) {
+    const timeBox = document.createElement("div");
+    timeBox.className = "qs-field qs-time-field";
+    timeBox.id = "catalogTimeBox";
+    const startT = state.filters.startTime || "09:00";
+    const endT = state.filters.endTime || "18:00";
+    timeBox.innerHTML = `
+      <span class="qs-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+      <button type="button" class="qs-time-trigger" id="catalogTimeBtn" aria-haspopup="dialog" aria-expanded="false">
+        <span class="qs-time-kicker">시간 선택</span>
+        <strong id="catalogTimeLabel">${escapeHtml(startT)}–${escapeHtml(endT)}</strong>
+      </button>
+      <div class="qs-time-pop" id="catalogTimePop" role="dialog" aria-label="대여 시간 선택" hidden>
+        <div class="qs-time-presets">
+          <button type="button" class="qs-time-preset" data-cat-time-preset="08:00,12:00">오전 (08~12)</button>
+          <button type="button" class="qs-time-preset" data-cat-time-preset="13:00,18:00">오후 (13~18)</button>
+          <button type="button" class="qs-time-preset" data-cat-time-preset="09:00,18:00">종일 (09~18)</button>
+        </div>
+        <div class="qs-time-selects">
+          <label><span>시작</span><select id="catalogStartTime">${CATALOG_TIME_OPTIONS.map((t) => `<option value="${t}"${startT === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+          <label><span>종료</span><select id="catalogEndTime">${CATALOG_TIME_OPTIONS.map((t) => `<option value="${t}"${endT === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+        </div>
+      </div>
+    `;
+    quickDateBox.insertAdjacentElement("afterend", timeBox);
+
+    const syncCatalogTime = () => {
+      const s = state.filters.startTime || "09:00";
+      const en = state.filters.endTime || "18:00";
+      if ($("catalogTimeLabel")) $("catalogTimeLabel").textContent = `${s}–${en}`;
+      if ($("catalogStartTime")) $("catalogStartTime").value = s;
+      if ($("catalogEndTime")) $("catalogEndTime").value = en;
+      if ($("homeTimeText")) $("homeTimeText").textContent = `${s}–${en}`;
+      if ($("headerMapTimeLabel")) $("headerMapTimeLabel").textContent = `${s}–${en}`;
+    };
+
+    $("catalogTimeBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pop = $("catalogTimePop");
+      if (!pop || $("catalogTimeBtn")?.disabled) return;
+      const open = pop.hidden;
+      pop.hidden = !open;
+      $("catalogTimeBtn")?.setAttribute("aria-expanded", String(open));
+    });
+
+    $("catalogTimePop")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const preset = e.target.closest("[data-cat-time-preset]");
+      if (!preset) return;
+      const [s, en] = preset.dataset.catTimePreset.split(",");
+      state.filters.startTime = s;
+      state.filters.endTime = en;
+      persist(deps.updateBadges);
+      syncCatalogTime();
+      $("catalogTimePop").hidden = true;
+      $("catalogTimeBtn")?.setAttribute("aria-expanded", "false");
+    });
+
+    const onSelectChange = () => {
+      const s = $("catalogStartTime")?.value || "09:00";
+      let en = $("catalogEndTime")?.value || "18:00";
+      if (en <= s) en = s;
+      state.filters.startTime = s;
+      state.filters.endTime = en;
+      persist(deps.updateBadges);
+      syncCatalogTime();
+    };
+    $("catalogStartTime")?.addEventListener("change", onSelectChange);
+    $("catalogEndTime")?.addEventListener("change", onSelectChange);
+
+    document.addEventListener("click", (e) => {
+      const pop = $("catalogTimePop");
+      if (pop && !pop.hidden && !timeBox.contains(e.target)) {
+        pop.hidden = true;
+        $("catalogTimeBtn")?.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // Persist open/closed state of nested sidebar folders across re-renders
+  sidebar.addEventListener("toggle", (event) => {
+    const details = event.target;
+    if (!(details instanceof HTMLDetailsElement)) return;
+    const mFolder = details.dataset.machineFolder;
+    if (mFolder) {
+      if (details.open) openMachineFolders.add(mFolder);
+      else openMachineFolders.delete(mFolder);
+    }
+    const cFolder = details.dataset.cropFolder;
+    if (cFolder) {
+      if (details.open) openCropFolders.add(cFolder);
+      else openCropFolders.delete(cFolder);
+    }
+  }, true);
 
   // Wire sidebar events
   $("catalogMobileFilterToggle")?.addEventListener("click", () => {
@@ -367,30 +513,78 @@ function renderSidebarFilters() {
   const machineListEl = $("sidebarMachineList");
   if (machineListEl) {
     const baseWithoutMachine = filteredListings({ ...state.filters, machineTypes: [] });
-    machineListEl.innerHTML = MACHINE_TYPES.map((m) => {
-      const count = baseWithoutMachine.filter((item) => item.machineType === m.id).length;
-      const checked = state.filters.machineTypes.includes(m.id);
-      return `
-        <label class="csf-check-row${checked ? " is-checked" : ""}">
-          <input type="checkbox" data-sidebar-group="machineTypes" value="${escapeHtml(m.id)}" ${checked ? "checked" : ""} />
-          <span class="csf-check-text">${escapeHtml(m.label)}</span>
-          <span class="csf-check-count">${count}</span>
-        </label>
-      `;
-    }).join("");
+    const countByType = new Map();
+    for (const item of baseWithoutMachine) {
+      countByType.set(item.machineType, (countByType.get(item.machineType) || 0) + 1);
+    }
+    const folders = groupMachineTypes();
+    machineListEl.innerHTML = folders
+      .map((folder) => {
+        const selectedInFolder = folder.items.filter((m) => state.filters.machineTypes.includes(m.id)).length;
+        const totalInFolder = folder.items.reduce((sum, m) => sum + (countByType.get(m.id) || 0), 0);
+        const isOpen = openMachineFolders.has(folder.id) || selectedInFolder > 0;
+        return `
+          <details class="csf-folder" data-machine-folder="${escapeHtml(folder.id)}"${isOpen ? " open" : ""}>
+            <summary class="csf-folder-summary">
+              <span class="csf-folder-caret" aria-hidden="true">▸</span>
+              <span class="csf-folder-title">${escapeHtml(folder.label)}</span>
+              ${selectedInFolder ? `<span class="csf-folder-sel">${selectedInFolder}</span>` : ""}
+              <span class="csf-folder-count">${totalInFolder}</span>
+            </summary>
+            <div class="csf-folder-body">
+              ${folder.items
+                .map((m) => {
+                  const count = countByType.get(m.id) || 0;
+                  const checked = state.filters.machineTypes.includes(m.id);
+                  return `
+                    <label class="csf-check-row${checked ? " is-checked" : ""}">
+                      <input type="checkbox" data-sidebar-group="machineTypes" value="${escapeHtml(m.id)}" ${checked ? "checked" : ""} />
+                      <span class="csf-check-text">${escapeHtml(m.label)}</span>
+                      <span class="csf-check-count">${count}</span>
+                    </label>
+                  `;
+                })
+                .join("")}
+            </div>
+          </details>
+        `;
+      })
+      .join("");
   }
 
   const cropListEl = $("sidebarCropList");
   if (cropListEl) {
-    cropListEl.innerHTML = CROPS.map((crop) => {
-      const checked = state.filters.cropIds.includes(crop.id);
-      return `
-        <label class="csf-check-row${checked ? " is-checked" : ""}">
-          <input type="checkbox" data-sidebar-group="cropIds" value="${escapeHtml(crop.id)}" ${checked ? "checked" : ""} />
-          <span class="csf-check-text">${escapeHtml(crop.name)}</span>
-        </label>
-      `;
-    }).join("");
+    const cropFolders = groupCropsByCategory();
+    cropListEl.classList.remove("csf-check-grid");
+    cropListEl.innerHTML = cropFolders
+      .map((folder) => {
+        const selectedInFolder = folder.items.filter((c) => state.filters.cropIds.includes(c.id)).length;
+        const isOpen = openCropFolders.has(folder.id) || selectedInFolder > 0;
+        return `
+          <details class="csf-folder" data-crop-folder="${escapeHtml(folder.id)}"${isOpen ? " open" : ""}>
+            <summary class="csf-folder-summary">
+              <span class="csf-folder-caret" aria-hidden="true">▸</span>
+              <span class="csf-folder-title">${escapeHtml(folder.label)}</span>
+              ${selectedInFolder ? `<span class="csf-folder-sel">${selectedInFolder}</span>` : ""}
+              <span class="csf-folder-count">${folder.items.length}</span>
+            </summary>
+            <div class="csf-folder-body csf-folder-grid">
+              ${folder.items
+                .map((crop) => {
+                  const checked = state.filters.cropIds.includes(crop.id);
+                  return `
+                    <label class="csf-check-row${checked ? " is-checked" : ""}">
+                      <input type="checkbox" data-sidebar-group="cropIds" value="${escapeHtml(crop.id)}" ${checked ? "checked" : ""} />
+                      <span class="csf-check-text">${escapeHtml(crop.name)}</span>
+                    </label>
+                  `;
+                })
+                .join("")}
+            </div>
+          </details>
+        `;
+      })
+      .join("");
   }
 
   const condListEl = $("sidebarConditionList");
@@ -435,6 +629,12 @@ function setTransaction(type) {
     $("quickDateInput").disabled = type === "sale";
     $("quickDateEndInput").disabled = type === "sale";
   }
+  const catalogTimeBox = $("catalogTimeBox");
+  if (catalogTimeBox) {
+    catalogTimeBox.classList.toggle("disabled-field", type === "sale");
+    if ($("catalogTimeBtn")) $("catalogTimeBtn").disabled = type === "sale";
+    if (type === "sale" && $("catalogTimePop")) $("catalogTimePop").hidden = true;
+  }
   persist(deps.updateBadges);
   deps.renderAll();
 }
@@ -455,6 +655,13 @@ function syncQuickSearchInputs() {
     $("quickDateEndLabel").textContent = e.date;
     $("quickDateEndDay").textContent = e.weekday;
     $("clearQuickDate").hidden = !state.filters.date;
+  }
+  if ($("catalogTimeLabel")) {
+    const startT = state.filters.startTime || "09:00";
+    const endT = state.filters.endTime || "18:00";
+    $("catalogTimeLabel").textContent = `${startT}–${endT}`;
+    if ($("catalogStartTime")) $("catalogStartTime").value = startT;
+    if ($("catalogEndTime")) $("catalogEndTime").value = endT;
   }
   if ($("quickRadiusSelect")) {
     $("quickRadiusSelect").value = state.filters.radius || "all";
@@ -523,10 +730,11 @@ function renderQuickWizard() {
   const tipText = (activeOpId && tipGroup[activeOpId]) || tipGroup.default || BEGINNER_TIPS.all.default;
 
   const calloutTitle = crop
-    ? `${crop.emoji} ${crop.name} 농사${activeOpId ? ` · '${OPERATION_BY_ID[activeOpId]?.label}'` : ""} 꿀팁!`
-    : ` 초보 농부를 위한 농기계 선택 팁`;
+    ? `${crop.name} 농사${activeOpId ? ` · '${OPERATION_BY_ID[activeOpId]?.label}'` : ""} 팁`
+    : `초보 농부를 위한 농기계 선택 팁`;
 
-  $("cropCallout").querySelector(".callout-icon").innerHTML = pictureIcon(crop?.id || "bulb");
+  const calloutIcon = $("cropCallout")?.querySelector(".callout-icon");
+  if (calloutIcon) calloutIcon.hidden = true;
   $("cropCallout").querySelector("strong").textContent = calloutTitle;
   $("cropCallout").querySelector("p").textContent = tipText;
 
@@ -565,7 +773,7 @@ function renderQuickWizard() {
     );
 }
 
-// 기종별 빠른 카테고리 탭바 (쏘카 스타일)
+// 기종별 빠른 카테고리 탭바 (텍스트 전용)
 function renderMachineCategoryBar() {
   const baseFiltersWithoutMachine = { ...state.filters, machineTypes: [] };
   const baseMatching = filteredListings(baseFiltersWithoutMachine);
@@ -573,18 +781,13 @@ function renderMachineCategoryBar() {
 
   const tabs = [
     `<button type="button" class="machine-tab ${isAll ? "active" : ""}" data-machine-tab="all" aria-pressed="${isAll}">
-      <span class="mt-emoji" aria-hidden="true"><img class="mt-photo" src="${machineImage()}" alt="" /></span>
       <span class="mt-caption"><span class="mt-name">전체 기종</span><span class="mt-count">${baseMatching.length}</span></span>
     </button>`,
     ...MACHINE_TYPES.map((m) => {
-      const matchingItems = baseMatching.filter((item) => item.machineType === m.id);
-      const count = matchingItems.length;
-      const photo = allListings().find((item) => item.machineType === m.id
-        && deps.hasListingPhoto(item))?.photo;
+      const count = baseMatching.filter((item) => item.machineType === m.id).length;
       const active = state.filters.machineTypes.includes(m.id);
       return `
         <button type="button" class="machine-tab ${active ? "active" : ""}" data-machine-tab="${m.id}" aria-pressed="${active}">
-          <span class="mt-emoji" aria-hidden="true"><img class="mt-photo" src="${photo ? escapeHtml(photo) : machineImage(m)}" alt="" /></span>
           <span class="mt-caption"><span class="mt-name">${escapeHtml(m.label)}</span><span class="mt-count">${count}</span></span>
         </button>
       `;
@@ -610,7 +813,7 @@ function renderMachineCategoryBar() {
     );
 }
 
-// 상세 필터 모달 내부 옵션 렌더링 (다나와 + 토스 스타일)
+// 상세 필터 모달 내부 옵션 렌더링 (이모지·썸네일 제거, 깔끔한 텍스트 체크박스)
 function selectOption(group, values, checked, recommendedIds = []) {
   return values
     .map((item) => {
@@ -619,10 +822,32 @@ function selectOption(group, values, checked, recommendedIds = []) {
       return `
         <label class="option ${isChecked ? "is-checked" : ""} ${isRec ? "is-recommended" : ""}">
           <input type="checkbox" data-filter-group="${group}" value="${item.id}" ${isChecked ? "checked" : ""}>
-          ${group === "cropIds" ? pictureIcon(item.id) : group === "machineTypes" ? `<img class="picture-icon" src="${machineImage(item)}" alt="" width="32" height="32">` : group === "conditions" && ["good", "repair"].includes(item.id) ? pictureIcon(item.id) : ""}
           <span class="opt-text">${escapeHtml(item.label || item.name)}</span>
           ${isRec ? `<span class="opt-rec-badge">추천</span>` : ""}
         </label>
+      `;
+    })
+    .join("");
+}
+
+function renderFolderizedOptions(group, folders, checked) {
+  return folders
+    .map((folder) => {
+      const selCount = folder.items.filter((it) => checked.includes(it.id)).length;
+      const folderKey = `${group}:${folder.id}`;
+      const isOpen = openModalFolders.has(folderKey) || selCount > 0;
+      return `
+        <details class="filter-folder" data-modal-folder="${escapeHtml(folderKey)}"${isOpen ? " open" : ""}>
+          <summary class="filter-folder-summary">
+            <span class="filter-folder-caret" aria-hidden="true">▸</span>
+            <span class="filter-folder-title">${escapeHtml(folder.label)}</span>
+            ${selCount ? `<span class="filter-folder-sel">${selCount}개 선택</span>` : ""}
+            <span class="filter-folder-count">${folder.items.length}</span>
+          </summary>
+          <div class="filter-folder-options">
+            ${selectOption(group, folder.items, checked)}
+          </div>
+        </details>
       `;
     })
     .join("");
@@ -632,13 +857,23 @@ function renderFilterOptions() {
   const activeCropId = runtime.draft.cropIds[0] || (state.selectedCrop !== "all" ? state.selectedCrop : null);
   const recOps = activeCropId ? CROP_OPERATIONS[activeCropId] || [] : [];
 
-  $("filterCrops").innerHTML = selectOption("cropIds", CROPS, runtime.draft.cropIds);
+  $("filterCrops").classList.add("is-folderized");
+  $("filterCrops").innerHTML = renderFolderizedOptions("cropIds", groupCropsByCategory(), runtime.draft.cropIds);
   $("filterStages").innerHTML = selectOption("stageIds", STAGES, runtime.draft.stageIds);
   const visibleOperations = runtime.draft.stageIds.length
     ? OPERATIONS.filter((operation) => runtime.draft.stageIds.includes(operation.stage))
     : OPERATIONS;
   $("filterOperations").innerHTML = selectOption("operations", visibleOperations, runtime.draft.operations, recOps);
-  $("filterMachines").innerHTML = selectOption("machineTypes", MACHINE_TYPES, runtime.draft.machineTypes);
+  $("filterMachines").classList.add("is-folderized");
+  $("filterMachines").innerHTML = renderFolderizedOptions("machineTypes", groupMachineTypes(), runtime.draft.machineTypes);
+  $("filterBackdrop")?.querySelectorAll("details[data-modal-folder]").forEach((det) => {
+    det.addEventListener("toggle", () => {
+      const key = det.dataset.modalFolder;
+      if (!key) return;
+      if (det.open) openModalFolders.add(key);
+      else openModalFolders.delete(key);
+    });
+  });
   $("filterBrands").innerHTML = selectOption(
     "brands",
     [...new Set(allListings().map((item) => item.brand))].sort().map((brand) => ({ id: brand, label: brand })),
@@ -829,7 +1064,7 @@ function applyFilters() {
 function buildFilterChips() {
   const f = state.filters;
   const chips = [];
-  f.cropIds.forEach((id) => chips.push({ group: "cropIds", value: id, label: `${CROP_BY_ID[id]?.emoji || ""} ${CROP_BY_ID[id]?.name}` }));
+  f.cropIds.forEach((id) => chips.push({ group: "cropIds", value: id, label: CROP_BY_ID[id]?.name }));
   f.stageIds.forEach((id) => chips.push({ group: "stageIds", value: id, label: STAGES.find((s) => s.id === id)?.label }));
   f.operations.forEach((id) => chips.push({ group: "operations", value: id, label: OPERATION_BY_ID[id]?.label }));
   f.machineTypes.forEach((id) => chips.push({ group: "machineTypes", value: id, label: MACHINE_BY_ID[id]?.label }));
@@ -970,15 +1205,13 @@ function renderListings() {
       refreshWeatherAndMapConfig({ onUpdate: () => renderListings() });
     },
   });
-  $("listingGrid").hidden = isMap;
 
-  if (isMap) {
-    renderListingMap(items, {
-      onOpenDetail: (id) => openDetail(id),
-      onGpsUpdated: () => renderListings(),
-    });
-  } else {
-    renderListingMap(items);
+  // Always show listing list immediately under count/sort bar; large inline map is removed
+  $("listingGrid").hidden = false;
+  const inlineMapPanel = $("listingMapPanel");
+  if (inlineMapPanel) {
+    inlineMapPanel.hidden = true;
+    inlineMapPanel.innerHTML = "";
   }
 
   const selectedItem = selectedMiniMapId ? items.find((i) => i.id === selectedMiniMapId) : null;

@@ -851,6 +851,10 @@
     grid-template-columns: 1fr;
   }
 
+  .checkout-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .checkout-dialog {
     width: 100vw;
     max-height: 100dvh;
@@ -866,6 +870,285 @@
     width: 58px;
     height: 58px;
   }
+}
+
+/* Upgraded Commerce UX: Escrow Strip, Badges, Time Row, Breakdown, 4-Step Checkout */
+.cart-escrow-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #eef8f1;
+  border: 1px solid rgba(30, 155, 75, 0.24);
+  font-size: 0.78rem;
+  color: #165232;
+  line-height: 1.35;
+}
+
+.cart-item-badges {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cart-delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 66, 51, 0.16);
+  background: #f5f8f6;
+  color: #274a39;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.cart-delivery-badge:hover {
+  border-color: var(--primary, #1e9b4b);
+  background: #eaf6ee;
+}
+
+.cart-delivery-badge.is-delivery {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.cart-time-row,
+.cart-sale-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.cart-time-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted, #5c6f65);
+}
+
+.cart-time-row select {
+  padding: 4px 7px;
+  border: 1px solid rgba(23, 66, 51, 0.18);
+  border-radius: 7px;
+  background: #ffffff;
+  font-size: 0.78rem;
+  color: var(--forest-deep, #132c22);
+}
+
+.cart-item-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(23, 66, 51, 0.1);
+}
+
+.cart-inline-chat-btn {
+  border: 1px solid rgba(23, 66, 51, 0.18);
+  background: #ffffff;
+  color: var(--forest, #174233);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.cart-inline-chat-btn:hover {
+  background: #eef8f1;
+  border-color: var(--primary, #1e9b4b);
+}
+
+.cart-order-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cart-price-breakdown {
+  display: grid;
+  gap: 5px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(23, 66, 51, 0.08);
+}
+
+.cart-breakdown-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted, #5c6f65);
+}
+
+.cart-free-tag {
+  color: #166534;
+  font-weight: 700;
+}
+
+/* 4-Step Safe Checkout */
+.checkout-trust-banner {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #edf8f1 0%, #f7fbf3 100%);
+  border: 1px solid rgba(30, 155, 75, 0.26);
+  display: grid;
+  gap: 10px;
+}
+
+.checkout-trust-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.checkout-trust-copy strong {
+  font-size: 0.92rem;
+  color: #144d2e;
+}
+
+.checkout-trust-copy span {
+  font-size: 0.78rem;
+  color: #365947;
+}
+
+.checkout-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.checkout-stepper li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(23, 66, 51, 0.1);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted, #5c6f65);
+}
+
+.checkout-stepper li.is-active {
+  background: #ffffff;
+  border-color: rgba(30, 155, 75, 0.4);
+  color: #144d2e;
+}
+
+.checkout-stepper li span {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #e6f4ec;
+  color: #166534;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.checkout-step-card {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 66, 51, 0.1);
+  background: #ffffff;
+}
+
+.checkout-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkout-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--forest, #174233);
+  color: #dcf29d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  flex: none;
+}
+
+.checkout-radio-pill span small {
+  margin-left: 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted, #5c6f65);
+}
+
+.checkout-pay-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.checkout-pay-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e6f5ec;
+  color: #166534;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.checkout-agreements {
+  display: grid;
+  gap: 8px;
+}
+
+.checkout-agree em {
+  color: #c83e2b;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.checkout-escrow-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #e6f5ec;
+  color: #166534;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.checkout-receipt-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.checkout-receipt-chat-btn {
+  width: 100%;
+}
+
+.checkout-receipt-secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {

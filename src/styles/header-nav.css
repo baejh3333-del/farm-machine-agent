@@ -252,7 +252,8 @@
 }
 
 .mypage-menu-item:focus-visible,
-#myPageButton:focus-visible {
+#myPageButton:focus-visible,
+.header-icon-btn:focus-visible {
   outline: 2px solid var(--forest, #174233);
   outline-offset: 2px;
 }
@@ -261,9 +262,95 @@
   margin-top: 8px;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-icon-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.header-icon-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(23, 66, 51, 0.14);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--forest-deep, #132c22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition:
+    background-color var(--dur-fast, 160ms) ease,
+    border-color var(--dur-fast, 160ms) ease,
+    color var(--dur-fast, 160ms) ease,
+    transform var(--dur-fast, 160ms) var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.header-icon-btn:hover {
+  background: #eef6f0;
+  border-color: var(--forest, #174233);
+  color: var(--forest, #174233);
+}
+
+.header-icon-btn.active {
+  background: var(--forest, #174233);
+  border-color: var(--forest, #174233);
+  color: #ffffff;
+}
+
+.header-cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #1e9b4b;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  border: 2px solid #ffffff;
+  pointer-events: none;
+}
+
+.header-cart-badge[hidden] {
+  display: none;
+}
+
 #myPageButton .mypage-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: #f7c548;
-  margin-left: 4px;
+  border: 1.5px solid #ffffff;
+  margin-left: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 1241px) {
+  .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: 16px;
+  }
+  .sidebar > .brand { justify-self: start; }
+  .sidebar > .topbar-left { justify-self: end; min-width: 0; }
 }
 
 @media (min-width: 1241px) {

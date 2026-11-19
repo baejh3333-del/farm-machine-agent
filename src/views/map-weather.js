@@ -2037,3 +2037,258 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     }
   }
 }
+
+let catalogMiniMapRenderSeq = 0;
+
+function renderCatalogMiniMapFallback(canvasEl, origin, items, selectedId, { onSelectListing } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const points = list.map((item) => {
+    const c = listingCoords(item, item.id);
+    return { item, lat: Number(c.lat), lng: Number(c.lng) };
+  });
+
+  const allLats = [Number(origin.lat), ...points.map((p) => p.lat)].filter(Number.isFinite);
+  const allLngs = [Number(origin.lng), ...points.map((p) => p.lng)].filter(Number.isFinite);
+  const minLat = Math.min(...allLats);
+  const maxLat = Math.max(...allLats);
+  const minLng = Math.min(...allLngs);
+  const maxLng = Math.max(...allLngs);
+  const latSpan = Math.max(0.03, (maxLat - minLat) * 1.35);
+  const lngSpan = Math.max(0.04, (maxLng - minLng) * 1.35);
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+
+  const project = (lat, lng) => {
+    const x = Math.max(10, Math.min(90, 50 + ((lng - centerLng) / lngSpan) * 76));
+    const y = Math.max(16, Math.min(82, 50 - ((lat - centerLat) / latSpan) * 66));
+    return { x, y };
+  };
+
+  const originPos = project(Number(origin.lat), Number(origin.lng));
+  const visiblePoints = points.slice(0, 24);
+
+  canvasEl.innerHTML = `
+    <div class="catalog-minimap-fallback" role="region" aria-label="매물 위치 미니 지도">
+      <svg class="catalog-minimap-svg" viewBox="0 0 320 200" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <pattern id="catalogMiniMapGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(23,66,51,0.07)" stroke-width="1" />
+          </pattern>
+        </defs>
+        <rect width="320" height="200" fill="#eef4ee" />
+        <rect width="320" height="200" fill="url(#catalogMiniMapGrid)" />
+        <path d="M-10,165 C70,138 140,104 215,82 C265,67 295,52 330,34" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" />
+        <path d="M52,-10 C86,58 135,105 198,136 C252,162 292,184 316,210" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+        <path d="M12,56 Q130,82 220,42 T332,68" fill="none" stroke="#cfe6f5" stroke-width="9" stroke-linecap="round" opacity="0.7" />
+      </svg>
+      <div class="catalog-minimap-origin-dot" style="left:${originPos.x.toFixed(1)}%;top:${originPos.y.toFixed(1)}%" title="내 위치 (${escapeHtml(state.region || "현재 위치")})"></div>
+      ${visiblePoints
+        .map(({ item, lat, lng }) => {
+          const pos = project(lat, lng);
+          const isActive = item.id === selectedId;
+          const shortPrice = item.price >= 10000
+            ? `${Math.round(item.price / 10000)}만`
+            : `${item.price.toLocaleString("ko-KR")}`;
+          return `
+            <button
+              type="button"
+              class="catalog-minimap-pin${isActive ? " is-active" : ""}"
+              style="left:${pos.x.toFixed(1)}%;top:${pos.y.toFixed(1)}%"
+              data-minimap-listing="${escapeHtml(item.id)}"
+              title="${escapeHtml(item.title)} (${money(item.price)})"
+              aria-label="${escapeHtml(item.title)} 위치 보기"
+            >${escapeHtml(shortPrice)}</button>`;
+        })
+        .join("")}
+    </div>
+  `;
+
+  canvasEl.querySelectorAll("[data-minimap-listing]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = btn.dataset.minimapListing;
+      const chosen = list.find((it) => it.id === id);
+      if (!chosen) return;
+      canvasEl.querySelectorAll(".catalog-minimap-pin.is-active").forEach((el) => el.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      onSelectListing?.(chosen);
+    });
+  });
+}
+
+export async function renderCatalogMiniMap(host, items, { selectedId = "", onSelectListing, onExpandMap } = {}) {
+  if (!host) return;
+  const list = Array.isArray(items) ? items : [];
+  const origin = activeOriginCoords();
+  const seq = ++catalogMiniMapRenderSeq;
+
+  // Initialize wrapper structure once per host to avoid DOM thrashing and ID collisions
+  let canvasEl = host.querySelector(".catalog-minimap-canvas");
+  let countBadge = host.querySelector(".catalog-minimap-count-pill");
+  let expandBtn = host.querySelector(".catalog-minimap-expand-btn");
+
+  if (!canvasEl) {
+    host.innerHTML = `
+      <div class="catalog-minimap-frame">
+        <div class="catalog-minimap-canvas" aria-label="필터링된 매물 미니 지도"></div>
+        <span class="catalog-minimap-count-pill" aria-live="polite"></span>
+        <button type="button" class="catalog-minimap-expand-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z"></path><circle cx="12" cy="10.6" r="2.3"></circle></svg>
+          <span>지도에서 보기</span>
+        </button>
+      </div>
+    `;
+    canvasEl = host.querySelector(".catalog-minimap-canvas");
+    countBadge = host.querySelector(".catalog-minimap-count-pill");
+    expandBtn = host.querySelector(".catalog-minimap-expand-btn");
+  }
+
+  if (countBadge) {
+    countBadge.textContent = list.length ? `지도 매물 ${list.length}대` : "표시할 매물 없음";
+  }
+  if (expandBtn) {
+    expandBtn.onclick = () => onExpandMap?.();
+  }
+
+  const appKey = runtime.mapConfig?.kakaoAppKey || DEFAULT_KAKAO_JS_KEY;
+  if (!appKey) {
+    host._miniMapState = null;
+    renderCatalogMiniMapFallback(canvasEl, origin, list, selectedId, { onSelectListing });
+    return;
+  }
+
+  try {
+    const maps = await loadKakaoSdk(appKey);
+    if (seq !== catalogMiniMapRenderSeq || !host.isConnected) return;
+
+    const originLatLng = new maps.LatLng(Number(origin.lat), Number(origin.lng));
+    let mapState = host._miniMapState;
+
+    if (!mapState || mapState.canvasEl !== canvasEl || !mapState.map) {
+      canvasEl.innerHTML = "";
+      const stageEl = document.createElement("div");
+      stageEl.className = "catalog-minimap-kakao-stage";
+      canvasEl.appendChild(stageEl);
+      const map = new maps.Map(stageEl, {
+        center: originLatLng,
+        level: 7,
+      });
+      mapState = {
+        canvasEl,
+        stageEl,
+        map,
+        overlays: [],
+        pinMap: new Map(),
+      };
+      host._miniMapState = mapState;
+    }
+
+    const { map } = mapState;
+    mapState.overlays.forEach((ov) => ov.setMap(null));
+    mapState.overlays = [];
+    mapState.pinMap.clear();
+
+    const originDotEl = document.createElement("div");
+    originDotEl.className = "catalog-minimap-origin-dot is-kakao";
+    originDotEl.title = `내 위치 (${state.region || "현재 위치"})`;
+    const originOv = new maps.CustomOverlay({
+      map,
+      position: originLatLng,
+      content: originDotEl,
+      xAnchor: 0.5,
+      yAnchor: 0.5,
+      zIndex: 3,
+    });
+    mapState.overlays.push(originOv);
+
+    const bounds = new maps.LatLngBounds();
+    bounds.extend(originLatLng);
+
+    const useClusters = list.length > 35;
+    const clusters = useClusters ? clusterListingsByZoom(list, 7, origin) : null;
+
+    if (clusters) {
+      clusters.forEach((cl) => {
+        const pos = new maps.LatLng(cl.lat, cl.lng);
+        bounds.extend(pos);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        if (cl.count === 1) {
+          const item = cl.items[0];
+          const shortPrice = item.price >= 10000
+            ? `${Math.round(item.price / 10000)}만`
+            : `${item.price.toLocaleString("ko-KR")}`;
+          btn.className = `catalog-minimap-pin is-kakao${item.id === selectedId ? " is-active" : ""}`;
+          btn.textContent = shortPrice;
+          btn.title = `${item.title} (${money(item.price)})`;
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            mapState.pinMap.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
+            map.panTo(pos);
+            onSelectListing?.(item);
+          });
+          mapState.pinMap.set(item.id, btn);
+        } else {
+          btn.className = "catalog-minimap-cluster is-kakao";
+          btn.textContent = `${cl.count}대`;
+          btn.title = `${cl.label} (${cl.count}대)`;
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (cl.items[0]) onSelectListing?.(cl.items[0]);
+          });
+        }
+        const ov = new maps.CustomOverlay({
+          map,
+          position: pos,
+          content: btn,
+          xAnchor: 0.5,
+          yAnchor: 1,
+          zIndex: cl.count === 1 && cl.items[0]?.id === selectedId ? 6 : 4,
+        });
+        mapState.overlays.push(ov);
+      });
+    } else {
+      list.forEach((item) => {
+        const c = listingCoords(item, item.id);
+        const pos = new maps.LatLng(Number(c.lat), Number(c.lng));
+        bounds.extend(pos);
+        const shortPrice = item.price >= 10000
+          ? `${Math.round(item.price / 10000)}만`
+          : `${item.price.toLocaleString("ko-KR")}`;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `catalog-minimap-pin is-kakao${item.id === selectedId ? " is-active" : ""}`;
+        btn.textContent = shortPrice;
+        btn.title = `${item.title} (${money(item.price)})`;
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          mapState.pinMap.forEach((el, id) => el.classList.toggle("is-active", id === item.id));
+          map.panTo(pos);
+          onSelectListing?.(item);
+        });
+        mapState.pinMap.set(item.id, btn);
+        const ov = new maps.CustomOverlay({
+          map,
+          position: pos,
+          content: btn,
+          xAnchor: 0.5,
+          yAnchor: 1,
+          zIndex: item.id === selectedId ? 6 : 4,
+        });
+        mapState.overlays.push(ov);
+      });
+    }
+
+    if (list.length > 0) {
+      map.setBounds(bounds, 24, 24, 36, 24);
+    } else {
+      map.setCenter(originLatLng);
+      map.setLevel(7);
+    }
+    map.relayout?.();
+  } catch {
+    if (seq !== catalogMiniMapRenderSeq || !host.isConnected) return;
+    host._miniMapState = null;
+    renderCatalogMiniMapFallback(canvasEl, origin, list, selectedId, { onSelectListing });
+  }
+}

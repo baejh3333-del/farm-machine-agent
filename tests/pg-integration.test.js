@@ -192,6 +192,7 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
     "0011_insurance_consult_repair_kind.sql",
     "0012_listing_draft_photos.sql",
     "0013_rental_operators.sql",
+    "0014_stored_images_cart_orders.sql",
   ]);
 
   const info = await inspectDatabase({ pool });

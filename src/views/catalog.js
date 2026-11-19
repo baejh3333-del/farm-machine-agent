@@ -3,11 +3,425 @@ import { CROPS, STAGES, OPERATIONS, MACHINE_TYPES, CROP_OPERATIONS, CROP_BY_ID, 
 import { available, compareListings } from "../data/recommendation.js";
 import { $, escapeHtml, money, toPyeong, areaLabel, areaFullLabel, today, addDays, koreanDateParts, BEGINNER_TIPS, pictureIcon, favoriteIcon, toast, showDialog, hideDialog, machineImage } from "../core/utils.js";
 import { state, runtime, blankFilters, persist, allListings, listingById, rentedNow, statusLabel, statusClass, activeFavorites, isLoggedIn } from "../core/store.js";
-import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
+import { activeDistanceOrigin, renderWeatherBanner, renderListingMap, renderCatalogMiniMap, weatherDetailNote, refreshWeatherAndMapConfig } from "./map-weather.js";
+
+const SORT_LABELS = {
+  recommended: "추천순",
+  distance: "거리순",
+  price: "낮은 가격순",
+  priceDesc: "높은 가격순",
+  inspection: "최근 점검순",
+};
 
 export function createCatalogViews(deps) {
 let lastPreviewCount = null;
 let previewCountRaf = 0;
+let splitLayoutInitialized = false;
+let selectedMiniMapId = "";
+let mobileFiltersOpen = false;
+
+function ensureSortOptions() {
+  if (typeof document === "undefined") return;
+  const sortSelect = $("listingSort");
+  const sortMenu = $("listingSortMenu");
+  if (!sortSelect || !sortMenu) return;
+
+  const desired = [
+    ["recommended", "추천순"],
+    ["distance", "거리순"],
+    ["price", "낮은 가격순"],
+    ["priceDesc", "높은 가격순"],
+    ["inspection", "최근 점검순"],
+  ];
+
+  // Rebuild options cleanly before main.js bindEvents() queries .listing-sort-option
+  const existingValues = new Set([...sortSelect.options].map((o) => o.value));
+  if (existingValues.has("recommended") && existingValues.has("priceDesc")) return;
+
+  sortSelect.innerHTML = desired
+    .map(([val, label]) => `<option value="${val}">${label}</option>`)
+    .join("");
+  sortMenu.innerHTML = desired
+    .map(([val, label]) => `<button type="button" class="listing-sort-option" role="option" data-sort-value="${val}">${label}</button>`)
+    .join("");
+  if (state.sort && desired.some(([val]) => val === state.sort)) {
+    sortSelect.value = state.sort;
+  }
+}
+
+function renderMiniMapSelectedBanner(item) {
+  const banner = $("catalogMiniMapSelected");
+  if (!banner) return;
+  if (!item) {
+    banner.hidden = true;
+    banner.innerHTML = "";
+    return;
+  }
+  const dist = distanceKm(activeDistanceOrigin(), item.region, item.id);
+  banner.hidden = false;
+  banner.innerHTML = `
+    <div class="catalog-minimap-sel-copy">
+      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(item.region)} · ${dist}km · ${money(item.price)}${item.type === "rent" ? "/일" : ""}</span>
+    </div>
+    <div class="catalog-minimap-sel-actions">
+      <button type="button" class="button button-primary button-sm" data-minimap-detail="${escapeHtml(item.id)}">상세</button>
+      <button type="button" class="catalog-minimap-sel-clear" data-minimap-clear aria-label="선택 해제">×</button>
+    </div>
+  `;
+}
+
+function highlightListingCard(id, { scroll = true } = {}) {
+  selectedMiniMapId = id || "";
+  const grid = $("listingGrid");
+  if (!grid) return;
+  let targetCard = null;
+  grid.querySelectorAll(".listing-card").forEach((cardEl) => {
+    const match = Boolean(id && cardEl.dataset.listingId === id);
+    cardEl.classList.toggle("is-map-selected", match);
+    if (match) targetCard = cardEl;
+  });
+  if (scroll && targetCard) {
+    targetCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function ensureSplitLayout() {
+  if (splitLayoutInitialized || typeof document === "undefined") return;
+  const market = $("market");
+  const listingGrid = $("listingGrid");
+  if (!market || !listingGrid) return;
+  splitLayoutInitialized = true;
+
+  ensureSortOptions();
+  market.classList.add("catalog-split-active");
+
+  const splitShell = document.createElement("div");
+  splitShell.className = "catalog-split-shell";
+  splitShell.id = "catalogSplitShell";
+
+  const sidebar = document.createElement("aside");
+  sidebar.className = "catalog-sidebar";
+  sidebar.id = "catalogSidebar";
+  sidebar.setAttribute("aria-label", "매물 지도 및 검색 필터");
+  sidebar.innerHTML = `
+    <div class="catalog-minimap-card">
+      <div id="catalogMiniMapHost" class="catalog-minimap-host"></div>
+      <div id="catalogMiniMapSelected" class="catalog-minimap-selected" hidden aria-live="polite"></div>
+    </div>
+
+    <button type="button" class="catalog-mobile-filter-toggle" id="catalogMobileFilterToggle" aria-expanded="false" aria-controls="catalogSidebarFilters">
+      <span>상세 필터</span>
+      <span class="catalog-mobile-filter-badge" id="catalogMobileFilterBadge" hidden>0</span>
+      <span class="catalog-mobile-filter-caret" aria-hidden="true">▾</span>
+    </button>
+
+    <div class="catalog-sidebar-filters" id="catalogSidebarFilters">
+      <div class="csf-head">
+        <h3>검색 필터</h3>
+        <button type="button" class="csf-reset-btn" id="sidebarResetFiltersBtn">초기화</button>
+      </div>
+
+      <div class="csf-section">
+        <label class="csf-label" for="sidebarSearchInput">키워드 검색</label>
+        <input type="search" id="sidebarSearchInput" class="csf-input" placeholder="기종, 작업, 브랜드, 지역 검색" autocomplete="off" />
+      </div>
+
+      <div class="csf-section">
+        <span class="csf-label">거래 유형</span>
+        <div class="csf-tx-group" role="group" aria-label="거래 유형 선택">
+          <button type="button" class="csf-tx-btn" data-sidebar-tx="rent">일일 대여</button>
+          <button type="button" class="csf-tx-btn" data-sidebar-tx="sale">중고 구매</button>
+        </div>
+      </div>
+
+      <div class="csf-section">
+        <div class="csf-label-row">
+          <span class="csf-label" id="sidebarPriceLabel">가격 범위</span>
+          <span class="csf-price-readout" id="sidebarPriceReadout">전체</span>
+        </div>
+        <input type="range" id="sidebarPriceSlider" class="csf-range" min="0" max="250000" step="10000" value="250000" aria-label="최대 가격 슬라이더" />
+        <div class="csf-price-inputs">
+          <input type="number" id="sidebarMinPrice" class="csf-input csf-num" min="0" step="10000" placeholder="최소 금액" aria-label="최소 금액" />
+          <span class="csf-price-tilde" aria-hidden="true">~</span>
+          <input type="number" id="sidebarMaxPrice" class="csf-input csf-num" min="0" step="10000" placeholder="최대 금액" aria-label="최대 금액" />
+        </div>
+        <div class="csf-price-presets" id="sidebarPricePresets"></div>
+      </div>
+
+      <div class="csf-section">
+        <span class="csf-label">이동 거리</span>
+        <div class="csf-radius-group" id="sidebarRadiusGroup" role="group" aria-label="이동 거리 선택">
+          <button type="button" class="csf-pill-btn" data-sidebar-radius="all">전체</button>
+          <button type="button" class="csf-pill-btn" data-sidebar-radius="10">10km</button>
+          <button type="button" class="csf-pill-btn" data-sidebar-radius="20">20km</button>
+          <button type="button" class="csf-pill-btn" data-sidebar-radius="30">30km</button>
+        </div>
+      </div>
+
+      <div class="csf-section">
+        <span class="csf-label">농기계 기종</span>
+        <div class="csf-check-list" id="sidebarMachineList"></div>
+      </div>
+
+      <div class="csf-section">
+        <span class="csf-label">추천 작물</span>
+        <div class="csf-check-list csf-check-grid" id="sidebarCropList"></div>
+      </div>
+
+      <div class="csf-section">
+        <span class="csf-label">기계 상태</span>
+        <div class="csf-check-list" id="sidebarConditionList"></div>
+      </div>
+
+      <button type="button" class="button button-secondary csf-more-btn" id="sidebarOpenFullFilters">
+        평수·세부 작업 필터 더보기
+      </button>
+    </div>
+  `;
+
+  const mainCol = document.createElement("div");
+  mainCol.className = "catalog-main";
+  mainCol.id = "catalogMain";
+
+  // Move existing market result elements into the right main column, preserving IDs & listeners
+  const toolbar = market.querySelector(".toolbar");
+  const weatherBanner = $("rentalWeatherBanner");
+  const mapPanel = $("listingMapPanel");
+
+  if (toolbar) mainCol.appendChild(toolbar);
+  if (weatherBanner) mainCol.appendChild(weatherBanner);
+  if (mapPanel) mainCol.appendChild(mapPanel);
+  mainCol.appendChild(listingGrid);
+
+  splitShell.append(sidebar, mainCol);
+  market.appendChild(splitShell);
+
+  // Wire sidebar events
+  $("catalogMobileFilterToggle")?.addEventListener("click", () => {
+    mobileFiltersOpen = !mobileFiltersOpen;
+    const panel = $("catalogSidebarFilters");
+    const toggle = $("catalogMobileFilterToggle");
+    if (panel) panel.classList.toggle("is-mobile-open", mobileFiltersOpen);
+    if (toggle) toggle.setAttribute("aria-expanded", String(mobileFiltersOpen));
+  });
+
+  $("sidebarResetFiltersBtn")?.addEventListener("click", () => resetAllFilters());
+  $("sidebarOpenFullFilters")?.addEventListener("click", () => openFilters());
+
+  $("catalogMiniMapSelected")?.addEventListener("click", (event) => {
+    const detailBtn = event.target.closest("[data-minimap-detail]");
+    if (detailBtn) {
+      openDetail(detailBtn.dataset.minimapDetail);
+      return;
+    }
+    if (event.target.closest("[data-minimap-clear]")) {
+      highlightListingCard("", { scroll: false });
+      renderMiniMapSelectedBanner(null);
+    }
+  });
+
+  $("sidebarSearchInput")?.addEventListener("input", (event) => {
+    const topSearch = $("searchInput");
+    if (topSearch && topSearch.value !== event.target.value) {
+      topSearch.value = event.target.value;
+    }
+    renderListings();
+  });
+
+  sidebar.addEventListener("click", (event) => {
+    const txBtn = event.target.closest("[data-sidebar-tx]");
+    if (txBtn) {
+      setTransaction(txBtn.dataset.sidebarTx);
+      return;
+    }
+    const radiusBtn = event.target.closest("[data-sidebar-radius]");
+    if (radiusBtn) {
+      state.filters.radius = radiusBtn.dataset.sidebarRadius;
+      if ($("quickRadiusSelect")) $("quickRadiusSelect").value = state.filters.radius;
+      persist(deps.updateBadges);
+      deps.renderAll();
+      return;
+    }
+    const presetBtn = event.target.closest("[data-sidebar-price-preset]");
+    if (presetBtn) {
+      state.filters.maxPrice = presetBtn.dataset.sidebarPricePreset;
+      persist(deps.updateBadges);
+      deps.renderAll();
+    }
+  });
+
+  const applySidebarPriceInputs = () => {
+    const minVal = $("sidebarMinPrice")?.value?.trim() || "";
+    const maxVal = $("sidebarMaxPrice")?.value?.trim() || "";
+    state.filters.minPrice = minVal;
+    state.filters.maxPrice = maxVal;
+    persist(deps.updateBadges);
+    renderListings();
+  };
+
+  $("sidebarMinPrice")?.addEventListener("change", applySidebarPriceInputs);
+  $("sidebarMaxPrice")?.addEventListener("change", applySidebarPriceInputs);
+
+  $("sidebarPriceSlider")?.addEventListener("input", (event) => {
+    const slider = event.target;
+    const val = Number(slider.value);
+    const maxLimit = Number(slider.max);
+    state.filters.maxPrice = val >= maxLimit ? "" : String(val);
+    if ($("sidebarMaxPrice")) $("sidebarMaxPrice").value = state.filters.maxPrice;
+    if ($("sidebarPriceReadout")) {
+      $("sidebarPriceReadout").textContent = state.filters.maxPrice ? `${money(state.filters.maxPrice)} 이하` : "전체";
+    }
+    renderListings();
+  });
+
+  $("sidebarPriceSlider")?.addEventListener("change", () => {
+    persist(deps.updateBadges);
+  });
+
+  sidebar.addEventListener("change", (event) => {
+    const cb = event.target.closest("input[data-sidebar-group]");
+    if (!cb) return;
+    const group = cb.dataset.sidebarGroup;
+    const val = cb.value;
+    const current = Array.isArray(state.filters[group]) ? state.filters[group] : [];
+    state.filters[group] = cb.checked ? [...new Set([...current, val])] : current.filter((v) => v !== val);
+    if (group === "cropIds") {
+      state.selectedCrop = state.filters.cropIds[0] || "all";
+    }
+    persist(deps.updateBadges);
+    deps.renderAll();
+  });
+}
+
+function renderSidebarFilters() {
+  if (!splitLayoutInitialized) return;
+  const sidebarSearch = $("sidebarSearchInput");
+  const topSearch = $("searchInput");
+  if (sidebarSearch && topSearch && document.activeElement !== sidebarSearch) {
+    sidebarSearch.value = topSearch.value;
+  }
+
+  document.querySelectorAll("[data-sidebar-tx]").forEach((btn) => {
+    const active = btn.dataset.sidebarTx === state.transaction;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  });
+
+  const isRent = state.transaction === "rent";
+  const sliderMax = isRent ? 250000 : 15000000;
+  const sliderStep = isRent ? 10000 : 500000;
+  const slider = $("sidebarPriceSlider");
+  const priceLabel = $("sidebarPriceLabel");
+  const priceReadout = $("sidebarPriceReadout");
+  const minInput = $("sidebarMinPrice");
+  const maxInput = $("sidebarMaxPrice");
+
+  if (priceLabel) priceLabel.textContent = isRent ? "1일 대여료" : "중고 구매가";
+  if (slider) {
+    slider.max = String(sliderMax);
+    slider.step = String(sliderStep);
+    const curMax = Number(state.filters.maxPrice);
+    slider.value = curMax > 0 && curMax < sliderMax ? String(curMax) : String(sliderMax);
+  }
+  if (minInput && document.activeElement !== minInput) minInput.value = state.filters.minPrice || "";
+  if (maxInput && document.activeElement !== maxInput) maxInput.value = state.filters.maxPrice || "";
+  if (priceReadout) {
+    if (state.filters.minPrice && state.filters.maxPrice) {
+      priceReadout.textContent = `${money(state.filters.minPrice)} ~ ${money(state.filters.maxPrice)}`;
+    } else if (state.filters.maxPrice) {
+      priceReadout.textContent = `${money(state.filters.maxPrice)} 이하`;
+    } else if (state.filters.minPrice) {
+      priceReadout.textContent = `${money(state.filters.minPrice)} 이상`;
+    } else {
+      priceReadout.textContent = "전체";
+    }
+  }
+
+  const presetsEl = $("sidebarPricePresets");
+  if (presetsEl) {
+    const presets = isRent
+      ? [
+          { label: "전체", max: "" },
+          { label: "5만↓", max: "50000" },
+          { label: "7만↓", max: "70000" },
+          { label: "10만↓", max: "100000" },
+        ]
+      : [
+          { label: "전체", max: "" },
+          { label: "300만↓", max: "3000000" },
+          { label: "600만↓", max: "6000000" },
+          { label: "1,000만↓", max: "10000000" },
+        ];
+    presetsEl.innerHTML = presets
+      .map((p) => `<button type="button" class="csf-chip${String(state.filters.maxPrice || "") === p.max ? " is-active" : ""}" data-sidebar-price-preset="${p.max}">${p.label}</button>`)
+      .join("");
+  }
+
+  document.querySelectorAll("[data-sidebar-radius]").forEach((btn) => {
+    const active = (state.filters.radius || "all") === btn.dataset.sidebarRadius;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  });
+
+  const machineListEl = $("sidebarMachineList");
+  if (machineListEl) {
+    const baseWithoutMachine = filteredListings({ ...state.filters, machineTypes: [] });
+    machineListEl.innerHTML = MACHINE_TYPES.map((m) => {
+      const count = baseWithoutMachine.filter((item) => item.machineType === m.id).length;
+      const checked = state.filters.machineTypes.includes(m.id);
+      return `
+        <label class="csf-check-row${checked ? " is-checked" : ""}">
+          <input type="checkbox" data-sidebar-group="machineTypes" value="${escapeHtml(m.id)}" ${checked ? "checked" : ""} />
+          <span class="csf-check-text">${escapeHtml(m.label)}</span>
+          <span class="csf-check-count">${count}</span>
+        </label>
+      `;
+    }).join("");
+  }
+
+  const cropListEl = $("sidebarCropList");
+  if (cropListEl) {
+    cropListEl.innerHTML = CROPS.map((crop) => {
+      const checked = state.filters.cropIds.includes(crop.id);
+      return `
+        <label class="csf-check-row${checked ? " is-checked" : ""}">
+          <input type="checkbox" data-sidebar-group="cropIds" value="${escapeHtml(crop.id)}" ${checked ? "checked" : ""} />
+          <span class="csf-check-text">${escapeHtml(crop.name)}</span>
+        </label>
+      `;
+    }).join("");
+  }
+
+  const condListEl = $("sidebarConditionList");
+  if (condListEl) {
+    const conditions = [
+      { id: "good", label: "정상 작동" },
+      { id: "used", label: "사용감 있음" },
+      { id: "repair", label: "정비 필요" },
+    ];
+    condListEl.innerHTML = conditions
+      .map((cond) => {
+        const checked = state.filters.conditions.includes(cond.id);
+        return `
+          <label class="csf-check-row${checked ? " is-checked" : ""}">
+            <input type="checkbox" data-sidebar-group="conditions" value="${cond.id}" ${checked ? "checked" : ""} />
+            <span class="csf-check-text">${cond.label}</span>
+          </label>
+        `;
+      })
+      .join("");
+  }
+
+  const mobileBadge = $("catalogMobileFilterBadge");
+  if (mobileBadge) {
+    const chipCount = buildFilterChips().length;
+    mobileBadge.hidden = chipCount === 0;
+    mobileBadge.textContent = String(chipCount);
+  }
+}
+
+ensureSplitLayout();
 
 function setTransaction(type) {
   state.transaction = type;
@@ -327,20 +741,33 @@ function matches(item, filters) {
   return true;
 }
 
+function sortListings(items, origin, sort) {
+  return [...items].sort((a, b) => {
+    if (sort === "priceDesc" && a.price !== b.price) return b.price - a.price;
+    if (sort === "recommended") {
+      const aGood = a.condition === "good" ? 0 : 1;
+      const bGood = b.condition === "good" ? 0 : 1;
+      if (aGood !== bGood) return aGood - bGood;
+      return compareListings(a, b, origin, "distance");
+    }
+    return compareListings(a, b, origin, sort);
+  });
+}
+
 function filteredListings(filters = state.filters, { ignoreQuery = false } = {}) {
-  const query = ignoreQuery ? "" : $("searchInput").value.trim().toLowerCase();
-  return allListings()
-    .filter(
-      (item) =>
-        matches(item, filters) &&
-        (!query ||
-          `${item.title} ${item.brand} ${item.description} ${MACHINE_BY_ID[item.machineType]?.label || ""} ${item.operations
-            .map((id) => OPERATION_BY_ID[id]?.label)
-            .join(" ")}`
-            .toLowerCase()
-            .includes(query))
-    )
-    .sort((a, b) => compareListings(a, b, activeDistanceOrigin(), state.sort));
+  const query = ignoreQuery ? "" : ($("searchInput")?.value || "").trim().toLowerCase();
+  const origin = activeDistanceOrigin();
+  const matched = allListings().filter(
+    (item) =>
+      matches(item, filters) &&
+      (!query ||
+        `${item.title} ${item.brand} ${item.region || ""} ${item.description} ${MACHINE_BY_ID[item.machineType]?.label || ""} ${item.operations
+          .map((id) => OPERATION_BY_ID[id]?.label)
+          .join(" ")}`
+          .toLowerCase()
+          .includes(query))
+  );
+  return sortListings(matched, origin, state.sort);
 }
 
 function renderFilterPreview() {
@@ -446,21 +873,22 @@ function card(item) {
   const opsText = item.operations.map((id) => OPERATION_BY_ID[id]?.label).filter(Boolean).slice(0, 2).join(" · ");
   const isFav = activeFavorites().includes(item.id);
   const sClass = statusClass(item);
+  const isMapSelected = item.id === selectedMiniMapId;
 
   return `
-    <article class="listing-card">
+    <article class="listing-card${isMapSelected ? " is-map-selected" : ""}" data-listing-id="${escapeHtml(item.id)}">
       <div class="card-media-wrap">
-        <button type="button" class="card-media-btn" data-detail="${item.id}" aria-label="${escapeHtml(item.title)} 상세 보기">
+        <button type="button" class="card-media-btn" data-detail="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 상세 보기">
           <div class="machine-art">
             ${deps.machineVisual(item)}
             <div class="art-badges-top">
               <span class="card-status-pill ${sClass}">${statusLabel(item)}</span>
-              <span class="art-distance-pill"> ${escapeHtml(item.region)} · ${distance}km</span>
+              <span class="art-distance-pill">${escapeHtml(item.region)} · ${distance}km</span>
             </div>
-            <span class="art-caption">${deps.hasListingPhoto(item) ? "실제 등록 사진" : `${escapeHtml(machineLabel)} AI 예시 이미지`}</span>
+            <span class="art-caption">${deps.hasListingPhoto(item) ? "실제 등록 사진" : `${escapeHtml(machineLabel)} 예시 이미지`}</span>
           </div>
         </button>
-        <button type="button" class="card-save" data-favorite="${item.id}" aria-label="${escapeHtml(item.title)} 찜하기" aria-pressed="${isFav}">
+        <button type="button" class="card-save" data-favorite="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 찜하기" aria-pressed="${isFav}">
           ${favoriteIcon()}
         </button>
       </div>
@@ -468,31 +896,49 @@ function card(item) {
       <div class="card-body">
         <div class="card-spec-tags">
           <span class="spec-tag primary">${escapeHtml(machineLabel)}</span>
-          <span class="spec-tag">${escapeHtml(cropsText)}</span>
-          <span class="spec-tag">${escapeHtml(opsText)}</span>
+          ${cropsText ? `<span class="spec-tag">${escapeHtml(cropsText)}</span>` : ""}
+          ${opsText ? `<span class="spec-tag">${escapeHtml(opsText)}</span>` : ""}
           <span class="spec-tag">${areaLabel(item.areaMin, item.areaMax)}</span>
         </div>
 
-        <button type="button" class="card-title-btn" data-detail="${item.id}">
+        <button type="button" class="card-title-btn" data-detail="${escapeHtml(item.id)}">
           <h3>${escapeHtml(item.title)}</h3>
         </button>
 
-        <div class="card-meta">제조사: ${escapeHtml(item.brand)} · 최근 점검: ${escapeHtml(item.inspectedAt)}</div>
+        <div class="card-meta">${escapeHtml(item.region)} (${distance}km) · 제조사 ${escapeHtml(item.brand)} · 최근 점검 ${escapeHtml(item.inspectedAt)}</div>
 
         <div class="card-summary">
-          <div class="summary-badge">${state.aiSummaries[item.id] ? "✦ AI 농농이 핵심 요약" : " AI 한줄 설명"}</div>
+          <div class="summary-badge">${state.aiSummaries[item.id] ? "✦ AI 농농이 핵심 요약" : "기종 안내"}</div>
           <p>${escapeHtml(summary)}</p>
         </div>
+      </div>
 
-        <div class="card-footer">
-          <div class="card-price-box">
-            <span class="price-type-label">${item.type === "rent" ? "1일 대여료" : "판매 가격"}</span>
-            <div class="card-price">${money(item.price)}<small>${item.type === "rent" ? " / 1일" : ""}</small></div>
-          </div>
-          <button type="button" class="button button-card-cta" data-detail="${item.id}">
-            <span>${item.type === "rent" ? "상세·대여 신청" : "상세·구매 문의"}</span>
-            <span aria-hidden="true">›</span>
-          </button>
+      <div class="card-aside">
+        <div class="card-price-box">
+          <span class="price-type-label">${item.type === "rent" ? "1일 대여료" : "중고 판매가"}</span>
+          <div class="card-price">${money(item.price)}<small>${item.type === "rent" ? " / 1일" : ""}</small></div>
+        </div>
+
+        <div class="card-actions-stack">
+          ${item.owner ? `
+            <button type="button" class="button button-primary button-sm card-primary-cta" data-detail="${escapeHtml(item.id)}">
+              <span>내 매물 관리</span>
+            </button>
+          ` : `
+            <div class="card-primary-row">
+              <button type="button" class="button button-primary button-sm card-primary-cta" data-detail="${escapeHtml(item.id)}">
+                <span>${item.type === "rent" ? "상세·대여" : "상세 보기"}</span>
+              </button>
+              <button type="button" class="button button-outline button-sm card-cart-btn" data-add-cart="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 장바구니 담기">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2.5 4h2.8l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.8a1.5 1.5 0 0 0 1.45-1.15L21 7.5H6"></path></svg>
+                <span>장바구니</span>
+              </button>
+            </div>
+            <div class="trade-action-pair card-trade-pair">
+              <button type="button" class="button button-secondary button-sm btn-direct-chat" data-direct-chat="${escapeHtml(item.id)}">1:1 대화</button>
+              <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(item.id)}">거래전담</button>
+            </div>
+          `}
         </div>
       </div>
     </article>
@@ -500,14 +946,18 @@ function card(item) {
 }
 
 function renderListings() {
+  ensureSplitLayout();
   const items = filteredListings();
-  $("resultCount").textContent = `총 ${items.length}대의 농기계 · ${{ distance: "거리순", price: "낮은 가격순", inspection: "최근 점검순" }[state.sort]}`;
+  const sortLabel = SORT_LABELS[state.sort] || "거리순";
+  $("resultCount").textContent = `총 ${items.length}대의 농기계 · ${sortLabel}`;
 
   const isMap = state.viewMode === "map";
   $("viewModeList")?.classList.toggle("active", !isMap);
   $("viewModeMap")?.classList.toggle("active", isMap);
   $("viewModeList")?.setAttribute("aria-pressed", String(!isMap));
   $("viewModeMap")?.setAttribute("aria-pressed", String(isMap));
+
+  renderSidebarFilters();
 
   renderWeatherBanner({
     onSelectDate: (chosenDate) => {
@@ -529,6 +979,28 @@ function renderListings() {
     });
   } else {
     renderListingMap(items);
+  }
+
+  const selectedItem = selectedMiniMapId ? items.find((i) => i.id === selectedMiniMapId) : null;
+  if (!selectedItem && selectedMiniMapId) {
+    selectedMiniMapId = "";
+    renderMiniMapSelectedBanner(null);
+  } else if (selectedItem) {
+    renderMiniMapSelectedBanner(selectedItem);
+  }
+
+  const miniMapHost = $("catalogMiniMapHost");
+  if (miniMapHost) {
+    renderCatalogMiniMap(miniMapHost, items, {
+      selectedId: selectedMiniMapId,
+      onSelectListing: (chosen) => {
+        highlightListingCard(chosen.id, { scroll: true });
+        renderMiniMapSelectedBanner(chosen);
+      },
+      onExpandMap: () => {
+        deps.setView?.("map", selectedMiniMapId ? { focusListingId: selectedMiniMapId } : {});
+      },
+    });
   }
 
   $("listingGrid").innerHTML = items.length
@@ -644,16 +1116,20 @@ function openDetail(id) {
         </details>` : ""}
 
         <div class="detail-actions">
-          <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${item.id}" aria-label="찜하기" aria-pressed="${isFav}">
+          <button type="button" class="button button-secondary detail-fav-btn" data-detail-fav="${escapeHtml(item.id)}" aria-label="찜하기" aria-pressed="${isFav}">
             ${favoriteIcon()}
             <span class="favorite-label">${isFav ? "찜한 기계" : "찜하기"}</span>
           </button>
           ${item.owner ? `
-            <button type="button" class="button button-primary button-large" data-detail-manage="${item.id}">내 매물 관리하기</button>
+            <button type="button" class="button button-primary button-large" data-detail-manage="${escapeHtml(item.id)}">내 매물 관리하기</button>
           ` : `
-            ${item.type === "rent" ? `<button type="button" class="button button-secondary" data-detail-chat="${item.id}">1:1 문의</button>` : ""}
-            <button type="button" class="button button-primary button-large" data-detail-action="${item.id}" ${unavailable || booked ? "disabled" : ""}>
-              ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? " 이 농기계 대여 신청하기" : " 판매자에게 채팅 문의하기"}
+            <button type="button" class="button button-outline detail-cart-btn" data-detail-cart="${escapeHtml(item.id)}" ${unavailable ? "disabled" : ""}>장바구니</button>
+            <div class="trade-action-pair detail-trade-pair">
+              <button type="button" class="button button-secondary btn-direct-chat" data-detail-chat="${escapeHtml(item.id)}">1:1 대화</button>
+              <button type="button" class="button btn-delegated-trade" data-delegated-trade="${escapeHtml(item.id)}">거래전담</button>
+            </div>
+            <button type="button" class="button button-primary button-large" data-detail-action="${escapeHtml(item.id)}" ${unavailable || booked ? "disabled" : ""}>
+              ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? "이 농기계 대여 신청하기" : "판매자에게 구매 문의하기"}
             </button>
           `}
         </div>
@@ -705,7 +1181,10 @@ function openFavoritesModal() {
 function resetAllFilters() {
   state.filters = blankFilters();
   state.selectedCrop = "all";
-  $("searchInput").value = "";
+  selectedMiniMapId = "";
+  renderMiniMapSelectedBanner(null);
+  if ($("searchInput")) $("searchInput").value = "";
+  if ($("sidebarSearchInput")) $("sidebarSearchInput").value = "";
   persist(deps.updateBadges);
   deps.renderAll();
   toast("모든 검색 조건을 초기화했습니다.");

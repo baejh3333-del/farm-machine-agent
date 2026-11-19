@@ -5,7 +5,23 @@ import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictu
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
 import { openCameraCapture, shrinkPhoto } from "../ai/panel.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
-import { senderState, SENDER_LABEL, roleOf, readSeqFor } from "../data/deals-model.js";
+import {
+  senderState, SENDER_LABEL, roleOf, readSeqFor,
+  presetsForListingType, getDelegationPreset, buildQuickDelegationPolicy,
+} from "../data/deals-model.js";
+
+export const DELEGATED_TRADE_EVENT = "moa:start-delegated-trade";
+
+let _activeStartDelegatedTrade = null;
+let _delegatedEventListener = null;
+let _delegatedClickListener = null;
+
+export function startDelegatedTradeForListing(listingId, options = {}) {
+  if (typeof _activeStartDelegatedTrade === "function") {
+    return _activeStartDelegatedTrade(listingId, options);
+  }
+  return false;
+}
 
 export function createTransactionViews(deps) {
 function openForm(html) {
@@ -289,6 +305,10 @@ function chatForm(target) {
   let conversationId = opts.conversationId || null;
   const draftBody = typeof opts.draftBody === "string" ? opts.draftBody : "";
   const item = listingId ? listingById(listingId) : null;
+  const quickDelegation = Boolean(opts.quickDelegation);
+  const listingType = item?.type === "sale" ? "sale" : "rent";
+  const presets = presetsForListingType(listingType);
+  let selectedPresetId = opts.preset || presets[0]?.id || "quick_rental";
   const incomingPolicy = opts.policy && typeof opts.policy === "object"
     ? opts.policy
     : (opts.aiPolicy && typeof opts.aiPolicy === "object" ? opts.aiPolicy : null);
@@ -304,7 +324,15 @@ function chatForm(target) {
             }
           : {}),
       }
-    : null;
+    : (quickDelegation
+      ? buildQuickDelegationPolicy({
+          listing: item,
+          role: item?.ownerId && item.ownerId === runtime.accountUser?.id ? "owner" : "buyer",
+          presetId: selectedPresetId,
+          filters: state.filters || {},
+          overrides: { fullDelegation: false },
+        })
+      : null);
 
   if (!isLoggedIn()) {
     deps.savePendingIntentAndRedirectLogin({
@@ -312,9 +340,10 @@ function chatForm(target) {
       listingId,
       conversationId,
       draftBody,
-      ...(requestedAiMode !== "off" ? { aiMode: requestedAiMode } : {}),
-      ...(requestedFullDelegation ? { fullDelegation: true } : {}),
-      ...(initialPolicyOverride ? { policy: initialPolicyOverride } : {}),
+      ...(quickDelegation ? { quickDelegation: true, preset: selectedPresetId } : {}),
+      ...(requestedAiMode !== "off" ? { aiMode: requestedAiMode } : (quickDelegation ? { aiMode: "autonomous" } : {})),
+      ...(requestedFullDelegation || quickDelegation ? { fullDelegation: true } : {}),
+      ...(initialPolicyOverride ? { policy: initialPolicyOverride, aiPolicy: initialPolicyOverride } : {}),
     });
     return;
   }
@@ -328,12 +357,14 @@ function chatForm(target) {
     : "";
   const filterArea = Number(state.filters?.areaPyeong) > 0 ? String(Number(state.filters.areaPyeong)) : "";
 
-  const initialDelegationOpen = Boolean(requestedFullDelegation || (requestedAiMode && requestedAiMode !== "off"));
+  const initialDelegationOpen = Boolean(quickDelegation || requestedFullDelegation || (requestedAiMode && requestedAiMode !== "off"));
+  const initialPolicyPanelOpen = Boolean(requestedFullDelegation || quickDelegation);
+  const activePreset = getDelegationPreset(selectedPresetId, listingType);
 
   openForm(`
-    <span class="step-pill">1:1 농기계 채팅 문의</span>
+    <span class="step-pill">${quickDelegation ? "🤖 AI 농농이 거래전담 · 1:1 대화" : "1:1 농기계 채팅 문의"}</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
-    <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
+    <p id="chatSubtitle">${quickDelegation ? "원하는 조건을 고르고 버튼 한 번으로 AI 농농이에게 자동 대화·협상을 맡기세요." : "대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요."}</p>
     <div class="chat-load-older-wrap">
       <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
     </div>
@@ -351,14 +382,31 @@ function chatForm(target) {
       </button>
       <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
     </div>
-    <section id="chatAiControlBar" class="chat-ai-bar" aria-label="농농이 거래 전담 설정" ${initialDelegationOpen ? "" : "hidden"}>
+    <section id="chatAiControlBar" class="chat-ai-bar${quickDelegation ? " is-quick-start" : ""}" aria-label="농농이 거래 전담 설정" ${initialDelegationOpen ? "" : "hidden"}>
+      <div id="chatQuickDelegationCard" class="delegated-quickstart-card">
+        <div class="delegated-quickstart-head">
+          <strong>⚡ 빠른 거래전담 프리셋</strong>
+          <small>목적을 고르면 조건이 자동 채워져요</small>
+        </div>
+        <div class="delegated-preset-list" role="group" aria-label="거래전담 빠른 프리셋">
+          ${presets.map((p) => `<button type="button" class="delegated-preset-btn${p.id === selectedPresetId ? " is-selected" : ""}" data-delegation-preset="${escapeHtml(p.id)}" aria-pressed="${p.id === selectedPresetId ? "true" : "false"}" title="${escapeHtml(p.desc)}">${escapeHtml(p.label)}</button>`).join("")}
+        </div>
+        <p id="chatQuickPresetDesc" class="delegated-quickstart-desc">${escapeHtml(activePreset?.desc || "")}</p>
+        <div class="delegated-quickstart-cta">
+          <label id="chatQuickSendFirstWrap" class="delegated-quickstart-check">
+            <input type="checkbox" id="chatQuickSendFirst" checked>
+            <span>첫 문의 메시지도 자동으로 보내기</span>
+          </label>
+          <button type="button" id="chatQuickStartAiBtn" class="button btn-delegated-trade button-sm">🤖 AI 거래전담 바로 시작</button>
+        </div>
+      </div>
       <div class="chat-ai-bar-head">
         <span class="chat-ai-title">🤖 농농이 대리 응대</span>
         <div class="chat-ai-modes" role="group" aria-label="대리 응대 모드">
           <button type="button" class="chat-ai-mode-btn active" data-ai-mode="off" aria-pressed="true">끄기</button>
           <button type="button" class="chat-ai-mode-btn" data-ai-mode="autonomous" aria-pressed="false">자동 응대</button>
         </div>
-        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${requestedFullDelegation ? "true" : "false"}">${requestedFullDelegation ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
+        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${initialPolicyPanelOpen ? "true" : "false"}">${initialPolicyPanelOpen ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
       </div>
       <div class="delegated-full-panel">
         <label class="chat-full-delegation-toggle" for="chatFullDelegationToggle">
@@ -371,7 +419,7 @@ function chatForm(target) {
         </label>
         <div id="chatDelegationSummary" class="chat-delegation-summary" hidden></div>
       </div>
-      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel${requestedFullDelegation ? " is-open" : ""}" ${requestedFullDelegation ? "" : "hidden"}>
+      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel${initialPolicyPanelOpen ? " is-open" : ""}" ${initialPolicyPanelOpen ? "" : "hidden"}>
         <div class="chat-ai-policy-inner">
           <div class="delegated-policy-grid">
             <label>희망 대여 시작일
@@ -568,6 +616,24 @@ function chatForm(target) {
       $("chatPolicyAllowNegotiation").checked = !activeChips.has("noNegotiation");
     }
     if ($("chatAiSavePolicy")) $("chatAiSavePolicy").disabled = aiBusy;
+    const quickStartBtn = $("chatQuickStartAiBtn");
+    if (quickStartBtn) {
+      quickStartBtn.disabled = aiBusy;
+      quickStartBtn.classList.toggle("is-active", isFullActive);
+      quickStartBtn.textContent = isFullActive
+        ? "✓ AI 거래전담 진행 중 (조건 다시 저장)"
+        : "🤖 AI 거래전담 바로 시작";
+    }
+    const quickSendWrap = $("chatQuickSendFirstWrap");
+    if (quickSendWrap) {
+      const hasMessages = bySeq.size > 0;
+      quickSendWrap.hidden = hasMessages;
+    }
+    bar.querySelectorAll("[data-delegation-preset]").forEach((btn) => {
+      const active = btn.dataset.delegationPreset === selectedPresetId;
+      btn.classList.toggle("is-selected", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
     updateDelegationSummary();
   }
 
@@ -855,6 +921,9 @@ function chatForm(target) {
         }).join("")
       : `<div class="chat-empty">아직 나눈 대화가 없어요. 기계 상태와 인수 조건을 먼저 물어보세요!</div>`;
     $("chatLoadOlder").hidden = !hasMoreOlder;
+    if ($("chatQuickSendFirstWrap")) {
+      $("chatQuickSendFirstWrap").hidden = bySeq.size > 0;
+    }
     if (keepScroll) {
       log.scrollTop += log.scrollHeight - prevHeight;
     } else {
@@ -1088,7 +1157,7 @@ function chatForm(target) {
     setDelegationPanelOpen(!delegationPanelOpen);
   });
 
-  let policyPanelOpen = requestedFullDelegation;
+  let policyPanelOpen = initialPolicyPanelOpen;
   let policyCollapseTimer = null;
   const setPolicyPanelOpen = (open) => {
     const panel = $("chatAiPolicyPanel");
@@ -1112,6 +1181,43 @@ function chatForm(target) {
       }, 280);
     }
   };
+
+  $("chatAiControlBar")?.querySelectorAll("[data-delegation-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pid = btn.dataset.delegationPreset;
+      const preset = getDelegationPreset(pid, listingType);
+      if (!preset) return;
+      selectedPresetId = preset.id;
+      instructionsDirty = true;
+      activeChips.clear();
+      for (const c of preset.policy.chips || []) activeChips.add(c);
+      if (preset.policy.allowNegotiation === false) activeChips.add("noNegotiation");
+      else activeChips.delete("noNegotiation");
+      if ($("chatQuickPresetDesc")) $("chatQuickPresetDesc").textContent = preset.desc || "";
+      syncAiControlUi();
+    });
+  });
+
+  $("chatQuickStartAiBtn")?.addEventListener("click", async () => {
+    if (aiBusy) return;
+    const preset = getDelegationPreset(selectedPresetId, listingType);
+    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
+    fullDelegationEnabled = true;
+    instructionsDirty = true;
+    if ($("chatFullDelegationToggle")) $("chatFullDelegationToggle").checked = true;
+    const policy = {
+      ...collectPolicy(),
+      fullDelegation: true,
+      autoExecuteTransaction: isBuyer ? Boolean(preset?.policy?.autoExecuteTransaction ?? true) : false,
+    };
+    await saveAiPolicy("autonomous", policy, { resume: true });
+    const shouldSendStarter = Boolean($("chatQuickSendFirst")?.checked) && bySeq.size === 0;
+    if (shouldSendStarter && preset?.starterTemplate && !busy) {
+      const title = currentConv?.listingTitle || item?.title || "농기계";
+      const starter = ($("chatMessage")?.value.trim()) || preset.starterTemplate(title);
+      await sendMessageBody(starter, { fromForm: Boolean($("chatMessage")?.value.trim()) });
+    }
+  });
 
   $("chatAiPolicyToggle")?.addEventListener("click", () => {
     const panel = $("chatAiPolicyPanel");
@@ -1214,6 +1320,77 @@ function chatForm(target) {
   });
 
   loadInitialMessages();
+  if (quickDelegation) {
+    requestAnimationFrame(() => {
+      $("chatQuickDelegationCard")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    });
+  }
+}
+
+function startDelegatedTrade(target, options = {}) {
+  const opts = typeof target === "object" && target !== null
+    ? { ...target, ...options }
+    : { listingId: target || null, ...options };
+  const listingId = opts.listingId || null;
+  const conversationId = opts.conversationId || null;
+  if (!listingId && !conversationId) return false;
+  if ($("detailBackdrop") && !$("detailBackdrop").hidden) {
+    hideDialog($("detailBackdrop"));
+  }
+  const item = listingId ? listingById(listingId) : null;
+  const preset = opts.preset || (item?.type === "sale" ? "purchase_inquiry" : "quick_rental");
+  const autoActivate = Boolean(opts.autoActivate);
+  chatForm({
+    listingId,
+    conversationId,
+    draftBody: typeof opts.draftBody === "string" ? opts.draftBody : "",
+    quickDelegation: true,
+    preset,
+    autoActivate,
+    ...(autoActivate ? { aiMode: "autonomous", fullDelegation: true } : {}),
+    ...(opts.policy && typeof opts.policy === "object" ? { policy: opts.policy } : {}),
+  });
+  return true;
+}
+
+_activeStartDelegatedTrade = startDelegatedTrade;
+if (typeof window !== "undefined") {
+  window.startDelegatedTradeForListing = startDelegatedTradeForListing;
+  if (_delegatedEventListener) {
+    window.removeEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
+  }
+  _delegatedEventListener = (event) => {
+    const detail = event?.detail || {};
+    startDelegatedTrade(detail.listingId || null, detail);
+  };
+  window.addEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
+}
+if (typeof document !== "undefined") {
+  if (_delegatedClickListener) {
+    document.removeEventListener("click", _delegatedClickListener);
+  }
+  _delegatedClickListener = (event) => {
+    if (event.defaultPrevented) return;
+    const delegatedBtn = event.target?.closest?.("[data-delegated-trade]");
+    if (delegatedBtn) {
+      event.preventDefault();
+      startDelegatedTrade(delegatedBtn.dataset.delegatedTrade || null, {
+        conversationId: delegatedBtn.dataset.delegatedConv || null,
+        preset: delegatedBtn.dataset.delegatedPreset || undefined,
+        autoActivate: delegatedBtn.dataset.delegatedAuto === "true",
+      });
+      return;
+    }
+    const directChatBtn = event.target?.closest?.("[data-direct-chat]");
+    if (directChatBtn) {
+      event.preventDefault();
+      if ($("detailBackdrop") && !$("detailBackdrop").hidden) {
+        hideDialog($("detailBackdrop"));
+      }
+      chatForm({ listingId: directChatBtn.dataset.directChat || null });
+    }
+  };
+  document.addEventListener("click", _delegatedClickListener);
 }
 
 async function handleRequestAction(action, requestId, button) {
@@ -1278,7 +1455,10 @@ function renderBuyerRequests() {
           ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
-          <button type="button" class="button button-secondary button-sm" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 채팅</button>
+          <div class="trade-action-pair">
+            <button type="button" class="button button-secondary button-sm btn-direct-chat" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 대화</button>
+            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(req.listingId)}">🤖 거래전담</button>
+          </div>
           ${req.canCancel ? `<button type="button" class="button button-secondary button-sm" data-req-cancel="${escapeHtml(req.id)}">요청 취소</button>` : ""}
         </div>
       </div>`).join("")
@@ -1299,6 +1479,7 @@ function renderBuyerRequests() {
             <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
           </button>
           <div class="owner-row-actions">
+            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(c.listingId)}" data-delegated-conv="${escapeHtml(c.id)}">🤖 거래전담</button>
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
           </div>
         </div>`).join("")
@@ -1421,6 +1602,7 @@ function renderOwner() {
             <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "새 대화"}</small>
           </button>
           <div class="owner-row-actions">
+            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(c.listingId)}" data-delegated-conv="${escapeHtml(c.id)}">🤖 거래전담</button>
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
           </div>
         </div>`).join("")
@@ -1772,6 +1954,7 @@ function openEditListing(item, draftValues = null) {
     renderRequestBadge,
     rentalForm,
     chatForm,
+    startDelegatedTradeForListing: startDelegatedTrade,
     handleRequestAction,
     renderRequestActionsHtml,
     renderBuyerRequests,

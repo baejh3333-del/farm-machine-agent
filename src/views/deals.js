@@ -7,6 +7,7 @@ import {
   SENDER_LABEL, SENDER_ICON, AI_STATUS_LABEL, STAGE_LABEL, stageSteps, describeOffer, formatWon,
   offerAcceptedBy, DEAL_FILTERS, matchesFilter, filterCounts, dealsBadge, filterMessages,
   readSeqFor, buildPolicyFromForm, validatePolicy, buildOfferBody, rentalDays, dealsHash,
+  presetsForListingType, getDelegationPreset,
 } from "../data/deals-model.js";
 
 const LIST_POLL_MS = 20000;
@@ -422,10 +423,17 @@ export function createDealsView(deps) {
     const limit = buyer ? p.maxBudget : p.minPrice;
     const transportKnown = p.transportFee !== null && p.transportFee !== undefined;
     const rq = Array.isArray(p.requiredQuestions) ? p.requiredQuestions.join("\n") : (p.requiredQuestions || "");
+    const presets = presetsForListingType(deal.listingType);
     return `<section class="deal-section deal-policy" aria-labelledby="dealPolicyTitle">
       <div class="deal-section-head">
         <h3 id="dealPolicyTitle">위임 조건 <small>🔒 나에게만 보여요 · 상대에게 공개되지 않아요</small></h3>
         <button type="button" class="button button-secondary button-sm" data-deal-delegation-close>닫기</button>
+      </div>
+      <div class="deal-preset-bar" role="group" aria-label="거래전담 빠른 프리셋">
+        <span class="deal-preset-label">⚡ 빠른 설정</span>
+        <div class="deal-preset-list">
+          ${presets.map((pr) => `<button type="button" class="deal-preset-btn" data-deal-preset="${escapeHtml(pr.id)}" title="${escapeHtml(pr.desc)}">${escapeHtml(pr.label)}</button>`).join("")}
+        </div>
       </div>
       <form id="dealPolicyForm" class="deal-policy-form">
         <fieldset class="deal-mode-group"><legend>농농이 역할</legend>
@@ -451,7 +459,10 @@ export function createDealsView(deps) {
         ${buyer ? `<label class="deal-check"><input type="checkbox" id="dealPolicyAutoApply"${p.autoExecuteTransaction ? " checked" : ""}> 양측이 같은 조건에 합의하면 내 명의로 ${rent ? "대여" : "구매"} 신청까지 맡기기</label>` : `<p class="deal-hint">판매자 쪽 농농이는 구매자 명의로 신청하지 않으며, 최종 승인은 직접 해요.</p>`}
         <label class="deal-check"><input type="checkbox" id="dealPolicyFull"${p.fullDelegation ? " checked" : ""}> 거래 전담(부재 중에도 위 범위 안에서 계속 진행)</label>
         <p class="deal-hint">한도를 비워 두면 매물 정가로 채우지 않고, 금액 결정이 필요할 때 내게 확인해요.</p>
-        <div class="deal-form-actions"><button type="submit" class="button button-primary button-sm">조건 저장</button></div>
+        <div class="deal-form-actions">
+          <button type="button" class="button btn-delegated-trade button-sm" data-deal-quick-start>🤖 거래전담 바로 시작</button>
+          <button type="submit" class="button button-primary button-sm">조건 저장</button>
+        </div>
       </form>
     </section>`;
   }
@@ -460,11 +471,13 @@ export function createDealsView(deps) {
     const ai = deal.ai;
     const activeDelegation = ai.mode !== "off";
     const btns = [
-      `<button type="button" class="button ${ui.delegationOpen ? "button-primary" : "button-secondary"} button-sm deal-delegation-btn${ui.delegationOpen ? " is-open" : ""}${activeDelegation ? " is-delegating" : ""}" data-deal-delegation-toggle aria-expanded="${ui.delegationOpen}" aria-controls="dealDelegationPanel">농농이 거래 전담</button>`,
+      `<div class="trade-action-pair">`,
+      `<button type="button" class="button button-secondary button-sm btn-direct-chat" data-deal-open-chat>1:1 대화 창 ↗</button>`,
+      `<button type="button" class="button ${ui.delegationOpen ? "button-primary" : "btn-delegated-trade"} button-sm deal-delegation-btn${ui.delegationOpen ? " is-open" : ""}${activeDelegation ? " is-delegating" : ""}" data-deal-delegation-toggle aria-expanded="${ui.delegationOpen}" aria-controls="dealDelegationPanel">농농이 거래 전담</button>`,
+      `</div>`,
     ];
     if (ai.canTakeover) btns.push(`<button type="button" class="button button-secondary button-sm" data-deal-takeover>✋ 직접 이어받기</button>`);
     if (ai.canResume && ai.mode !== "off") btns.push(`<button type="button" class="button button-primary button-sm" data-arm-key="resume" data-deal-resume>▶ 다시 맡기기</button>`);
-    btns.push(`<button type="button" class="button button-secondary button-sm" data-deal-open-chat>대화 전체 보기 ↗</button>`);
     return `<div class="deal-controls">${btns.join("")}</div>`;
   }
 
@@ -974,6 +987,28 @@ export function createDealsView(deps) {
         ui.delegationOpen = false;
         renderDetail();
         return;
+      }
+      const presetBtn = t.closest("[data-deal-preset]");
+      if (presetBtn) {
+        const deal = detailDeal();
+        const preset = deal ? getDelegationPreset(presetBtn.dataset.dealPreset, deal.listingType) : null;
+        if (preset) {
+          const autoRadio = root.querySelector('input[name="dealPolicyMode"][value="autonomous"]');
+          if (autoRadio) autoRadio.checked = true;
+          if ($("dealPolicyNegotiate")) $("dealPolicyNegotiate").checked = preset.policy.allowNegotiation !== false;
+          if ($("dealPolicyAutoApply") && deal.myRole === "buyer") $("dealPolicyAutoApply").checked = Boolean(preset.policy.autoExecuteTransaction);
+          if ($("dealPolicyFull")) $("dealPolicyFull").checked = true;
+          root.querySelectorAll("[data-deal-preset]").forEach((b) => b.classList.toggle("is-selected", b === presetBtn));
+          toast(`'${preset.label}' 조건을 채웠어요. 바로 시작하거나 조건을 저장하세요.`);
+        }
+        return;
+      }
+      const quickStartBtn = t.closest("[data-deal-quick-start]");
+      if (quickStartBtn) {
+        const autoRadio = root.querySelector('input[name="dealPolicyMode"][value="autonomous"]');
+        if (autoRadio) autoRadio.checked = true;
+        if ($("dealPolicyFull")) $("dealPolicyFull").checked = true;
+        return savePolicy(quickStartBtn);
       }
       const msgTab = t.closest("[data-deal-msgtab]");
       if (msgTab) { ui.msgTab = msgTab.dataset.dealMsgtab; return renderDetail(); }

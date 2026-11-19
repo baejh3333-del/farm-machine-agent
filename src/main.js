@@ -24,6 +24,7 @@ import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-se
 import { createAiPanel } from "./ai/panel.js";
 import { createHomeView } from "./views/home.js?v=20261119-3";
 import { createHeaderNav } from "./views/header-nav.js";
+import { createCartCheckout } from "./views/cart-checkout.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
 
 initFontScale();
@@ -42,6 +43,9 @@ const appDeps = {
   openForm: (...args) => txViews.openForm(...args),
   rentalForm: (...args) => txViews.rentalForm(...args),
   chatForm: (...args) => txViews.chatForm(...args),
+  startDelegatedTradeForListing: (...args) => txViews.startDelegatedTradeForListing?.(...args),
+  addToCart: (...args) => cartCheckout.addToCart(...args),
+  openCheckout: (...args) => cartCheckout.openCheckout(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
   renderListings: (...args) => catalogViews.renderListings(...args),
   openDeal: (conversationId) => setView("deals", { conversationId }),
@@ -117,6 +121,9 @@ const headerNav = createHeaderNav({
   openFilters: () => catalogViews.openFilters(),
   openAiPanel: () => aiPanel.openAiPanel(),
   submitAiPrompt: (prompt) => aiPanel.submitPrompt(prompt),
+});
+const cartCheckout = createCartCheckout({
+  setView: (...args) => setView(...args),
 });
 
 async function loadCatalog({ quiet = false } = {}) {
@@ -317,6 +324,7 @@ function updateBadges() {
     const hasPending = favCount > 0 || (isLoggedIn() && runtime.approvableRequestCount > 0);
     myPageDot.hidden = !hasPending;
   }
+  cartCheckout.updateCartBadge();
 }
 
 const viewIds = {
@@ -342,7 +350,6 @@ const MY_PAGE_VIEWS = new Set([
   "requestsLoginRequired",
   "owner",
   "ownerLoginRequired",
-  "garage",
 ]);
 
 // 모아농 2.0: 홈은 예약창·소개만 보여주고, 매물 목록은 '매물 찾기'에서 따로 본다
@@ -982,12 +989,16 @@ function bindEvents() {
   }
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      const open = ["formBackdrop", "detailBackdrop", "filterBackdrop"].map($).find((dialog) => !dialog.hidden);
+      const open = ["checkoutBackdrop", "cartBackdrop", "formBackdrop", "detailBackdrop", "filterBackdrop"].map($).find((dialog) => dialog && !dialog.hidden);
       if (open) hideDialog(open, (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
     }
   });
 
   $("listingGrid").addEventListener("click", (event) => {
+    const cartButton = event.target.closest("[data-add-cart]");
+    if (cartButton) return cartCheckout.addToCart(cartButton.dataset.addCart);
+    const checkoutButton = event.target.closest("[data-buy-now]");
+    if (checkoutButton) return cartCheckout.openCheckout(checkoutButton.dataset.buyNow);
     const detailButton = event.target.closest("[data-detail]");
     if (detailButton) return catalogViews.openDetail(detailButton.dataset.detail);
     const favoriteButton = event.target.closest("[data-favorite]");
@@ -996,6 +1007,13 @@ function bindEvents() {
   });
 
   $("detailContent").addEventListener("click", (event) => {
+    const cartBtn = event.target.closest("[data-detail-cart]");
+    if (cartBtn) return cartCheckout.addToCart(cartBtn.dataset.detailCart);
+    const checkoutBtn = event.target.closest("[data-detail-checkout]");
+    if (checkoutBtn) {
+      hideDialog($("detailBackdrop"), (b) => { if (b === $("formBackdrop")) stopChatPolling(); });
+      return cartCheckout.openCheckout(checkoutBtn.dataset.detailCheckout);
+    }
     const favBtn = event.target.closest("[data-detail-fav]");
     if (favBtn) return toggleFavorite(favBtn.dataset.detailFav);
     const manageBtn = event.target.closest("[data-detail-manage]");
@@ -1144,7 +1162,7 @@ function bindEvents() {
   $("buyerConversations")?.addEventListener("click", handleRequestsAndChatsClick);
 
 
-  for (const id of ["filterBackdrop", "detailBackdrop", "formBackdrop", "regionPickerDialog"]) {
+  for (const id of ["filterBackdrop", "detailBackdrop", "formBackdrop", "regionPickerDialog", "cartBackdrop", "checkoutBackdrop"]) {
     const el = $(id);
     if (el) el.style.zIndex = "1300";
   }
@@ -1248,7 +1266,6 @@ function initLoginForm() {
     runtime.accountUser = user ?? null;
     const loggedIn = isLoggedIn();
     headerButton.hidden = loggedIn;
-    $("myPageButton").hidden = !loggedIn;
     logout.hidden = !loggedIn;
     updateBadges();
   }
@@ -1264,9 +1281,13 @@ function initLoginForm() {
     renderAccount(nextUser);
     if (changed) {
       runtime.catalogReady = loadCatalog({ quiet: true });
-      await Promise.all([runtime.catalogReady, refreshAuthenticatedData()]);
+      await Promise.all([
+        runtime.catalogReady,
+        refreshAuthenticatedData(),
+        nextId ? cartCheckout.syncGuestCartOnLogin() : cartCheckout.loadCart(),
+      ]);
     } else if (nextId) {
-      await refreshAuthenticatedData();
+      await Promise.all([refreshAuthenticatedData(), cartCheckout.loadCart()]);
     } else {
       runtime.garage?.refreshNote?.();
       updateBadges();
@@ -1278,6 +1299,7 @@ function initLoginForm() {
     bumpAuthEpoch();
     resetAccountRuntimeState();
     renderAccount(null);
+    cartCheckout.loadCart();
     runtime.garage?.resetToGuest();
     if (state.view === "deals" || state.view === "requests" || state.view === "owner") {
       setView(state.view);
@@ -1576,6 +1598,7 @@ $("detailContent").addEventListener("click", (event) => {
   }
 });
 headerNav.bind();
+cartCheckout.bind();
 bindEvents();
 homeView.bind();
 syncServerTime().then(() => { catalogViews.syncQuickSearchInputs(); renderAll(); });

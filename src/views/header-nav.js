@@ -16,51 +16,26 @@ export function createHeaderNav(deps) {
   function runDestination(dest) {
     closeAll();
     switch (dest) {
+      case "browse":
+        deps.setView("browse");
+        return;
       case "home-booking":
         return scrollHomeSection("homeBooking");
       case "home-about":
         return scrollHomeSection("homeAbout");
       case "home-faq":
         return scrollHomeSection("homeFaq");
-      case "browse-rent":
-        deps.setTransaction("rent");
-        deps.setView("browse");
-        return;
-      case "browse-sale":
-        deps.setTransaction("sale");
-        deps.setView("browse");
-        return;
-      case "browse-filters":
-        deps.setView("browse");
-        deps.openFilters();
-        return;
       case "favorites":
         deps.setView("favorites");
         return;
       case "map":
         deps.setView("map");
         return;
-      case "browse-map":
-        deps.setView("browse");
-        $("viewModeMap")?.click();
-        return;
-      case "region-picker":
-        $("regionPickerBtn")?.click();
-        return;
       case "guide":
         deps.setView("guide");
         return;
       case "garage":
         deps.setView("garage");
-        return;
-      case "ai-open":
-        deps.openAiPanel();
-        return;
-      case "ai-recommend":
-        deps.submitAiPrompt("밭에 두둑을 만들려면 어떤 농기계가 좋을까요?");
-        return;
-      case "ai-nearby":
-        deps.submitAiPrompt("우리 동네에서 관리기를 빌릴 수 있을까요?");
         return;
       case "deals":
         deps.setView("deals");

@@ -514,3 +514,99 @@ export function dealsHash({ conversationId = null, filter = null } = {}) {
   if (filter && filter !== "all") h += `?filter=${encodeURIComponent(filter)}`;
   return h;
 }
+
+/** 외부 '거래전담' 빠른 시작 프리셋 (대여/판매 공용) */
+export const DELEGATION_PRESETS = [
+  {
+    id: "quick_rental",
+    label: "⚡ 빠른 대여 진행",
+    desc: "일정·인수 조율 후 조건이 맞으면 대여 신청까지 자동 진행",
+    listingTypes: ["rent"],
+    policy: {
+      allowNegotiation: true,
+      fullDelegation: true,
+      autoExecuteTransaction: true,
+      autoReplyOn: ["schedule", "availability", "compatibility"],
+      chips: ["pickupTime", "availability", "compatibility"],
+    },
+    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 대여 가능 여부와 인수 일정 확인 부탁드립니다.`,
+  },
+  {
+    id: "purchase_inquiry",
+    label: "🤝 중고 구매 전담",
+    desc: "기계 상태·구성품 확인 및 구매 조건 자동 협의",
+    listingTypes: ["sale"],
+    policy: {
+      allowNegotiation: true,
+      fullDelegation: true,
+      autoExecuteTransaction: true,
+      autoReplyOn: ["schedule", "compatibility"],
+      chips: ["pickupTime", "compatibility"],
+    },
+    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 현재 상태와 인수·거래 조건 문의드립니다.`,
+  },
+  {
+    id: "price_negotiation",
+    label: "💰 가격·조건 협상",
+    desc: "설정한 예산·조건 한도 안에서 유연하게 가격 조율",
+    listingTypes: ["rent", "sale"],
+    policy: {
+      allowNegotiation: true,
+      fullDelegation: true,
+      autoExecuteTransaction: false,
+      autoReplyOn: ["schedule", "availability"],
+      chips: ["pickupTime", "availability"],
+    },
+    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 가격 및 거래 조건 협의 가능할까요?`,
+  },
+  {
+    id: "schedule_pickup",
+    label: "📅 일정·인수 조율",
+    desc: "가격 흥정 없이 가능한 날짜와 인수 방법만 빠르게 확인",
+    listingTypes: ["rent", "sale"],
+    policy: {
+      allowNegotiation: false,
+      fullDelegation: true,
+      autoExecuteTransaction: false,
+      autoReplyOn: ["schedule", "availability", "compatibility"],
+      chips: ["pickupTime", "availability", "compatibility", "noNegotiation"],
+    },
+    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 인수 가능한 날짜와 시간대 알려주실 수 있을까요?`,
+  },
+];
+
+export function presetsForListingType(listingType) {
+  const type = listingType === "sale" ? "sale" : "rent";
+  return DELEGATION_PRESETS.filter((p) => p.listingTypes.includes(type));
+}
+
+export function getDelegationPreset(presetId, listingType = "rent") {
+  const list = presetsForListingType(listingType);
+  return list.find((p) => p.id === presetId) || DELEGATION_PRESETS.find((p) => p.id === presetId) || list[0];
+}
+
+/**
+ * 빠른 거래전담 시작용 기본 정책 생성.
+ * 사용자가 명시한 검색 필터(일정·최대 예산·면적)만 반영하며, 매물 정가로 한도를 임의 채우지 않는다.
+ */
+export function buildQuickDelegationPolicy({ listing = null, role = "buyer", presetId = null, filters = {}, overrides = {} } = {}) {
+  const listingType = listing?.type === "sale" ? "sale" : "rent";
+  const preset = getDelegationPreset(presetId, listingType);
+  const isBuyer = role !== "owner";
+  const maxBudgetFromFilter = isBuyer && Number(filters?.maxPrice) > 0 ? Math.trunc(Number(filters.maxPrice)) : null;
+  const areaFromFilter = Number(filters?.areaPyeong) > 0 ? Number(filters.areaPyeong) : null;
+  const targetStart = overrides.targetStart ?? (filters?.date || null);
+  const targetEnd = overrides.targetEnd ?? (filters?.dateEnd || targetStart || null);
+
+  return {
+    ...preset.policy,
+    autoExecuteTransaction: isBuyer ? Boolean(preset.policy.autoExecuteTransaction) : false,
+    intent: listingType,
+    targetStart,
+    targetEnd,
+    ...(isBuyer ? { maxBudget: overrides.maxBudget ?? maxBudgetFromFilter } : { minPrice: overrides.minPrice ?? null }),
+    areaPyeong: overrides.areaPyeong ?? areaFromFilter,
+    ...overrides,
+    ...(isBuyer ? {} : { autoExecuteTransaction: false }),
+  };
+}

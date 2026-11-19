@@ -4,7 +4,9 @@ import { test } from "node:test";
 import {
   checkFarmCompatibilityTool,
   cleanUiContext,
+  inferBareUsageHours,
   isRepairRequest,
+  missingListingDetails,
   proposeRentalTool,
   runAgentTurn,
   sanitizeHistory,
@@ -444,6 +446,79 @@ test("세부사항을 답하면 그 내용으로 초안을 만든다", async (t)
   assert.match(result.listingDraft.description, /^연식: 2019년식/);
   assert.match(result.listingDraft.description, /로터리 포함, 사용시간 500시간/);
   assert.doesNotMatch(result.listingDraft.description, /확인 필요/);
+});
+
+test("세부사항은 한 번만 묻는다: '2016, 400시간, 없어요'처럼 짧게 답해도 바로 초안을 만든다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "작업기 없음, 사용시간 400시간", machineType: "tractor", year: "2016년식" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [
+    { role: "user", content: "[사진 첨부] 이 기계를 팔고싶어요" },
+    { role: "assistant", content: "이 기계는 트랙터로 보입니다. 판매 매물 등록을 위해 연식, 사용 시간, 함께 판매할 작업기 등이 필요합니다. 모르시면 모른다고 하셔도 됩니다." },
+  ];
+  const result = await runAgentTurn("2016, 400시간, 없어요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.ok(result.listingDraft, "한 번 물었으면 다시 묻지 않고 초안을 만든다");
+  assert.match(result.listingDraft.description, /^연식: 2016년식/);
+  assert.match(result.listingDraft.description, /사용시간 400시간/);
+  assert.doesNotMatch(result.listingDraft.description, /확인 필요/);
+});
+
+test("사용시간은 'h·hr·아워·한글 숫자·탔어요' 표현도 인식한다", () => {
+  for (const said of ["400h", "400hr", "400 hrs", "400아워", "천 시간", "삼백오십시간", "한 500 정도 탔어요", "1,200 썼어요"]) {
+    assert.ok(!missingListingDetails(said, said).includes("사용시간"), `${said}는 사용시간으로 인식해야 한다`);
+  }
+  for (const said of ["이 시간에 연락 주세요", "2016 샀어요", "2000만원"]) {
+    assert.ok(missingListingDetails(said, said).includes("사용시간"), `${said}는 사용시간이 아니다`);
+  }
+});
+
+test("세부사항을 물은 직후 답의 단독 숫자는 사용시간으로 본다", () => {
+  assert.equal(inferBareUsageHours("2016, 400, 없어요"), "400");
+  assert.equal(inferBareUsageHours("2016, 1,200, 로터리"), "1,200");
+  assert.equal(inferBareUsageHours("400시간, 2016"), null, "이미 시간 단위가 있으면 추정하지 않는다");
+  assert.equal(inferBareUsageHours("2016"), null, "연도만 있으면 사용시간이 아니다");
+  assert.equal(inferBareUsageHours("2016, 400~500"), null, "숫자가 여러 개면 추정하지 않는다");
+  assert.equal(inferBareUsageHours("2016, 3대"), null, "단위가 붙은 숫자는 제외한다");
+});
+
+test("'2016, 400, 없어요'로 답하면 400을 사용시간으로 넣어 초안을 만든다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "작업기 없음, 사용시간 400시간", machineType: "tractor", year: "2016년식" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [
+    { role: "user", content: "[사진 첨부] 이 기계를 팔고싶어요" },
+    { role: "assistant", content: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." },
+  ];
+  const result = await runAgentTurn("2016, 400, 없어요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.match(result.listingDraft.description, /사용시간 400시간/);
+  assert.doesNotMatch(result.listingDraft.description, /확인 필요/);
+  assert.match(calls[0].system, /400 → 사용시간 400시간/);
+});
+
+test("세부사항을 묻지 않은 대화에서는 단독 숫자를 사용시간으로 보지 않는다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([{ content: [{ type: "text", text: "네." }] }]);
+  await runAgentTurn("트랙터 400 정도면 돼요", { history: [{ role: "user", content: "트랙터 보여줘" }, { role: "assistant", content: "어떤 작업에 쓰실 건가요?" }] }, { listings: LISTINGS, call, today: TODAY });
+  assert.doesNotMatch(calls[0].system, /→ 사용시간/);
+});
+
+test("세부사항을 이미 물었으면 일부만 답해도 다시 묻지 않고 남은 항목은 [확인 필요]로 둔다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "사용시간 400시간", machineType: "tractor" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [
+    { role: "user", content: "[사진 첨부] 이 기계를 팔고싶어요" },
+    { role: "assistant", content: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요." },
+  ];
+  const result = await runAgentTurn("400시간 썼어요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.ok(result.listingDraft);
+  assert.match(result.listingDraft.description, /\[확인 필요\] 연식 · 포함 작업기/);
 });
 
 test("사용자가 직접 말한 사실은 소개글에 남긴다", async (t) => {

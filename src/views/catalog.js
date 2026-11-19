@@ -1132,6 +1132,7 @@ function card(item) {
       <div class="card-body">
         <div class="card-spec-tags">
           <span class="spec-tag primary">${escapeHtml(machineLabel)}</span>
+          ${item.type === "rent" && item.rentalOperator ? `<span class="spec-tag operator-tag">대행운영서비스 제공중</span>` : ""}
           ${cropsText ? `<span class="spec-tag">${escapeHtml(cropsText)}</span>` : ""}
           ${opsText ? `<span class="spec-tag">${escapeHtml(opsText)}</span>` : ""}
           <span class="spec-tag">${areaLabel(item.areaMin, item.areaMax)}</span>
@@ -1344,7 +1345,7 @@ function openDetail(id) {
         </div>
 
         ${item.type === "rent" && item.rentalOperator ? `<details class="detail-box rental-operator">
-          <summary><strong>작업자 동반 가능</strong> · +${money(item.rentalOperator.dailyPrice)}/일</summary>
+          <summary><strong>대행운영서비스 제공중</strong> · 작업자 +${money(item.rentalOperator.dailyPrice)}/일</summary>
           <p class="rental-operator-experience"><strong>${escapeHtml(item.rentalOperator.name)}</strong><br>${escapeHtml(item.rentalOperator.experience)}</p>
         </details>` : ""}
 

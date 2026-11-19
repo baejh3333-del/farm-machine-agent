@@ -108,7 +108,7 @@ test("농농 대화: '가져다 드릴 수 있어요, 운송비 3만 원' → �
     { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "대동 트랙터 빌려드려요", description: "트랙터 대여", machineType: "tractor", price: 150000, delivery: { methods: ["owner_delivery"], fee: 30000, area: "영양군 안" } } }] },
     { content: [{ type: "text", text: "초안을 만들었어요." }] },
   ]);
-  const result = await runAgentTurn("트랙터 빌려줄게요. 2019년식, 500시간, 로터리 없어요. 트럭으로 가져다 드릴 수 있어요, 운송비 3만 원", {}, { listings: LISTINGS, call, today: TODAY });
+  const result = await runAgentTurn("트랙터 빌려줄게요. 2019년식, 500시간, 로터리 없어요. 트럭으로 가져다 드릴 수 있어요, 운송비 3만 원. 대행운영은 안 할게요", {}, { listings: LISTINGS, call, today: TODAY });
   assert.deepEqual(result.listingDraft.delivery.methods, ["owner_delivery"]);
   assert.equal(result.listingDraft.delivery.fee, 30000);
 });
@@ -120,7 +120,7 @@ test("농농 대화: 운송 방식 없이 바로 등록하려 하면 막고 운�
     { content: [{ type: "text", text: "가져다주실 수 있나요, 아니면 가지러 와야 하나요?" }] },
   ]);
   const created = [];
-  const result = await runAgentTurn("네 올려 주세요", { user: { id: "u1" } }, {
+  const result = await runAgentTurn("네 올려 주세요", { user: { id: "u1" }, history: [{ role: "user", content: "대행운영은 안 할게요" }] }, {
     listings: LISTINGS, call, today: TODAY,
     deps: { createListing: async (u, payload) => { created.push(payload); return { listing: { id: payload.id } }; } },
   });

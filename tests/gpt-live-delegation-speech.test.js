@@ -396,3 +396,10 @@ test("재연결 전에 줄 서 있던 쓰기 결과는 다음 세션이 시작�
   assert.match(carried[0].content, /판매글 올렸어요/);
   await live.stop();
 });
+
+test("실시간 음성: 대행운영서비스 사용·제공 여부와 작업자 정보 답은 늘 농농이(백엔드)에게 맡긴다", async () => {
+  const { buildGptLiveInstructions } = await import("../server/gpt-live.js");
+  const text = buildGptLiveInstructions({});
+  assert.match(text, /대행운영서비스/);
+  assert.match(text, /대행운영[^\n]*(?:delegate|맡긴다)/i);
+});

@@ -463,12 +463,12 @@ export async function seedDemoListings({
           id, owner_id, type, model_id, title, brand, machine_type,
           crop_ids, operations, area_min, area_max, price, region,
           condition, inspected_at, included, pickup, description, summary,
-          photo_key, status, is_demo, sort_order, delivery_methods
+          photo_key, status, is_demo, sort_order, delivery_methods, rental_operator
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12, $13,
           $14, $15, $16, $17, $18, $19,
-          NULL, $20, true, $21, $22
+          NULL, $20, true, $21, $22, $23
         )
         ON CONFLICT (id) DO UPDATE SET
           model_id = EXCLUDED.model_id,
@@ -489,6 +489,7 @@ export async function seedDemoListings({
           description = EXCLUDED.description,
           summary = EXCLUDED.summary,
           sort_order = EXCLUDED.sort_order,
+          rental_operator = EXCLUDED.rental_operator,
           updated_at = now()
         WHERE listings.is_demo = true
           AND (
@@ -510,6 +511,7 @@ export async function seedDemoListings({
             OR listings.description IS DISTINCT FROM EXCLUDED.description
             OR listings.summary IS DISTINCT FROM EXCLUDED.summary
             OR listings.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+            OR listings.rental_operator IS DISTINCT FROM EXCLUDED.rental_operator
           )`,
         [
           item.id,
@@ -534,6 +536,7 @@ export async function seedDemoListings({
           item.status || "open",
           index,
           item.delivery?.methods?.length ? item.delivery.methods : inferDeliveryMethods(item.pickup),
+          item.rentalOperator ?? null,
         ]
       );
       inserted += res.rowCount ?? 0;

@@ -230,7 +230,7 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
 
       const dailyPrice = Number(listing.price);
       if (operator && !sameOperator(listing.rental_operator, operator)) {
-        fail(409, "OPERATOR_OPTION_CHANGED", "작업자 옵션이 변경됐어요. 새 요금과 이력을 확인해 주세요.");
+        fail(409, "OPERATOR_OPTION_CHANGED", "대행운영서비스 내용이 바뀌었어요. 새 요금과 작업자 이력을 확인해 주세요.");
       }
       const acceptedOperator = operator ? listing.rental_operator : null;
       const operatorDailyPrice = acceptedOperator?.dailyPrice ?? 0;
@@ -246,7 +246,7 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
 
       const requestDto = await buildSingleRequestDto(client, id, user.id, today);
       if (requestDto.derivedState === "operator_conflict") {
-        fail(409, "OPERATOR_DATE_OVERLAP", "같은 기간에 확정된 작업자 동반 예약이 있습니다.");
+        fail(409, "OPERATOR_DATE_OVERLAP", "같은 기간에 이미 확정된 대행운영서비스(작업자 동반) 예약이 있습니다.");
       }
       return { status: 201, idempotent: false, request: requestDto };
     }, pool);
@@ -324,7 +324,7 @@ export async function approveRentalRequest(user, requestId, { today = kstToday()
       );
     } catch (error) {
       if (error?.constraint === "rental_requests_operator_no_overlap") {
-        fail(409, "OPERATOR_DATE_OVERLAP", "같은 기간에 확정된 작업자 동반 예약이 있습니다.");
+        fail(409, "OPERATOR_DATE_OVERLAP", "같은 기간에 이미 확정된 대행운영서비스(작업자 동반) 예약이 있습니다.");
       }
       if (error?.code === "23P01") {
         fail(409, "DATE_OVERLAP", "이미 승인된 다른 예약과 기간이 겹칩니다.");

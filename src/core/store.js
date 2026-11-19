@@ -18,16 +18,15 @@ export const blankFilters = () => ({
   dateEnd: "",
 });
 
+export const DEFAULT_FALLBACK_REGION = "경기도 이천시";
+
 const defaults = {
   view: "home",
   viewMode: "list",
   transaction: "rent",
-  region: "홍천 비발디파크",
-  userCoords: {
-    lat: 37.6456,
-    lng: 127.6844,
-    source: "default",
-  },
+  region: DEFAULT_FALLBACK_REGION,
+  regionSource: "default",
+  userCoords: null,
   sort: "distance",
   selectedCrop: "all",
   filters: blankFilters(),
@@ -37,7 +36,7 @@ const defaults = {
 };
 
 function sanitizeUserCoords(raw) {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object" || raw.source === "default") return null;
   const lat = Number(raw.lat);
   const lng = Number(raw.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -55,12 +54,28 @@ function sanitizeUserCoords(raw) {
 export let state;
 try {
   const saved = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+  const savedCoords = sanitizeUserCoords(saved.userCoords);
+  const savedSource =
+    saved.regionSource === "gps" || saved.regionSource === "manual" || saved.regionSource === "default"
+      ? saved.regionSource
+      : savedCoords
+        ? "gps"
+        : typeof saved.region === "string" && saved.region && saved.region !== "홍천 비발디파크"
+          ? "manual"
+          : "default";
+
   state = {
     view: typeof saved.view === "string" ? saved.view : defaults.view,
     viewMode: saved.viewMode === "map" ? "map" : defaults.viewMode,
     transaction: saved.transaction === "sale" ? "sale" : defaults.transaction,
-    region: typeof saved.region === "string" ? saved.region : defaults.region,
-    userCoords: sanitizeUserCoords(saved.userCoords) ?? (typeof saved.region === "string" ? null : structuredClone(defaults.userCoords)),
+    region:
+      savedSource === "default"
+        ? DEFAULT_FALLBACK_REGION
+        : typeof saved.region === "string"
+          ? saved.region
+          : DEFAULT_FALLBACK_REGION,
+    regionSource: savedSource,
+    userCoords: savedCoords,
     sort: typeof saved.sort === "string" ? saved.sort : defaults.sort,
     selectedCrop: typeof saved.selectedCrop === "string" ? saved.selectedCrop : defaults.selectedCrop,
     filters: { ...blankFilters(), ...(saved.filters || {}) },
@@ -267,6 +282,7 @@ export function persist(onUpdateBadges) {
         viewMode: state.viewMode,
         transaction: state.transaction,
         region: state.region,
+        regionSource: state.regionSource,
         userCoords: state.userCoords,
         sort: state.sort,
         selectedCrop: state.selectedCrop,

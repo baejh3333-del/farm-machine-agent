@@ -328,12 +328,30 @@ function chatForm(target) {
     : "";
   const filterArea = Number(state.filters?.areaPyeong) > 0 ? String(Number(state.filters.areaPyeong)) : "";
 
+  const initialDelegationOpen = Boolean(requestedFullDelegation || (requestedAiMode && requestedAiMode !== "off"));
+
   openForm(`
     <span class="step-pill">1:1 농기계 채팅 문의</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
     <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
-    <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
-    <section id="chatAiControlBar" class="chat-ai-bar" aria-label="농농이 대리 응대 설정">
+    <div class="chat-load-older-wrap">
+      <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
+    </div>
+    <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
+    <div id="chatPausedBanner" class="chat-paused-banner" role="status" hidden></div>
+    <div id="chatDraftBar" class="chat-draft-bar" hidden></div>
+    <form id="chatForm" class="chat-send">
+      <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
+      <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
+    </form>
+    <div class="chat-secondary-actions">
+      <button type="button" id="chatDelegationTrigger" class="button button-secondary button-sm chat-delegation-trigger${initialDelegationOpen ? " is-open" : ""}" aria-expanded="${initialDelegationOpen ? "true" : "false"}" aria-controls="chatAiControlBar">
+        <span>농농이 거래 전담</span>
+        <span id="chatDelegationTriggerStatus" class="chat-delegation-trigger-status" hidden></span>
+      </button>
+      <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
+    </div>
+    <section id="chatAiControlBar" class="chat-ai-bar" aria-label="농농이 거래 전담 설정" ${initialDelegationOpen ? "" : "hidden"}>
       <div class="chat-ai-bar-head">
         <span class="chat-ai-title">🤖 농농이 대리 응대</span>
         <div class="chat-ai-modes" role="group" aria-label="대리 응대 모드">
@@ -386,16 +404,6 @@ function chatForm(target) {
         </div>
       </div>
     </section>
-    <div style="margin-bottom:8px">
-      <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
-    </div>
-    <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
-    <div id="chatPausedBanner" class="chat-paused-banner" role="status" hidden></div>
-    <div id="chatDraftBar" class="chat-draft-bar" hidden></div>
-    <form id="chatForm" class="chat-send">
-      <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
-      <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
-    </form>
   `);
 
   const epoch = runtime.authEpoch;
@@ -536,6 +544,24 @@ function chatForm(target) {
     if (fullBadge) {
       fullBadge.textContent = isFullActive ? "ON" : "OFF";
       fullBadge.classList.toggle("is-active", isFullActive);
+    }
+    const triggerBtn = $("chatDelegationTrigger");
+    const triggerStatus = $("chatDelegationTriggerStatus");
+    const isAiActive = currentAiMode !== "off";
+    if (triggerBtn) {
+      triggerBtn.classList.toggle("is-active", isAiActive);
+    }
+    if (triggerStatus) {
+      if (isFullActive) {
+        triggerStatus.textContent = "전담 ON";
+        triggerStatus.hidden = false;
+      } else if (isAiActive) {
+        triggerStatus.textContent = "대리 ON";
+        triggerStatus.hidden = false;
+      } else {
+        triggerStatus.textContent = "";
+        triggerStatus.hidden = true;
+      }
     }
     bar.querySelector(".delegated-full-panel")?.classList.toggle("is-active", isFullActive);
     if ($("chatPolicyAllowNegotiation")) {
@@ -1044,6 +1070,24 @@ function chatForm(target) {
 
   syncAiControlUi();
 
+  let delegationPanelOpen = initialDelegationOpen;
+  const setDelegationPanelOpen = (open) => {
+    const bar = $("chatAiControlBar");
+    const trigger = $("chatDelegationTrigger");
+    if (!bar) return;
+    delegationPanelOpen = Boolean(open);
+    bar.hidden = !delegationPanelOpen;
+    if (trigger) {
+      trigger.setAttribute("aria-expanded", String(delegationPanelOpen));
+      trigger.classList.toggle("is-open", delegationPanelOpen);
+    }
+  };
+
+  $("chatDelegationTrigger")?.addEventListener("click", () => {
+    // 설정 패널을 여는 동작만으로 대리 응대나 거래 전담을 켜지 않는다.
+    setDelegationPanelOpen(!delegationPanelOpen);
+  });
+
   let policyPanelOpen = requestedFullDelegation;
   let policyCollapseTimer = null;
   const setPolicyPanelOpen = (open) => {
@@ -1245,18 +1289,17 @@ function renderBuyerRequests() {
     const dealsLink = `<div class="deals-crosslink"><span>농농이가 보낸 메시지·제안·확인할 일은 거래 관리에서 한눈에 볼 수 있어요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="buyer">거래 관리 열기 ›</button></div>`;
     convEl.innerHTML = buyerConvs.length
       ? buyerConvs.map((c) => `
-        <div class="request-row">
-          <div class="owner-row-info">
-            <div class="owner-row-badges">
+        <div class="request-row conv-list-row">
+          <button type="button" class="owner-row-info conv-row-open" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">
+            <span class="owner-row-badges">
               <span class="step-pill">판매자: ${escapeHtml(c.ownerName)}</span>
               ${renderConvAiBadges(c, "buyer")}
-            </div>
-            <strong>${escapeHtml(c.listingTitle)}</strong>
-            <small>${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
-          </div>
+            </span>
+            <strong class="conv-row-title">${escapeHtml(c.listingTitle)}</strong>
+            <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
+          </button>
           <div class="owner-row-actions">
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
-            <button type="button" class="button button-primary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화 보기</button>
           </div>
         </div>`).join("")
       : `<div class="empty-panel">아직 시작한 채팅 문의가 없습니다.</div>`;
@@ -1368,18 +1411,17 @@ function renderOwner() {
     const ownerConvs = runtime.userConversations.filter((c) => c.ownerId === runtime.accountUser?.id);
     ownerConvsEl.innerHTML = ownerConvs.length
       ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div><div class="deals-crosslink"><span>농농이 응대 내역·받은 제안은 거래 관리에서 확인하세요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="owner">거래 관리 열기 ›</button></div>` + ownerConvs.map((c) => `
-        <div class="request-row">
-          <div class="owner-row-info">
-            <div class="owner-row-badges">
+        <div class="request-row conv-list-row">
+          <button type="button" class="owner-row-info conv-row-open" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">
+            <span class="owner-row-badges">
               <span class="step-pill">문의자: ${escapeHtml(c.buyerName)}</span>
               ${renderConvAiBadges(c, "owner")}
-            </div>
-            <strong>${escapeHtml(c.listingTitle)}</strong>
-            <small>${c.lastMessage ? `"${escapeHtml(c.lastMessage.body)}"` : "새 대화"}</small>
-          </div>
+            </span>
+            <strong class="conv-row-title">${escapeHtml(c.listingTitle)}</strong>
+            <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "새 대화"}</small>
+          </button>
           <div class="owner-row-actions">
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
-            <button type="button" class="button button-secondary button-sm" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">대화하기</button>
           </div>
         </div>`).join("")
       : "";

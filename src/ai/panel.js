@@ -2207,7 +2207,7 @@ export function createAiPanel({
     if (capCard.dataset.aiPhotoTrigger === "true") {
       if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
       const bubble = appendAiMessage(
-        "농기계 사진을 올려주시면 기종·고장 의심 부위·적정 시세까지 바로 분석해 드려요! 카메라로 찍거나 이미지를 첨부해 보세요.",
+        "농기계 전체가 보이는 사진을 올려 주세요. 모델명이 적힌 명판도 보이면 기종을 확인하는 데 도움이 돼요.",
         "assistant",
       );
       const ctaWrap = document.createElement("div");
@@ -2226,9 +2226,6 @@ export function createAiPanel({
       bubble.append(ctaWrap);
       scrollAiToEnd();
       return;
-    }
-    if (capCard.dataset.aiEnableDelegation === "true") {
-      setFullDelegation(true);
     }
     if (capCard.dataset.prompt) {
       submitPrompt(capCard.dataset.prompt);

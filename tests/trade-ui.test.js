@@ -6,6 +6,7 @@ import {
   buildPolicyFromForm, validatePolicy, buildOfferBody, describeOffer, rentalDays,
   parseDealsHash, dealsHash, stageSteps,
 } from "../src/data/deals-model.js";
+import { sortInboxDeals } from "../src/views/deals.js";
 
 const ME = "u-me";
 const OTHER = "u-other";
@@ -197,4 +198,13 @@ test("구버전 DTO(order 미포함)에서도 목록이 깨지지 않는다", ()
   assert.equal(d.stage, "applied");
   assert.equal(d.ai.key, "submitted");
   assert.equal(nextActions(d).some((a) => a.key === "approve"), false, "구매자에게는 승인 버튼이 없다");
+});
+
+test("메시지함 정렬(sortInboxDeals): 확인 필요 여부와 무관하게 최근 대화순으로 정렬한다", () => {
+  const deals = [
+    normalizeDeal(conv({ id: "older-alert", updatedAt: "2026-11-18T00:00:00Z", myAiState: { mode: "autonomous", pause: "escalated:unknown_condition", waitingForUser: true } }), { meId: ME }),
+    normalizeDeal(conv({ id: "newest", updatedAt: "2026-11-18T03:00:00Z", ownerAiMode: "off", buyerAiMode: "off" }), { meId: ME }),
+    normalizeDeal(conv({ id: "middle", updatedAt: "2026-11-18T01:30:00Z", unreadCount: 1 }), { meId: ME }),
+  ];
+  assert.deepEqual(sortInboxDeals(deals).map((d) => d.id), ["newest", "middle", "older-alert"]);
 });

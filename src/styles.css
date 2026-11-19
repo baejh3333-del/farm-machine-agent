@@ -1468,10 +1468,31 @@ img {
   padding-top: 4px;
 }
 
+.owner-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.owner-row-info {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.owner-row-info strong,
+.owner-row-info small {
+  overflow-wrap: anywhere;
+}
+
 .owner-row-badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 6px;
+}
+
+.owner-row-badges > * {
+  flex: none;
+  white-space: nowrap;
 }
 
 .owner-row-info strong {
@@ -1491,7 +1512,13 @@ img {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.owner-row-actions .button {
+  white-space: nowrap;
 }
 
 .empty-panel {

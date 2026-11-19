@@ -1662,7 +1662,71 @@ export function createAiPanel({
       ? "승인하면 1:1 거래 채팅방에서 농농이 자동 협상·응대 모드가 시작돼요."
       : isPurchase
         ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
-        : "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+        : "승인하면 게시자에게 대여 요청과 아래 희망 조건이 채팅으로 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+
+    // 대여 요청: 희망 네고 가격(1일)·대리운용 희망 여부를 받아 요청과 함께 게시자 채팅으로 보낸다.
+    const isRental = action.type === "rental_request";
+    let rentalTerms = null;
+    if (isRental) {
+      const terms = document.createElement("div");
+      terms.className = "ai-draft-options ai-rental-terms";
+
+      const priceBox = document.createElement("fieldset");
+      priceBox.className = "ai-draft-option-box";
+      const priceLegend = document.createElement("legend");
+      priceLegend.textContent = "💬 희망 네고 가격 (1일)";
+      const priceLabel = document.createElement("label");
+      priceLabel.className = "ai-rental-price";
+      const priceInput = document.createElement("input");
+      priceInput.type = "number";
+      priceInput.inputMode = "numeric";
+      priceInput.min = "0";
+      priceInput.step = "1000";
+      priceInput.placeholder = Number.isFinite(Number(action.dailyPrice)) ? String(action.dailyPrice) : "";
+      priceInput.setAttribute("aria-label", "희망 네고 가격(1일, 원)");
+      priceLabel.append(priceInput, document.createTextNode("원"));
+      const priceHint = document.createElement("small");
+      priceHint.textContent = "비워 두면 등록가 그대로 요청해요.";
+      priceBox.append(priceLegend, priceLabel, priceHint);
+
+      const operatorBox = document.createElement("fieldset");
+      operatorBox.className = "ai-draft-option-box";
+      const operatorLegend = document.createElement("legend");
+      operatorLegend.textContent = "🧑‍🌾 대리운용 희망";
+      const operatorChoices = document.createElement("div");
+      operatorChoices.className = "ai-draft-option-choices";
+      for (const [value, text] of [["no", "희망 안 함"], ["yes", "희망"]]) {
+        const choice = document.createElement("label");
+        choice.className = "ai-draft-option";
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = `ai-rental-operator-${requestId}`;
+        input.value = value;
+        input.checked = value === "no";
+        choice.append(input, document.createTextNode(text));
+        operatorChoices.append(choice);
+      }
+      operatorBox.append(operatorLegend, operatorChoices);
+      terms.append(priceBox, operatorBox);
+      card.append(terms);
+
+      rentalTerms = {
+        read() {
+          const raw = priceInput.value.trim();
+          const price = raw === "" ? null : Math.round(Number(raw));
+          if (raw !== "" && !(Number.isSafeInteger(price) && price > 0)) return { error: "희망 네고 가격은 0보다 큰 숫자로 입력해 주세요." };
+          return {
+            negotiatedDailyPrice: price,
+            operatorWanted: operatorChoices.querySelector("input:checked")?.value === "yes",
+          };
+        },
+        lock() {
+          priceInput.disabled = true;
+          for (const input of operatorChoices.querySelectorAll("input")) input.disabled = true;
+        },
+      };
+    }
+
     const actions = document.createElement("div");
     actions.className = "ai-confirm-actions";
     const approve = document.createElement("button");
@@ -1704,9 +1768,20 @@ export function createAiPanel({
     });
 
     approve.addEventListener("click", () => {
+      let pendingAction = action;
+      if (rentalTerms) {
+        const terms = rentalTerms.read();
+        if (terms.error) {
+          toast(terms.error);
+          return;
+        }
+        pendingAction = { ...action, ...terms };
+        // 같은 requestId로 재시도할 때 조건이 바뀌면 서버 멱등성 검사에 걸리므로, 한 번 보낸 뒤에는 잠근다.
+        rentalTerms.lock();
+      }
       rememberAgentTurn({ role: "user", content: isMyPage ? "승인합니다. 바꿔 주세요." : "승인합니다. 요청을 보내 주세요." });
       executeOneTapAction({
-        pendingAction: action,
+        pendingAction,
         requestId,
         triggerButton: approve,
         onBusy: () => {
@@ -1717,6 +1792,7 @@ export function createAiPanel({
           forget();
           card.dataset.state = outcome;
           actions.remove();
+          rentalTerms?.lock();
         },
         onError: (kind) => {
           if (kind === "aborted") {

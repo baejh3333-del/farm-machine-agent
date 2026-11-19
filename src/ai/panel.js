@@ -515,6 +515,8 @@ export function createAiPanel({
   let photoLabel = "첨부한 기계 사진";
   let lastPhotoDataUrl = null;
   let savedDraft = null;
+  // 마지막으로 올린 사진의 인식 결과. 사진은 첫 턴에만 보내므로, 세부사항을 답하는 다음 턴에 함께 보낸다.
+  let lastPhotoSummary = null;
   let plusMenuOpen = false;
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
@@ -802,6 +804,7 @@ export function createAiPanel({
     agentPhoto = null;
     photoIsNew = false;
     photoLabel = "첨부한 기계 사진";
+    lastPhotoSummary = null;
     const input = $("aiPhotoInput");
     if (input) input.value = "";
     const cameraInput = $("aiCameraInput");
@@ -814,6 +817,7 @@ export function createAiPanel({
     photoIsNew = true;
     photoLabel = label;
     savedDraft = null;
+    lastPhotoSummary = null;
     showPhotoPreview();
     // 고르기만 해서는 보내지 않는다(음성 대화 중에도). 입력해 둔 글은 그대로 두고 입력칸으로 돌아간다.
     $("aiInput")?.focus({ preventScroll: true });
@@ -2058,6 +2062,7 @@ export function createAiPanel({
 
   function renderAgentEffects(bubble, result, { reply = "", includeFollowUp = true } = {}) {
     if (!bubble || !result) return;
+    if (result.photoSummary && typeof result.photoSummary === "object") lastPhotoSummary = result.photoSummary;
     rememberPendingAction(result);
     if (result.reservation || result.createdListing || result.myPageAction) {
       // 말로 바로 실행한 작업도 화면 목록(대여 요청·내 매물·마이페이지)을 새로 고친다.
@@ -2626,6 +2631,7 @@ export function createAiPanel({
         delegationId: delegationId || undefined,
         sessionId: agentSessionId,
         savedDraft,
+        photoSummary: lastPhotoSummary,
         insuranceOffer,
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
@@ -3210,6 +3216,7 @@ export function createAiPanel({
         uiContext,
         image: sendingPhoto || undefined,
         savedDraft,
+        photoSummary: lastPhotoSummary,
         insuranceOffer,
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
@@ -3309,6 +3316,7 @@ export function createAiPanel({
     insuranceAsked = false;
     savedDraft = null;
     lastPhotoDataUrl = null;
+    lastPhotoSummary = null;
     setFullDelegation(false);
     setPlusMenuOpen(false);
     renderStarterBar();

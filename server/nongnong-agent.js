@@ -130,7 +130,8 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
   1) 기종을 알면 get_repair_guide로 안전 수칙과 자가점검 3~5단계, 중단 조건을 조회해 짧게 안내한다.
   2) **반드시 find_repair_centers도 함께 호출**해 가까운 수리센터·임대사업소·제조사 A/S 창구를 추천한다(화면에 전화·사이트 버튼 카드로 보이며, 답변에도 센터명·전화번호·웹사이트 URL을 도구 결과 그대로 안내한다).
   3) 수리 흐름에서도 보험 보장이 포함될 수 있으므로, 답변 마지막에 **"보험 추천해드릴까요?"**를 함께 제안한다.
-- 판매·대여 등록을 원하면 estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 확정한다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 연식·사용시간·포함 작업기처럼 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
+- 판매·대여 등록을 원하면 초안부터 만들지 않는다. 먼저 사진으로 본 기종을 "사진으로 보면 ○○ 같아요"처럼 알려 주고, 연식·사용시간·같이 드릴 작업기 중 사용자가 아직 말하지 않은 것을 한 번에 짧게 묻는다("모르시면 모른다고 하셔도 돼요"). 답을 받으면(모른다고 해도) estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 보여 준다. prepare_listing_draft가 needsDetails를 돌려주면 그 항목을 묻는다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
+- 초안 카드에는 제목·소개글·참고가가 이미 보인다. 답변에서 "제목은 ~, 설명은 ~"처럼 카드 내용을 다시 나열하지 않는다. 해요체 2~3문장으로 "말씀해 주신 내용으로 초안을 만들었어요", 참고가 한 번, "이대로 올릴까요?"만 말한다.
 - **보험 안내**: 대여 추천·예약 흐름과 고장·수리 안내 흐름 모두에서 **"보험 추천해드릴까요?"**로 먼저 제안할 수 있으며, 사용자가 보험을 묻거나 추천을 원하면 get_insurance_info로 안내한다. 보험료를 확정해 말하지 않고, 보험 가입·결제를 대신하지 않으며, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
 - 웹 검색 도구가 있으면, 위 도구에 없는 사실을 확인할 때만 쓰고 "웹 검색 결과라 확인이 필요해요"라고 밝힌다.
 - 시니어도 읽기 쉽게: 한 문장은 짧게, 어려운 말은 쉬운 말로 풀어 쓴다.`;
@@ -1086,7 +1087,59 @@ export function cleanSavedDraft(draft) {
   return { listingId: draft.listingId, photoKey: draft.photoKey, photoUrl: typeof draft.photoUrl === "string" ? draft.photoUrl : null };
 }
 
-function resolveListingPayload(input, { uiCtx, photoSummary, catalog } = {}) {
+// 사진만으로는 알 수 없는 사실. 사용자가 그 주제를 말한 적이 없으면 소개글·제목에 쓰지 않는다.
+const UNVERIFIED_FACTS = [
+  { label: "연식", claim: /\d{2,4}\s*년(?:식|형)|연식|년식|연형|신형|구형/, said: /\d{2,4}\s*년|신형|구형/ },
+  { label: "사용시간", claim: /사용\s*시간|\d+\s*시간|최근\s*(?:까지\s*)?(?:사용|씀|썼)|(?:거의|별로)\s*안\s*(?:쓴|썼|씀)|적게\s*(?:쓴|썼)|사용감|운행/, said: /\d+\s*시간|최근|안\s*(?:썼|쓴|씀)|조금\s*(?:썼|쓴)|많이\s*(?:썼|쓴)|적게\s*(?:썼|쓴)|사용감|운행/ },
+  { label: "포함 작업기", claim: /작업기|부속|로터리|쟁기|베일러|탈부착|부착|포함/, said: /작업기|부속|로터리|쟁기|베일러|포함|달려|붙어|부착/ },
+  { label: null, claim: /정비|수리\s*(?:완료|이력|했|받)|교체|점검\s*(?:완료|받|했)|관리\s*(?:잘|받|했)|무사고|고장\s*(?:없|이\s*없|난\s*적\s*없)/, said: /정비|수리|교체|점검|관리|고장|사고/ },
+  { label: null, claim: /상태\s*(?:가\s*)?(?:양호|좋|최상|깨끗|훌륭|멀쩡)|양호|깨끗|최상|멀쩡|새\s*것|새것|신품/, said: /상태|양호|깨끗|좋아|좋습|멀쩡|새\s*것|새것|신품/ },
+];
+const ASK_LABELS = UNVERIFIED_FACTS.filter((fact) => fact.label).map((fact) => fact.label);
+
+/** 사용자가 말하지 않은 주제의 사실이 들어 있으면 true. */
+function hasUnsaidClaim(clause, saidText) {
+  return UNVERIFIED_FACTS.some((fact) => fact.claim.test(clause) && !fact.said.test(saidText));
+}
+
+/**
+ * 모델이 쓴 소개글에서 사용자가 말하지 않은 사실(작업기 포함·사용시간·연식·정비 이력·상태 평가)을 뺀다.
+ * 사진에서 본 상태는 그대로 덧붙이고, 모르는 항목은 [확인 필요]로 남긴다.
+ */
+export function groundListingDescription(description, { saidText = "", observations = [], year = "" } = {}) {
+  const said = String(saidText || "");
+  const lines = [];
+  for (const rawLine of String(description || "").split("\n")) {
+    const line = rawLine.trim();
+    if (!line || /확인\s*필요|사진으로\s*본\s*상태/.test(line)) continue;
+    // 쉼표·마침표로 문장을 나누되 "300,000원"·"1.5톤"처럼 숫자 사이 기호는 나누지 않는다.
+    const clauses = (line.match(/(?:[^,，·.!?]|(?<=\d)[,.](?=\d))+[.!?]?/g) || [])
+      .map((clause) => clause.trim())
+      .filter((clause) => clause && !/확인\s*필요/.test(clause) && !hasUnsaidClaim(clause, said));
+    if (!clauses.length) continue;
+    lines.push(clauses.reduce((acc, clause, i) => (i === 0 ? clause : `${acc}${/[.!?]$/.test(clauses[i - 1]) ? " " : ", "}${clause}`), ""));
+  }
+  const seen = (Array.isArray(observations) ? observations : []).filter((item) => typeof item === "string" && item.trim());
+  if (seen.length) lines.push(`사진으로 본 상태: ${seen.join(", ")}`);
+  const unknown = ASK_LABELS.filter((label) => {
+    if (label === "연식" && year) return false;
+    const fact = UNVERIFIED_FACTS.find((item) => item.label === label);
+    return !fact.said.test(said);
+  });
+  if (unknown.length) lines.push(`[확인 필요] ${unknown.join(" · ")}`);
+  return lines.join("\n").slice(0, 1000);
+}
+
+// "몰라요", "그냥 만들어 줘"처럼 더 말하지 않겠다는 답이면 남은 항목은 [확인 필요]로 두고 초안을 만든다.
+const SKIP_DETAILS = /모르|몰라|모름|기억\s*(?:이\s*)?안|그냥\s*(?:만들|올려|보여|해|진행)|넘어가|건너뛰|나중에|생략/;
+
+/** 초안을 만들기 전에 사용자에게 물어볼 항목(연식·사용시간·포함 작업기). 이미 말했거나 건너뛰겠다고 하면 빈 배열. */
+export function missingListingDetails(saidText, latestText = "") {
+  if (SKIP_DETAILS.test(String(latestText || ""))) return [];
+  return UNVERIFIED_FACTS.filter((fact) => fact.label && !fact.said.test(String(saidText || ""))).map((fact) => fact.label);
+}
+
+function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText = null } = {}) {
   const type = input?.type === "sale" ? "sale" : "rent";
   const modelId = Object.hasOwn(SPEC_BY_ID, input?.modelId) ? input.modelId : null;
   const spec = modelId ? SPEC_BY_ID[modelId] : null;
@@ -1115,14 +1168,21 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog } = {}) {
       ? uiCtx.operations
       : [CROP_OPERATIONS[resolvedCrops[0]]?.[0] || OPERATIONS[0].id];
   const condition = ["good", "used", "repair"].includes(input?.condition) ? input.condition : "good";
-  const title = String(input?.title || "").trim().slice(0, 80)
-    || `${brand === "직접 등록" ? "" : `${brand} `}${MACHINE_BY_ID[machineType]?.label || "농기계"} ${type === "sale" ? "판매" : "대여"}`.trim().slice(0, 80);
+  const grounded = typeof saidText === "string";
+  const defaultTitle = `${brand === "직접 등록" ? "" : `${brand} `}${MACHINE_BY_ID[machineType]?.label || "농기계"} ${type === "sale" ? "판매" : "대여"}`.trim().slice(0, 80);
+  const inputTitle = String(input?.title || "").trim().slice(0, 80);
+  const title = inputTitle && !(grounded && hasUnsaidClaim(inputTitle, saidText)) ? inputTitle : defaultTitle;
   const priceInput = Number.isSafeInteger(input?.price) && input.price >= 0 ? input.price : null;
   const estimated = priceInput !== null ? null : estimatePrice(catalog || [], { purpose: type, modelId, machineType });
   const price = priceInput !== null ? priceInput : estimated?.median ?? null;
   const deposit = type === "rent" && Number.isSafeInteger(input?.deposit) && input.deposit > 0 ? input.deposit : 0;
-  const year = typeof input?.year === "string" ? input.year.trim().slice(0, 20) : "";
-  const description = composeListingDescription({ year, deposit, description: input?.description || "" });
+  const rawYear = typeof input?.year === "string" ? input.year.trim().slice(0, 20) : "";
+  // 연식도 사용자가 말한 적이 있을 때만 쓴다(사진만으로는 연식을 알 수 없다).
+  const year = grounded && rawYear && !UNVERIFIED_FACTS[0].said.test(saidText) ? "" : rawYear;
+  const bodyText = grounded
+    ? groundListingDescription(input?.description || "", { saidText, observations: photoSummary?.observations, year })
+    : input?.description || "";
+  const description = composeListingDescription({ year, deposit, description: bodyText });
   return {
     type,
     modelId,
@@ -1643,7 +1703,7 @@ const VOICE_GUIDE = `## 음성으로 들어온 질문
 
 async function runTurn(
   message,
-  { history = [], region, uiContext, image, user, savedDraft, farmProfile, sessionId, sessionSlots, inputMode = "text" } = {},
+  { history = [], region, uiContext, image, user, savedDraft, photoSummary: carriedPhotoSummary, farmProfile, sessionId, sessionSlots, inputMode = "text" } = {},
   { listings, pool, today = kstToday(), call = callLLM, saveDraft = saveDraftPhoto, fetchOffices, deps = null } = {},
   signal,
 ) {
@@ -1684,6 +1744,14 @@ async function runTurn(
   const intentTurn = recentUser.find((t) => SALE_RE.test(t) || RENT_RE.test(t)) || "";
   const saleIntent = SALE_RE.test(intentTurn) && !RENT_RE.test(intentTurn);
   const effectiveRegion = cleanRegion(region) || uiCtx.region;
+  // 매물 소개글에 쓸 수 있는 사실의 근거: 이 대화에서 사용자가 직접 한 말.
+  const saidText = [...(Array.isArray(history) ? history : []).filter((item) => item?.role === "user").map((item) => String(item.content || "")), text].join("\n");
+  // 앞 턴에서 본 사진의 인식 결과(사진은 첫 턴에만 보낸다). 세부사항을 물은 뒤 초안을 만들 때 쓴다.
+  const priorPhotoRaw = !image && carriedPhotoSummary && typeof carriedPhotoSummary === "object" ? cleanPhotoSummary(carriedPhotoSummary) : null;
+  const priorPhoto = priorPhotoRaw && (priorPhotoRaw.machineType || priorPhotoRaw.observations.length) ? priorPhotoRaw : null;
+  const priorPhotoNote = priorPhoto
+    ? `\n\n[앞서 사용자가 올린 사진 인식 결과] 기종=${MACHINE_BY_ID[priorPhoto.machineType]?.label || "모름"}${priorPhoto.modelId ? `, 모델=${priorPhoto.modelId}` : ""}, 확신도=${priorPhoto.confidence}${priorPhoto.observations.length ? `, 보이는 상태=${priorPhoto.observations.join(", ")}` : ""}`
+    : "";
   const messages = sanitizeHistory(history, text || "사진을 보고 도와주세요.");
   if (image?.base64) {
     const last = messages.at(-1);
@@ -1707,12 +1775,12 @@ async function runTurn(
   const repairNote = repairTurn
     ? "\n\n[이번 메시지] 기계 고장·수리 문의다. 매물을 검색하거나 추천하지 않는다. get_repair_guide로 안전 수칙과 점검 단계를 짧게 안내하고, 마지막에 \"아래 가까운 수리센터 3곳에 연락해 보세요\"라고 말한다. 수리센터 카드는 화면이 보여 주니 전화번호를 글로 늘어놓지 않는다."
     : "";
-  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}${dialectHint}${repairNote}`;
+  const system = `${SYSTEM_PROMPT}${voice ? `\n\n${VOICE_GUIDE}` : ""}\n\n오늘 날짜(한국 시간): ${today}${typeof effectiveRegion === "string" && effectiveRegion ? `\n사용자가 고른 지역: ${effectiveRegion.slice(0, 20)}` : ""}${user ? "\n사용자는 로그인한 상태다." : "\n사용자는 로그인하지 않은 상태다 (추천·조회·초안까지만 가능, 예약·등록은 로그인 필요)."}${formatUiContextPrompt(uiCtx, catalog)}${knownFacts}${priorPhotoNote}${dialectHint}${repairNote}`;
   const selectedTools = selectToolsForTurn({
     text,
     hasImage: Boolean(image?.base64),
     uiCtx,
-    slots: { ...(sessionSlots || {}), ...(savedDraft ? { savedDraft: true } : {}) },
+    slots: { ...(sessionSlots || {}), ...(savedDraft ? { savedDraft: true } : {}), ...(priorPhoto ? { photoSummary: true } : {}) },
     history,
   });
   const tools = process.env.AI_WEB_SEARCH === "1" ? [...selectedTools, { type: "web_search" }] : selectedTools;
@@ -1724,6 +1792,23 @@ async function runTurn(
     for (const item of items || []) if (item?.url && !sources.some((source) => source.url === item.url)) sources.push({ title: item.title, url: item.url });
   };
   let draft = image ? null : cleanSavedDraft(savedDraft);
+  // 이미 초안 카드를 보여 준 뒤(저장된 초안이 있음) 고치는 턴이면 세부사항을 다시 묻지 않는다.
+  const editingDraft = Boolean(draft);
+  const listingPhoto = () => out.photoSummary || priorPhoto;
+  // 초안을 만들기 전에 아직 묻지 않은 세부사항이 있으면 초안 대신 이것을 돌려줘 먼저 묻게 한다.
+  const askDetailsFirst = () => {
+    if (editingDraft) return null;
+    const needsDetails = missingListingDetails(saidText, text);
+    if (!needsDetails.length) return null;
+    const photo = listingPhoto();
+    return {
+      ok: false,
+      draftCreated: false,
+      needsDetails,
+      ...(photo ? { photoSummary: photo } : {}),
+      guide: `아직 초안을 만들지 않았다. ${photo?.machineType ? "사진으로 본 기종을 \"사진으로 보면 ○○ 같아요\"처럼 한 문장으로 말하고, " : ""}needsDetails(${needsDetails.join(", ")})를 한 번에 짧게 묻는다. 예: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." 참고가·제목·소개글은 아직 말하지 않는다. 사용자가 답하면 prepare_listing_draft를 다시 부른다.`,
+    };
+  };
   let writeDone = false;
   let searchedThisTurn = false;
   let repairGuideCalled = false;
@@ -2017,8 +2102,14 @@ async function runTurn(
       } else if (block.name === "estimate_price") {
         reportProgress("estimate_price", block.input);
         output = estimatePrice(await loadCatalog(), block.input || {});
+      } else if (
+        (block.name === "prepare_listing_draft"
+          || (block.name === "create_listing" && !(user && spokenApproval && deps?.createListing && !writeDone)))
+        && (output = askDetailsFirst())
+      ) {
+        // 세부사항(연식·사용시간·포함 작업기)을 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
       } else if (block.name === "prepare_listing_draft") {
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: out.photoSummary, catalog: await loadCatalog() });
+        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: await loadCatalog(), saidText });
         const price = resolved.estimated ?? estimatePrice(await loadCatalog(), { purpose: resolved.type, modelId: resolved.modelId, machineType: resolved.machineType });
         const finalPrice = Number.isSafeInteger(block.input?.price) && block.input.price > 0 ? block.input.price : price.median;
         let photoNote = null;
@@ -2051,15 +2142,19 @@ async function runTurn(
           year: resolved.year,
           deposit: resolved.deposit,
         };
+        const needsCheck = /\[확인 필요\]\s*(.+)/.exec(out.listingDraft.description)?.[1]?.split(" · ") || [];
         output = {
           ok: true,
           price,
+          description: out.listingDraft.description,
+          needsCheck,
+          replyGuide: "초안 카드가 화면에 보인다. 제목·소개글을 다시 읽지 말고, \"말씀해 주신 내용으로 초안을 만들었어요\"와 참고가를 한 번 말한 뒤 \"이대로 올릴까요?\"라고 해요체로 묻는다.",
           photoSaved: Boolean(draft),
           ...(user ? {} : { loginRequired: true, note: "로그인하지 않아 사진은 저장하지 않았어요. 등록하기를 누르면 로그인 후 이어서 등록해요." }),
           ...(photoNote ? { photoNote } : {}),
         };
       } else if (block.name === "create_listing") {
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: out.photoSummary, catalog: await loadCatalog() });
+        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: await loadCatalog(), saidText });
         if (resolved.price === null || !Number.isSafeInteger(resolved.price)) {
           output = { ok: false, error: "가격을 정해야 등록할 수 있어요. 희망 가격을 물어보세요." };
         } else if (user && spokenApproval && deps?.createListing && !writeDone) {

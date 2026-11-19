@@ -1044,7 +1044,8 @@ body.ai-fullscreen .ai-launcher {
 
 #aiForm .ai-tool-btn,
 #aiForm .ai-photo-btn,
-#aiForm .ai-camera-btn {
+#aiForm .ai-camera-btn,
+#aiForm .ai-live-voice-btn {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -1068,14 +1069,16 @@ body.ai-fullscreen .ai-launcher {
 
 #aiForm .ai-tool-btn:hover,
 #aiForm .ai-photo-btn:hover,
-#aiForm .ai-camera-btn:hover {
+#aiForm .ai-camera-btn:hover,
+#aiForm .ai-live-voice-btn:hover {
   background: #f2f2f2;
   border-color: #111111;
 }
 
 #aiForm .ai-tool-btn:active,
 #aiForm .ai-photo-btn:active,
-#aiForm .ai-camera-btn:active {
+#aiForm .ai-camera-btn:active,
+#aiForm .ai-live-voice-btn:active {
   transform: scale(0.96);
 }
 
@@ -2074,11 +2077,32 @@ body.ai-fullscreen .ai-launcher {
 }
 
 .ai-plus-btn span {
-  display: inline-block;
-  font-size: 1.4rem;
-  font-weight: 500;
-  line-height: 1;
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
   transition: transform 0.22s var(--ease-spring, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* CSS로 그린 '+' — 폰트 기준선과 무관하게 동그라미 정중앙에 위치 */
+.ai-plus-btn span::before,
+.ai-plus-btn span::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--forest, #111111);
+  transform: translate(-50%, -50%);
+}
+
+.ai-plus-btn span::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .ai-plus-menu {
@@ -2407,26 +2431,197 @@ body.ai-fullscreen .ai-launcher {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-.ai-composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-inline-start: auto;
+/* =========================================
+   실시간 음성 대화: '듣고 있어요' 표시
+   패널 아래쪽 언덕(호) 위에 농농이가 앉아 있고,
+   상태에 따라 둘레 고리가 움직인다.
+   ========================================= */
+.ai-voice-live-bar {
+  position: relative;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 18px 14px 14px;
+  border: 0;
+  border-radius: 20px;
+  color: var(--text-strong, #162a22);
+  background:
+    radial-gradient(130% 90px at 50% 100%, #e3f1e7 0 99%, transparent 100%) bottom / 100% 90px no-repeat,
+    #ffffff;
+  box-shadow: inset 0 0 0 1px var(--line, #e8e8e8);
+  overflow: hidden;
 }
 
-.ai-voice-control {
-  display: inline-grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
+/* 언덕 윤곽선 */
+.ai-voice-live-bar::before {
+  content: "";
+  position: absolute;
+  left: -15%;
+  right: -15%;
+  bottom: -60px;
+  height: 150px;
   border-radius: 50%;
-  background: #202020;
-  color: #f4f4f4;
-  cursor: pointer;
+  border-top: 1.5px solid #b9dcc4;
+  pointer-events: none;
 }
-.ai-voice-control[hidden] { display: none; }
-.ai-voice-control:hover { background: #393939; }
-.ai-voice-control:focus-visible { outline: 3px solid #26844d; outline-offset: 2px; }
-.ai-voice-control[aria-pressed="true"] { background: #16613c; }
+
+.ai-voice-live-bar[data-voice-state="thinking"],
+.ai-voice-live-bar[data-voice-state="muted"] {
+  background:
+    radial-gradient(130% 90px at 50% 100%, #eef0ee 0 99%, transparent 100%) bottom / 100% 90px no-repeat,
+    #ffffff;
+}
+
+.ai-voice-orb {
+  position: relative;
+  z-index: 1;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+}
+
+.ai-voice-orb-face {
+  position: relative;
+  z-index: 2;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px var(--forest, #174233), 0 8px 20px rgba(16, 48, 36, 0.16);
+  overflow: hidden;
+}
+
+.ai-voice-orb-face img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}
+
+.ai-voice-orb-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #22a55a;
+  opacity: 0;
+  animation: aiVoiceOrbRing 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.ai-voice-orb-ring.is-late {
+  animation-delay: 0.9s;
+}
+
+@keyframes aiVoiceOrbRing {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+/* 농농이가 말하는 중: 고리가 더 빠르고 크게 */
+.ai-voice-live-bar[data-voice-state="speaking"] .ai-voice-orb-ring {
+  animation-duration: 1.1s;
+  border-width: 3px;
+}
+
+.ai-voice-live-bar[data-voice-state="speaking"] .ai-voice-orb-face {
+  animation: aiVoiceOrbTalk 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes aiVoiceOrbTalk {
+  from { transform: scale(1); }
+  to { transform: scale(1.05); }
+}
+
+/* 확인 중·연결 중: 고리 대신 둘레를 도는 호 */
+.ai-voice-live-bar[data-voice-state="thinking"] .ai-voice-orb-ring,
+.ai-voice-live-bar[data-voice-state="connecting"] .ai-voice-orb-ring {
+  inset: -6px;
+  opacity: 1;
+  border-color: transparent;
+  border-top-color: #22a55a;
+  border-right-color: #22a55a;
+  animation: aiVoiceOrbSpin 1s linear infinite;
+}
+
+.ai-voice-live-bar[data-voice-state="thinking"] .ai-voice-orb-ring.is-late,
+.ai-voice-live-bar[data-voice-state="connecting"] .ai-voice-orb-ring.is-late {
+  display: none;
+}
+
+@keyframes aiVoiceOrbSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* 마이크 꺼짐: 고리를 멈추고 흐리게 */
+.ai-voice-live-bar[data-voice-state="muted"] .ai-voice-orb-ring {
+  display: none;
+}
+
+.ai-voice-live-bar[data-voice-state="muted"] .ai-voice-orb-face {
+  box-shadow: 0 0 0 2px var(--line-strong, #d4d4d4);
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+.ai-voice-live-bar .ai-voice-live-info {
+  position: relative;
+  z-index: 1;
+  justify-content: center;
+}
+
+.ai-voice-live-bar .ai-voice-wave {
+  display: none;
+}
+
+.ai-voice-live-bar .ai-voice-live-status {
+  color: var(--text-strong, #162a22);
+  text-align: center;
+}
+
+.ai-voice-live-bar .ai-voice-live-actions {
+  position: relative;
+  z-index: 1;
+  justify-content: center;
+}
+
+.ai-voice-live-bar .ai-voice-bar-btn {
+  border-color: var(--line, #e8e8e8);
+  background: #ffffff;
+  color: var(--text-strong, #162a22);
+}
+
+.ai-voice-live-bar .ai-voice-bar-btn:hover {
+  background: #f3f6f4;
+}
+
+.ai-voice-live-bar .ai-voice-bar-btn.is-stop {
+  border-color: var(--forest, #174233);
+  background: var(--forest, #174233);
+  color: #ffffff;
+}
+
+.ai-voice-live-bar .ai-voice-bar-btn.is-muted {
+  border-color: #b9dcc4;
+  background: #e3f1e7;
+  color: var(--forest, #174233);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-voice-orb-ring,
+  .ai-voice-orb-face {
+    animation: none !important;
+  }
+
+  .ai-voice-live-bar[data-voice-state="listening"] .ai-voice-orb-ring:not(.is-late) {
+    opacity: 0.6;
+    transform: scale(1.18);
+  }
+}
+
+.ai-voice-live-bar .ai-voice-select {
+  border-color: var(--line, #e8e8e8);
+  background: #ffffff;
+  color: var(--text-strong, #162a22);
+}

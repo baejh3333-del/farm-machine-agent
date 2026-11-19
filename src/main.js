@@ -210,7 +210,7 @@ function closeAiPanel({ returnFocus = true } = {}) {
   panel.hidden = true;
   if ($("aiBackdrop")) $("aiBackdrop").hidden = true;
   panel.classList.remove("is-entering");
-  document.body.classList.remove("ai-open", "ai-fullscreen");
+  document.body.classList.remove("ai-open", "ai-fullscreen", "ai-docked");
   $("aiLauncher")?.setAttribute("aria-expanded", "false");
   if (returnFocus) $("aiLauncher")?.focus({ preventScroll: true });
 }

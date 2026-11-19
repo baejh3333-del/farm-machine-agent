@@ -305,6 +305,7 @@ async function chatTurn(request, body, started, progress) {
     sessionId: activeSessionId,
     sessionSlots: session?.slots,
     savedDraft: cleanSavedDraft(body.savedDraft),
+    photoSummary: body.photoSummary && typeof body.photoSummary === "object" && !Array.isArray(body.photoSummary) ? body.photoSummary : undefined,
   }, {
     timeoutMs: Math.max(1, (image ? 40000 : 25000) - (Date.now() - started)),
     deps,

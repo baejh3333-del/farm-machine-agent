@@ -304,7 +304,7 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
     // 4. 지도 사용 중 AI 농농이 패널 열림 및 크기 유지 + 명시적 닫기 유지
     await page.locator("#aiLauncher").click();
     await page.locator("#aiPanel").waitFor({ state: "visible" });
-    await page.locator("#aiExpand").click(); // docked 모드로 전환
+    if (await page.locator("#aiPanel").getAttribute("data-layout-mode") !== "docked") await page.locator("#aiExpand").click();
     await page.waitForTimeout(500);
     const sizeBefore = await page.locator("#aiPanel").boundingBox();
     assert.equal(await page.locator("#aiPanel").getAttribute("data-layout-mode"), "docked");
@@ -344,7 +344,7 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
 
     await page.locator("#aiLauncher").click();
     await page.locator("#aiPanel").waitFor({ state: "visible" });
-    await page.locator("#aiExpand").click(); // docked 모드 유지 확인
+    if (await page.locator("#aiPanel").getAttribute("data-layout-mode") !== "docked") await page.locator("#aiExpand").click();
     await page.locator("#aiInput").fill("홍천 트랙터 찾아줘");
     await page.locator('#aiForm button[type="submit"]').click();
 

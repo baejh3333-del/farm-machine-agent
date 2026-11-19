@@ -516,6 +516,8 @@ export function createAiPanel({
   let photoLabel = "첨부한 기계 사진";
   let lastPhotoDataUrl = null;
   let savedDraft = null;
+  // 마지막으로 올린 사진의 인식 결과. 사진은 첫 턴에만 보내므로, 세부사항을 답하는 다음 턴에 함께 보낸다.
+  let lastPhotoSummary = null;
   let plusMenuOpen = false;
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
@@ -644,6 +646,8 @@ export function createAiPanel({
     panel.classList.toggle("is-fullscreen", isFullscreen);
     panel.classList.toggle("is-expanded", isFullscreen);
     document.body.classList.toggle("ai-fullscreen", isFullscreen && !panel.hidden);
+    // 지도 화면은 이 표시를 보고 우측 패널 자리만큼 지도를 좁힌다.
+    document.body.classList.toggle("ai-docked", !isFullscreen && !panel.hidden);
     const backdrop = $("aiBackdrop");
     if (backdrop) backdrop.hidden = panel.hidden || !isFullscreen;
 
@@ -794,13 +798,14 @@ export function createAiPanel({
     if (labelEl) labelEl.textContent = photoLabel || "첨부한 기계 사진";
     // 사진은 고르기만 해서는 보내지 않는다: 사용자가 전송(또는 음성 대화 중 말하기)해야 함께 간다.
     const hint = preview.querySelector(".ai-photo-meta span");
-    if (hint) hint.textContent = isLiveVoiceActive() ? "전송을 누르면 사진만 보내요. 말하면 사진과 함께 전달돼요." : "전송을 누르면 사진만 보내요.";
+    if (hint) hint.textContent = "입력한 글이 있으면 사진과 함께 보내요.";
   }
 
   function clearPhoto() {
     agentPhoto = null;
     photoIsNew = false;
     photoLabel = "첨부한 기계 사진";
+    lastPhotoSummary = null;
     const input = $("aiPhotoInput");
     if (input) input.value = "";
     const cameraInput = $("aiCameraInput");
@@ -813,6 +818,7 @@ export function createAiPanel({
     photoIsNew = true;
     photoLabel = label;
     savedDraft = null;
+    lastPhotoSummary = null;
     showPhotoPreview();
     // 고르기만 해서는 보내지 않는다(음성 대화 중에도). 입력해 둔 글은 그대로 두고 입력칸으로 돌아간다.
     $("aiInput")?.focus({ preventScroll: true });
@@ -1656,7 +1662,72 @@ export function createAiPanel({
       ? "승인하면 1:1 거래 채팅방에서 농농이 자동 협상·응대 모드가 시작돼요."
       : isPurchase
         ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
-        : "승인하면 게시자에게 대여 요청이 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+        : "승인하면 게시자에게 대여 요청과 아래 희망 조건이 채팅으로 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
+    card.append(notice);
+
+    // 대여 요청: 희망 네고 가격(1일)·대리운용 희망 여부를 받아 요청과 함께 게시자 채팅으로 보낸다.
+    const isRental = action.type === "rental_request";
+    let rentalTerms = null;
+    if (isRental) {
+      const terms = document.createElement("div");
+      terms.className = "ai-draft-options ai-rental-terms";
+
+      const priceBox = document.createElement("fieldset");
+      priceBox.className = "ai-draft-option-box";
+      const priceLegend = document.createElement("legend");
+      priceLegend.textContent = "💬 희망 네고 가격 (1일)";
+      const priceLabel = document.createElement("label");
+      priceLabel.className = "ai-rental-price";
+      const priceInput = document.createElement("input");
+      priceInput.type = "number";
+      priceInput.inputMode = "numeric";
+      priceInput.min = "0";
+      priceInput.step = "1000";
+      priceInput.placeholder = Number.isFinite(Number(action.dailyPrice)) ? String(action.dailyPrice) : "";
+      priceInput.setAttribute("aria-label", "희망 네고 가격(1일, 원)");
+      priceLabel.append(priceInput, document.createTextNode("원"));
+      const priceHint = document.createElement("small");
+      priceHint.textContent = "비워 두면 등록가 그대로 요청해요.";
+      priceBox.append(priceLegend, priceLabel, priceHint);
+
+      const operatorBox = document.createElement("fieldset");
+      operatorBox.className = "ai-draft-option-box";
+      const operatorLegend = document.createElement("legend");
+      operatorLegend.textContent = "🧑‍🌾 대리운용 희망";
+      const operatorChoices = document.createElement("div");
+      operatorChoices.className = "ai-draft-option-choices";
+      for (const [value, text] of [["no", "희망 안 함"], ["yes", "희망"]]) {
+        const choice = document.createElement("label");
+        choice.className = "ai-draft-option";
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = `ai-rental-operator-${requestId}`;
+        input.value = value;
+        input.checked = value === "no";
+        choice.append(input, document.createTextNode(text));
+        operatorChoices.append(choice);
+      }
+      operatorBox.append(operatorLegend, operatorChoices);
+      terms.append(priceBox, operatorBox);
+      card.append(terms);
+
+      rentalTerms = {
+        read() {
+          const raw = priceInput.value.trim();
+          const price = raw === "" ? null : Math.round(Number(raw));
+          if (raw !== "" && !(Number.isSafeInteger(price) && price > 0)) return { error: "희망 네고 가격은 0보다 큰 숫자로 입력해 주세요." };
+          return {
+            negotiatedDailyPrice: price,
+            operatorWanted: operatorChoices.querySelector("input:checked")?.value === "yes",
+          };
+        },
+        lock() {
+          priceInput.disabled = true;
+          for (const input of operatorChoices.querySelectorAll("input")) input.disabled = true;
+        },
+      };
+    }
+
     const actions = document.createElement("div");
     actions.className = "ai-confirm-actions";
     const approve = document.createElement("button");
@@ -1669,7 +1740,7 @@ export function createAiPanel({
     cancel.className = "button button-secondary";
     cancel.textContent = "취소";
     actions.append(approve, cancel);
-    card.append(notice, actions);
+    card.append(actions);
     bubble.append(card);
     scrollAiToEnd();
 
@@ -1698,9 +1769,20 @@ export function createAiPanel({
     });
 
     approve.addEventListener("click", () => {
+      let pendingAction = action;
+      if (rentalTerms) {
+        const terms = rentalTerms.read();
+        if (terms.error) {
+          toast(terms.error);
+          return;
+        }
+        pendingAction = { ...action, ...terms };
+        // 같은 requestId로 재시도할 때 조건이 바뀌면 서버 멱등성 검사에 걸리므로, 한 번 보낸 뒤에는 잠근다.
+        rentalTerms.lock();
+      }
       rememberAgentTurn({ role: "user", content: isMyPage ? "승인합니다. 바꿔 주세요." : "승인합니다. 요청을 보내 주세요." });
       executeOneTapAction({
-        pendingAction: action,
+        pendingAction,
         requestId,
         triggerButton: approve,
         onBusy: () => {
@@ -1711,6 +1793,7 @@ export function createAiPanel({
           forget();
           card.dataset.state = outcome;
           actions.remove();
+          rentalTerms?.lock();
         },
         onError: (kind) => {
           if (kind === "aborted") {
@@ -2057,6 +2140,7 @@ export function createAiPanel({
 
   function renderAgentEffects(bubble, result, { reply = "", includeFollowUp = true } = {}) {
     if (!bubble || !result) return;
+    if (result.photoSummary && typeof result.photoSummary === "object") lastPhotoSummary = result.photoSummary;
     rememberPendingAction(result);
     if (result.reservation || result.createdListing || result.myPageAction) {
       // 말로 바로 실행한 작업도 화면 목록(대여 요청·내 매물·마이페이지)을 새로 고친다.
@@ -2118,6 +2202,11 @@ export function createAiPanel({
     appendInsuranceAsk(result);
   }
 
+  function resultListingIds(result) {
+    if (!result || result.reservation || result.createdListing || result.updatedListing) return [];
+    return uniqueListingIds(result.listingIds);
+  }
+
   function renderAgentResult(message, result, { photo = false } = {}) {
     const reply = typeof result.reply === "string" && result.reply.trim() ? result.reply.trim() : "말씀하신 내용을 처리하지 못했어요.";
     const summary = photoSummaryText(result.photoSummary);
@@ -2125,14 +2214,14 @@ export function createAiPanel({
       { role: "user", content: photo ? `[사진 첨부] ${message}`.trim() : message },
       { role: "assistant", content: [reply, summary].filter(Boolean).join("\n") },
     );
-    const listingIds = result.reservation || result.createdListing || result.updatedListing
-      ? []
-      : (Array.isArray(result.listingIds) ? result.listingIds : []).filter((id) => listingById(id));
-    if (listingIds.length) lastShownListingIds = listingIds.slice(0, 6);
-    if (result.reservation) lastShownListingIds = [];
+    const rawListingIds = resultListingIds(result);
+    const listingIds = rawListingIds.filter((id) => listingById(id));
     // 새 답이 오면 이전 확인 카드는 "방금 물어본 것"이 아니므로 채팅 "네"로 실행하지 않는다(버튼은 그대로 쓸 수 있다).
     openConfirmation = null;
     const bubble = appendAiMessage(reply, "assistant", listingIds, null, { searchDates: result.searchDates || null });
+    // 화면에 아직 없는 매물이어도 서버가 정한 순서·ID를 그대로 기억한다(“1번 자세히 알려줘”가 같은 매물을 가리키게).
+    if (rawListingIds.length) lastShownListingIds = rawListingIds.slice(0, 6);
+    else if (result.reservation) lastShownListingIds = [];
     renderAgentEffects(bubble, result, { reply, includeFollowUp: true });
     if (listingIds.length) focusMapListing?.(listingIds[0], listingIds);
     if ($("aiModeLabel")) $("aiModeLabel").textContent = "농농 AI · 추천부터 예약까지";
@@ -2623,6 +2712,7 @@ export function createAiPanel({
         delegationId: delegationId || undefined,
         sessionId: agentSessionId,
         savedDraft,
+        photoSummary: lastPhotoSummary,
         insuranceOffer,
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
@@ -2774,18 +2864,21 @@ export function createAiPanel({
   }
 
   // 음성 대화 중 사진을 보내면 답을 화면에 표시하고 음성으로 읽어 준다.
-  async function sendPhotoDuringLiveVoice() {
+  async function sendPhotoDuringLiveVoice(message) {
     if (livePhotoInFlight) return false;
     const photo = takeLivePhoto();
     if (!photo) return false;
     const gen = sessionGeneration;
     const liveGen = liveVoiceGeneration;
     livePhotoInFlight = true;
-    const message = "";
+    $("aiInput").value = "";
     appendAiMessage(message, "user", [], photo);
     const pending = appendAiMessage("농농이가 사진을 보고 있어요…", "assistant");
     pending.classList.add("is-thinking");
     try {
+      const catalogWait = runtime.catalogState !== "ready"
+        ? Promise.resolve(runtime.catalogReady).catch(() => {})
+        : null;
       const uiContext = collectUiContext();
       const result = await askAgent(message, {
         history: agentHistory,
@@ -2798,6 +2891,10 @@ export function createAiPanel({
         fullDelegation: fullDelegationEnabled,
       });
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      if (result?.mode === "agent" && resultListingIds(result).length && catalogWait && runtime.catalogState !== "ready") {
+        await catalogWait;
+        if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
+      }
       pending.remove();
       if (result?.sessionId) agentSessionId = result.sessionId;
       if (result?.mode !== "agent") throw new Error("사진을 지금 확인하지 못했어요.");
@@ -2812,6 +2909,7 @@ export function createAiPanel({
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
       pending.remove();
       restorePendingPhoto(photo);
+      if (message && !$("aiInput").value.trim()) $("aiInput").value = message;
       const msg = error?.message && /[가-힣]/.test(error.message) ? error.message : "사진을 지금 확인하지 못했어요.";
       appendAiMessage(`${msg} 사진은 그대로 두었어요. 전송을 다시 누르시거나 말로 설명해 주세요.`, "assistant");
       if (isLiveVoiceActive()) liveController.notifyUiEvent(`사용자에게 짧게 말한다: ${msg} 사진은 그대로 두었으니 다시 보내 주시거나 말로 설명해 주세요.`);
@@ -3143,14 +3241,13 @@ export function createAiPanel({
   async function sendAiQuestion(event) {
     event.preventDefault();
     const sendingPhoto = photoIsNew && agentPhoto ? agentPhoto : null;
-    const typedText = $("aiInput").value.trim();
-    const message = sendingPhoto ? "" : typedText;
+    const message = $("aiInput").value.trim();
     if ((!message && !sendingPhoto) || recommendationPending) return;
     if (message.length > 500) return toast("질문을 500자 이내로 입력해 주세요.");
     // 음성 대화 중에는 사진 응답도 음성으로 읽어 준다.
     if (sendingPhoto && isLiveVoiceActive()) {
       if (livePhotoInFlight) return toast("앞서 보낸 사진을 확인하고 있어요. 잠시만 기다려 주세요.");
-      sendPhotoDuringLiveVoice();
+      sendPhotoDuringLiveVoice(message);
       return;
     }
     if (sendingPhoto) lastPhotoDataUrl = sendingPhoto;
@@ -3161,7 +3258,7 @@ export function createAiPanel({
     recommendationPending = true;
     const submit = $("aiForm").querySelector('[type="submit"]');
     submit.disabled = true;
-    if (!sendingPhoto) $("aiInput").value = "";
+    $("aiInput").value = "";
     $("aiInput").placeholder = aiDefaultPlaceholder;
     if ($("aiWelcomeHero")) $("aiWelcomeHero").hidden = true;
     $("aiStarters").hidden = true;
@@ -3197,8 +3294,10 @@ export function createAiPanel({
       }
       pending = appendThinkingBubble(sendingPhoto ? "농농이가 사진을 보고 있어요…" : "농농이가 생각하고 있어요…");
       const pendingBubble = pending;
-      if (runtime.catalogState !== "ready") await Promise.resolve(runtime.catalogReady).catch(() => {});
-      if (gen !== sessionGeneration) return;
+      // 매물 목록(catalog)은 카드를 그릴 때만 필요하다. 요청은 바로 보내고, 목록은 응답을 기다리는 동안 함께 불러온다.
+      const catalogWait = runtime.catalogState !== "ready"
+        ? Promise.resolve(runtime.catalogReady).catch(() => {})
+        : null;
       const uiContext = collectUiContext();
       const agentResult = await askAgent(message, {
         history: withCorrectedRequests(agentHistory, correctedVoiceTasks),
@@ -3208,6 +3307,7 @@ export function createAiPanel({
         uiContext,
         image: sendingPhoto || undefined,
         savedDraft,
+        photoSummary: lastPhotoSummary,
         insuranceOffer,
         insuranceAsked,
         fullDelegation: fullDelegationEnabled,
@@ -3219,6 +3319,11 @@ export function createAiPanel({
         },
       });
       if (gen !== sessionGeneration) return;
+      // 카드를 그려야 하는데 목록이 아직이면 그때만 기다린다(비매물 답변은 기다리지 않는다).
+      if (agentResult?.mode === "agent" && resultListingIds(agentResult).length && catalogWait && runtime.catalogState !== "ready") {
+        await catalogWait;
+        if (gen !== sessionGeneration) return;
+      }
       if (agentResult?.sessionId) agentSessionId = agentResult.sessionId;
       pending.remove();
       pending = undefined;
@@ -3267,7 +3372,9 @@ export function createAiPanel({
     $("aiLauncher").setAttribute("aria-expanded", "true");
     applyWelcomeStagger();
     if (wasHidden) {
-      setAiLayoutMode("fullscreen", { animate: true });
+      // 지도를 보는 중이면 지도를 가리지 않게 우측 화면으로 연다.
+      const onMap = $("mapView") && !$("mapView").hidden;
+      setAiLayoutMode(onMap ? "docked" : "fullscreen", { animate: !onMap });
     } else {
       setAiLayoutMode(aiLayoutMode, { animate: false });
     }
@@ -3305,6 +3412,7 @@ export function createAiPanel({
     insuranceAsked = false;
     savedDraft = null;
     lastPhotoDataUrl = null;
+    lastPhotoSummary = null;
     setFullDelegation(false);
     setPlusMenuOpen(false);
     renderStarterBar();

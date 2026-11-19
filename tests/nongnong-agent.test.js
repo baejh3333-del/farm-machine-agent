@@ -4,7 +4,9 @@ import { test } from "node:test";
 import {
   checkFarmCompatibilityTool,
   cleanUiContext,
+  inferBareUsageHours,
   isRepairRequest,
+  missingListingDetails,
   proposeRentalTool,
   runAgentTurn,
   sanitizeHistory,
@@ -388,7 +390,7 @@ test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 �
     return { listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", photoUrl: "/api/photos?key=x" };
   };
   const first = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "초안을 만들었어요." }] }]);
-  const r1 = await runAgentTurn("빌려주고 싶어요", { image: PHOTO, user: USER }, { listings: LISTINGS, call: first.call, today: TODAY, saveDraft });
+  const r1 = await runAgentTurn("빌려주고 싶어요. 연식은 모르고 작업기는 없어요", { image: PHOTO, user: USER }, { listings: LISTINGS, call: first.call, today: TODAY, saveDraft });
   assert.equal(saves, 1);
   assert.equal(r1.listingDraft.listingId, "11111111-1111-4111-8111-111111111111");
   assert.equal(r1.listingDraft.type, "rent");
@@ -401,6 +403,140 @@ test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 �
   assert.equal(r2.listingDraft.photoKey, r1.listingDraft.photoKey);
 });
 
+test("사진+'팔고싶어'만 말하면 초안 대신 세부사항을 먼저 묻고, 답을 받은 뒤 초안을 만든다", async (t) => {
+  photoEnv(t);
+  const fabricated = { type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "상태 양호, 탈부착 가능 작업기 포함, 최근 사용함", machineType: "tractor", year: "2019년식" } };
+  // 1턴: 사진 + "이 기계를 팔고싶어" → 초안 카드 없이 세부사항 질문
+  const first = scripted([
+    { content: [{ type: "tool_use", id: "p1", name: "note_photo", input: { machineType: "tractor", confidence: "high", observations: ["외관 녹 적음", "앞 타이어 마모 보통"] } }] },
+    { content: [fabricated] },
+    { content: [{ type: "text", text: "사진으로 보면 트랙터 같아요. 연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요." }] },
+  ]);
+  const r1 = await runAgentTurn("이 기계를 팔고싶어", { image: PHOTO }, { listings: LISTINGS, call: first.call, today: TODAY });
+  assert.equal(r1.listingDraft, undefined, "세부사항을 묻기 전에는 초안 카드를 띄우지 않는다");
+  const gate = JSON.parse(first.calls[2].messages.at(-1).content[0].content);
+  assert.equal(gate.draftCreated, false);
+  assert.deepEqual(gate.needsDetails, ["연식", "사용시간", "포함 작업기"]);
+  assert.equal(gate.photoSummary.machineType, "tractor");
+  assert.equal(r1.photoSummary.machineType, "tractor");
+
+  // 2턴: 사진 없이 "다 몰라요" + 앞 턴 사진 인식 결과 → 초안, 지어낸 내용은 빠지고 사진 관찰·[확인 필요]가 남는다
+  const second = scripted([{ content: [fabricated] }, { content: [{ type: "text", text: "말씀해 주신 내용으로 초안을 만들었어요." }] }]);
+  const history = [{ role: "user", content: "[사진 첨부] 이 기계를 팔고싶어" }, { role: "assistant", content: r1.reply }];
+  const r2 = await runAgentTurn("다 몰라요", { history, photoSummary: r1.photoSummary }, { listings: LISTINGS, call: second.call, today: TODAY });
+  const { description, title, machineType } = r2.listingDraft;
+  assert.equal(title, "트랙터");
+  assert.equal(machineType, "tractor");
+  assert.doesNotMatch(description, /양호|작업기 포함|탈부착|최근 사용|2019/);
+  assert.match(description, /사진으로 본 상태: 외관 녹 적음, 앞 타이어 마모 보통/);
+  assert.match(description, /\[확인 필요\] 연식 · 사용시간 · 포함 작업기/);
+  assert.match(second.calls[0].system, /앞서 사용자가 올린 사진 인식 결과\] 기종=트랙터/);
+  const out = JSON.parse(second.calls[1].messages.at(-1).content[0].content);
+  assert.match(out.replyGuide, /이대로 올릴까요/);
+});
+
+test("세부사항을 답하면 그 내용으로 초안을 만든다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "로터리 포함, 사용시간 500시간", machineType: "tractor", year: "2019년식" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [{ role: "user", content: "[사진 첨부] 이 기계를 팔고싶어" }, { role: "assistant", content: "연식, 사용시간, 작업기를 알려 주세요." }];
+  const result = await runAgentTurn("2019년식이고 500시간 썼어요. 로터리 같이 드려요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.match(result.listingDraft.description, /^연식: 2019년식/);
+  assert.match(result.listingDraft.description, /로터리 포함, 사용시간 500시간/);
+  assert.doesNotMatch(result.listingDraft.description, /확인 필요/);
+});
+
+test("세부사항은 한 번만 묻는다: '2016, 400시간, 없어요'처럼 짧게 답해도 바로 초안을 만든다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "작업기 없음, 사용시간 400시간", machineType: "tractor", year: "2016년식" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [
+    { role: "user", content: "[사진 첨부] 이 기계를 팔고싶어요" },
+    { role: "assistant", content: "이 기계는 트랙터로 보입니다. 판매 매물 등록을 위해 연식, 사용 시간, 함께 판매할 작업기 등이 필요합니다. 모르시면 모른다고 하셔도 됩니다." },
+  ];
+  const result = await runAgentTurn("2016, 400시간, 없어요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.ok(result.listingDraft, "한 번 물었으면 다시 묻지 않고 초안을 만든다");
+  assert.match(result.listingDraft.description, /^연식: 2016년식/);
+  assert.match(result.listingDraft.description, /사용시간 400시간/);
+  assert.doesNotMatch(result.listingDraft.description, /확인 필요/);
+});
+
+test("사용시간은 'h·hr·아워·한글 숫자·탔어요' 표현도 인식한다", () => {
+  for (const said of ["400h", "400hr", "400 hrs", "400아워", "천 시간", "삼백오십시간", "한 500 정도 탔어요", "1,200 썼어요"]) {
+    assert.ok(!missingListingDetails(said, said).includes("사용시간"), `${said}는 사용시간으로 인식해야 한다`);
+  }
+  for (const said of ["이 시간에 연락 주세요", "2016 샀어요", "2000만원"]) {
+    assert.ok(missingListingDetails(said, said).includes("사용시간"), `${said}는 사용시간이 아니다`);
+  }
+});
+
+test("세부사항을 물은 직후 답의 단독 숫자는 사용시간으로 본다", () => {
+  assert.equal(inferBareUsageHours("2016, 400, 없어요"), "400");
+  assert.equal(inferBareUsageHours("2016, 1,200, 로터리"), "1,200");
+  assert.equal(inferBareUsageHours("400시간, 2016"), null, "이미 시간 단위가 있으면 추정하지 않는다");
+  assert.equal(inferBareUsageHours("2016"), null, "연도만 있으면 사용시간이 아니다");
+  assert.equal(inferBareUsageHours("2016, 400~500"), null, "숫자가 여러 개면 추정하지 않는다");
+  assert.equal(inferBareUsageHours("2016, 3대"), null, "단위가 붙은 숫자는 제외한다");
+});
+
+test("'2016, 400, 없어요'로 답하면 400을 사용시간으로 넣어 초안을 만든다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "작업기 없음, 사용시간 400시간", machineType: "tractor", year: "2016년식" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [
+    { role: "user", content: "[사진 첨부] 이 기계를 팔고싶어요" },
+    { role: "assistant", content: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." },
+  ];
+  const result = await runAgentTurn("2016, 400, 없어요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.match(result.listingDraft.description, /사용시간 400시간/);
+  assert.doesNotMatch(result.listingDraft.description, /확인 필요/);
+  assert.match(calls[0].system, /400 → 사용시간 400시간/);
+});
+
+test("세부사항을 묻지 않은 대화에서는 단독 숫자를 사용시간으로 보지 않는다", async (t) => {
+  photoEnv(t);
+  const { call, calls } = scripted([{ content: [{ type: "text", text: "네." }] }]);
+  await runAgentTurn("트랙터 400 정도면 돼요", { history: [{ role: "user", content: "트랙터 보여줘" }, { role: "assistant", content: "어떤 작업에 쓰실 건가요?" }] }, { listings: LISTINGS, call, today: TODAY });
+  assert.doesNotMatch(calls[0].system, /→ 사용시간/);
+});
+
+test("세부사항을 이미 물었으면 일부만 답해도 다시 묻지 않고 남은 항목은 [확인 필요]로 둔다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터", description: "사용시간 400시간", machineType: "tractor" } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [
+    { role: "user", content: "[사진 첨부] 이 기계를 팔고싶어요" },
+    { role: "assistant", content: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요." },
+  ];
+  const result = await runAgentTurn("400시간 썼어요", { history, photoSummary: { machineType: "tractor", confidence: "high", observations: [] } }, { listings: LISTINGS, call, today: TODAY });
+  assert.ok(result.listingDraft);
+  assert.match(result.listingDraft.description, /\[확인 필요\] 연식 · 포함 작업기/);
+});
+
+test("사용자가 직접 말한 사실은 소개글에 남긴다", async (t) => {
+  photoEnv(t);
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "대동 트랙터 로터리 포함", description: "로터리 포함, 사용시간 1,200시간, 상태 양호", machineType: "tractor", year: "2019년식" } }] },
+    { content: [{ type: "text", text: "초안이에요." }] },
+  ]);
+  const history = [{ role: "user", content: "2019년식 트랙터 팔고 싶어요" }, { role: "assistant", content: "네, 더 알려 주세요." }];
+  const result = await runAgentTurn("로터리 같이 팔고 1,200시간 썼어요", { image: PHOTO, history }, { listings: LISTINGS, call, today: TODAY });
+  const { description, title } = result.listingDraft;
+  assert.equal(title, "대동 트랙터 로터리 포함");
+  assert.match(description, /^연식: 2019년식/);
+  assert.match(description, /로터리 포함, 사용시간 1,200시간/);
+  assert.doesNotMatch(description, /양호/, "상태 평가는 사용자가 말하지 않았다");
+  assert.doesNotMatch(description, /확인 필요/);
+});
+
 test("비로그인 판매 초안은 저장 없이 listingId·photoKey가 null이다", async (t) => {
   photoEnv(t);
   let saves = 0;
@@ -408,7 +544,7 @@ test("비로그인 판매 초안은 저장 없이 listingId·photoKey가 null이
     { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "sale", title: "트랙터 팝니다", description: "소개글", machineType: "tractor", modelId: null, brand: null } }] },
     { content: [{ type: "text", text: "초안이에요." }] },
   ]);
-  const result = await runAgentTurn("팔고 싶어요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY, saveDraft: async () => { saves += 1; } });
+  const result = await runAgentTurn("팔고 싶어요. 자세한 건 몰라요", { image: PHOTO }, { listings: LISTINGS, call, today: TODAY, saveDraft: async () => { saves += 1; } });
   assert.equal(saves, 0);
   assert.equal(result.listingDraft.listingId, null);
   assert.equal(result.listingDraft.photoKey, null);
@@ -498,7 +634,7 @@ test("[리뷰] 새 사진을 보내면 이전 초안을 쓰지 않고 새로 저
     { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "관리기", description: "소개", machineType: "cultivator" } }] },
     { content: [{ type: "text", text: "새 초안" }] },
   ]);
-  const result = await runAgentTurn("이것도 빌려줄래요", { image: PHOTO, user: USER, savedDraft: old }, { listings: LISTINGS, call, today: TODAY, saveDraft });
+  const result = await runAgentTurn("이것도 빌려줄래요. 연식은 몰라요",{ image: PHOTO, user: USER, savedDraft: old }, { listings: LISTINGS, call, today: TODAY, saveDraft });
   assert.equal(saves, 1);
   assert.equal(result.listingDraft.listingId, "33333333-3333-4333-8333-333333333333");
 });

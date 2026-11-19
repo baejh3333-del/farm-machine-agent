@@ -1,0 +1,109 @@
+/* =========================================================
+   모아농 디자인 토큰 v1.0 (2026.11)
+   - 모든 화면은 이 변수만 써서 색·글자·간격을 정해요.
+   - 새 색이 필요하면 여기에 먼저 추가하고 팀에 공유해요.
+   ========================================================= */
+
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
+
+:root {
+  /* ---------- 브랜드 그린 (화면의 약 8%만) ---------- */
+  --mn-green: #1E9B4B;        /* 메인 버튼, 선택한 날짜, 심볼 몸체 */
+  --mn-green-hover: #178A40;  /* 메인 버튼 hover */
+  --mn-green-text: #13773A;   /* 초록 글자·라벨·배지 글자 (흰 바탕 대비 5.6:1) */
+  --mn-forest: #0F3B24;       /* 넓은 브랜드 면 (페이지당 1번, 마지막 섹션) */
+  --mn-sprout: #EDF6F0;       /* 배지 배경, 선택 기간, 아이콘 원 */
+  --mn-on-forest-muted: #A8CDB5; /* 포레스트 위 보조 글자 */
+
+  /* ---------- 흑백 (화면의 대부분) ---------- */
+  --mn-ink: #111111;          /* 제목, 본문, 팝업 안 '적용' 버튼 */
+  --mn-gray: #555555;         /* 보조 글자 */
+  --mn-gray-light: #767676;   /* 캡션, 요일, 힌트 (이보다 연한 글자 금지) */
+  --mn-line: #EEEEEE;         /* 구분선 */
+  --mn-border: #DDDDDD;       /* 테두리 버튼 */
+  --mn-bg: #F6F6F6;           /* 섹션 배경, 입력 칸이 놓이는 패널 */
+  --mn-white: #FFFFFF;
+  --mn-danger: #D93025;       /* 오류 문구에만 */
+
+  /* ---------- 글꼴 ---------- */
+  --mn-font: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+  --mn-fs-display: 72px;   /* 첫 화면 대제목 · 700 · 자간 -0.04em */
+  --mn-fs-h2: 44px;        /* 섹션 제목 · 700 · 자간 -0.03em */
+  --mn-fs-h3: 22px;        /* 소제목 · 700 */
+  --mn-fs-body-lg: 18px;   /* 첫 화면 설명 */
+  --mn-fs-body: 16px;      /* 기본 본문 · 줄간격 1.6 */
+  --mn-fs-small: 15px;     /* 보조 본문 (본문 최소 크기) */
+  --mn-fs-label: 14px;     /* 라벨·배지 · 700 */
+  --mn-fs-caption: 13px;   /* 캡션 (이보다 작게 쓰지 않아요) */
+
+  /* ---------- 모양 ---------- */
+  --mn-radius-sm: 12px;    /* 버튼, 입력 칸 */
+  --mn-radius-md: 16px;    /* 사진, 작은 카드 */
+  --mn-radius-lg: 20px;    /* 팝업 */
+  --mn-radius-xl: 24px;    /* 큰 카드, 예약 카드 */
+  --mn-radius-pill: 999px; /* 칩, 배지, 토글 */
+
+  --mn-h-button: 52px;     /* 메인 버튼 높이 */
+  --mn-h-input: 50px;      /* 입력·선택 칸 높이 (터치 영역 48px 이상) */
+
+  --mn-shadow-card: 0 24px 60px rgba(0,0,0,0.08);
+  --mn-shadow-pop: 0 20px 50px rgba(0,0,0,0.18);
+
+  /* ---------- 간격 ---------- */
+  --mn-page-max: 1200px;   /* 본문 최대 폭 */
+  --mn-page-pad: 24px;     /* 좌우 안쪽 여백 */
+  --mn-section-y: 120px;   /* 섹션 위아래 여백 (데스크톱) */
+  --mn-gap-lg: 64px;
+  --mn-gap-md: 24px;
+  --mn-gap-sm: 12px;
+}
+
+body { margin: 0; font-family: var(--mn-font); color: var(--mn-ink); background: var(--mn-white); letter-spacing: -0.01em; }
+a { color: var(--mn-ink); }
+a:hover { color: var(--mn-green-text); }
+
+/* ---------- 기본 컴포넌트 ---------- */
+.mn-btn-primary {            /* 한 화면에 하나만 */
+  height: var(--mn-h-button); padding: 0 24px; border: none; border-radius: var(--mn-radius-sm);
+  background: var(--mn-green); color: #fff; font: 700 16px/1 var(--mn-font); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.mn-btn-primary:hover { background: var(--mn-green-hover); color: #fff; }
+
+.mn-btn-dark {               /* 팝업 안 '적용', 확인 */
+  height: 40px; padding: 0 22px; border: none; border-radius: var(--mn-radius-sm);
+  background: var(--mn-ink); color: #fff; font: 700 15px/1 var(--mn-font); cursor: pointer;
+}
+
+.mn-btn-outline {            /* 나머지 모든 버튼 */
+  height: 44px; padding: 0 20px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-pill);
+  background: #fff; color: var(--mn-ink); font: 500 15px/1 var(--mn-font); cursor: pointer;
+}
+
+.mn-field {                  /* 회색 패널 위의 흰 입력 칸 */
+  height: var(--mn-h-input); padding: 0 16px; border: none; border-radius: var(--mn-radius-sm);
+  background: #fff; font: 500 15px var(--mn-font); color: var(--mn-ink);
+}
+.mn-field:focus, .mn-field[aria-expanded="true"] { outline: none; box-shadow: inset 0 0 0 2px var(--mn-ink); }
+
+.mn-badge {                  /* 좋은 상태: 대여 가능, 승인 완료 */
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--mn-radius-pill);
+  background: var(--mn-sprout); color: var(--mn-green-text); font: 700 var(--mn-fs-label) var(--mn-font);
+}
+.mn-badge--muted { background: #F2F2F2; color: var(--mn-gray); }   /* 마감, 대기 아닌 상태 */
+
+.mn-label { font: 700 var(--mn-fs-label) var(--mn-font); color: var(--mn-green-text); }  /* '주요 기능 01' 같은 섹션 라벨 */
+
+.mn-card { background: #fff; border: 1px solid var(--mn-line); border-radius: var(--mn-radius-xl); box-shadow: var(--mn-shadow-card); padding: 32px; }
+.mn-popup { background: #fff; border-radius: var(--mn-radius-lg); box-shadow: var(--mn-shadow-pop); padding: 24px; }
+
+.mn-icon-circle { width: 52px; height: 52px; border-radius: 50%; background: var(--mn-sprout); color: var(--mn-green-text); display: flex; align-items: center; justify-content: center; }
+
+/* 달력 날짜 */
+.mn-day { height: 56px; border: none; background: transparent; border-radius: var(--mn-radius-pill); font: 400 18px var(--mn-font); color: var(--mn-ink); cursor: pointer; }
+.mn-day--selected { background: var(--mn-green); color: #fff; font-weight: 700; }
+.mn-day--in-range { background: var(--mn-sprout); border-radius: 0; }
+.mn-day--past { color: #C8C8C8; cursor: default; }
+
+.mn-section-forest { background: var(--mn-forest); color: #fff; }
+.mn-section-forest .mn-muted { color: var(--mn-on-forest-muted); }

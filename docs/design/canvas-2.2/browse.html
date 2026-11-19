@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<title>모아농 매물 찾기</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"><style>
+body{margin:0}
+body, body *{font-family:'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif !important}
+a{color:#111111}a:hover{color:#1E9B4B}
+[data-rail]{scrollbar-width:none}
+[data-rail]::-webkit-scrollbar{display:none}
+[data-card] img, [data-card] [data-ph]{transition:transform 0.3s ease}
+[data-card]:hover img, [data-card]:hover [data-ph]{transform:scale(1.03)}
+[data-chip]:hover{background:#F2F2F2 !important}
+[data-field]:hover{background:#F6F6F6 !important}
+[data-arrow]:hover{border-color:#111111 !important}
+[data-cta]:hover{background:#178A40 !important}
+</style><style>*{animation:none !important;transition:none !important}</style></head>
+<body>
+<div id="dc-root">
+
+<div style="background: #FFFFFF; color: #111111; letter-spacing: -0.01em">
+
+
+
+<header style="position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.9); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid #EEEEEE">
+<div style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px">
+<a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a>
+<div style="display: flex; align-items: center; gap: 28px">
+<nav aria-label="주 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap"><a href="#" aria-current="page" style="text-decoration: none; font-weight: 700; box-shadow: inset 0 -2px 0 #1E9B4B; padding-bottom: 4px">매물 찾기</a><a href="#" style="text-decoration: none">지도</a><a href="#" style="text-decoration: none">마이페이지</a></nav>
+<a href="#" style="height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid #DDDDDD; display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">농기계 등록하기</a>
+<a href="#" style="height: 38px; padding: 0 18px; border-radius: 999px; background: #111111; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 600; text-decoration: none">로그인</a>
+</div>
+</div>
+<div aria-hidden="true" style="max-height: 0px; opacity: 1; overflow: hidden; transition: max-height 0.35s, opacity 0.25s;">
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 24px 12px; display: flex; justify-content: center">
+<div role="search" aria-label="검색 조건" style="width: 100%; max-width: 760px; height: 50px; padding: 0 5px 0 6px; box-sizing: border-box; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; box-shadow: 0 6px 18px rgba(0,0,0,0.07); display: flex; align-items: center">
+<button type="button" style="flex: 1.3 1 0; min-width: 0; height: 40px; padding: 0 16px; border: none; border-left: none; background: transparent; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 14px; font-weight: 500; color: #9A9A9A; text-align: left; white-space: nowrap; overflow: hidden; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"></path></svg><span style="overflow: hidden; text-overflow: ellipsis">동네, 주소</span></button><button type="button" style="flex: 1.6 1 0; min-width: 0; height: 40px; padding: 0 16px; border: none; border-left: 1px solid #EEEEEE; background: transparent; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 14px; font-weight: 500; color: #9A9A9A; text-align: left; white-space: nowrap; overflow: hidden; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"></path></svg><span style="overflow: hidden; text-overflow: ellipsis">빌리는 날 – 돌려주는 날</span></button><button type="button" style="flex: 1 1 0; min-width: 0; height: 40px; padding: 0 16px; border: none; border-left: 1px solid #EEEEEE; background: transparent; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 14px; font-weight: 500; color: #9A9A9A; text-align: left; white-space: nowrap; overflow: hidden; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 5h7v7H4zM11 9h5l3 5v2M7.5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM17.5 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM10.5 17h5"></path></svg><span style="overflow: hidden; text-overflow: ellipsis">전체 기계</span></button>
+<button type="button" data-cta="" aria-label="검색 조건 바꾸기" style="flex: none; width: 40px; height: 40px; border: none; border-radius: 50%; background: #1E9B4B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></button>
+</div>
+</div>
+</div>
+</header>
+
+<section style="max-width: 1200px; margin: 24px auto 0; padding: 0 24px">
+<div style="position: relative; z-index: 31; border-radius: 28px; overflow: visible; background: #2B4A36">
+<div style="position: absolute; inset: 0; border-radius: 28px; overflow: hidden"><img src="assets/field.jpg" alt="" aria-hidden="true" style="width: 100%; height: 100%; object-fit: cover; object-position: center 55%"><div style="position: absolute; inset: 0; background: linear-gradient(rgba(10,36,22,0.55), rgba(10,36,22,0.30) 55%, rgba(10,36,22,0.55))"></div></div>
+<div style="position: relative; padding: 64px 40px 40px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; color: #FFFFFF">
+<h1 style="margin: 0; font-size: 40px; line-height: 1.25; font-weight: 800; letter-spacing: -0.03em">필요한 날, 필요한 농기계</h1>
+<p style="margin: 0; font-size: 17px; opacity: 0.92">이웃의 쉬는 농기계를 하루 단위로 빌려요.</p>
+
+<div role="search" aria-label="매물 검색" style="position: relative; margin-top: 26px; width: 100%; max-width: 980px; height: 72px; padding: 0 8px 0 8px; box-sizing: border-box; border-radius: 18px; background: #FFFFFF; box-shadow: 0 16px 40px rgba(0,0,0,0.18); display: flex; align-items: center; color: #111111; text-align: left">
+<button type="button" data-field="" aria-expanded="false" style="flex: 1.3 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: transparent; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">어디서</span><span style="font-size: 15px; font-weight: 500; color: #9A9A9A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">동네, 주소</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 32px; background: #E6E6E6"></span>
+<button type="button" data-field="" aria-expanded="false" style="flex: 1 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: transparent; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">빌리는 날</span><span style="font-size: 15px; font-weight: 500; color: #9A9A9A; white-space: nowrap">날짜 · 시간</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 32px; background: #E6E6E6"></span>
+<button type="button" data-field="" aria-expanded="false" style="flex: 1 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: transparent; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">돌려주는 날</span><span style="font-size: 15px; font-weight: 500; color: #9A9A9A; white-space: nowrap">날짜 · 시간</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 32px; background: #E6E6E6"></span>
+<button type="button" data-field="" aria-expanded="false" style="flex: 1 1 0; min-width: 0; height: 56px; padding: 0 18px; border: none; border-radius: 12px; background: transparent; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-family: inherit; text-align: left; cursor: pointer"><span style="font-size: 13px; font-weight: 600; color: #555555">농기계 종류</span><span style="font-size: 15px; font-weight: 500; color: #9A9A9A; white-space: nowrap">전체 기계</span></button>
+<button type="button" data-cta="" aria-label="찾기" style="flex: none; margin-left: 6px; width: 56px; height: 56px; border: none; border-radius: 14px; background: #1E9B4B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></button>
+
+
+
+
+
+
+</div>
+</div>
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 28px 24px 0; display: flex; flex-direction: column; align-items: center; gap: 22px">
+<div role="tablist" aria-label="찾는 방법" style="display: flex; gap: 8px">
+<button type="button" role="tab" data-chip="" aria-selected="true" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: #111111; color: #FFFFFF; display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"></path></svg>전체 보기</button><button type="button" role="tab" data-chip="" aria-selected="false" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #111111; display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"></path></svg>당일 대여</button><button type="button" role="tab" data-chip="" aria-selected="false" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #111111; display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v14H4zM4 10h16M8 14h3M13 14h3M8 17h3"></path></svg>한 달 대여</button><button type="button" role="tab" data-chip="" aria-selected="false" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #111111; display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16l-1.5 11h-13zM9 7V5a3 3 0 0 1 6 0v2"></path></svg>중고 구매</button><button type="button" role="tab" data-chip="" aria-selected="false" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #111111; display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3 15c0-3.2 1.8-5.5 4-5.5 1.6 0 2.8 1 3.4 2.5M12 11h5l3 4v3h-8zM14.5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM3 21h6"></path></svg>농작업 대행</button>
+</div>
+<a href="#" style="width: 100%; max-width: 560px; box-sizing: border-box; padding: 14px 18px; border-radius: 16px; border: 1px solid #E6E6E6; display: flex; align-items: center; gap: 14px; text-decoration: none"><span style="flex: none; width: 40px; height: 40px; border-radius: 12px; background: #EDF6F0; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#13773A" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 15px">트랙터를 계속 찾아보세요</b><span style="font-size: 13px; color: #767676">강원 춘천시 · 10km 이내</span></span><span aria-hidden="true" style="font-size: 20px; color: #9A9A9A">›</span></a>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 0">
+<h2 style="margin: 0 0 16px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">최근 검색으로 골라 봤어요</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<a href="#" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><img src="assets/tractor.jpg" alt="" style="flex: none; width: 104px; height: 72px; border-radius: 10px; object-fit: cover"><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">트랙터 + 로터리 50마력</b><span style="font-size: 13px; color: #555555">2021년식 · ★ 4.9 (32)</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a><a href="#" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><img src="assets/tractor.jpg" alt="" style="flex: none; width: 104px; height: 72px; border-radius: 10px; object-fit: cover"><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">트랙터 35마력</b><span style="font-size: 13px; color: #555555">2020년식 · ★ 4.9 (27)</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a><a href="#" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><img src="assets/tractor.jpg" alt="" style="flex: none; width: 104px; height: 72px; border-radius: 10px; object-fit: cover"><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">트랙터 45마력</b><span style="font-size: 13px; color: #555555">2018년식 · ★ 4.9 (6)</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a><a href="#" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><img src="assets/cultivator.jpg" alt="" style="flex: none; width: 104px; height: 72px; border-radius: 10px; object-fit: cover"><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 (소형)</b><span style="font-size: 13px; color: #555555">2022년식 · ★ 5.0 (18)</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a><a href="#" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><span style="flex: none; width: 104px; height: 72px; border-radius: 10px; background: linear-gradient(135deg, #E9F1EB, #DCE8DF); display: flex; align-items: center; justify-content: center"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8FA394" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg></span><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">고구마 수확기 (1조)</b><span style="font-size: 13px; color: #555555">2021년식 · ★ 4.8 (10)</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a><a href="#" style="padding: 12px; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; gap: 14px; text-decoration: none"><img src="assets/tiller.jpg" alt="" style="flex: none; width: 104px; height: 72px; border-radius: 10px; object-fit: cover"><span style="min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.35"><b style="font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">경운기 8마력</b><span style="font-size: 13px; color: #555555">2019년식 · ★ 4.8 (41)</span><span style="font-size: 13px; font-weight: 600; text-decoration: underline">자세히 보기</span></span></a>
+</div>
+</section>
+
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">춘천에서 저렴한 농기계</h2><span style="font-size: 14px; color: #767676">3일 대여 기준 가격이에요</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4H9zM8 7h6v13H8zM14 10l4-2M14 12h5M14 14l4 2"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">동력 분무기 20L</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2023년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 22)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신동면 · 6.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 2만원</b><span style="font-size: 13px; color: #767676">총 6만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tiller.jpg" alt="경운기 8마력" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="true" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="#1E9B4B" stroke="#1E9B4B" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">경운기 8마력</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2019년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 41)</span>
+<span style="font-size: 13px; color: #767676">춘천시 사북면 · 8.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3만원</b><span style="font-size: 13px; color: #767676">총 9만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 (소형)" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 (소형)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">5.0</span>(후기 18)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 5.8km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3.5만원</b><span style="font-size: 13px; color: #767676">총 10.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tiller.jpg" alt="경운기 10마력 + 적재함" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 30% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">경운기 10마력 + 적재함</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2018년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.6</span>(후기 33)</span>
+<span style="font-size: 13px; color: #767676">춘천시 서면 · 9.2km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3.5만원</b><span style="font-size: 13px; color: #767676">총 10.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7v7H4zM11 9h5l3 5v2M7.5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM17.5 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM10.5 17h5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">궤도 운반차</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 14)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동산면 · 10.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 4만원</b><span style="font-size: 13px; color: #767676">총 12만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 + 두둑 성형기" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 20% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 + 두둑 성형기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 19)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 6.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 4.5만원</b><span style="font-size: 13px; color: #767676">총 13.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="승용 관리기" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 70% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">승용 관리기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2023년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.7</span>(후기 12)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신북읍 · 4.6km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 5.5만원</b><span style="font-size: 13px; color: #767676">총 16.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">고구마 수확기 (1조)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 10)</span>
+<span style="font-size: 13px; color: #767676">춘천시 서면 · 9.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 5.5만원</b><span style="font-size: 13px; color: #767676">총 16.5만원</span></span>
+</div>
+</article>
+
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">밭 갈기 딱 좋은 트랙터·관리기</h2><span style="font-size: 14px; color: #767676">지금 가장 많이 찾는 작업이에요</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tractor.jpg" alt="트랙터 + 로터리 50마력" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">트랙터 + 로터리 50마력</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 32)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신북읍 · 3.2km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 8.5만원</b><span style="font-size: 13px; color: #767676">총 25.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 (소형)" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 (소형)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">5.0</span>(후기 18)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 5.8km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3.5만원</b><span style="font-size: 13px; color: #767676">총 10.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tractor.jpg" alt="트랙터 35마력" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 30% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">트랙터 35마력</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2020년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 27)</span>
+<span style="font-size: 13px; color: #767676">춘천시 서면 · 9.7km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 6.5만원</b><span style="font-size: 13px; color: #767676">총 19.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="승용 관리기" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 70% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">승용 관리기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2023년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.7</span>(후기 12)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신북읍 · 4.6km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 5.5만원</b><span style="font-size: 13px; color: #767676">총 16.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 + 두둑 성형기" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 20% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 + 두둑 성형기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 19)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 6.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 4.5만원</b><span style="font-size: 13px; color: #767676">총 13.5만원</span></span>
+</div>
+</article>
+
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">감자·고구마 캐는 수확기</h2><span style="font-size: 14px; color: #767676">수확철엔 일찍 예약해 주세요</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">땅속작물 수확기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">5.0</span>(후기 9)</span>
+<span style="font-size: 13px; color: #767676">홍천군 화촌면 · 12.5km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 7만원</b><span style="font-size: 13px; color: #767676">총 21만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">감자 굴취기 (2조)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2020년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 15)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동산면 · 10.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 6만원</b><span style="font-size: 13px; color: #767676">총 18만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">마늘·양파 수확기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 7)</span>
+<span style="font-size: 13px; color: #767676">화천군 하남면 · 14.2km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 7.5만원</b><span style="font-size: 13px; color: #767676">총 22.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">고구마 수확기 (1조)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 10)</span>
+<span style="font-size: 13px; color: #767676">춘천시 서면 · 9.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 5.5만원</b><span style="font-size: 13px; color: #767676">총 16.5만원</span></span>
+</div>
+</article>
+
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">방제 시즌, 약 뿌리는 기계</h2><span style="font-size: 14px; color: #767676">혼자 쓰기 쉬운 것부터 보여드려요</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="승용 관리기" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 70% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">승용 관리기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2023년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.7</span>(후기 12)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신북읍 · 4.6km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 5.5만원</b><span style="font-size: 13px; color: #767676">총 16.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4H9zM8 7h6v13H8zM14 10l4-2M14 12h5M14 14l4 2"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">동력 분무기 20L</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2023년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 22)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신동면 · 6.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 2만원</b><span style="font-size: 13px; color: #767676">총 6만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4H9zM8 7h6v13H8zM14 10l4-2M14 12h5M14 14l4 2"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">SS기 500L</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2019년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.7</span>(후기 11)</span>
+<span style="font-size: 13px; color: #767676">춘천시 사북면 · 8.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 9만원</b><span style="font-size: 13px; color: #767676">총 27만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4H9zM8 7h6v13H8zM14 10l4-2M14 12h5M14 14l4 2"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">농업용 방제 드론</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2024년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">5.0</span>(후기 5)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신북읍 · 3.9km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 15만원</b><span style="font-size: 13px; color: #767676">총 45만원</span></span>
+</div>
+</article>
+
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">처음이라면, 다루기 쉬운 기계</h2><span style="font-size: 14px; color: #767676">초보 농사꾼 후기가 좋은 기계예요</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 (소형)" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 (소형)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">5.0</span>(후기 18)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 5.8km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3.5만원</b><span style="font-size: 13px; color: #767676">총 10.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tiller.jpg" alt="경운기 8마력" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="true" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="#1E9B4B" stroke="#1E9B4B" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">경운기 8마력</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2019년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 41)</span>
+<span style="font-size: 13px; color: #767676">춘천시 사북면 · 8.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3만원</b><span style="font-size: 13px; color: #767676">총 9만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4H9zM8 7h6v13H8zM14 10l4-2M14 12h5M14 14l4 2"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">동력 분무기 20L</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2023년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 22)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신동면 · 6.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 2만원</b><span style="font-size: 13px; color: #767676">총 6만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tiller.jpg" alt="경운기 10마력 + 적재함" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 30% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">경운기 10마력 + 적재함</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2018년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.6</span>(후기 33)</span>
+<span style="font-size: 13px; color: #767676">춘천시 서면 · 9.2km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 3.5만원</b><span style="font-size: 13px; color: #767676">총 10.5만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7v7H4zM11 9h5l3 5v2M7.5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM17.5 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM10.5 17h5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">궤도 운반차</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 14)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동산면 · 10.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 4만원</b><span style="font-size: 13px; color: #767676">총 12만원</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 + 두둑 성형기" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 20% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 + 두둑 성형기</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2022년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 19)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 6.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1일 4.5만원</b><span style="font-size: 13px; color: #767676">총 13.5만원</span></span>
+</div>
+</article>
+
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 0">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em">중고로 사기 좋은 매물</h2><span style="font-size: 14px; color: #767676">소유주가 직접 점검한 매물이에요</span></div>
+<span style="display: flex; gap: 8px"><button type="button" data-arrow="" aria-label="이전" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">‹</button><button type="button" data-arrow="" aria-label="다음" style="width: 36px; height: 36px; border-radius: 50%; border: 1px solid #DDDDDD; background: #FFFFFF; font-size: 18px; cursor: pointer">›</button></span>
+</div>
+<div data-rail="" style="display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 60px) / 4); gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding-bottom: 4px">
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tractor.jpg" alt="트랙터 45마력" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 60% 50%">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">트랙터 45마력</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2018년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 6)</span>
+<span style="font-size: 13px; color: #767676">춘천시 신북읍 · 3.6km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">1,850만원</b><span style="font-size: 13px; color: #767676">판매가</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/cultivator.jpg" alt="관리기 (중형)" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">관리기 (중형)</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2020년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.8</span>(후기 4)</span>
+<span style="font-size: 13px; color: #767676">춘천시 동면 · 6.1km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">180만원</b><span style="font-size: 13px; color: #767676">판매가</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+<img src="assets/tiller.jpg" alt="경운기 10마력" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: center">
+
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">경운기 10마력</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2017년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.7</span>(후기 3)</span>
+<span style="font-size: 13px; color: #767676">화천군 하남면 · 14.2km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">250만원</b><span style="font-size: 13px; color: #767676">판매가</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h12l3-5h3v8H3zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 14V9h6v5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">콤바인 4조</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2016년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">5.0</span>(후기 2)</span>
+<span style="font-size: 13px; color: #767676">홍천군 화촌면 · 12.8km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">3,200만원</b><span style="font-size: 13px; color: #767676">판매가</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4H9zM8 7h6v13H8zM14 10l4-2M14 12h5M14 14l4 2"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">SS기 500L</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2019년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.6</span>(후기 5)</span>
+<span style="font-size: 13px; color: #767676">춘천시 사북면 · 8.4km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">650만원</b><span style="font-size: 13px; color: #767676">판매가</span></span>
+</div>
+</article>
+
+<article data-card="" style="scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; gap: 14px; cursor: pointer">
+<div style="position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1">
+
+<span data-ph="" style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #7C9283"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#9DB2A3" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7v7H4zM11 9h5l3 5v2M7.5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM17.5 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM10.5 17h5"></path></svg>사진 준비 중</span>
+<button type="button" aria-pressed="false" aria-label="찜하기" style="position: absolute; top: 8px; right: 8px; width: 38px; height: 38px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="rgba(17,17,17,0.25)" stroke="#FFFFFF" stroke-width="1.8"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 0; line-height: 1.4">
+<b style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">농업용 운반차</b>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555555">2021년식<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="14" height="14" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><span style="color: #111111; font-weight: 600">4.9</span>(후기 3)</span>
+<span style="font-size: 13px; color: #767676">춘천시 서면 · 9.7km</span>
+<span style="margin-top: 6px; display: flex; align-items: baseline; gap: 8px"><b style="font-size: 16px">320만원</b><span style="font-size: 13px; color: #767676">판매가</span></span>
+</div>
+</article>
+
+</div>
+</section>
+
+
+<footer style="margin-top: 96px; background: #F6F6F6">
+<div style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px">
+<nav aria-label="하단 메뉴" style="display: flex; flex-wrap: wrap; gap: 28px; font-size: 14px"><a href="#" style="text-decoration: none; color: #555555">매물 찾기</a><a href="#" style="text-decoration: none; color: #555555">지도</a><a href="#" style="text-decoration: none; color: #555555">마이페이지</a><a href="#" style="text-decoration: none; color: #555555">개인정보처리방침</a></nav>
+<span style="font-size: 13px; color: #767676">info@moanong.co.kr · 1577-1106 · © 2026 모아농</span>
+</div>
+</footer>
+</div>
+</div>
+
+
+
+</body></html>

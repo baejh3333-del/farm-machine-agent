@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>모아농 매물 상세</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+body{margin:0}
+body, body *{font-family:'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif !important}
+a{color:#111111}a:hover{color:#1E9B4B}
+[data-cta]:hover{background:#178A40 !important}
+[data-ghost]:hover{border-color:#111111 !important}
+[data-opt]{transition:border-color 0.15s, background 0.15s}
+[data-shot]{transition:filter 0.2s}[data-shot]:hover{filter:brightness(0.92)}
+[data-rail]{scrollbar-width:none}[data-rail]::-webkit-scrollbar{display:none}
+</style>
+</helmet>
+<div style="background: #FFFFFF; color: #111111; letter-spacing: -0.01em">
+
+<sc-if value="{{ anyOpen }}" hint-placeholder-val="{{ false }}"><div onClick="{{ closePop }}" style="position: fixed; inset: 0; z-index: 30"></div></sc-if>
+
+<header style="position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.92); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid #EEEEEE">
+<div style="max-width: 1200px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 24px">
+<a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a>
+<div role="search" aria-label="검색 조건" style="flex: 0 1 520px; height: 46px; padding: 0 5px 0 16px; box-sizing: border-box; border: 1px solid #E6E6E6; border-radius: 999px; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #555555"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">강원 춘천시 · {{ rangeShort }} · 트랙터</span><span style="height: 36px; padding: 0 14px; border-radius: 999px; background: #F2F2F2; display: flex; align-items: center; font-weight: 600; color: #111111">바꾸기</span></div>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 24px">
+<nav aria-label="주 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap"><a href="#" style="text-decoration: none; font-weight: 700; box-shadow: inset 0 -2px 0 #1E9B4B; padding-bottom: 4px">매물 찾기</a><a href="#" style="text-decoration: none">지도</a><a href="#" style="text-decoration: none">마이페이지</a></nav>
+<a href="#" style="height: 38px; padding: 0 18px; border-radius: 999px; background: #111111; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 600; text-decoration: none">로그인</a>
+</div>
+</div>
+</header>
+
+<main style="max-width: 1200px; margin: 0 auto; padding: 24px 24px 0">
+<nav aria-label="현재 위치" style="display: flex; gap: 8px; font-size: 13px; color: #767676; margin-bottom: 14px"><a href="#" style="color: #767676; text-decoration: none">매물 찾기</a>›<a href="#" style="color: #767676; text-decoration: none">트랙터</a>›<span style="color: #111111">트랙터 + 로터리 50마력</span></nav>
+
+<div style="position: relative; display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 220px 220px; gap: 8px; border-radius: 22px; overflow: hidden">
+<button type="button" data-shot="" onClick="{{ openGallery }}" style="grid-row: 1 / 3; padding: 0; border: none; cursor: pointer; background: #F2F4F1"><img src="/_blob/3e8891d65613ebfb6340c578c9a9254e" alt="트랙터 + 로터리 50마력" style="display: block; width: 100%; height: 100%; object-fit: cover"></button>
+<button type="button" data-shot="" onClick="{{ openGallery }}" style="padding: 0; border: none; cursor: pointer; background: #F2F4F1"><img src="/_blob/3e8891d65613ebfb6340c578c9a9254e" alt="로터리 부분" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 15% 80%; transform: scale(1.6); transform-origin: 15% 80%"></button>
+<button type="button" data-shot="" onClick="{{ openGallery }}" style="padding: 0; border: none; cursor: pointer; background: #F2F4F1"><img src="/_blob/3e8891d65613ebfb6340c578c9a9254e" alt="운전석 쪽" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: 70% 40%; transform: scale(1.5); transform-origin: 70% 40%"></button>
+<button type="button" onClick="{{ toggleFav }}" aria-pressed="{{ favSel }}" aria-label="찜하기" style="position: absolute; top: 14px; right: 14px; width: 42px; height: 42px; border: none; border-radius: 50%; background: rgba(255,255,255,0.94); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.12)"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z" fill="{{ favFill }}" stroke="{{ favStroke }}" stroke-width="1.8"></path></svg></button>
+<button type="button" data-ghost="" onClick="{{ openGallery }}" style="position: absolute; right: 14px; bottom: 14px; height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="10" r="1.8"></circle><path d="M21 16l-5-5-9 8"></path></svg>사진 8장 모두 보기</button>
+</div>
+
+<div style="margin-top: 32px; display: flex; gap: 56px; align-items: flex-start">
+<div style="flex: 1 1 auto; min-width: 0">
+
+<h1 style="margin: 0; font-size: 32px; line-height: 1.3; font-weight: 800; letter-spacing: -0.03em">트랙터 + 로터리 50마력</h1>
+<div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 16px; color: #555555">2021년식 · 대동<span aria-hidden="true" style="color: #CCCCCC">·</span><svg width="15" height="15" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg><b style="color: #111111">4.9</b><a href="#reviews" style="color: #111111">대여 32번</a><span aria-hidden="true" style="color: #CCCCCC">·</span>춘천시 신북읍 · 3.2km</div>
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{ specs }}" as="sp" hint-placeholder-count="6"><span style="height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid #E6E6E6; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#555555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ sp.icon }}"></path></svg>{{ sp.label }}</span></sc-for>
+</div>
+<div style="margin-top: 18px; padding: 14px 18px; border-radius: 14px; background: #EDF6F0; display: flex; align-items: center; gap: 12px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#13773A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12V7l-8-4-8 4v5c0 5 3.4 8.6 8 9.5 4.6-.9 8-4.5 8-9.5z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path></svg><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 15px; color: #13773A">좋은 가격이에요</b><span style="font-size: 14px; color: #2E6B45">같은 날짜의 비슷한 트랙터보다 1일 1.2만원 저렴해요.</span></span></div>
+
+<section style="padding: 32px 0; border-bottom: 1px solid #EEEEEE">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 32px; height: 32px; border-radius: 10px; background: #FFF4DF; display: flex; align-items: flex-end; justify-content: center; overflow: hidden"><img src="/_blob/ce1efcfa4f86270a8c6085b5b3d620d2" alt="" style="width: 28px; height: auto; margin-bottom: -3px"></span><h2 style="margin: 0; font-size: 21px; font-weight: 700">농농이가 정리한 특징</h2><span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #E3F3E8; color: #13773A; font-size: 12px; font-weight: 700; display: flex; align-items: center">AI</span></div>
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{ keywords }}" as="k" hint-placeholder-count="6"><span style="height: 36px; padding: 0 14px; border-radius: 999px; background: #F6F6F6; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600"><span style="color: #1E9B4B">#</span>{{ k }}</span></sc-for>
+</div>
+<p style="margin: 14px 0 0; font-size: 15px; line-height: 1.65; color: #555555">50마력에 로터리가 달려 있어 <b style="color: #111111">1,000~3,000평 밭 갈기</b>에 알맞아요. 감자·배추처럼 두둑이 필요한 밭이라면 두둑 성형기를 함께 빌리면 좋아요.</p>
+<span style="display: block; margin-top: 8px; font-size: 13px; color: #9A9A9A">매물 정보와 후기를 보고 AI가 정리했어요. 실제와 다를 수 있어요.</span>
+</section>
+
+<section style="padding: 32px 0; border-bottom: 1px solid #EEEEEE">
+<h2 style="margin: 0; font-size: 21px; font-weight: 700">소유주가 적은 매물 설명</h2>
+<div style="margin-top: 16px; padding: 20px 22px; border-radius: 16px; border: 1px solid #EEEEEE; font-size: 16px; line-height: 1.75; color: #333333">
+4년 동안 제 밭에서만 썼어요. 로터리 날 한쪽이 조금 닳아서 저렴하게 올려요.<br>그래도 밭 가는 데는 전혀 문제없어요. 쓰다가 하루 이틀 더 필요하면 연장해 드려요.
+</div>
+<div style="margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{ notes }}" as="n" hint-placeholder-count="4"><div style="padding: 14px 16px; border-radius: 14px; background: #F6F6F6; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 13px; color: #767676">{{ n.k }}</span><b style="font-size: 15px; color: {{ n.color }}">{{ n.v }}</b></div></sc-for>
+</div>
+</section>
+
+<section style="padding: 32px 0; border-bottom: 1px solid #EEEEEE">
+<h2 style="margin: 0; font-size: 21px; font-weight: 700">대여에 함께 들어 있어요</h2>
+<div style="margin-top: 18px; display: flex; flex-direction: column; gap: 18px">
+<sc-for list="{{ included }}" as="i" hint-placeholder-count="4"><div style="display: flex; gap: 14px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="{{ i.icon }}"></path></svg><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 500">{{ i.t }}</span><span style="font-size: 14px; color: #767676">{{ i.d }}</span></span></div></sc-for>
+</div>
+</section>
+
+<section id="reviews" style="padding: 32px 0; border-bottom: 1px solid #EEEEEE">
+<h2 style="margin: 0; font-size: 21px; font-weight: 700">후기</h2>
+<div style="margin-top: 12px; display: flex; gap: 48px; align-items: flex-start">
+<div style="flex: none; display: flex; flex-direction: column; gap: 4px"><b style="display: flex; align-items: center; gap: 6px; font-size: 44px; line-height: 1; font-weight: 800">4.9<svg width="28" height="28" viewBox="0 0 24 24" fill="#111111" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"></path></svg></b><span style="font-size: 14px; color: #767676">후기 32개</span></div>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{ scores }}" as="sc" hint-placeholder-count="5"><div style="display: flex; align-items: center; gap: 14px; font-size: 14px"><span style="flex: none; width: 92px">{{ sc.k }}</span><span style="flex: 1; height: 6px; border-radius: 999px; background: #EEEEEE; overflow: hidden"><span style="display: block; height: 100%; width: {{ sc.w }}; background: #111111; border-radius: 999px"></span></span><span style="flex: none; width: 28px; text-align: right; font-weight: 600">{{ sc.v }}</span></div></sc-for>
+</div>
+</div>
+<div style="margin-top: 28px; display: flex; flex-direction: column; gap: 26px">
+<sc-for list="{{ reviews }}" as="rv" hint-placeholder-count="3"><div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 14px; letter-spacing: 2px">★★★★★</span><p style="margin: 0; font-size: 16px; line-height: 1.65">{{ rv.text }}</p><span style="font-size: 13px; color: #767676">{{ rv.who }}</span><sc-if value="{{ rv.hasReply }}" hint-placeholder-val="{{ true }}"><div style="margin-top: 6px; padding: 14px 16px; border-radius: 12px; background: #F6F6F6; display: flex; flex-direction: column; gap: 4px"><b style="font-size: 14px">소유주 답글</b><span style="font-size: 15px; color: #333333">{{ rv.reply }}</span></div></sc-if></div></sc-for>
+</div>
+<button type="button" data-ghost="" style="margin-top: 22px; height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">후기 32개 모두 보기</button>
+</section>
+
+<section style="padding: 28px 0; border-bottom: 1px solid #EEEEEE; display: flex; align-items: center; gap: 16px">
+<span style="position: relative; flex: none; width: 60px; height: 60px; border-radius: 50%; background: #E3F3E8; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; color: #13773A">김<span style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.12); font-size: 12px; font-weight: 700; color: #111111; white-space: nowrap">4.9★</span></span>
+<span style="display: flex; flex-direction: column; gap: 3px"><span style="display: flex; align-items: center; gap: 8px"><b style="font-size: 17px">소유주 김○○</b><span style="height: 22px; padding: 0 8px; border-radius: 6px; background: #EDF6F0; color: #13773A; font-size: 12px; font-weight: 700; display: flex; align-items: center">믿을 수 있는 소유주</span></span><span style="font-size: 14px; color: #767676">대여 87번 · 모아농 3년째 · 보통 1시간 안에 답해요</span></span>
+<button type="button" data-ghost="" style="margin-left: auto; height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">소유주에게 묻기</button>
+</section>
+
+<section style="padding: 32px 0">
+<h2 style="margin: 0; font-size: 21px; font-weight: 700">꼭 지켜 주세요</h2>
+<div style="margin-top: 18px; display: flex; flex-direction: column; gap: 16px">
+<sc-for list="{{ rules }}" as="ru" hint-placeholder-count="4"><div style="display: flex; gap: 14px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="{{ ru.icon }}"></path></svg><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 500">{{ ru.t }}</span><span style="font-size: 14px; color: #767676">{{ ru.d }}</span></span></div></sc-for>
+</div>
+</section>
+</div>
+
+<aside style="flex: 0 0 380px; position: sticky; top: 88px; z-index: 31">
+<div aria-label="받는 곳 지도" style="position: relative; height: 200px; margin-bottom: 12px; border-radius: 22px; overflow: hidden; border: 1px solid #E6E6E6; background: #EEF4EE">
+<svg width="100%" height="100%" viewBox="0 0 380 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="380" height="200" fill="#EEF4EE"></rect><path d="M0 150 C40 120 70 160 110 140 S170 90 210 110 S300 150 380 120 L380 200 L0 200Z" fill="#E3EEE4"></path><path d="M-10 40 C40 20 70 70 120 50 S200 10 250 40 S330 70 390 40" fill="none" stroke="#D5E4D7" stroke-width="1.2"></path><path d="M-10 62 C40 44 80 90 130 72 S205 34 255 62 S335 92 390 62" fill="none" stroke="#D5E4D7" stroke-width="1.2"></path><path d="M-10 84 C45 68 90 110 140 94 S210 58 262 84 S340 112 390 86" fill="none" stroke="#D5E4D7" stroke-width="1.2"></path><path d="M200 70 C230 55 270 60 280 85 S250 125 215 115 S175 85 200 70Z" fill="none" stroke="#CFE0D1" stroke-width="1.2"></path><path d="M215 82 C232 74 256 78 260 92 S242 112 222 106 S203 90 215 82Z" fill="none" stroke="#CFE0D1" stroke-width="1.2"></path><path d="M-10 120 C50 104 100 140 150 126 S230 92 280 116 S350 146 390 124" fill="none" stroke="#D5E4D7" stroke-width="1.2"></path><path d="M300 -10 C292 40 310 80 296 120 S318 180 310 210" fill="none" stroke="#A9D3E6" stroke-width="3"></path><path d="M60 210 C80 160 70 120 100 80 S120 20 150 -10" fill="none" stroke="#F2E3B6" stroke-width="7" stroke-linecap="round"></path><path d="M60 210 C80 160 70 120 100 80 S120 20 150 -10" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="6 6"></path><rect x="26" y="140" width="60" height="34" rx="6" fill="#CFE5C9"></rect><rect x="240" y="150" width="48" height="26" rx="6" fill="#CFE5C9"></rect></svg>
+<span style="position: absolute; left: 50%; top: 42%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: rgba(30,155,75,0.18)"></span>
+<span style="position: absolute; left: 50%; top: 42%; width: 16px; height: 16px; margin: -8px 0 0 -8px; box-sizing: border-box; border-radius: 50%; background: #13773A; border: 3px solid #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.25)"></span>
+<span style="position: absolute; top: 14px; left: 14px; height: 34px; padding: 0 14px; border-radius: 999px; background: #1F4A30; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 700">{{ mapPill }}</span>
+<button type="button" data-ghost="" style="position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); height: 44px; padding: 0 20px; border-radius: 999px; border: 1px solid #E6E6E6; background: #FFFFFF; box-shadow: 0 6px 18px rgba(0,0,0,0.12); display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 15px; font-weight: 700; white-space: nowrap; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg>지도에서 보기</button>
+</div>
+<div style="border: 1px solid #E6E6E6; border-radius: 22px; padding: 24px; box-shadow: 0 12px 32px rgba(0,0,0,0.06); background: #FFFFFF">
+<div style="display: flex; align-items: baseline; gap: 10px"><b style="font-size: 26px; letter-spacing: -0.02em">1일 8.5만원</b><span style="font-size: 15px; color: #767676">총 {{ totalText }}</span></div>
+<span style="display: block; margin-top: 2px; font-size: 13px; color: #9A9A9A">{{ days }}일 · 옵션 포함</span>
+
+<div style="position: relative; margin-top: 20px; padding-top: 20px; border-top: 1px solid #EEEEEE">
+<b style="display: block; font-size: 17px; margin-bottom: 12px">대여 일정</b>
+<span style="display: block; font-size: 13px; font-weight: 600; color: #555555; margin-bottom: 6px">빌리는 날</span>
+<div style="display: flex; gap: 8px"><button type="button" data-ghost="" onClick="{{ openDate }}" style="flex: 1.4; height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; cursor: pointer">{{ startText }}<span aria-hidden="true" style="color: #767676">⌄</span></button><button type="button" data-ghost="" onClick="{{ cycleStartT }}" style="flex: 1; height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; cursor: pointer">{{ startT }}<span aria-hidden="true" style="color: #767676">⌄</span></button></div>
+<span style="display: block; font-size: 13px; font-weight: 600; color: #555555; margin: 12px 0 6px">돌려주는 날</span>
+<div style="display: flex; gap: 8px"><button type="button" data-ghost="" onClick="{{ openDate }}" style="flex: 1.4; height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; cursor: pointer">{{ endText }}<span aria-hidden="true" style="color: #767676">⌄</span></button><button type="button" data-ghost="" onClick="{{ cycleEndT }}" style="flex: 1; height: 46px; padding: 0 12px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; cursor: pointer">{{ endT }}<span aria-hidden="true" style="color: #767676">⌄</span></button></div>
+<span style="display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: #13773A"><span style="width: 6px; height: 6px; border-radius: 50%; background: #1E9B4B"></span>찾을 때 고른 날짜를 그대로 가져왔어요</span>
+
+<sc-if value="{{ dateOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; top: 40px; right: 0; width: 680px; box-sizing: border-box; background: #FFFFFF; border-radius: 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 20px 24px">
+<b style="display: block; font-size: 16px; margin-bottom: 10px">{{ rangeHint }}</b>
+<div style="display: flex; align-items: flex-start; gap: 32px">
+<button type="button" onClick="{{ prevMonth }}" aria-label="이전 달" style="flex: none; width: 32px; height: 32px; border: 1px solid #E2E2E2; border-radius: 10px; background: #FFFFFF; cursor: pointer; color: {{ prevColor }}; margin-right: -16px">‹</button>
+<div style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 15px; line-height: 32px; margin-bottom: 4px">{{ m1.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; color: #767676; margin-bottom: 4px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m1.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
+<div style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 15px; line-height: 32px; margin-bottom: 4px">{{ m2.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; color: #767676; margin-bottom: 4px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m2.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
+<button type="button" onClick="{{ nextMonth }}" aria-label="다음 달" style="flex: none; width: 32px; height: 32px; border: 1px solid #E2E2E2; border-radius: 10px; background: #FFFFFF; cursor: pointer; margin-left: -16px">›</button>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid #EEEEEE"><span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #767676"><span style="width: 10px; height: 10px; border-radius: 3px; background: #EEEEEE"></span>이미 예약된 날</span><button type="button" onClick="{{ closePop }}" style="padding: 8px 20px; border: none; border-radius: 12px; background: #111111; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">적용</button></div>
+</div>
+</sc-if>
+</div>
+
+<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #EEEEEE">
+<b style="display: block; font-size: 17px; margin-bottom: 10px">받는 방법</b>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{ pickups }}" as="pk" hint-placeholder-count="2"><button type="button" data-opt="" onClick="{{ pk.pick }}" aria-pressed="{{ pk.on }}" style="padding: 12px 14px; border-radius: 12px; border: 1.5px solid {{ pk.border }}; background: {{ pk.bg }}; display: flex; align-items: flex-start; gap: 10px; font-family: inherit; text-align: left; cursor: pointer"><span style="flex: none; margin-top: 2px; width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; border: {{ pk.ring }}; background: #FFFFFF"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; gap: 8px"><b style="font-size: 15px">{{ pk.t }}</b><span style="font-size: 14px; font-weight: 600; color: {{ pk.priceColor }}">{{ pk.price }}</span></span><span style="font-size: 13px; line-height: 1.5; color: #767676">{{ pk.d }}</span></span></button></sc-for>
+</div>
+<div style="margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: #F6F6F6; display: flex; align-items: center; gap: 10px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#555555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg><span style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 13px; color: #767676">{{ placeLabel }}</span><b style="font-size: 15px">{{ placeText }}</b></span><span style="font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer">바꾸기</span></div>
+</div>
+
+<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #EEEEEE">
+<b style="display: block; font-size: 17px; margin-bottom: 4px">옵션</b>
+<span style="display: block; font-size: 13px; color: #767676; margin-bottom: 10px">소유주가 제공하는 것만 보여요</span>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{ options }}" as="op" hint-placeholder-count="5"><button type="button" data-opt="" onClick="{{ op.pick }}" aria-pressed="{{ op.on }}" style="padding: 12px 14px; border-radius: 12px; border: 1.5px solid {{ op.border }}; background: {{ op.bg }}; display: flex; align-items: flex-start; gap: 10px; font-family: inherit; text-align: left; cursor: pointer"><span style="flex: none; margin-top: 1px; width: 20px; height: 20px; border-radius: 6px; background: {{ op.boxBg }}; border: {{ op.boxBorder }}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 13px; font-weight: 800">{{ op.check }}</span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; gap: 8px"><b style="font-size: 15px">{{ op.t }}</b><span style="flex: none; font-size: 14px; font-weight: 600">{{ op.price }}</span></span><span style="font-size: 13px; line-height: 1.5; color: #767676">{{ op.d }}</span></span></button></sc-for>
+</div>
+</div>
+
+<div style="margin-top: 20px; padding-top: 18px; border-top: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 8px; font-size: 15px">
+<sc-for list="{{ lines }}" as="ln" hint-placeholder-count="3"><div style="display: flex; justify-content: space-between; color: {{ ln.color }}"><span>{{ ln.k }}</span><span>{{ ln.v }}</span></div></sc-for>
+<div style="display: flex; justify-content: space-between; margin-top: 6px; padding-top: 12px; border-top: 1px solid #EEEEEE; font-size: 17px"><b>합계</b><b>{{ totalText }}</b></div>
+</div>
+
+<a href="#" data-cta="" style="margin-top: 18px; height: 54px; border-radius: 14px; background: #1E9B4B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; text-decoration: none">대여 요청 보내기</a>
+<span style="display: block; margin-top: 10px; text-align: center; font-size: 13px; line-height: 1.5; color: #767676">소유주가 승인하면 확정돼요. 승인 전엔 결제되지 않아요.</span>
+
+<div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #EEEEEE; display: flex; gap: 12px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M7 11v9H4v-9zM7 11l4-8c1.7 0 3 1.3 3 3v4h5a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 20H7"></path></svg><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 15px">빌리기 하루 전까지 무료 취소</b><span style="font-size: 13px; color: #767676">그 뒤에 취소하면 1일 대여료가 나가요.</span></span></div>
+<div style="margin-top: 14px; display: flex; gap: 8px"><button type="button" data-ghost="" onClick="{{ toggleFav }}" style="flex: 1; height: 42px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">{{ favLabel }}</button><button type="button" data-ghost="" style="flex: 1; height: 42px; border-radius: 10px; border: 1px solid #DDDDDD; background: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer"><img src="/_blob/ce1efcfa4f86270a8c6085b5b3d620d2" alt="" style="width: 20px; height: auto">농농이에게 묻기</button></div>
+</div>
+</aside>
+</div>
+
+<section style="margin-top: 40px; padding: 40px 0 0; border-top: 1px solid #EEEEEE">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px"><h2 style="margin: 0; font-size: 22px; font-weight: 700">같은 날짜에 빌릴 수 있는 비슷한 기계</h2><a href="#" style="font-size: 14px; font-weight: 600">더 보기 →</a></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+<sc-for list="{{ similar }}" as="m" hint-placeholder-count="4"><article style="display: flex; flex-direction: column; gap: 12px; cursor: pointer"><div style="border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; background: #F2F4F1"><sc-if value="{{ m.hasImg }}" hint-placeholder-val="{{ true }}"><img src="{{ m.img }}" alt="{{ m.name }}" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: {{ m.pos }}"></sc-if><sc-if value="{{ m.noImg }}" hint-placeholder-val="{{ false }}"><span style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; align-items: center; justify-content: center; font-size: 13px; color: #7C9283">사진 준비 중</span></sc-if></div><div style="display: flex; flex-direction: column; gap: 6px; line-height: 1.4"><b style="font-size: 16px">{{ m.name }}</b><span style="font-size: 14px; color: #555555">{{ m.meta }}</span><span style="display: flex; gap: 8px; align-items: baseline"><b style="font-size: 16px">{{ m.price }}</b><span style="font-size: 13px; color: #767676">{{ m.total }}</span></span></div></article></sc-for>
+</div>
+</section>
+</main>
+
+<footer style="margin-top: 96px; background: #F6F6F6">
+<div style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px">
+<nav aria-label="하단 메뉴" style="display: flex; flex-wrap: wrap; gap: 28px; font-size: 14px"><a href="#" style="text-decoration: none; color: #555555">매물 찾기</a><a href="#" style="text-decoration: none; color: #555555">지도</a><a href="#" style="text-decoration: none; color: #555555">마이페이지</a><a href="#" style="text-decoration: none; color: #555555">개인정보처리방침</a></nav>
+<span style="font-size: 13px; color: #767676">info@moanong.co.kr · 1577-1106 · © 2026 모아농</span>
+</div>
+</footer>
+
+<sc-if value="{{ galleryOpen }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="사진 모두 보기" style="position: fixed; inset: 0; z-index: 60; background: #FFFFFF; overflow-y: auto">
+<div style="position: sticky; top: 0; background: rgba(255,255,255,0.95); border-bottom: 1px solid #EEEEEE"><div style="max-width: 960px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between"><b style="font-size: 17px">사진 8장</b><button type="button" onClick="{{ closeGallery }}" aria-label="닫기" style="width: 40px; height: 40px; border: none; border-radius: 50%; background: #F2F2F2; font-size: 22px; cursor: pointer">×</button></div></div>
+<div style="max-width: 960px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{ shots }}" as="g" hint-placeholder-count="8"><figure style="margin: 0; grid-column: {{ g.span }}; display: flex; flex-direction: column; gap: 6px"><div style="border-radius: 14px; overflow: hidden; aspect-ratio: {{ g.ratio }}; background: #F2F4F1"><sc-if value="{{ g.hasImg }}" hint-placeholder-val="{{ true }}"><img src="{{ g.img }}" alt="{{ g.cap }}" style="display: block; width: 100%; height: 100%; object-fit: cover; object-position: {{ g.pos }}; transform: scale({{ g.zoom }}); transform-origin: {{ g.pos }}"></sc-if><sc-if value="{{ g.noImg }}" hint-placeholder-val="{{ false }}"><span style="width: 100%; height: 100%; background: linear-gradient(135deg, #EDF3EE, #DCE8DF); display: flex; align-items: center; justify-content: center; font-size: 14px; color: #7C9283">[{{ g.cap }} 사진]</span></sc-if></div><figcaption style="font-size: 14px; color: #555555">{{ g.cap }}</figcaption></figure></sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3200}}'>
+const TODAY = 20261118;
+const TODAY_YM = 2026 * 12 + 10;
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const K = (y, m, d) => y * 10000 + (m + 1) * 100 + d;
+const P = k => [Math.floor(k / 10000), Math.floor(k / 100) % 100, k % 100];
+const MDW = k => { const [y, m, d] = P(k); return m + '/' + d + ' (' + WD[new Date(y, m - 1, d).getDay()] + ')'; };
+const SL = k => { const [, m, d] = P(k); return m + '/' + d; };
+const DAYS = (a, b) => { const [y1, m1, d1] = P(a), [y2, m2, d2] = P(b); return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 86400000) + 1; };
+const won = p => (Math.round(p / 1000) / 10).toLocaleString('ko-KR') + '만원';
+const DAY = 85000;
+const BOOKED = [20261126, 20261127, 20261128, 20261205, 20261206];
+const TIMES = ['오전 7시', '오전 9시', '오전 10시', '오후 1시', '오후 6시'];
+const I = {
+  hp: 'M13 3L5 14h6l-1 7 8-11h-6z', rot: 'M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5M21 3l-6 6', fuel: 'M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3M7 7h4',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2', weight: 'M6 8h12l2 12H4zM9 8a3 3 0 0 1 6 0', area: 'M4 4h16v16H4zM4 12h16M12 4v16',
+  book: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11', chat: 'M4 5h16v11H9l-5 4zM8 9.5h8M8 12.5h5', wrench: 'M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8 6.2 21l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.5 2.5-2.4-.6-.6-2.4z',
+  shield: 'M20 12V7l-8-4-8 4v5c0 5 3.4 8.6 8 9.5 4.6-.9 8-4.5 8-9.5z', drop: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z', dirt: 'M3 17c3-4 6-4 9 0s6 4 9 0M3 12h4M10 9h4M17 12h4', noalc: 'M8 3h8l-1 7a3 3 0 0 1-6 0zM12 13v6M9 21h6M4 4l16 16', job: 'M4 7h16v12H4zM9 7V5h6v2M4 12h16'
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { pop: null, start: 20261120, end: 20261122, st: 1, et: 4, pickup: 'self', opts: ['ridger'], fav: false, gallery: false, ym: TODAY_YM };
+  }
+
+  pickDay(k) {
+    const s = this.state;
+    if (BOOKED.includes(k)) return;
+    if (!s.start || s.end || k < s.start) this.setState({ start: k, end: null });
+    else if (BOOKED.some(b => b > s.start && b < k)) this.setState({ start: k, end: null });
+    else this.setState({ end: k });
+  }
+
+  month(ym) {
+    const s = this.state;
+    const y = Math.floor(ym / 12), m = ym % 12;
+    const first = new Date(y, m, 1).getDay();
+    const n = new Date(y, m + 1, 0).getDate();
+    const days = [];
+    for (let i = 0; i < first; i++) days.push({ label: '', pick: () => {}, style: 'height: 36px; border: none; background: transparent' });
+    for (let d = 1; d <= n; d++) {
+      const k = K(y, m, d);
+      const past = k < TODAY, booked = BOOKED.includes(k);
+      const on = k === s.start || k === s.end;
+      const inR = s.start && s.end && k > s.start && k < s.end;
+      let look = 'color: #111111; background: transparent; border-radius: 999px; cursor: pointer';
+      if (past) look = 'color: #C8C8C8; background: transparent; cursor: default';
+      else if (booked) look = 'color: #B4B4B4; background: #EEEEEE; border-radius: 8px; text-decoration: line-through; cursor: not-allowed';
+      else if (on) look = 'color: #FFFFFF; background: #1E9B4B; border-radius: 999px; font-weight: 700; cursor: pointer';
+      else if (inR) look = 'color: #111111; background: #EDF6F0; border-radius: 0; cursor: pointer';
+      days.push({ label: String(d), pick: past ? () => {} : () => this.pickDay(k), style: 'height: 36px; border: none; font-family: inherit; font-size: 14px; ' + look });
+    }
+    return { title: y + '년 ' + (m + 1) + '월', days };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const days = s.start && s.end ? DAYS(s.start, s.end) : 1;
+    const has = id => s.opts.includes(id);
+    const flip = id => () => this.setState({ opts: has(id) ? s.opts.filter(x => x !== id) : [...s.opts, id] });
+    const OPTS = [
+      { id: 'work', t: '농작업 대행', d: '소유주가 기계를 몰고 와서 직접 작업해 드려요. 1,000평 기준 하루면 끝나요.', unit: 60000, per: 'day' },
+      { id: 'ridger', t: '두둑 성형기 같이 빌리기', d: '트랙터에 달아 쓰는 작업기예요. 감자·배추 밭에 필요해요.', unit: 10000, per: 'day' },
+      { id: 'lesson', t: '처음 쓰는 법 알려 주기', d: '받을 때 30분 동안 시동부터 작업까지 알려 드려요.', unit: 0, per: 'once' },
+      { id: 'fuel', t: '연료 가득 채워 받기', d: '반납할 때 다시 채우지 않아도 돼요.', unit: 30000, per: 'once' },
+      { id: 'care', t: '고장 걱정 없는 안심 보장', d: '작업 중 고장 나면 수리비를 30만원까지 대신 내 드려요.', unit: 5000, per: 'day' }
+    ];
+    const optCost = o => o.per === 'day' ? o.unit * days : o.unit;
+    const deliveryFee = s.pickup === 'deliver' ? 20000 : 0;
+    const base = DAY * days;
+    const chosen = OPTS.filter(o => has(o.id));
+    const total = base + deliveryFee + chosen.reduce((a, o) => a + optCost(o), 0);
+    const lines = [{ k: '대여료 (1일 8.5만원 × ' + days + '일)', v: won(base), color: '#333333' }];
+    if (deliveryFee) lines.push({ k: '배달·회수', v: won(deliveryFee), color: '#333333' });
+    chosen.forEach(o => lines.push({ k: o.t, v: optCost(o) ? won(optCost(o)) : '무료', color: '#333333' }));
+
+    let rangeHint = '빌리는 날을 눌러 주세요';
+    if (s.start && !s.end) rangeHint = '돌려주는 날을 눌러 주세요';
+    if (s.start && s.end) rangeHint = SL(s.start) + ' – ' + SL(s.end) + ' · ' + days + '일';
+
+    const shots = [
+      { cap: '앞쪽 전체', pos: 'center', zoom: 1, ratio: '16 / 9', span: '1 / 3', img: true },
+      { cap: '로터리 날', pos: '15% 80%', zoom: 1.7, ratio: '4 / 3', img: true },
+      { cap: '운전석 쪽', pos: '70% 40%', zoom: 1.6, ratio: '4 / 3', img: true },
+      { cap: '뒷바퀴', pos: '85% 75%', zoom: 1.8, ratio: '4 / 3', img: true },
+      { cap: '계기판', ratio: '4 / 3' }, { cap: '엔진룸', ratio: '4 / 3' }, { cap: '점검 기록지', ratio: '4 / 3' }, { cap: '작업한 밭', ratio: '4 / 3' }
+    ].map(g => ({ ...g, span: g.span || 'auto', pos: g.pos || 'center', zoom: g.zoom || 1, hasImg: !!g.img, noImg: !g.img, img: '/_blob/3e8891d65613ebfb6340c578c9a9254e' }));
+
+    return {
+      anyOpen: s.pop === 'date', closePop: () => this.setState({ pop: null }),
+      rangeShort: s.start && s.end ? SL(s.start) + '–' + SL(s.end) : '날짜',
+      openGallery: () => this.setState({ gallery: true }), closeGallery: () => this.setState({ gallery: false }), galleryOpen: s.gallery, shots,
+      toggleFav: () => this.setState({ fav: !s.fav }), favSel: s.fav ? 'true' : 'false', favFill: s.fav ? '#1E9B4B' : 'rgba(17,17,17,0.2)', favStroke: s.fav ? '#1E9B4B' : '#111111', favLabel: s.fav ? '찜했어요' : '찜하기',
+      specs: [
+        { icon: I.hp, label: '50마력' }, { icon: I.rot, label: '로터리 달림' }, { icon: I.fuel, label: '디젤' },
+        { icon: I.clock, label: '1,200시간 사용' }, { icon: I.weight, label: '2.1톤' }, { icon: I.area, label: '1,000~3,000평' }
+      ],
+      keywords: ['밭 갈기 특화', '감자·배추 밭에 딱', '초보도 다루기 쉬움', '점검 기록 있음', '로터리 바로 작업', '연장 가능'],
+      notes: [
+        { k: '사용 기간', v: '4년 (2021년부터)', color: '#111111' },
+        { k: '최근 점검', v: '2026년 11월 2일', color: '#111111' },
+        { k: '알고 빌려 주세요', v: '로터리 날 한쪽이 조금 닳음', color: '#9A5B00' },
+        { k: '중간 연장', v: '하루 단위로 가능해요', color: '#13773A' }
+      ],
+      included: [
+        { icon: I.book, t: '쓰는 법 안내', d: '받을 때 소유주가 간단히 알려 드려요.' },
+        { icon: I.chat, t: '농농이 작업 도우미', d: '작업 중 궁금한 건 말로 물어보세요.' },
+        { icon: I.wrench, t: '고장 나면 수리 상담', d: '농농이가 가까운 수리점까지 찾아 드려요.' },
+        { icon: I.shield, t: '승인 후 확정', d: '소유주가 승인해야 예약과 결제가 진행돼요.' }
+      ],
+      scores: [['기계 상태', 4.9], ['설명과 같음', 5.0], ['소통', 4.9], ['받기·돌려주기', 4.8], ['가격 만족', 4.9]].map(([k, v]) => ({ k, v: v.toFixed(1), w: (v / 5 * 100) + '%' })),
+      reviews: [
+        { text: '처음 트랙터 써 봤는데 소유주님이 30분 동안 차근차근 알려 주셔서 금방 익혔어요. 1,500평 하루 만에 다 갈았어요.', who: '박○○ · 2026년 10월 26일 · 3일 대여', hasReply: true, reply: '잘 쓰셨다니 다행이에요. 다음에도 연락 주세요!' },
+        { text: '설명대로 로터리 날이 조금 닳긴 했는데 작업엔 전혀 문제없었어요. 가격도 착해요.', who: '이○○ · 2026년 9월 14일 · 2일 대여', hasReply: false, reply: '' },
+        { text: '비 때문에 하루 연장했는데 바로 받아 주셨어요. 배달도 시간 맞춰 와서 편했어요.', who: '최○○ · 2026년 7월 30일 · 4일 대여', hasReply: true, reply: '비 오면 언제든 말씀 주세요. 연장해 드려요.' }
+      ],
+      rules: [
+        { icon: I.drop, t: '쓴 만큼 연료 채워 주세요', d: '연료 옵션을 고르면 안 채워도 돼요.' },
+        { icon: I.dirt, t: '흙은 털고 돌려주세요', d: '물 세척까지는 안 해도 돼요.' },
+        { icon: I.job, t: '정한 작업에만 써 주세요', d: '돌밭·자갈밭 작업은 미리 말해 주세요.' },
+        { icon: I.noalc, t: '술 마시고 작업 금지', d: '안전을 위해 꼭 지켜 주세요.' }
+      ],
+      days, totalText: won(total), lines,
+      startText: s.start ? MDW(s.start) : '날짜', endText: s.end ? MDW(s.end) : '날짜',
+      startT: TIMES[s.st], endT: TIMES[s.et],
+      cycleStartT: () => this.setState({ st: (s.st + 1) % TIMES.length }), cycleEndT: () => this.setState({ et: (s.et + 1) % TIMES.length }),
+      openDate: () => this.setState({ pop: s.pop === 'date' ? null : 'date' }), dateOpen: s.pop === 'date',
+      m1: this.month(s.ym), m2: this.month(s.ym + 1), rangeHint,
+      prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
+      prevColor: s.ym <= TODAY_YM ? '#C8C8C8' : '#111111',
+      pickups: [
+        { id: 'self', t: '직접 가지러 가기', d: '소유주 집 앞 창고에서 받아요. 트럭이나 운반차가 필요해요.', price: '무료' },
+        { id: 'deliver', t: '배달 받기', d: '신북읍·동면·서면까지, 15km 안이면 내 밭까지 가져다 드려요.', price: '+2만원' }
+      ].map(p => { const on = s.pickup === p.id; return { ...p, on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', ring: on ? '6px solid #1E9B4B' : '2px solid #CCCCCC', priceColor: p.price === '무료' ? '#13773A' : '#111111', pick: () => this.setState({ pickup: p.id }) }; }),
+      mapPill: s.pickup === 'deliver' ? '배달 받을 곳' : '받는 곳 · 3.2km',
+      placeLabel: s.pickup === 'deliver' ? '배달 받을 곳' : '받는 곳 (소유주 창고)',
+      placeText: s.pickup === 'deliver' ? '내 밭 · 춘천시 동면 장학리 ○○' : '춘천시 신북읍 천전리 ○○',
+      options: OPTS.map(o => { const on = has(o.id); return { t: o.t, d: o.d, price: o.unit ? '+' + won(o.unit) + (o.per === 'day' ? ' / 1일' : '') : '무료', on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', boxBg: on ? '#1E9B4B' : '#FFFFFF', boxBorder: on ? 'none' : '2px solid #CCCCCC', check: on ? '✓' : '', pick: flip(o.id) }; }),
+      similar: [
+        { name: '트랙터 35마력', meta: '2020년식 · ★ 4.9 (27)', price: '1일 6.5만원', mul: 65000, img: '/_blob/3e8891d65613ebfb6340c578c9a9254e', pos: '30% 50%' },
+        { name: '승용 관리기', meta: '2023년식 · ★ 4.7 (12)', price: '1일 5.5만원', mul: 55000, img: '/_blob/e63a666a2975e82311ad258da44ef619', pos: '70% 50%' },
+        { name: '관리기 + 두둑 성형기', meta: '2022년식 · ★ 4.9 (19)', price: '1일 4.5만원', mul: 45000, img: '/_blob/e63a666a2975e82311ad258da44ef619', pos: '20% 50%' },
+        { name: '트랙터 60마력', meta: '2022년식 · ★ 5.0 (8)', price: '1일 9.5만원', mul: 95000, img: '' }
+      ].map(m => ({ ...m, hasImg: !!m.img, noImg: !m.img, pos: m.pos || 'center', total: '총 ' + won(m.mul * days) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

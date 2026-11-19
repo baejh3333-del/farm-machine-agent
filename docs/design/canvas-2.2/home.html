@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<title>모아농 2.0 홈</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"><style>
+body{margin:0}
+a{color:#111111}a:hover{color:#1E9B4B}
+[data-cta]{transition:background 0.15s}
+/* Figma 노트북 1440(84:514) 값 동기화 */
+section[style*="padding: 96px 24px 48px"]{position:relative;z-index:2;padding-top:120px !important;padding-bottom:24px !important;gap:22px !important}
+[data-booking-wrap]{margin-top:-640px !important;margin-bottom:230px !important;max-width:1248px !important}
+[data-booking-wrap] > div{padding:32px !important;border:1px solid rgba(255,255,255,0.7) !important;background:linear-gradient(rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.86) 55%, rgba(255,255,255,0.96) 100%) !important;box-shadow:0 30px 60px -12px rgba(0,0,0,0.20), 0 8px 24px rgba(0,0,0,0.06) !important}
+section[style*="padding: 96px 24px 120px"]{padding-top:110px !important;padding-bottom:140px !important}
+[data-booking-wrap] div[style*="flex: 0 1 320px"]{flex-basis:350px !important;padding:24px !important;gap:12px !important}
+[data-booking-wrap] div[role="tablist"]{margin-bottom:0 !important}
+[data-booking-wrap] div[style*="flex-direction: column; gap: 8px"]{gap:6px !important}
+[data-booking-wrap] button[style*="height: 50px"]{height:52px !important}
+[data-booking-wrap] button[role="tab"]{height:44px !important}
+[data-booking-wrap] a[style*="height: 52px"]{height:56px !important;margin-top:4px}
+[data-booking-wrap] img[style*="aspect-ratio"], [data-booking-wrap] span[style*="aspect-ratio"]{aspect-ratio:auto !important;height:auto !important;flex:1 1 0;min-height:180px}
+/* 늘린 예약창 높이에 맞춰: 검색 칸과 추천 매물이 아래까지 꽉 차게 */
+[data-booking-wrap] > div > div:first-child{flex:1 1 auto;min-height:0;flex-wrap:nowrap !important;align-items:stretch}
+[data-booking-wrap] div[style*="flex: 0 1 320px"] > a[data-cta]{margin-top:auto !important}
+[data-booking-wrap] div[style*="flex: 1 1 560px"] > div[style*="flex-wrap: wrap; gap: 20px"]{flex:1 1 auto;min-height:0;align-items:stretch}
+[data-booking-wrap] article{min-height:0}
+section[style*="padding: 96px 24px 120px"] span[style*="52px"]{background:#EDF6F0 !important}
+section[style*="padding: 96px 24px 120px"] svg [stroke="#111111"]{stroke:#13773A}
+section[data-brand-end] [style*="#9A9A9A"]{color:#A8CDB5 !important}
+section[data-brand-end] nav a:hover{color:#FFFFFF !important}[data-cta]:hover{background:#178A40 !important;color:#FFFFFF !important}
+.wheel::-webkit-scrollbar{display:none}
+/* 주요 기능 구간: 새싹 사진을 흐리게 + 숲 초록으로 부드럽게 덮어 깔기 (스타일은 마크업에 직접) */
+[data-feat-dim] > section{padding-top:290px !important;z-index:1}
+[data-feat-dim]::after{content:"";position:absolute;inset:-1px 0;z-index:0;pointer-events:none;background:linear-gradient(#F6F6F6 0, rgba(246,246,246,0.9) 20px, rgba(246,246,246,0.7) 45px, rgba(246,246,246,0.45) 72px, rgba(246,246,246,0.22) 98px, rgba(246,246,246,0.08) 120px, rgba(246,246,246,0.02) 138px, rgba(246,246,246,0) 150px, rgba(246,246,246,0) calc(100% - 150px), rgba(246,246,246,0.02) calc(100% - 138px), rgba(246,246,246,0.08) calc(100% - 120px), rgba(246,246,246,0.22) calc(100% - 98px), rgba(246,246,246,0.45) calc(100% - 72px), rgba(246,246,246,0.7) calc(100% - 45px), rgba(246,246,246,0.9) calc(100% - 20px), #F6F6F6 100%)}
+/* 첨 화면: 제목이 먼저 올라오고, 그다음 예약창 */
+@keyframes moaUp{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:none}}
+section[style*="padding: 96px 24px 48px"] h1{animation:moaUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both}
+section[style*="padding: 96px 24px 48px"] p{animation:moaUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both}
+/* 이웃의 쉬는 농기계: 구간 넓게, 일러스트 크게, 초록 글자 숨김 */
+#about > div{padding-top:128px !important;padding-bottom:128px !important;gap:48px !important}
+#about div[style*="width: 460px; height: 300px"]{height:340px !important}
+#about span[style*="width: 72px; height: 72px"]{width:112px !important;height:112px !important}
+#about span[style*="width: 72px; height: 72px"] svg{width:78px;height:78px}
+#about span[style*="background: #EDF6F0; color: #13773A"]{display:none}
+/* 이웃의 쉬는 농기계: 빌려주는 분을 왼쪽, 초보 농사꾼을 오른쪽으로 */
+#about [style^="width: 100%; display: flex; align-items: center; justify-content: center"] > div:first-child{order:3}
+#about [style^="width: 100%; display: flex; align-items: center; justify-content: center"] > div[aria-label="모아농"]{order:2;width:220px !important}
+#about [style^="width: 100%; display: flex; align-items: center; justify-content: center"] > div:last-child{order:1}
+[data-feat-dim] > section > div{padding-bottom:72px !important}
+[data-feat-dim] > section > div:last-child{padding-bottom:290px !important}
+/* 주요 기능: 글 | 카드 2단을 같은 폭으로 맞추고, 카드는 불투명·또렷하게 */
+[data-feat-dim] > section > div{display:grid !important;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);align-items:center;gap:88px !important}
+[data-feat-dim] > section > div > div{flex:none !important}
+[data-feat-dim] div[style*="max-width: 480px"]{max-width:500px !important;box-shadow:0 24px 56px rgba(6,28,16,0.28) !important}
+[data-feat-dim] div[style*="background: #111111; border: 1px solid"]{border-color:#2A2A2A !important}
+[data-feat-dim] h2{text-shadow:0 2px 18px rgba(6,28,16,0.25)}
+[data-feat-dim] div:has(> h3){position:relative;padding-left:36px}
+[data-feat-dim] div:has(> h3)::before{content:"";position:absolute;left:0;top:1px;width:24px;height:24px;border-radius:50%;background:#1E9B4B url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center / 14px no-repeat}
+[data-feat-dim] h3{font-size:18px !important}
+[data-feat-dim] div:has(> h3) p{color:rgba(255,255,255,0.9) !important}
+/* 예약창: 칸 위 작은 제목 숨김, 달력·시간 팝업은 작고 트인 반투명 */
+[data-booking-wrap] div[style*="flex-direction: column; gap: 8px"] > span[style*="font-size: 13px; font-weight: 500; color: #555555"]{display:none}
+[data-booking-wrap] div[style*="width: 1060px"], [data-booking-wrap] div[style*="width: 620px"]{background:rgba(255,255,255,0.86) !important;-webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%);border:1px solid rgba(255,255,255,0.7);box-shadow:0 18px 44px rgba(0,0,0,0.14) !important}
+[data-booking-wrap] div[style*="width: 1060px"]{width:740px !important;padding:20px 24px !important;border-radius:20px !important}
+[data-booking-wrap] div[style*="width: 1060px"] div[style*="gap: 72px"]{gap:36px !important}
+[data-booking-wrap] div[style*="width: 1060px"] b[style*="font-size: 20px"]{font-size:17px !important;line-height:34px !important;margin-bottom:8px !important}
+[data-booking-wrap] div[style*="width: 1060px"] button[style*="width: 40px"]{width:34px !important;height:34px !important}
+[data-booking-wrap] button[style*="height: 56px"]{height:40px !important;font-size:15px !important}
+[data-booking-wrap] div[style*="width: 620px"]{width:500px !important;padding:18px 22px !important;border-radius:20px !important}
+[data-booking-wrap] div[style*="width: 620px"] > div[style*="gap: 28px"]{gap:20px !important}
+/* 상단 검색창: '위치·날짜·작업' 글자는 숨기고 값만 보여주기 */
+[role="search"] button > b[style*="font-size: 12px"]{display:none}
+[role="search"] button > span[style*="font-size: 14px"]{font-size:15px !important;font-weight:500}
+/* 양옆 여백 210px: 본문(1248px)을 통째로 1020px에 맞게 비례 축소 — 글자·간격·카드가 같은 비율로 작아져요 */
+section[style*="max-width: 1200px"], section [style*="max-width: 1200px"]:not([data-booking-wrap]), section[style*="padding: 96px 24px 48px"]{zoom:0.8173}
+body, body *{font-family:'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif !important}
+</style><style>*{animation:none !important;transition:none !important}</style></head>
+<body>
+<div id="dc-root">
+
+<div style="background: #FFFFFF; color: #111111; font-family: 'Noto Sans KR', sans-serif; letter-spacing: -0.01em">
+
+<header style="position: relative; z-index: 10; background: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><span style="display: flex; align-items: center"><svg width="136.4" height="36" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></span></a>
+
+<div style="display: flex; align-items: center; gap: 32px">
+<nav aria-label="주 메뉴" style="display: flex; gap: 28px; font-size: 15px; font-weight: 500; white-space: nowrap">
+<a href="#search" style="text-decoration: none">매물 찾기</a>
+<a href="#" style="text-decoration: none">지도</a>
+<a href="#" style="text-decoration: none">마이페이지</a>
+</nav>
+<a href="#" style="flex: none; height: 38px; padding: 0 18px; border-radius: 999px; border: 1px solid #DDDDDD; display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">로그인</a>
+</div>
+</div>
+</header>
+<div aria-hidden="true" style="position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: rgba(255,255,255,0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(17,17,17,0.06); transform: translateY(-110%); transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)">
+<div style="max-width: 1200px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px">
+<a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="136.4" height="36" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a>
+<div role="search" aria-label="빠른 검색" style="flex: 1 1 auto; max-width: 640px; height: 56px; margin: 0 24px; padding: 0 6px; box-sizing: border-box; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; box-shadow: 0 8px 28px rgba(0,0,0,0.10); display: flex; align-items: center">
+<button type="button" style="flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: none; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; font-family: inherit; text-align: left; cursor: pointer"><b style="font-size: 12px; color: #111111">위치</b><span style="max-width: 100%; font-size: 14px; color: #9A9A9A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">동네 검색</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 28px; background: #E6E6E6"></span><button type="button" style="flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: none; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; font-family: inherit; text-align: left; cursor: pointer"><b style="font-size: 12px; color: #111111">날짜</b><span style="max-width: 100%; font-size: 14px; color: #9A9A9A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">날짜 추가</span></button>
+<span aria-hidden="true" style="flex: none; width: 1px; height: 28px; background: #E6E6E6"></span>
+<button type="button" style="flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: none; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; font-family: inherit; text-align: left; cursor: pointer"><b style="font-size: 12px; color: #111111">작업</b><span style="max-width: 100%; font-size: 14px; color: #9A9A9A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">작업 추가</span></button>
+<button type="button" aria-label="농기계 찾기" style="flex: none; width: 44px; height: 44px; border: none; border-radius: 50%; background: #1E9B4B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="#FFFFFF" stroke-width="2.2"></circle><path d="M16 16l4.5 4.5" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"></path></svg></button>
+</div>
+<div style="display: flex; align-items: center; gap: 32px">
+<nav aria-label="상단 메뉴" style="display: flex; gap: 28px; font-size: 15px; font-weight: 500; white-space: nowrap">
+<a href="#search" style="text-decoration: none">매물 찾기</a>
+<a href="#" style="text-decoration: none">지도</a>
+<a href="#" style="text-decoration: none">마이페이지</a>
+</nav>
+<a href="#" style="flex: none; height: 38px; padding: 0 18px; border-radius: 999px; border: 1px solid #DDDDDD; background: rgba(255,255,255,0.8); display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">로그인</a>
+</div>
+</div>
+</div>
+
+<section style="padding: 96px 24px 48px; display: flex; flex-direction: column; align-items: center; gap: 22px; text-align: center">
+
+<h1 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 72px; line-height: 1.3; font-weight: 600; letter-spacing: -0.04em"><span style="font-weight: 800">농기계</span>,<br>클릭 한 번으로</h1><p style="margin: 0; font-size: 18px; line-height: 1.6; color: #555555">위치와 날짜만 고르면 돼요.</p>
+</section>
+
+<section id="search" style="position: relative">
+
+
+<div style="position: relative; height: 1000px; margin-top: -312px">
+<img src="assets/field.jpg" alt="산 아래 넓게 펼쳐진 배추밭" style="display: block; width: 100%; height: 1000px; object-fit: cover; object-position: center 45%">
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 220px; background: linear-gradient(#FFFFFF 0%, rgba(255,255,255,0.6) 40%, rgba(255,255,255,0) 100%)"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: -2px; height: 260px; background: linear-gradient(rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 55%, #FFFFFF 92%)"></div>
+</div><div style="max-width: 1200px; margin: -300px auto 0; padding: 0 24px; position: relative; z-index: 3; transform: none; opacity: 1; transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.6s ease" data-booking-wrap="">
+<div style="background: linear-gradient(rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.78) 45%, #FFFFFF 100%); -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%); border: 1px solid rgba(255,255,255,0.7); border-radius: 24px; padding: 28px; box-shadow: 0 24px 60px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 22px; height: 488px">
+<div style="display: flex; flex-wrap: wrap; gap: 24px">
+<div style="position: relative; z-index: 31; flex: 0 1 320px; min-width: 260px; background: rgba(246,246,246,0.82); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box">
+<div role="tablist" aria-label="거래 방식" style="position: relative; display: flex; padding: 4px; border-radius: 999px; background: #E6E6E6; margin-bottom: 4px">
+<span aria-hidden="true" style="position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px; background: #FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: left 0.25s ease"></span>
+<button type="button" role="tab" aria-selected="true" style="position: relative; flex: 1 1 0; height: 44px; border: none; border-radius: 999px; background: transparent; font-family: inherit; font-size: 16px; font-weight: 700; color: #111111; cursor: pointer; transition: color 0.2s">대여</button>
+<button type="button" role="tab" aria-selected="false" style="position: relative; flex: 1 1 0; height: 44px; border: none; border-radius: 999px; background: transparent; font-family: inherit; font-size: 16px; font-weight: 700; color: #767676; cursor: pointer; transition: color 0.2s">중고 구매</button>
+</div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">위치</span>
+
+<button type="button" aria-expanded="false" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: none"><span style="color: #9A9A9A">이용할 위치</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="#555555" stroke-width="1.6"></path><circle cx="12" cy="10.6" r="2.3" stroke="#555555" stroke-width="1.6"></circle></svg></button></div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">날짜 · 시간</span>
+
+
+<div style="display: flex; gap: 8px">
+<button type="button" aria-expanded="false" style="flex: 1.35 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; box-shadow: none"><span style="color: #9A9A9A">날짜</span></button>
+<button type="button" aria-expanded="false" style="flex: 1 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; box-shadow: none"><span style="color: #9A9A9A">시간</span></button>
+</div>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">작업</span>
+
+<button type="button" aria-expanded="false" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: none"><span style="color: #9A9A9A">하려는 작업</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#555555" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div>
+<a href="#search" data-cta="" style="height: 52px; border-radius: 12px; background: #1E9B4B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 700; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="#FFFFFF" stroke-width="2"></circle><path d="M16 16l4.5 4.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg>농기계 찾기</a>
+</div>
+<div style="flex: 1 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding-top: 2px; margin-bottom: 6px">
+<div style="display: flex; flex-direction: column; gap: 4px"><b style="font-size: 24px; line-height: 1.3; letter-spacing: -0.02em">추천하는 매물</b><span style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 15px; color: #555555">우리 동네에서 많이 찾는 농기계예요</span></div>
+<a href="#" style="flex: none; font-size: 15px; font-weight: 500">전체 보기 →</a>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+
+<article style="flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<img src="assets/cultivator.jpg" alt="관리기 (소형)" style="width: 100%; aspect-ratio: 4 / 3.4; object-fit: cover; border-radius: 16px; background: #F6F6F6">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 16px; font-weight: 700">관리기 (소형)</span>
+<span style="font-size: 13px; color: #555555">춘천시 동면 · 5.8km</span>
+<span style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px"><span style="font-size: 15px; font-weight: 700">1일 [대여료]</span><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #1E7A3F"><span style="width: 6px; height: 6px; border-radius: 50%; background: #1E9B4B"></span>대여 가능</span></span>
+</div>
+</article>
+
+<article style="flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<span style="width: 100%; aspect-ratio: 4 / 3.4; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #9A9A9A">[사진]</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 16px; font-weight: 700">동력 분무기 (20L)</span>
+<span style="font-size: 13px; color: #555555">춘천시 신동면 · 6.4km</span>
+<span style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px"><span style="font-size: 15px; font-weight: 700">1일 [대여료]</span><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #1E7A3F"><span style="width: 6px; height: 6px; border-radius: 50%; background: #1E9B4B"></span>대여 가능</span></span>
+</div>
+</article>
+
+<article style="flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<span style="width: 100%; aspect-ratio: 4 / 3.4; border-radius: 16px; background: #F6F6F6; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #9A9A9A">[사진]</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 16px; font-weight: 700">땅속작물 수확기</span>
+<span style="font-size: 13px; color: #555555">홍천군 화촌면 · 12.5km</span>
+<span style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px"><span style="font-size: 15px; font-weight: 700">1일 [대여료]</span><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #1E7A3F"><span style="width: 6px; height: 6px; border-radius: 50%; background: #1E9B4B"></span>대여 가능</span></span>
+</div>
+</article>
+
+</div>
+<span style="font-size: 13px; color: #555555">소유주가 승인하면 대여가 확정돼요.</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 96px 24px 120px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; padding-top: 1px; padding-bottom: 192px">
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 8px 24px">
+<span style="width: 52px; height: 52px; border-radius: 50%; background: #F6F6F6; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="#111111" stroke-width="1.6"></path><circle cx="12" cy="10.6" r="2.3" stroke="#111111" stroke-width="1.6"></circle></svg></span>
+<h3 style="margin: 0; font-size: 22px; font-weight: 700">가까운 곳에서</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">이웃 농기계를<br>가까이에서 찾아요</p></div>
+<div aria-hidden="true" style="width: 1px; background: #E8E8E8; margin: 16px 0"></div>
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 8px 24px">
+<span style="width: 52px; height: 52px; border-radius: 50%; background: #F6F6F6; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="#111111" stroke-width="1.6"></circle><path d="M8 9l2 7 2-5 2 5 2-7M7.5 12h9" stroke="#111111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+<h3 style="margin: 0; font-size: 22px; font-weight: 700">합리적으로</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">사지 않고<br>필요한 날만 빌려요</p></div>
+<div aria-hidden="true" style="width: 1px; background: #E8E8E8; margin: 16px 0"></div>
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 8px 24px">
+<span style="width: 52px; height: 52px; border-radius: 50%; background: #F6F6F6; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.3-3 8-7 9.5-4-1.5-7-5.2-7-9.5V6z" stroke="#111111" stroke-width="1.6" stroke-linejoin="round"></path><path d="M9 12l2.2 2.2L15.5 10" stroke="#111111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+<h3 style="margin: 0; font-size: 22px; font-weight: 700">안전하게</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">소유주가 승인한 대여라<br>안심이에요</p></div>
+</section>
+
+<section id="about" style="background: #F6F6F6">
+<div style="max-width: 1200px; margin: 0 auto; padding: 88px 24px; display: flex; flex-direction: column; align-items: center; gap: 36px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+<h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em">이웃의 쉬는 농기계를,<br>필요한 사람에게</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.65; color: #555555">동네 농기계를 모아<br>빌리고, 빌려주고, 사고팔아요.</p>
+</div>
+<div style="width: 100%; display: flex; align-items: center; justify-content: center">
+<div style="flex: none; width: 460px; height: 300px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 20px 50px rgba(0,0,0,0.06); box-sizing: border-box; padding: 28px 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center">
+<span aria-hidden="true" style="width: 72px; height: 72px; border-radius: 50%; background: #F6F6F6; display: flex; align-items: center; justify-content: center"><svg width="48" height="48" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21h28" stroke="#111111" stroke-width="2.4"></path><path d="M23 21c0-5 4-9 9-9s9 4 9 9" stroke="#111111" stroke-width="2.4"></path><circle cx="32" cy="27" r="6" stroke="#111111" stroke-width="2.4"></circle><path d="M17 54c0-9 6.5-16 15-16s15 7 15 16" stroke="#111111" stroke-width="2.4"></path><path d="M51 54V42" stroke="#1E9B4B" stroke-width="2.4"></path><path d="M51 45c-4.5 0-7-3-7-7.5 4.5 0 7 3 7 7.5z" fill="#1E9B4B"></path><path d="M51 43c0-4.5 3-7 7-7 0 4.5-3 7-7 7z" fill="#1E9B4B"></path></svg></span>
+<span style="padding: 6px 14px; border-radius: 999px; background: #EDF6F0; color: #13773A; font-size: 13px; font-weight: 700">빌리는 분 · 초보 농사꾼</span>
+<h3 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em">농사가 처음이라면</h3>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 16px">
+<li style="display: flex; align-items: center; gap: 8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1E9B4B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>기계 없이도 시작해요</li>
+<li style="display: flex; align-items: center; gap: 8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1E9B4B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>작업만 알면 찾을 수 있어요</li>
+</ul>
+</div>
+<div aria-label="모아농" style="flex: none; width: 150px; display: flex; align-items: center; justify-content: center; gap: 10px">
+<span style="height: 1px; flex: 1; background: #D6D6D6"></span>
+<svg width="47.7" height="44" viewBox="0 0 52 48" fill="none" aria-hidden="true"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111"></circle><circle cx="41" cy="39" r="5" fill="#111111"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111"></circle></svg>
+<span style="height: 1px; flex: 1; background: #D6D6D6"></span>
+</div>
+<div style="flex: none; width: 460px; height: 300px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 20px 50px rgba(0,0,0,0.06); box-sizing: border-box; padding: 28px 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center">
+<span aria-hidden="true" style="width: 72px; height: 72px; border-radius: 50%; background: #F6F6F6; display: flex; align-items: center; justify-content: center"><svg width="48" height="48" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="22" r="6" stroke="#111111" stroke-width="2.4"></circle><path d="M6 54c0-9 5.5-16 12-16 4 0 7.5 2.5 9.5 6.5" stroke="#111111" stroke-width="2.4"></path><path d="M36 30h9a2 2 0 0 1 2 2v6h8a2 2 0 0 1 2 2v6" stroke="#111111" stroke-width="2.4"></path><path d="M36 30v14" stroke="#111111" stroke-width="2.4"></path><circle cx="39" cy="50" r="6.5" stroke="#111111" stroke-width="2.4"></circle><circle cx="39" cy="50" r="2" fill="#1E9B4B"></circle><circle cx="55" cy="52" r="4" stroke="#111111" stroke-width="2.4"></circle><path d="M27 46h6" stroke="#111111" stroke-width="2.4"></path></svg></span>
+<span style="padding: 6px 14px; border-radius: 999px; background: #EDF6F0; color: #13773A; font-size: 13px; font-weight: 700">빌려주는 분 · 여유 농기계</span>
+<h3 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em">쉬는 농기계가 있다면</h3>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 16px">
+<li style="display: flex; align-items: center; gap: 8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1E9B4B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>쉬는 날 빌려주고 돈을 벌어요</li>
+<li style="display: flex; align-items: center; gap: 8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1E9B4B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>누구에게 빌려줄지 직접 정해요</li>
+</ul>
+</div>
+</div>
+<p style="margin: 0; display: flex; align-items: center; gap: 10px; font-size: 16px; color: #555555"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6M18 3v4h-4M6 21v-4h4" stroke="#1E9B4B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>놀던 기계는 다시 일하고, 농사의 문턱은 낮아져요.</p>
+</div>
+</section>
+
+<div data-feat-dim="" style="position: relative; overflow: hidden; background: #2B4A36; border-radius: 1px">
+<img src="assets/sprout.jpg" alt="" aria-hidden="true" style="position: absolute; inset: -24px; width: calc(100% + 48px); height: calc(100% + 48px); object-fit: cover; object-position: 72% 60%; filter: blur(4px) saturate(0.85)">
+<div aria-hidden="true" style="position: absolute; inset: 0; background: linear-gradient(90deg, rgba(22,74,44,0.58) 0%, rgba(24,92,54,0.42) 55%, rgba(24,92,54,0.30) 100%), linear-gradient(rgba(14,40,26,0.40), rgba(14,40,26,0.10) 25%, rgba(14,40,26,0.10) 75%, rgba(14,40,26,0.45))"></div>
+<section style="max-width: 1200px; margin: 0 auto; padding: 120px 24px 0; display: flex; flex-direction: column; position: relative">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 64px; padding-bottom: 120px">
+<div style="flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 15px; font-weight: 600; color: #A8EBBE">주요 기능 01</span><h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em; color: #FFFFFF">전화 없이,<br>언제든 예약해요</h2></div>
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">날짜만 고르면 끝</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">밤에도, 주말에도 예약돼요.</p></div>
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">소유주가 승인하면 확정</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">소유주가 직접 확인해요.</p></div>
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">진행 상황을 한눈에</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">요청, 승인, 확정 순서로 보여요.</p></div>
+</div>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; display: flex; justify-content: center">
+<div style="background: #FFFFFF; border-radius: 24px; box-shadow: 0 24px 60px rgba(8,30,18,0.25); padding: 32px; box-sizing: border-box; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; align-items: center; gap: 16px"><img src="assets/tractor.jpg" alt="트랙터" style="width: 72px; height: 72px; border-radius: 14px; object-fit: cover"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 18px">트랙터 + 로터리 (50마력)</b><span style="font-size: 14px; color: #555555">춘천시 신북읍 · 3.2km</span></span></div>
+<div style="display: flex; justify-content: space-between; font-size: 15px; border-top: 1px solid #EEEEEE; padding-top: 16px"><span style="color: #555555">대여 기간</span><b>4월 10일 → 4월 11일</b></div>
+<div style="display: flex; justify-content: space-between; font-size: 15px"><span style="color: #555555">대여료</span><b>[대여료]</b></div>
+<span style="height: 52px; border-radius: 12px; background: #111111; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700">대여 요청 보내기</span>
+<span style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: #1E7A3F"><span style="width: 7px; height: 7px; border-radius: 50%; background: #1E9B4B"></span>소유주 승인 대기 중</span>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap-reverse; align-items: center; gap: 64px; padding-bottom: 120px">
+<div style="flex: 1 1 520px; min-width: 0; display: flex; justify-content: center">
+<div style="background: #FFFFFF; border-radius: 24px; box-shadow: 0 24px 60px rgba(8,30,18,0.25); padding: 32px; box-sizing: border-box; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px">
+<span style="display: flex; align-items: center; gap: 10px"><span style="width: 36px; height: 36px; border-radius: 12px; background: #FFF4DF; display: flex; align-items: flex-end; justify-content: center; overflow: hidden"><img src="assets/nongnong.png" alt="" style="width: 32px; height: auto; margin-bottom: -4px"></span><b style="font-size: 16px">농농이</b><span style="font-size: 13px; color: #767676">AI 농기계 도우미</span></span>
+<span style="align-self: flex-end; background: #111111; color: #FFFFFF; border-radius: 16px; padding: 12px 16px; font-size: 15px">감자 300평 심을 건데요</span>
+<span style="align-self: flex-start; background: #F2F2F2; border-radius: 16px; padding: 14px 16px; font-size: 15px; line-height: 1.6"><b>관리기 + 두둑 성형기</b>를 추천해요.<br>이틀이면 충분해요.</span>
+<span style="display: flex; align-items: center; gap: 14px; border-radius: 14px; background: #F6F6F6; padding: 12px"><img src="assets/cultivator.jpg" alt="관리기" style="width: 56px; height: 56px; border-radius: 10px; object-fit: cover"><span style="display: flex; flex-direction: column; font-size: 14px"><b style="font-size: 15px">관리기 (소형)</b><span style="color: #555555">춘천시 동면 · 1일 [대여료]</span></span></span>
+</div>
+</div>
+<div style="flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 15px; font-weight: 600; color: #A8EBBE">주요 기능 02</span><h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em; color: #FFFFFF">모르면,<br>농농이에게 물어봐요</h2></div>
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">농사 질문에 답해요</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">기본 농사부터 농기계 쓰는 법까지 알려줘요.</p></div>
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">채팅만으로 등록해요</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">대여·구매 요청과 판매글까지 올려줘요.</p></div>
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">말로 수리 상담해요</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">목소리로 물으면 수리·대여·구매로 이어져요.</p></div>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 64px; padding-bottom: 120px">
+<div style="flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 15px; font-weight: 600; color: #A8EBBE">주요 기능 03</span><h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em; color: #FFFFFF">처음이어도,<br>순서대로 알려줘요</h2></div>
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">작물부터 고르기</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">작물을 고르면 할 일이 순서대로 나와요.</p></div>
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">단계마다 필요한 기계</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">밭 갈기부터 수확까지 알려줘요.</p></div>
+<div><h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 700; color: #FFFFFF">바로 빌리기</h3><p style="margin: 0; font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.86)">기계를 누르면 가까운 매물이 나와요.</p></div>
+</div>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; display: flex; justify-content: center">
+<div style="background: #111111; border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; box-shadow: 0 24px 60px rgba(8,30,18,0.3); padding: 32px; box-sizing: border-box; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; color: #FFFFFF">
+<div style="display: flex; gap: 8px"><span style="padding: 9px 18px; border-radius: 999px; background: #FFFFFF; color: #111111; font-size: 15px; font-weight: 700">감자</span><span style="padding: 9px 18px; border-radius: 999px; background: #2A2A2A; font-size: 15px">고추</span><span style="padding: 9px 18px; border-radius: 999px; background: #2A2A2A; font-size: 15px">배추</span></div>
+<div style="background: #1E1E1E; border-radius: 16px; padding: 18px 20px; display: flex; align-items: center; gap: 14px"><span style="width: 32px; height: 32px; border-radius: 50%; background: #1E9B4B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">1</span><span style="display: flex; flex-direction: column"><b style="font-size: 16px">밭 갈기</b><span style="font-size: 14px; color: #BBBBBB">트랙터 + 로터리</span></span></div>
+<div style="background: #1E1E1E; border-radius: 16px; padding: 18px 20px; display: flex; align-items: center; gap: 14px"><span style="width: 32px; height: 32px; border-radius: 50%; background: #2F2F2F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">2</span><span style="display: flex; flex-direction: column"><b style="font-size: 16px">두둑 만들기</b><span style="font-size: 14px; color: #BBBBBB">두둑 성형기</span></span></div>
+<div style="background: #1E1E1E; border-radius: 16px; padding: 18px 20px; display: flex; align-items: center; gap: 14px"><span style="width: 32px; height: 32px; border-radius: 50%; background: #2F2F2F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">3</span><span style="display: flex; flex-direction: column"><b style="font-size: 16px">심기</b><span style="font-size: 14px; color: #BBBBBB">감자 파종기</span></span></div>
+</div>
+</div>
+</div>
+</section>
+</div>
+
+<section style="background: #F6F6F6">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; align-items: center; gap: 56px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center">
+<span style="font-size: 15px; font-weight: 500; color: #13773A">사용 방법</span>
+<h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em">네 번이면 충분해요</h2>
+<div role="tablist" aria-label="사용자 유형" style="margin-top: 10px; display: flex; gap: 4px; background: #FFFFFF; border-radius: 999px; padding: 4px">
+<button type="button" role="tab" aria-selected="true" style="height: 44px; padding: 0 24px; border: none; border-radius: 999px; background: #111111; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700">빌리는 분</button>
+<button type="button" role="tab" aria-selected="false" style="height: 44px; padding: 0 24px; border: none; border-radius: 999px; background: transparent; color: #555555; font-family: inherit; font-size: 15px; font-weight: 500">빌려주는 분</button>
+</div>
+</div>
+<div style="width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center">
+<div style="width: 100%; display: flex; align-items: center"><span style="flex: 1; height: 1.5px; background: transparent"></span><span style="flex: none; width: 104px; height: 104px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="#111111" stroke-width="1.6" stroke-linecap="round"></path><circle cx="16" cy="7" r="2" stroke="#111111" stroke-width="1.6"></circle><circle cx="10" cy="17" r="2" stroke="#111111" stroke-width="1.6"></circle></svg></span><span style="flex: 1; height: 1.5px; background: #DDDDDD"></span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 12px"><span style="font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #767676">STEP 01</span><h3 style="margin: 0; font-size: 21px; font-weight: 700">조건 고르기</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">위치·날짜·작업</p></div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center">
+<div style="width: 100%; display: flex; align-items: center"><span style="flex: 1; height: 1.5px; background: #DDDDDD"></span><span style="flex: none; width: 104px; height: 104px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" stroke="#111111" stroke-width="1.6" stroke-linejoin="round"></path><circle cx="12" cy="12" r="3" stroke="#111111" stroke-width="1.6"></circle></svg></span><span style="flex: 1; height: 1.5px; background: #DDDDDD"></span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 12px"><span style="font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #767676">STEP 02</span><h3 style="margin: 0; font-size: 21px; font-weight: 700">기계 확인하기</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">사진과 대여료</p></div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center">
+<div style="width: 100%; display: flex; align-items: center"><span style="flex: 1; height: 1.5px; background: #DDDDDD"></span><span style="flex: none; width: 104px; height: 104px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z" stroke="#111111" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span style="flex: 1; height: 1.5px; background: #DDDDDD"></span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 12px"><span style="font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #767676">STEP 03</span><h3 style="margin: 0; font-size: 21px; font-weight: 700">대여 요청하기</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">버튼 한 번</p></div>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center">
+<div style="width: 100%; display: flex; align-items: center"><span style="flex: 1; height: 1.5px; background: #DDDDDD"></span><span style="flex: none; width: 104px; height: 104px; border-radius: 50%; background: #1E9B4B; display: flex; align-items: center; justify-content: center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#FFFFFF" stroke-width="1.6"></circle><path d="M8 12.5l2.7 2.7L16 10" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span style="flex: 1; height: 1.5px; background: transparent"></span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 12px"><span style="font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #767676">STEP 04</span><h3 style="margin: 0; font-size: 21px; font-weight: 700">쓰고 돌려주기</h3><p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555">승인되면 시작</p></div>
+</div>
+</div>
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-wrap: wrap; gap: 64px">
+<div style="flex: 0 1 340px; min-width: 260px; display: flex; flex-direction: column; gap: 16px">
+<span style="font-family: Inter, sans-serif; font-size: 14px; font-weight: 600; color: #13773A">FAQ</span>
+<h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em">자주 묻는 질문</h2>
+<div role="group" aria-label="질문 종류" style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px">
+<button type="button" aria-pressed="true" style="height: 36px; padding: 0 16px; border: none; border-radius: 999px; background: #111111; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">전체</button><button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #555555; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">대여</button><button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #555555; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">기계 등록</button><button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: none; border-radius: 999px; background: #F6F6F6; color: #555555; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">결제·반납</button>
+</div>
+<div style="margin-top: 16px; padding-top: 24px; border-top: 1px solid #E8E8E8; display: flex; flex-direction: column; gap: 12px">
+<p style="margin: 0; font-size: 16px; line-height: 1.6; color: #555555">더 궁금하면 문의해 주세요.</p>
+<a href="mailto:info@moanong.co.kr" style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; text-decoration: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#13773A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"></rect><path d="M4 7l8 6 8-6"></path></svg>info@moanong.co.kr</a>
+<a href="tel:15771106" style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; text-decoration: none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#13773A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"></path></svg>1577-1106</a>
+</div>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; border-bottom: 1px solid #E8E8E8">
+
+<div style="border-top: 1px solid #E8E8E8">
+<button type="button" aria-expanded="true" style="width: 100%; min-height: 72px; padding: 20px 0; border: none; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-family: inherit; font-size: 18px; font-weight: 500; color: #111111; text-align: left; cursor: pointer"><span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #13773A"><span style="background-color: transparent; color: rgb(17, 17, 17); font-size: 18px; font-weight: 500; letter-spacing: -0.01em">1. 농기계는 어떻게 빌리나요?</span></span></span><span aria-hidden="true" style="font-size: 26px; font-weight: 400; line-height: 1">−</span></button>
+<p style="margin: 0 0 24px; padding: 16px 20px; border-radius: 14px; background: #F6F6F6; font-size: 15px; line-height: 1.65; color: #555555">위치·날짜·작업을 고르고 대여 요청을 보내면 돼요. 소유주가 승인하면 예약이 확정돼요.</p>
+</div>
+
+<div style="border-top: 1px solid #E8E8E8">
+<button type="button" aria-expanded="false" style="width: 100%; min-height: 72px; padding: 20px 0; border: none; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-family: inherit; font-size: 18px; font-weight: 500; color: #111111; text-align: left; cursor: pointer"><span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #13773A"><span style="background-color: transparent; color: rgb(17, 17, 17); font-size: 18px; font-weight: 500; letter-spacing: -0.01em">2. 쉬는 농기계는 어떻게 올리나요?</span></span></span><span aria-hidden="true" style="font-size: 26px; font-weight: 400; line-height: 1">+</span></button>
+
+</div>
+
+<div style="border-top: 1px solid #E8E8E8">
+<button type="button" aria-expanded="false" style="width: 100%; min-height: 72px; padding: 20px 0; border: none; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-family: inherit; font-size: 18px; font-weight: 500; color: #111111; text-align: left; cursor: pointer"><span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #13773A"><span style="background-color: transparent; color: rgb(17, 17, 17); font-size: 18px; font-weight: 500; letter-spacing: -0.01em">3. 대여료는 언제 내나요?</span></span></span><span aria-hidden="true" style="font-size: 26px; font-weight: 400; line-height: 1">+</span></button>
+
+</div>
+
+<div style="border-top: 1px solid #E8E8E8">
+<button type="button" aria-expanded="false" style="width: 100%; min-height: 72px; padding: 20px 0; border: none; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-family: inherit; font-size: 18px; font-weight: 500; color: #111111; text-align: left; cursor: pointer"><span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #13773A"><span style="background-color: transparent; color: rgb(17, 17, 17); font-size: 18px; font-weight: 500; letter-spacing: -0.01em">4. 반납이 늦어지거나 기계가 고장 나면요?</span></span></span><span aria-hidden="true" style="font-size: 26px; font-weight: 400; line-height: 1">+</span></button>
+
+</div>
+
+</div>
+</section>
+
+<section data-brand-end="" style="background: #0F3B24; color: #FFFFFF">
+<div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px 40px; display: flex; flex-direction: column">
+<div style="display: flex; flex-wrap: wrap; padding-bottom: 120px">
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 20px; align-items: flex-start; padding-right: 64px">
+<span style="font-size: 15px; font-weight: 500; color: #9A9A9A">농기계가 필요하다면</span>
+<h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 40px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em">필요한 날,<br>원하는 매물 찾기</h2>
+<a href="#search" style="margin-top: 12px; height: 50px; padding: 0 22px 0 24px; border-radius: 999px; background: #FFFFFF; color: #0F3B24; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; text-decoration: none">농기계 찾기 →</a>
+</div>
+<div aria-hidden="true" style="width: 1px; background: rgba(255,255,255,0.18)"></div>
+<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 20px; align-items: flex-start; padding-left: 64px">
+<span style="font-size: 15px; font-weight: 500; color: #9A9A9A">쉬는 농기계가 있다면</span>
+<h2 style="margin: 0; font-family: 'Noto Sans KR', sans-serif; font-size: 40px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em">이웃 농가에<br>빌려주기</h2>
+<a href="#" style="margin-top: 12px; height: 50px; padding: 0 22px 0 24px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.45); color: #FFFFFF; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; text-decoration: none">농기계 등록하기 →</a>
+</div>
+</div>
+<div style="border-top: 1px solid rgba(255,255,255,0.14); padding-top: 32px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px">
+<span aria-label="모아농"><span style="display: flex; align-items: center"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#FFFFFF" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#FFFFFF" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#FFFFFF" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#FFFFFF" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#FFFFFF" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#FFFFFF"></rect><path d="M19 24v10M2 39h34" stroke="#FFFFFF"></path><circle cx="58" cy="21" r="12.5" stroke="#FFFFFF"></circle><path d="M82 13v28M82 23h8" stroke="#FFFFFF"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#FFFFFF"></path><circle cx="116" cy="33.7" r="7.3" stroke="#FFFFFF"></circle></svg></span></span>
+<nav aria-label="하단 메뉴" style="display: flex; flex-wrap: wrap; gap: 28px; font-size: 14px"><a href="#search" style="text-decoration: none; color: #9A9A9A">매물 찾기</a><a href="#" style="text-decoration: none; color: #9A9A9A">지도</a><a href="#" style="text-decoration: none; color: #9A9A9A">마이페이지</a><a href="#" style="text-decoration: none; color: #9A9A9A">개인정보처리방침</a></nav>
+<span style="font-size: 13px; color: #9A9A9A">© 2026 모아농</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+
+
+
+</body></html>

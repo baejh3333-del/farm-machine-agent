@@ -368,9 +368,9 @@
 /* 스크롤 시 상단 검색 바: '이웃의 쉬는 농기계를' 섹션부터 위에서 부드럽게 내려온다 */
 .h2-scrollbar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: rgba(255, 255, 255, 0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(17, 17, 17, 0.06); transform: translateY(-110%); transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .h2-scrollbar.is-on { transform: translateY(0); }
-.h2-scrollbar-in { max-width: 1200px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.h2-sb-logo { flex: none; border: 0; background: none; padding: 0; cursor: pointer; display: flex; }
-.h2-sb-pill { flex: 1 1 auto; max-width: 640px; height: 56px; margin: 0 24px; padding: 0 6px; box-sizing: border-box; border: 1px solid #e6e6e6; border-radius: 999px; background: #fff; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.10); display: flex; align-items: center; }
+.h2-scrollbar-in { width: 100%; box-sizing: border-box; margin: 0 auto; padding: 12px var(--gutter, 24px); display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 640px) minmax(220px, 1fr); align-items: center; column-gap: 24px; }
+.h2-sb-logo { justify-self: start; border: 0; background: none; padding: 0; cursor: pointer; display: flex; }
+.h2-sb-pill { width: 100%; max-width: 640px; justify-self: center; height: 56px; margin: 0; padding: 0 6px; box-sizing: border-box; border: 1px solid #e6e6e6; border-radius: 999px; background: #fff; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.10); display: flex; align-items: center; }
 .h2-sb-seg { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; text-align: left; cursor: pointer; }
 .h2-sb-seg:hover { background: #f4f4f4; }
 .h2-sb-seg b { font-size: 12px; color: var(--h2-ink); }
@@ -380,14 +380,17 @@
 .h2-sb-seg[hidden], .h2-sb-div[hidden] { display: none; }
 .h2-sb-go { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--h2-green); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .h2-sb-go:hover { background: var(--h2-green-hover); }
-.h2-sb-nav { flex: none; display: flex; gap: 28px; }
+.h2-sb-nav { justify-self: end; display: flex; gap: 28px; }
 .h2-sb-nav button { border: 0; background: none; padding: 0; font-size: 15px; font-weight: 500; color: var(--h2-ink); cursor: pointer; white-space: nowrap; }
 .h2-sb-nav button:hover { color: var(--h2-green-text); }
-@media (max-width: 1080px) { .h2-sb-nav { display: none; } }
+@media (max-width: 1080px) {
+  .h2-scrollbar-in { grid-template-columns: auto minmax(0, 640px); justify-content: center; }
+  .h2-sb-nav { display: none; }
+}
 @media (max-width: 720px) {
   .h2-field-photo { margin-top: -60px; height: 360px; }
   .h2-search-wrap { margin-top: -200px; }
-  .h2-scrollbar-in { padding: 8px 12px; gap: 8px; }
+  .h2-scrollbar-in { grid-template-columns: minmax(0, 640px); padding: 8px 12px; gap: 8px; }
   .h2-sb-logo { display: none; }
   .h2-sb-pill { margin: 0; height: 52px; }
   .h2-sb-seg { padding: 0 12px; }

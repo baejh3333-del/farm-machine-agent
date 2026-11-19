@@ -1141,11 +1141,17 @@ export function createAiPanel({
     onBusy?.();
     if (triggerButton) triggerButton.disabled = true;
     try {
-      const result = await executeAgentAction(pendingAction, requestId, { insuranceAsked });
+      // 직전에 보여준 목록의 번호를 함께 보내 완료 답변을 "n번 매물 …"로 말하게 한다.
+      const shownNo = lastShownListingIds.indexOf(pendingAction?.listingId) + 1;
+      const actionToRun = shownNo > 0 && (pendingAction?.type === "rental_request" || pendingAction?.type === "purchase_request")
+        ? { ...pendingAction, shownNo }
+        : pendingAction;
+      const result = await executeAgentAction(actionToRun, requestId, { insuranceAsked });
       if (gen !== sessionGeneration) return;
       if (result?.outcome === "completed") {
         const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
         if (result.reservation) renderReservationBox(bubble, result.reservation);
+        if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
         if (result.delegatedTransaction) renderDelegatedTransactionBox(bubble, result.delegatedTransaction);
         appendInsuranceAsk(result);
         if (result.createdListing) {
@@ -2154,10 +2160,20 @@ export function createAiPanel({
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "ai-chat-cta-btn";
-    btn.textContent = `💬 ${chatTarget.title || "매물"} 소유자와 1:1 채팅 열기`;
+    const who = chatTarget.kind === "purchase" ? "판매자" : "소유자";
+    btn.textContent = `💬 ${chatTarget.title || "매물"} ${who}와 1:1 채팅 열기`;
     btn.addEventListener("click", () => {
       handleOpenChat({ listingId: chatTarget.listingId, draftBody: chatTarget.prefill || "" });
     });
+    // 신청 직후 버튼: 메시지는 사용자가 직접 보내므로 대리 채팅 버튼은 두지 않는다.
+    if (chatTarget.afterRequest) {
+      const hint = document.createElement("p");
+      hint.className = "ai-chat-cta-hint";
+      hint.textContent = "버튼을 누르면 인사말이 미리 채워져요. 확인하고 직접 보내 주세요.";
+      wrap.append(btn, hint);
+      bubble.append(wrap);
+      return;
+    }
     const autoBtn = document.createElement("button");
     autoBtn.type = "button";
     autoBtn.className = "ai-chat-cta-btn ai-chat-auto-btn";

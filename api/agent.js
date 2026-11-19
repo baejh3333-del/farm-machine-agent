@@ -29,6 +29,8 @@ import {
   executeListingAction,
   executePurchaseRequest,
   executeRentalRequest,
+  requestChatTarget,
+  requestDoneMessage,
   runAgentTurn,
 } from "../server/nongnong-agent.js";
 import { executeMyPageAction, MY_PAGE_ACTION_TYPE, myPageRateKind } from "../server/my-page-agent.js";
@@ -128,7 +130,7 @@ const ACTION_LABEL = { rental_request: "대여 예약 요청", purchase_request:
  * 모델을 다시 부르지 않고 그 자리에서 실행한다. 매물 ID를 잃어버리거나 "잠시 후 진행"으로 끝나는 일을 막는다.
  * 실행 대상이 아니면 null.
  */
-export async function runConfirmedAction({ message, pending, user, requestId, run, beforeWrite }) {
+export async function runConfirmedAction({ message, pending, user, requestId, run, beforeWrite, shownNo = null }) {
   if (!user || !pending || typeof pending !== "object" || !CONFIRMABLE_ACTIONS.has(pending.type)) return null;
   if (!isAffirmative(message)) return null;
   const label = ACTION_LABEL[pending.type];
@@ -146,9 +148,15 @@ export async function runConfirmedAction({ message, pending, user, requestId, ru
     }
     if (executed?.outcome === "completed" || executed?.outcome === "partial") {
       const number = executed.reservation?.number || executed.createdListing?.number || "";
-      const reply = executed.outcome === "completed"
-        ? `${title}${label}을 완료했어요.${number ? ` 신청 번호는 ${number}예요.` : ""}`
-        : executed.message;
+      // 대여·구매 신청이 끝나면 소유자/판매자와 1:1 채팅 버튼을 같이 보여 준다(메시지는 사용자가 직접 보낸다).
+      const chatTarget = executed.outcome === "completed" && executed.reservation
+        ? (executed.chatTarget || requestChatTarget(executed.reservation))
+        : null;
+      const reply = executed.outcome !== "completed"
+        ? executed.message
+        : executed.reservation
+          ? `${requestDoneMessage(executed.reservation.title ? executed.reservation : { ...executed.reservation, title: pending.title }, { shownNo })}${number ? `\n신청 번호는 ${number}예요.` : ""}`
+          : `${title}${label}을 완료했어요.${number ? ` 신청 번호는 ${number}예요.` : ""}`;
       return {
         mode: "agent",
         reply,
@@ -157,6 +165,7 @@ export async function runConfirmedAction({ message, pending, user, requestId, ru
         executedAction: pending.type,
         ...(executed.reservation ? { reservation: executed.reservation } : {}),
         ...(executed.createdListing ? { createdListing: executed.createdListing } : {}),
+        ...(chatTarget ? { chatTarget } : {}),
       };
     }
     const reason = String(executed?.message || "요청을 처리하지 못했어요").replace(/[.。]\s*$/, "");
@@ -168,6 +177,15 @@ export async function runConfirmedAction({ message, pending, user, requestId, ru
     if (!(error instanceof HttpError)) console.warn("confirmed_action_failed", error?.name || "unknown");
     return { mode: "agent", reply: `${title}${label}을 하지 못했어요. 이유: ${reason}. "다시 해줘"라고 말씀하시면 바로 다시 시도할게요.`, listingIds: [], learnedSlots: {}, actionFailed: true, pendingAction: pending };
   }
+}
+
+/** 화면이 보낸 직전 매물 목록에서 확인 대기 매물의 번호(1번, 2번…)를 찾는다. 모르면 null. */
+function shownNoFromBody(body) {
+  const listingId = body?.pendingAction?.listingId;
+  const shown = body?.uiContext?.lastShownListings;
+  if (typeof listingId !== "string" || !Array.isArray(shown)) return null;
+  const index = shown.slice(0, 6).findIndex((item) => (typeof item === "string" ? item : item?.id) === listingId);
+  return index >= 0 ? index + 1 : null;
 }
 
 /** 사진을 검사·재인코딩(EXIF 제거)해서 모델에 보낼 형태로 만든다. 저장은 하지 않는다. */
@@ -288,6 +306,7 @@ async function chatTurn(request, body, started, progress) {
         user,
         requestId: pendingRequestId,
         run: (u, pending, id) => EXECUTE_ACTIONS[pending.type].run(u, pending, id),
+        shownNo: shownNoFromBody(body),
         beforeWrite: async (type, pending) => {
           await assertWritesAllowed();
           await enforceRateLimit(request, rateKindOf(type, pending), { userId: user.id });

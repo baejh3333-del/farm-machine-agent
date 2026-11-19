@@ -2614,3 +2614,12 @@ body.ai-fullscreen .ai-launcher {
   background: #ffffff;
   color: var(--text-strong, #162a22);
 }
+
+/* 신청 직후 1:1 채팅 버튼 아래 안내: 인사말은 미리 채워지고 보내기는 사용자가 직접 한다 */
+.ai-chat-cta-hint {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #5c6660;
+}

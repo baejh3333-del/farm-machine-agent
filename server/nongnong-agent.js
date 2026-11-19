@@ -103,6 +103,19 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 비밀번호, 아이디, 전화번호, 결제 정보, 다른 사람의 정보는 조회·변경하지 않는다. 교육이수증 사진 올리기는 [교육이수증] 화면에서 직접 하도록 안내한다.
 - 변경은 반드시 get_my_page 결과의 ID로 propose_my_page_action을 불러 확인 카드를 띄우고, 사용자가 승인해야만 실행된다. 확인 없이 "바꿨어요"라고 말하지 않는다. 대상이 여러 개면 추측하지 말고 어느 것인지 묻는다.
 
+## 신청 후 채팅으로 이어주기 (대여·구매 공통)
+- 대여 승인 신청(create_rental_request) 또는 구매 신청(create_purchase_request)이 성공하면, 같은 답변 안에서 바로 open_listing_chat을 그 매물의 listingId로 호출한다. 화면에 "소유자와 1:1 채팅 열기" 버튼이 나타난다(서버도 신청 성공 시 버튼을 붙인다).
+- 채팅은 신청한 사람(지금 사용자: 빌리는 사람 또는 사는 사람)이 먼저 시작하는 입장이다.
+- 채팅 메시지는 농농이가 대신 보내지 않는다. 버튼을 누르고 보내기를 누르는 것은 사용자가 직접 한다.
+- prefillMessage에는 예약·신청 결과에 있는 값(매물명, 날짜, 가격)만 쓴다. 사용자의 전화번호, 주소, 결제 정보는 넣지 않는다.
+- 신청이 실패하면 채팅 버튼을 띄우지 않고, 실패 이유와 다음에 할 일만 알려준다.
+- 대여 신청 후 prefillMessage 예: "안녕하세요. [매물명]을 [11월 20일(목)~11월 21일(금)]에 대여 신청했어요. 수령 방법과 시간 여쭤보고 싶어요."
+  답변: "n번 매물 대여 신청이 완료되었어요! 소유 농가가 승인하면 예약이 확정돼요. 궁금한 점은 아래 버튼을 눌러 소유 농가와 바로 이야기해 보세요."
+- 구매 신청을 하면 판매자에게 구매 희망 메시지가 이미 한 번 보내진다. 그래서 prefillMessage는 비우거나, 같은 말을 반복하지 않는 짧은 질문만 넣는다. 예: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요."
+  답변: "n번 매물 구매 신청이 완료되었어요! 판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요. 아래 버튼을 눌러 판매자와 바로 이야기해 보세요."
+- "n번"은 [직전에 보여준 매물]의 번호다. 번호를 모르면 매물 이름으로 말한다.
+- 신청 전에 사용자가 "주인한테 먼저 물어볼래요", "판매자한테 연락할래요"라고 하면, 신청 없이 open_listing_chat만 호출해 채팅 버튼을 보여준다.
+
 ## 이미 보여준 매물로 예약 진행 (반복 추천 금지)
 - [직전에 보여준 매물] 목록이 있으면 "1번/2번/3번", "첫 번째", "그거", "아까 그 트랙터", "청기면 거", "제일 싼 거"는 이 목록에서만 찾는다. 번호는 목록 번호와 정확히 같다.
 - 이 목록이 있고 사용자가 그중 하나를 고르거나 고른 매물에 대해 묻는 중이면 search_listings를 다시 호출하지 않는다. 다시 검색하는 경우는 다른 조건(기종·작물·지역·날짜·예산)을 말했거나 "다른 거 보여줘/다시 찾아줘"라고 했거나, 목록 매물이 그 날짜에 안 될 때뿐이다.
@@ -1601,6 +1614,75 @@ const WRITE_LABEL = {
 // "잠시 후 진행할게요", "기다려 주세요"처럼 실행을 미루기만 하는 말
 const DEFERRED_PROMISE = /잠시\s*(?:후|만)|기다려\s*주|곧\s*(?:진행|처리|신청)|(?:진행|처리|신청|요청)(?:을|를)?\s*(?:해\s*)?드릴게|진행할게|처리할게|다시\s*(?:한\s*번\s*)?(?:매물\s*정보를\s*)?확인해\s*보겠/;
 
+// 채팅 첫 메시지에 넣으면 안 되는 개인정보(전화번호·계좌·카드·주소). 농농이 미리 채우는 문장에서는 빼고 쓴다.
+const PRIVATE_INFO_RE = /(?:0\d{1,2}[-\s.)]?\d{3,4}[-\s.]?\d{4}|\d{4}[-\s]\d{4}[-\s]\d{4}|계좌|카드\s*번호|비밀번호|주민\s*(?:등록)?\s*번호|주소|번지|\d+\s*동\s*\d+\s*호|\d+\s*호(?!\S*(?:기|번))|도로명|아파트)/;
+
+/** 미리 채울 문장에 개인정보가 섞였으면 비운다(사용자가 채팅 창에서 직접 쓰게 한다). */
+export function cleanPrefill(text) {
+  const value = typeof text === "string" ? text.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  return value && !PRIVATE_INFO_RE.test(value) ? value : "";
+}
+
+function hasBatchim(word) {
+  const last = String(word || "").trim().replace(/[^가-힣A-Za-z0-9]+$/u, "").slice(-1);
+  if (!last) return false;
+  const code = last.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 !== 0;
+  return /[013678lmnLMN]$/.test(last);
+}
+
+/** 신청 결과에 있는 값(매물명·날짜)만으로 신청 후 1:1 채팅 버튼을 만든다. */
+export function requestChatTarget(reservation) {
+  if (!reservation || typeof reservation !== "object" || typeof reservation.listingId !== "string" || !reservation.listingId) return null;
+  const title = String(reservation.title || "매물").trim().slice(0, 80);
+  if (reservation.kind === "purchase") {
+    // 구매 신청 메시지는 이미 판매자에게 한 번 갔으므로 같은 말을 반복하지 않는 짧은 질문만 채운다.
+    return {
+      listingId: reservation.listingId,
+      title,
+      kind: "purchase",
+      afterRequest: true,
+      prefill: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요.",
+    };
+  }
+  const start = DATE.test(reservation.start || "") ? reservation.start : "";
+  const end = DATE.test(reservation.end || "") && reservation.end >= start ? reservation.end : start;
+  const period = start ? (end && end !== start ? `${formatKoreanDate(start)}~${formatKoreanDate(end)}` : formatKoreanDate(start)) : "";
+  const object = `${title}${hasBatchim(title) ? "을" : "를"}`;
+  return {
+    listingId: reservation.listingId,
+    title,
+    kind: "rental",
+    afterRequest: true,
+    prefill: period
+      ? `안녕하세요. ${object} ${period}에 대여 신청했어요. 수령 방법과 시간 여쭤보고 싶어요.`
+      : `안녕하세요. ${object} 대여 신청했어요. 수령 방법과 시간 여쭤보고 싶어요.`,
+  };
+}
+
+/** 신청 완료 답변. 직전에 보여준 목록의 번호를 알면 "n번 매물", 모르면 매물 이름으로 부른다. */
+export function requestDoneMessage(reservation, { shownNo = null } = {}) {
+  const no = Number.isInteger(shownNo) && shownNo >= 1 && shownNo <= 9 ? shownNo : null;
+  const label = no ? `${no}번 매물` : `'${String(reservation?.title || "매물").trim()}'`;
+  if (reservation?.kind === "purchase") {
+    return [
+      `${label} 구매 신청이 완료되었어요!`,
+      "판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요.",
+      "아래 버튼을 눌러 판매자와 바로 이야기해 보세요.",
+    ].join("\n");
+  }
+  return [
+    `${label} 대여 신청이 완료되었어요!`,
+    "소유 농가가 승인하면 예약이 확정돼요.",
+    "궁금한 점은 아래 버튼을 눌러 소유 농가와 바로 이야기해 보세요.",
+  ].join("\n");
+}
+
+function shownNoOf(listingId, ids) {
+  const index = Array.isArray(ids) ? ids.indexOf(listingId) : -1;
+  return index >= 0 ? index + 1 : null;
+}
+
 /**
  * 쓰기 도구 결과와 답변이 어긋나지 않게 한다.
  * - 실행에 성공했는데 번호를 말하지 않으면 번호를 붙인다.
@@ -1619,6 +1701,7 @@ export function settleReply(reply, { out = {}, toolCalls = [] } = {}) {
       if (text && !DEFERRED_PROMISE.test(text) && /완료|마쳤|보냈|접수|등록했|신청했/.test(text)) {
         return `${text} 신청 번호는 ${number}예요.`;
       }
+      if (out.reservation) return `${requestDoneMessage(out.reservation, { shownNo: out.shownNo ?? null })}\n신청 번호는 ${number}예요.`;
       return `${title}${what}을 완료했어요. 신청 번호는 ${number}예요.`;
     }
     return null;
@@ -2163,8 +2246,11 @@ async function runTurn(
               days: req.days ?? prop.proposal.days,
               totalPrice: req.totalPrice ?? prop.proposal.totalPrice,
             };
+            out.chatTarget = requestChatTarget(out.reservation);
+            out.shownNo = shownNoOf(out.reservation.listingId, uiCtx.lastShownListingIds);
             output = {
               ok: true,
+              chatButton: "신청 후 소유자와 1:1 채팅 버튼을 화면에 띄웠습니다(메시지는 사용자가 직접 보냄).",
               reservationNumber: out.reservation.number,
               title: out.reservation.title,
               period: `${formatKoreanDate(prop.proposal.start)} ~ ${formatKoreanDate(prop.proposal.end)}`,
@@ -2211,8 +2297,11 @@ async function runTurn(
               region: item.region,
               totalPrice: item.price,
             };
+            out.chatTarget = requestChatTarget(out.reservation);
+            out.shownNo = shownNoOf(item.id, uiCtx.lastShownListingIds);
             output = {
               ok: true,
+              chatButton: "신청 후 판매자와 1:1 채팅 버튼을 화면에 띄웠습니다(메시지는 사용자가 직접 보냄).",
               reservationNumber: out.reservation.number,
               title: item.title,
               price: won(item.price),
@@ -2431,8 +2520,14 @@ async function runTurn(
           output = { ok: false, error: "매물을 찾을 수 없습니다." };
         } else if (user && item.ownerId === user.id) {
           output = { ok: false, error: "본인이 등록한 매물에는 1:1 채팅을 열 수 없습니다." };
+        } else if (!out.reservation && toolCalls.some((call) => (call.tool === "create_rental_request" || call.tool === "create_purchase_request") && call.ok === false)) {
+          // 신청이 실패한 턴에는 채팅 버튼을 띄우지 않고 실패 이유와 다음 할 일만 말한다.
+          output = { ok: false, error: "신청이 실패해 채팅 버튼을 띄우지 않습니다. 실패 이유와 다음에 할 일만 알려 주세요." };
+        } else if (out.chatTarget?.afterRequest && out.chatTarget.listingId === item.id) {
+          // 신청 직후에는 서버가 신청 결과 값으로만 만든 버튼을 그대로 쓴다.
+          output = { ok: true, listingId: item.id, title: item.title, prefill: out.chatTarget.prefill, note: "신청 후 1:1 채팅 버튼이 이미 화면에 있습니다." };
         } else {
-          const prefill = typeof block.input?.prefillMessage === "string" ? block.input.prefillMessage.trim().slice(0, 200) : "";
+          const prefill = cleanPrefill(block.input?.prefillMessage);
           out.chatTarget = { listingId: item.id, title: item.title, prefill };
           output = { ok: true, listingId: item.id, title: item.title, prefill, note: "판매자·소유자와의 1:1 채팅 창을 열도록 화면에 전달했습니다." };
         }
@@ -2665,7 +2760,7 @@ async function runTurn(
   const fallbackReply = out.delegatedTransaction
     ? `'${out.delegatedTransaction.title}' 거래를 농농이 전담 모드로 시작했어요.`
     : out.reservation
-      ? `접수가 완료되었어요. 번호는 ${out.reservation.number}이에요.`
+      ? `${requestDoneMessage(out.reservation, { shownNo: out.shownNo ?? null })}\n신청 번호는 ${out.reservation.number}예요.`
       : out.createdListing
         ? `매물 등록을 완료했어요. 등록 번호는 ${out.createdListing.number}이에요.`
         : "요청을 처리하지 못했어요. 찾으시는 작업을 조금 더 자세히 말씀해 주세요.";
@@ -2753,7 +2848,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       };
     }
   }
-  return {
+  const result = {
     outcome: "completed",
     request: verified,
     ...(conversation ? { conversation } : {}),
@@ -2769,8 +2864,14 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       days: verified.days,
       totalPrice: verified.totalPrice,
     },
-    message: `대여 요청을 보냈어요${conversation ? "(희망 네고 가격·대리운용 여부는 게시자 채팅으로 전달했어요)" : ""}. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
+    message: [
+      requestDoneMessage({ kind: "rental", title: verified.listingTitle }, { shownNo: Number(action?.shownNo) }),
+      ...(conversation ? ["희망 네고 가격·대리운용 여부는 게시자 채팅으로 전달했어요."] : []),
+      "(+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)",
+    ].join("\n"),
   };
+  result.chatTarget = requestChatTarget(result.reservation);
+  return result;
 }
 
 /**
@@ -2788,7 +2889,7 @@ export async function executePurchaseRequest(user, action, { requestId, pool = g
     ? `[농농 구매 신청] '${item.title}' 구매를 희망합니다. (${note})`
     : `[농농 구매 신청] '${item.title}' 구매를 희망합니다. 확인 후 답장 부탁드립니다.`;
   const sent = await sendPurchaseMessage(user, { id: requestId, listingId: item.id, body }, { pool });
-  return {
+  const result = {
     outcome: "completed",
     idempotent: Boolean(sent.idempotent),
     conversation: sent.conversation,
@@ -2801,8 +2902,10 @@ export async function executePurchaseRequest(user, action, { requestId, pool = g
       region: item.region,
       totalPrice: item.price,
     },
-    message: `구매 신청을 보냈어요. 판매자가 확인하면 채팅에서 거래를 이어갈 수 있어요.`,
+    message: requestDoneMessage({ kind: "purchase", title: item.title }, { shownNo: Number(action?.shownNo) }),
   };
+  result.chatTarget = requestChatTarget(result.reservation);
+  return result;
 }
 
 /**

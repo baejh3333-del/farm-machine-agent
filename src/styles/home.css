@@ -308,3 +308,88 @@
   .h2-rec-foot { flex-direction: column; align-items: flex-start; gap: 2px; }
   .h2-rec-grid { gap: 12px; }
 }
+
+/* ======================================================================
+   모아농 2.1 — 브랜드 가이드 반영 (초록 포인트, 반투명 예약창, 스크롤 검색 바)
+   색은 화면의 약 8%만 초록: 누르는 곳 · 고른 것 · 좋은 소식
+   ====================================================================== */
+.h2-home {
+  --h2-green-hover: #178a40;
+  --h2-green-text: #13773a;
+  --h2-forest: #0f3b24;
+  --h2-sprout: #edf6f0;
+  --h2-on-forest: #a8cdb5;
+}
+
+/* 첫 화면: 화면 높이에 맞춰 제목·여백이 줄어들어 노트북에서도 예약창이 한눈에 */
+.h2-hero { padding-top: clamp(24px, 5vh, 96px); padding-bottom: clamp(16px, 3vh, 48px); gap: clamp(10px, 2vh, 22px); position: relative; z-index: 2; }
+.h2-hero-title { font-size: clamp(44px, min(6vw, 7.4vh), 72px); }
+
+/* 농경지 사진: 위 경계가 보이지 않게 제목 아래로 살짝 겹치며 부드럽게 */
+.h2-field-photo { margin-top: -140px; height: 620px; }
+.h2-field-photo::before { height: 320px; background: linear-gradient(#fff 0%, rgba(255, 255, 255, 0.75) 35%, rgba(255, 255, 255, 0) 100%); }
+.h2-search-wrap { margin-top: calc(-620px + clamp(140px, calc(100vh - 660px), 400px)); }
+
+/* 예약창: 반투명 유리 + 스크롤하면 부드럽게 제자리로 */
+.h2-search-card { background: rgba(255, 255, 255, 0.74); -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%); border: 1px solid rgba(255, 255, 255, 0.7); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.12); }
+.h2-filter { background: rgba(246, 246, 246, 0.82); }
+@media (max-height: 880px) {
+  .h2-search-card { padding: 22px; gap: 18px; }
+  .h2-filter { padding: 18px; gap: 10px; }
+  .h2-input { height: 44px; }
+  .h2-find { height: 46px; }
+  .h2-rec-media { aspect-ratio: 4 / 2.9; }
+}
+
+/* 초록 포인트 */
+.h2-find { background: var(--h2-green); }
+.h2-find:hover { background: var(--h2-green-hover); }
+.h2-day.is-sel { background: var(--h2-green); }
+.h2-day.is-range { background: var(--h2-sprout); }
+.h2-kicker { color: var(--h2-green-text); }
+.h2-kw-icon { background: var(--h2-sprout); color: var(--h2-green-text); }
+.h2-badge { background: var(--h2-sprout); color: var(--h2-green-text); }
+.h2-step b.on { background: var(--h2-green); color: #fff; }
+.h2-step-col.is-last .h2-step-circle { background: var(--h2-green); }
+.h2-link:hover { color: var(--h2-green-text); }
+
+/* 하단 CTA: 넓은 브랜드 면은 포레스트 그린 (페이지당 한 번) */
+.h2-cta { background: var(--h2-forest); }
+.h2-cta-row > div:first-child { border-right-color: rgba(255, 255, 255, 0.18); }
+.h2-cta-row span, .h2-footer nav button, .h2-footer small { color: var(--h2-on-forest); }
+.h2-pill { border-color: rgba(255, 255, 255, 0.45); }
+.h2-pill-solid { color: var(--h2-forest); font-weight: 700; }
+.h2-footer { border-top-color: rgba(255, 255, 255, 0.14); }
+.h2-footer-logo { display: block; }
+
+/* 첫 화면에서는 상단바가 따라오지 않는다 (스크롤 검색 바가 대신 나타남) */
+.app-shell:has(#homeView:not([hidden])) .sidebar { position: relative; }
+
+/* 스크롤 시 상단 검색 바: '이웃의 쉬는 농기계를' 섹션부터 위에서 부드럽게 내려온다 */
+.h2-scrollbar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: rgba(255, 255, 255, 0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(17, 17, 17, 0.06); transform: translateY(-110%); transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.h2-scrollbar.is-on { transform: translateY(0); }
+.h2-scrollbar-in { max-width: 1200px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.h2-sb-logo { flex: none; border: 0; background: none; padding: 0; cursor: pointer; display: flex; }
+.h2-sb-pill { flex: 1 1 auto; max-width: 640px; height: 56px; margin: 0 24px; padding: 0 6px; box-sizing: border-box; border: 1px solid #e6e6e6; border-radius: 999px; background: #fff; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.10); display: flex; align-items: center; }
+.h2-sb-seg { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; text-align: left; cursor: pointer; }
+.h2-sb-seg:hover { background: #f4f4f4; }
+.h2-sb-seg b { font-size: 12px; color: var(--h2-ink); }
+.h2-sb-seg span { max-width: 100%; font-size: 14px; color: var(--h2-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.h2-sb-seg span.is-empty { color: #9a9a9a; }
+.h2-sb-div { flex: none; width: 1px; height: 28px; background: #e6e6e6; }
+.h2-sb-seg[hidden], .h2-sb-div[hidden] { display: none; }
+.h2-sb-go { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--h2-green); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.h2-sb-go:hover { background: var(--h2-green-hover); }
+.h2-sb-nav { flex: none; display: flex; gap: 28px; }
+.h2-sb-nav button { border: 0; background: none; padding: 0; font-size: 15px; font-weight: 500; color: var(--h2-ink); cursor: pointer; white-space: nowrap; }
+.h2-sb-nav button:hover { color: var(--h2-green-text); }
+@media (max-width: 1080px) { .h2-sb-nav { display: none; } }
+@media (max-width: 720px) {
+  .h2-field-photo { margin-top: -60px; height: 360px; }
+  .h2-search-wrap { margin-top: -200px; }
+  .h2-scrollbar-in { padding: 8px 12px; gap: 8px; }
+  .h2-sb-logo { display: none; }
+  .h2-sb-pill { margin: 0; height: 52px; }
+  .h2-sb-seg { padding: 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .h2-scrollbar { transition: none; } }

@@ -119,11 +119,12 @@ export function buildGptLiveInstructions({ region = "영양읍", uiContext = nul
     "Generate <|SpawnThinking|> when:",
     "- The user asks to search listings, check availability, pricing, weather, farm/tractor compatibility, photo/repair/market price/insurance info, or wants to reserve, buy, or delegate a machine.",
     "- The user changes a condition such as region, date, crop, area, budget, or machine type.",
+    "- While a sale/rental listing is being prepared (the backend asked for 연식·사용시간·작업기), the user answers any of those details or says they don't know (e.g. '2019년식이에요', '500시간 썼어요', '로터리 같이 드려요', '몰라요'). Always delegate this answer so the backend can build the draft; never just acknowledge it yourself.",
     "",
     "Do not generate <|SpawnThinking|> when:",
     "- Responding to simple greetings or small talk.",
     "- Repeating or clarifying results already provided in the conversation.",
-    "- Asking a brief clarifying question before enough criteria exist.",
+    "- Asking a brief clarifying question before enough criteria exist (but never for answers to the backend's listing-detail questions — those must be delegated).",
     "",
     "Generate <|SpawnThinking|> before giving an answer that depends on backend work. Do not guess the result while waiting.",
   ].join("\n");

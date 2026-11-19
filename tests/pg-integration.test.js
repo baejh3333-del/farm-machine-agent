@@ -246,6 +246,14 @@ test("[PGlite 로컬 엔진] 1. 명시적 마이그레이션, 체크섬 검증, 
   assert.ok(rec.listingIds.length > 0);
   const pgListings = await fetchListings({ pool });
   assert.equal(pgListings.length, expectedMockCount);
+  // 시연 매물 일부는 대행운영서비스(작업자 동반)를 제공해, 농농이로 '사용'·'안 함' 두 흐름을 모두 시연할 수 있다.
+  const seededOperators = buildMockListings().filter((item) => item.rentalOperator);
+  assert.ok(seededOperators.length >= 3);
+  for (const item of seededOperators) {
+    assert.equal(item.type, "rent");
+    const dto = pgListings.find((row) => row.id === item.id);
+    assert.deepEqual(dto.rentalOperator, item.rentalOperator);
+  }
 });
 
 test("[PGlite 로컬 엔진] 2. 회원가입 및 A/B/C 계정 세션, write-freeze 503 차단 및 복구", async () => {

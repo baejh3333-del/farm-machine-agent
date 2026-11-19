@@ -100,7 +100,7 @@ function rentalForm(id, draftValues = null) {
       ${operator ? `<div class="rental-operator rental-operator-option">
         <label class="rental-operator-toggle">
           <input type="checkbox" id="rentWithOperator" ${restoreOperator ? "checked" : ""}>
-          <span>작업자 동반 <strong>+${money(operator.dailyPrice)}/일</strong></span>
+          <span>대행운영서비스 사용 (작업자 동반) <strong>+${money(operator.dailyPrice)}/일</strong></span>
         </label>
         <details>
           <summary>${escapeHtml(operator.name)} 작업자 이력 보기</summary>
@@ -172,7 +172,7 @@ function rentalForm(id, draftValues = null) {
   updateEstimate();
   if (savedOperator && !restoreOperator) {
     draftRequestId = crypto.randomUUID();
-    toast("작업자 옵션이 변경됐어요. 새 요금과 이력을 확인해 주세요.");
+    toast("대행운영서비스 내용이 바뀌었어요. 새 요금과 작업자 이력을 확인해 주세요.");
   }
 
   $("rentalForm").addEventListener("submit", async (event) => {
@@ -1906,7 +1906,7 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       <div id="editOperatorOption" class="rental-operator rental-operator-option">
         <label class="rental-operator-toggle">
           <input type="checkbox" id="editOperatorEnabled" ${initialOperator ? "checked" : ""}>
-          작업자 동반 대여 제공
+          대행운영서비스 제공 (작업자 동반 대여)
         </label>
         <fieldset id="editOperatorFields" class="rental-operator-fields">
           <legend>공개 작업자 프로필</legend>

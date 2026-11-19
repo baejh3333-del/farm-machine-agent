@@ -21,6 +21,7 @@ import { sendMessage as sendChatMessage, updateConversationAiPolicy } from "./ch
 import { getPool, kstToday } from "./db.js";
 import { HttpError } from "./http.js";
 import { saveDraftPhoto } from "./listing-drafts.js";
+import { cleanOperatorProfile, detectOperatorChoice, hasOperatorService, withOperatorLine } from "./operator-service.js";
 import { fetchListingById, fetchListings } from "./listings-db.js";
 import { createListing as createListingService } from "./listings-service.js";
 import { callLLM, llmEnabled, textOf } from "./llm.js";
@@ -132,6 +133,10 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
   3) 수리 흐름에서도 보험 보장이 포함될 수 있으므로, 답변 마지막에 **"보험 추천해드릴까요?"**를 함께 제안한다.
 - 판매·대여 등록을 원하면 초안부터 만들지 않는다. 먼저 사진으로 본 기종을 "사진으로 보면 ○○ 같아요"처럼 알려 주고, 연식·사용시간·같이 드릴 작업기 중 사용자가 아직 말하지 않은 것을 한 번에 짧게 묻는다("모르시면 모른다고 하셔도 돼요"). 답을 받으면(모른다고 해도) estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 보여 준다. prepare_listing_draft가 needsDetails를 돌려주면 그 항목을 묻는다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
 - 초안 카드에는 제목·소개글·참고가가 이미 보인다. 답변에서 "제목은 ~, 설명은 ~"처럼 카드 내용을 다시 나열하지 않는다. 해요체 2~3문장으로 "말씀해 주신 내용으로 초안을 만들었어요", 참고가 한 번, "이대로 올릴까요?"만 말한다.
+- **대행운영서비스**(생산자가 기계와 함께 작업자를 보내 대신 작업해 주고 하루 추가 요금을 받는 서비스. 대여에만 있다):
+   - 소비자가 대여를 원하면, 필요한 조건(작물·면적·날짜 등)을 물을 때 대행운영서비스 사용 여부도 함께 한 번 묻는다. offer_choices 선택지는 ["대행운영 사용할게요", "대행운영 없이 할게요"]로 주고, 서비스가 무엇인지 한 문장으로 설명한다. [이미 받은 정보]에 있으면 다시 묻지 않는다.
+   - 사용한다면 search_listings·propose_rental_request·create_rental_request에 operatorService=true를, 안 쓴다면 false를 넘긴다. 사용하면 확인 카드와 금액은 "기계 + 작업자" 합계다.
+   - 생산자가 대여글을 올릴 때는 기계 정보(연식·사용시간·작업기)를 받은 뒤 "대행운영서비스를 제공하시겠어요?"라고 묻는다. 선택지는 ["대행운영 제공할게요", "대행운영 안 할게요"]. 제공한다면 작업자 이름, 이력, 하루 추가 요금을 한 번에 묻고, prepare_listing_draft·create_listing의 operatorService에 넣는다. 판매글에는 묻지 않는다.
 - **보험 안내**: 대여 추천·예약 흐름과 고장·수리 안내 흐름 모두에서 **"보험 추천해드릴까요?"**로 먼저 제안할 수 있으며, 사용자가 보험을 묻거나 추천을 원하면 get_insurance_info로 안내한다. 보험료를 확정해 말하지 않고, 보험 가입·결제를 대신하지 않으며, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
 - 웹 검색 도구가 있으면, 위 도구에 없는 사실을 확인할 때만 쓰고 "웹 검색 결과라 확인이 필요해요"라고 밝힌다.
 - 시니어도 읽기 쉽게: 한 문장은 짧게, 어려운 말은 쉬운 말로 풀어 쓴다.`;
@@ -152,6 +157,7 @@ const TOOLS = [
         maxPrice: { type: ["integer", "null"], description: "최대 가격(원). 대여는 하루 대여료" },
         start: { type: ["string", "null"], description: "대여 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "반납일 YYYY-MM-DD" },
+        operatorService: { type: ["boolean", "null"], description: "대여에서 대행운영서비스(작업자 동반) 사용 여부. 사용 true면 제공 매물만, false면 제공 안 하는 매물만. 정하지 않았으면 null" },
       },
       required: ["transaction"],
     },
@@ -241,6 +247,7 @@ const TOOLS = [
         start: { type: "string", description: "대여 시작일 YYYY-MM-DD" },
         end: { type: "string", description: "반납일 YYYY-MM-DD" },
         note: { type: "string", description: "게시자에게 남길 짧은 메모(선택)" },
+        operatorService: { type: ["boolean", "null"], description: "대행운영서비스(작업자 동반) 사용 여부" },
       },
       required: ["listingId", "start", "end"],
     },
@@ -255,6 +262,7 @@ const TOOLS = [
         start: { type: "string", description: "대여 시작일 YYYY-MM-DD" },
         end: { type: "string", description: "반납일 YYYY-MM-DD" },
         note: { type: "string", description: "게시자에게 남길 짧은 메모(선택)" },
+        operatorService: { type: ["boolean", "null"], description: "대행운영서비스(작업자 동반) 사용 여부" },
       },
       required: ["listingId", "start", "end"],
     },
@@ -355,6 +363,11 @@ const TOOLS = [
         condition: { type: ["string", "null"], enum: [null, "good", "used", "repair"] },
         year: { type: ["string", "null"], description: "연식(예: 2019년식)" },
         deposit: { type: ["integer", "null"], description: "대여 보증금(원)" },
+        operatorService: {
+          type: ["object", "null"],
+          description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
+          properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
+        },
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
         operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) } },
       },
@@ -376,6 +389,11 @@ const TOOLS = [
         condition: { type: ["string", "null"], enum: [null, "good", "used", "repair"] },
         price: { type: "integer", description: "가격(원). 대여는 하루 대여료" },
         deposit: { type: ["integer", "null"], description: "빌려주기일 때 보증금(원)" },
+        operatorService: {
+          type: ["object", "null"],
+          description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
+          properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
+        },
         region: { type: ["string", "null"], enum: [null, ...REGIONS] },
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
         operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) } },
@@ -630,6 +648,9 @@ function listingView(item) {
     pickup: String(item.pickup || "").slice(0, 80),
     inspectedAt: item.inspectedAt,
     bookedRanges: (item.booked || []).slice(0, 6),
+    operatorService: hasOperatorService(item)
+      ? { name: item.rentalOperator.name, experience: String(item.rentalOperator.experience).slice(0, 120), dailyPricePerDay: item.rentalOperator.dailyPrice }
+      : null,
   };
 }
 
@@ -735,7 +756,11 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   // 사용자가 말한 지역(input.region)은 꼭 지킬 조건이고, 화면 기준 지역(region)은 거리 정렬 기준이다.
   const requestedRegion = cleanRegion(input?.region);
   const effectiveRegion = requestedRegion || region;
-  const scoped = Array.isArray(listings) ? listings.filter((item) => !userId || item.ownerId !== userId) : [];
+  const operatorWanted = input?.transaction !== "sale" && typeof input?.operatorService === "boolean" ? input.operatorService : null;
+  const scoped = Array.isArray(listings)
+    ? listings.filter((item) => (!userId || item.ownerId !== userId)
+      && (operatorWanted === null || item.type !== "rent" || hasOperatorService(item) === operatorWanted))
+    : [];
   const context = {
     cropIds: cropId ? [cropId] : [],
     operations,
@@ -748,7 +773,7 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
     region: effectiveRegion,
   };
   const selection = selectMatchingListings("", context, scoped);
-  const what = describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction });
+  const what = `${operatorWanted === true ? "대행운영서비스를 제공하는 " : operatorWanted === false ? "대행운영서비스 없는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
   let candidates = selection.candidates;
   let regionFallback = null;
   if (requestedRegion) {
@@ -821,6 +846,11 @@ export function proposeRentalTool(input, listings, today = kstToday()) {
     return { ok: false, reason: "선택한 기간에 이미 확정된 예약이 있습니다.", bookedRanges: listing.booked };
   }
   const note = typeof input?.note === "string" ? input.note.trim().slice(0, 200) : "";
+  const rentalOperator = input?.operatorService === true ? cleanOperatorProfile(listing.rentalOperator) : null;
+  if (input?.operatorService === true && !rentalOperator) {
+    return { ok: false, reason: "이 매물은 대행운영서비스를 제공하지 않는 매물입니다. 대행운영서비스를 제공하는 매물로 다시 찾아 주세요." };
+  }
+  const operatorDailyPrice = rentalOperator?.dailyPrice ?? 0;
   return {
     ok: true,
     proposal: {
@@ -832,7 +862,9 @@ export function proposeRentalTool(input, listings, today = kstToday()) {
       end,
       days,
       dailyPrice: listing.price,
-      totalPrice: listing.price * days,
+      totalPrice: (listing.price + operatorDailyPrice) * days,
+      rentalOperator,
+      operatorDailyPrice,
       note,
     },
   };
@@ -1211,7 +1243,9 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
   const bodyText = grounded
     ? groundListingDescription(input?.description || "", { saidText, observations: photoSummary?.observations, year })
     : input?.description || "";
-  const description = composeListingDescription({ year, deposit, description: bodyText });
+  // 대행운영서비스는 대여글에만: 작업자 정보가 모두 있으면 소개글 맨 위에 "대행운영서비스 제공중"을 적는다.
+  const rentalOperator = type === "rent" ? cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator) : null;
+  const description = withOperatorLine(composeListingDescription({ year, deposit, description: bodyText }), rentalOperator);
   return {
     type,
     modelId,
@@ -1228,6 +1262,7 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
     areaMax: Number.isSafeInteger(input?.areaMax) && input.areaMax >= 1 ? Math.max(input.areaMin || 300, input.areaMax) : 1500,
     year,
     deposit,
+    rentalOperator,
     description,
   };
 }
@@ -1495,6 +1530,9 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
     const matchedMachine = FALLBACK_MACHINE_PATTERNS.find(([, re]) => re.test(rawText))?.[0];
     if (matchedMachine) slots.machineType = matchedMachine;
 
+    const operatorChoice = detectOperatorChoice(rawText);
+    if (operatorChoice !== null) slots.operatorService = operatorChoice;
+
     if (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|살(?:라|래|게|께)|구매|구입)/.test(rawText)) {
       slots.transaction = "sale";
     } else if (/(?:빌리|빌려|빌릴|대여|임대)/.test(rawText)) {
@@ -1577,6 +1615,8 @@ export function applyKnownFactsToSearch(input, { facts = {}, sell = false, spoke
     && facts.transaction === next.transaction) {
     next.maxPrice = facts.maxPrice;
   }
+  // 소비자가 말한 대행운영서비스 사용 여부는 모델이 빠뜨리거나 바꿔도 지킨다.
+  if (!sell && next.transaction === "rent" && typeof facts.operatorService === "boolean") next.operatorService = facts.operatorService;
   return next;
 }
 
@@ -1704,6 +1744,11 @@ export function summarizeKnownFacts(input = {}, precomputed = null) {
     lines.push(`- 기간: ${facts.start}${facts.end && facts.end !== facts.start ? ` ~ ${facts.end}` : ""}`);
   }
   if (Number.isSafeInteger(facts.maxPrice) && facts.maxPrice > 0) lines.push(`- 예산 상한: ${won(facts.maxPrice)}`);
+  if (typeof facts.operatorService === "boolean") {
+    lines.push(sell
+      ? `- 대행운영서비스: ${facts.operatorService ? "제공" : "제공 안 함"}`
+      : `- 대행운영서비스: ${facts.operatorService ? "사용" : "사용 안 함"}`);
+  }
   const lastAssistant = [...(Array.isArray(history) ? history : [])].reverse()
     .find((item) => item?.role === "assistant" && typeof item.content === "string")?.content || "";
   const lastQuestion = lastAssistant.split(/(?<=[.!?。？！])\s+/).filter((part) => /[?？]\s*$/.test(part)).at(-1)?.trim().slice(0, 120) || "";
@@ -1884,6 +1929,33 @@ async function runTurn(
       needsDetails,
       ...(photo ? { photoSummary: photo } : {}),
       guide: `아직 초안을 만들지 않았다. ${photo?.machineType ? "사진으로 본 기종을 \"사진으로 보면 ○○ 같아요\"처럼 한 문장으로 말하고, " : ""}needsDetails(${needsDetails.join(", ")})를 한 번에 짧게 묻는다. 예: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." 참고가·제목·소개글은 아직 말하지 않는다. 사용자가 답하면 prepare_listing_draft를 다시 부른다.`,
+    };
+  };
+  // 대행운영서비스: 사용자가 말한 사용·제공 여부를 모델 입력보다 먼저 지킨다.
+  const operatorChoice = typeof known.facts.operatorService === "boolean" ? known.facts.operatorService : null;
+  const withOperatorChoice = (input) => (operatorChoice === null ? input : { ...(input || {}), operatorService: operatorChoice });
+  const listingInput = (input) => {
+    if (input?.type !== "rent" || operatorChoice !== false) return input;
+    return { ...input, operatorService: null, rentalOperator: null };
+  };
+  // 대여글은 기계 정보를 받은 뒤 대행운영서비스 제공 여부를 묻고, 제공하면 작업자 정보를 받는다(판매글은 묻지 않는다).
+  const askOperatorFirst = (input) => {
+    if (input?.type !== "rent") return null;
+    const profile = cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator);
+    if (operatorChoice === false || (profile && operatorChoice !== false)) return null;
+    if (operatorChoice === null) {
+      return {
+        ok: false,
+        draftCreated: false,
+        needOperatorChoice: true,
+        guide: "아직 초안을 만들지 않았다. \"대행운영서비스를 제공하시겠어요?\"라고 묻고, 기계와 함께 작업자가 가서 대신 작업해 주고 하루 추가 요금을 받는 서비스라고 한 문장으로 설명한다. offer_choices 선택지는 [\"대행운영 제공할게요\", \"대행운영 안 할게요\"]. 답을 받으면 prepare_listing_draft를 다시 부른다.",
+      };
+    }
+    return {
+      ok: false,
+      draftCreated: false,
+      needOperatorProfile: true,
+      guide: "대행운영서비스를 제공한다고 했다. 작업자 이름, 이력(예: 경력 몇 년, 다뤄 본 기계), 하루 추가 요금을 한 번에 짧게 묻는다. 답을 받으면 prepare_listing_draft의 operatorService에 넣어 다시 부른다.",
     };
   };
   let writeDone = false;
@@ -2133,10 +2205,10 @@ async function runTurn(
     const runSequentialTool = async (block) => {
       let output;
       if (block.name === "propose_rental_request") {
-        output = proposeRentalTool(block.input, await loadCatalog(), today);
+        output = proposeRentalTool(withOperatorChoice(block.input), await loadCatalog(), today);
         if (output.ok) pendingAction = output.proposal;
       } else if (block.name === "create_rental_request") {
-        const prop = proposeRentalTool(block.input, await loadCatalog(), today);
+        const prop = proposeRentalTool(withOperatorChoice(block.input), await loadCatalog(), today);
         if (!prop.ok) {
           output = { ok: false, error: prop.reason, ...(prop.bookedRanges ? { bookedRanges: prop.bookedRanges } : {}) };
         } else if (user && spokenApproval && deps?.createRentalRequest && !writeDone) {
@@ -2149,6 +2221,7 @@ async function runTurn(
               start: prop.proposal.start,
               end: prop.proposal.end,
               note: prop.proposal.note || "농농 채팅으로 신청한 예약입니다.",
+              ...(prop.proposal.rentalOperator ? { rentalOperator: prop.proposal.rentalOperator } : {}),
             });
             const req = created.request || {};
             writeDone = true;
@@ -2242,12 +2315,12 @@ async function runTurn(
       } else if (
         (block.name === "prepare_listing_draft"
           || (block.name === "create_listing" && !(user && spokenApproval && deps?.createListing && !writeDone)))
-        && (output = askDetailsFirst())
+        && (output = askDetailsFirst() || askOperatorFirst(block.input))
       ) {
-        // 세부사항(연식·사용시간·포함 작업기)을 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
+        // 세부사항(연식·사용시간·포함 작업기), 대여글이면 대행운영서비스 제공 여부를 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
       } else if (block.name === "prepare_listing_draft") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
+        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
         const price = resolved.estimated ?? estimatePrice(catalogRows, { purpose: resolved.type, modelId: resolved.modelId, machineType: resolved.machineType });
         const finalPrice = Number.isSafeInteger(block.input?.price) && block.input.price > 0 ? block.input.price : price.median;
         let photoNote = null;
@@ -2279,6 +2352,7 @@ async function runTurn(
           areaMax: resolved.areaMax,
           year: resolved.year,
           deposit: resolved.deposit,
+          rentalOperator: resolved.rentalOperator,
         };
         const needsCheck = /\[확인 필요\]\s*(.+)/.exec(out.listingDraft.description)?.[1]?.split(" · ") || [];
         output = {
@@ -2291,9 +2365,11 @@ async function runTurn(
           ...(user ? {} : { loginRequired: true, note: "로그인하지 않아 사진은 저장하지 않았어요. 등록하기를 누르면 로그인 후 이어서 등록해요." }),
           ...(photoNote ? { photoNote } : {}),
         };
+      } else if (block.name === "create_listing" && (output = askOperatorFirst(listingInput(block.input)))) {
+        // 대여글을 바로 올리기 전에도 대행운영서비스 제공 여부·작업자 정보부터 받는다.
       } else if (block.name === "create_listing") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
+        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
         if (resolved.price === null || !Number.isSafeInteger(resolved.price)) {
           output = { ok: false, error: "가격을 정해야 등록할 수 있어요. 희망 가격을 물어보세요." };
         } else if (user && spokenApproval && deps?.createListing && !writeDone) {
@@ -2315,6 +2391,7 @@ async function runTurn(
               areaMin: resolved.areaMin,
               areaMax: resolved.areaMax,
               description: resolved.description,
+              ...(resolved.rentalOperator ? { rentalOperator: resolved.rentalOperator } : {}),
               ...(draft?.photoKey ? { draftPhotoKey: draft.photoKey } : (image?.dataUrl ? { photoDataUrl: image.dataUrl } : {})),
             });
             const listing = result.listing || {};
@@ -2676,7 +2753,7 @@ async function runTurn(
  * 사용자가 승인한 대여 요청을 실행하고, 실제 저장 상태를 다시 조회해 결과를 분류한다.
  * outcome: completed(요청 저장·확인됨) | partial(저장됐지만 상태 확인 실패) | failed(실행 안 됨)
  */
-/** 확인 카드에서 받은 희망 네고 가격(1일)·대리운용 희망 여부를 정리한다. 둘 다 없으면 null. */
+/** 확인 카드에서 받은 희망 네고 가격(1일)·대행운영서비스 사용 여부를 정리한다. 둘 다 없으면 null. */
 export function rentalTermsOf(action) {
   const price = Number(action?.negotiatedDailyPrice);
   const negotiatedDailyPrice = action?.negotiatedDailyPrice != null && Number.isSafeInteger(price) && price > 0 ? price : null;
@@ -2691,7 +2768,7 @@ function rentalTermsLines(terms, listedDailyPrice) {
     terms.negotiatedDailyPrice !== null
       ? `희망 네고 가격: 1일 ${won(terms.negotiatedDailyPrice)}${listed ? ` (등록가 1일 ${won(listed)})` : ""}`
       : "희망 네고 가격: 없음 (등록가 그대로)",
-    `대리운용: ${terms.operatorWanted ? "희망 (기계 운전·작업까지 맡기고 싶어요)" : "희망 안 함"}`,
+    `대행운영서비스: ${terms.operatorWanted ? "사용 (작업자 동반)" : "사용 안 함"}`,
   ];
 }
 
@@ -2710,12 +2787,14 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
   const terms = rentalTermsOf(action);
   const baseNote = typeof action?.note === "string" ? action.note.trim() : "";
   const termsNote = terms ? rentalTermsLines(terms, action?.dailyPrice).join(" · ") : "";
+  const rentalOperator = cleanOperatorProfile(action?.rentalOperator);
   const created = await createRentalRequest(user, {
     id: requestId,
     listingId: action?.listingId,
     start: action?.start,
     end: action?.end,
     note: [baseNote, termsNote].filter(Boolean).join(" / ").slice(0, 200),
+    ...(rentalOperator ? { rentalOperator } : {}),
   }, options);
 
   let verified = null;
@@ -2733,7 +2812,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
     };
   }
 
-  // 희망 네고 가격·대리운용 희망 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
+  // 희망 네고 가격·대행운영서비스 사용 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
   let conversation = null;
   if (terms) {
     try {
@@ -2749,7 +2828,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       return {
         outcome: "partial",
         request: verified,
-        message: "대여 요청은 보냈지만 희망 네고 가격·대리운용 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
+        message: "대여 요청은 보냈지만 희망 네고 가격·대행운영서비스 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
       };
     }
   }
@@ -2769,7 +2848,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       days: verified.days,
       totalPrice: verified.totalPrice,
     },
-    message: `대여 요청을 보냈어요${conversation ? "(희망 네고 가격·대리운용 여부는 게시자 채팅으로 전달했어요)" : ""}. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
+    message: `대여 요청을 보냈어요${conversation ? "(희망 네고 가격·대행운영서비스 여부는 게시자 채팅으로 전달했어요)" : ""}. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
   };
 }
 
@@ -2834,6 +2913,7 @@ export async function executeListingAction(user, action, { requestId, pool = get
     areaMin: resolved.areaMin,
     areaMax: resolved.areaMax,
     description: resolved.description,
+    ...(resolved.rentalOperator ? { rentalOperator: resolved.rentalOperator } : {}),
     ...(cleanDraft ? { draftPhotoKey: cleanDraft.photoKey } : {}),
     ...(photoDataUrl ? { photoDataUrl } : {}),
   }, { pool });

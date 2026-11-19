@@ -81,7 +81,7 @@ test("rentalTermsMessage: 희망 네고 가격과 대리운용 여부를 게시�
   );
   assert.match(msg, /\[농농 대여 요청\] '관리기 A' 2026-11-24 ~ 2026-11-28 \(5일\) 대여를 요청했어요\./);
   assert.match(msg, /희망 네고 가격: 1일 40,000원 \(등록가 1일 50,000원\)/);
-  assert.match(msg, /대리운용: 희망 \(기계 운전·작업까지 맡기고 싶어요\)/);
+  assert.match(msg, /대행운영서비스: 사용 \(작업자 동반\)/);
 });
 
 test("executeRentalRequest: 희망 네고 가격·대리운용을 메모에 남기고 게시자에게 채팅으로 한 번만 보낸다", async () => {
@@ -105,7 +105,7 @@ test("executeRentalRequest: 희망 네고 가격·대리운용을 메모에 남�
   assert.match(first.message, /게시자 채팅으로 전달했어요/);
   assert.match(first.request.note, /오전 9시 인수 희망/);
   assert.match(first.request.note, /희망 네고 가격: 1일 40,000원/);
-  assert.match(first.request.note, /대리운용: 희망/);
+  assert.match(first.request.note, /대행운영서비스: 사용/);
 
   // 같은 requestId로 재시도해도 채팅·요청 모두 1건만 유지된다(멱등성).
   const retry = await executeRentalRequest(renter, action, { requestId, pool });
@@ -115,7 +115,7 @@ test("executeRentalRequest: 희망 네고 가격·대리운용을 메모에 남�
   const msgRows = await pool.query("SELECT body FROM messages WHERE id = $1", [requestId]);
   assert.equal(msgRows.rows.length, 1);
   assert.match(msgRows.rows[0].body, /희망 네고 가격: 1일 40,000원/);
-  assert.match(msgRows.rows[0].body, /대리운용: 희망/);
+  assert.match(msgRows.rows[0].body, /대행운영서비스: 사용/);
 });
 
 test("executeRentalRequest: 채팅 전송이 실패해도 대여 요청은 유지되고 partial을 반환한다", async () => {
@@ -144,4 +144,32 @@ test("executeRentalRequest: 채팅 전송이 실패해도 대여 요청은 유�
   assert.equal(res.outcome, "partial");
   assert.equal(res.request.id, requestId);
   assert.match(res.message, /채팅으로 전하지 못했어요/);
+});
+
+test("executeRentalRequest: 대행운영서비스를 쓰면 작업자를 함께 요청하고 금액은 기계+작업자 합계다", async () => {
+  const operator = { name: "김영수", experience: "관리기 15년", dailyPrice: 30_000 };
+  const opListing = (await createListing(owner, {
+    id: randomUUID(),
+    title: "관리기 대행운영",
+    type: "rent",
+    price: 50_000,
+    region: "영양읍",
+    machineType: "rootHarvester",
+    cropIds: ["sweetPotato"],
+    operations: ["potatoHarvest"],
+    areaMin: 300,
+    areaMax: 2000,
+    condition: "good",
+    brand: "아세아텍",
+    description: "대행운영 됩니다.",
+    rentalOperator: operator,
+  }, { pool })).listing;
+  const start = addDays(kstToday(), 5);
+  const end = addDays(start, 1);
+  const result = await executeRentalRequest(renter, {
+    listingId: opListing.id, title: opListing.title, dailyPrice: 50_000, start, end, rentalOperator: operator,
+  }, { requestId: randomUUID(), pool });
+  assert.equal(result.outcome, "completed");
+  assert.deepEqual(result.request.rentalOperator, operator);
+  assert.equal(result.request.totalPrice, (50_000 + 30_000) * 2);
 });

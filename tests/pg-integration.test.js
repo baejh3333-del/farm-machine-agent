@@ -1180,6 +1180,7 @@ test("[PGlite 로컬 엔진] 10. /api/agent 원탭 구매 신청 및 원탭 매�
         type: "create_listing",
         listingType: "sale",
         machineType: "cultivator",
+        delivery: { methods: ["self_pickup"] },
         title: "원탭 등록 관리기",
         price: 1550000,
         region: "청기면",

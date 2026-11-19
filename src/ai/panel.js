@@ -518,6 +518,8 @@ export function createAiPanel({
   // 마지막으로 올린 사진의 인식 결과. 사진은 첫 턴에만 보내므로, 세부사항을 답하는 다음 턴에 함께 보낸다.
   let lastPhotoSummary = null;
   let plusMenuOpen = false;
+  let plusHoverCloseTimer = null;
+  let plusOpenedByHover = false;
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
   let enterAnimTimer = null;
@@ -554,6 +556,11 @@ export function createAiPanel({
 
   function setPlusMenuOpen(nextOpen) {
     plusMenuOpen = Boolean(nextOpen);
+    if (!plusMenuOpen) {
+      clearTimeout(plusHoverCloseTimer);
+      plusHoverCloseTimer = null;
+      plusOpenedByHover = false;
+    }
     const menu = $("aiPlusMenu");
     const btn = $("aiPlusButton");
     if (menu) menu.hidden = !plusMenuOpen;
@@ -563,8 +570,35 @@ export function createAiPanel({
     }
   }
 
+  // 마우스는 + 위에 커서만 올려도 메뉴가 펼쳐진다. 버튼과 메뉴 사이 틈을 지나갈 때 닫히지 않도록 잠깐 늦게 닫는다.
+  // 터치·키보드는 기존처럼 눌러서 연다.
+  const cancelPlusHoverClose = () => {
+    clearTimeout(plusHoverCloseTimer);
+    plusHoverCloseTimer = null;
+  };
+  $("aiPlusWrap")?.addEventListener("pointerenter", (event) => {
+    if (event.pointerType !== "mouse") return;
+    cancelPlusHoverClose();
+    if (!plusMenuOpen) {
+      plusOpenedByHover = true;
+      setPlusMenuOpen(true);
+    }
+  });
+  $("aiPlusWrap")?.addEventListener("pointerleave", (event) => {
+    if (event.pointerType !== "mouse" || !plusOpenedByHover) return;
+    cancelPlusHoverClose();
+    plusHoverCloseTimer = setTimeout(() => {
+      plusHoverCloseTimer = null;
+      plusOpenedByHover = false;
+      setPlusMenuOpen(false);
+    }, 250);
+  });
+
   $("aiPlusButton")?.addEventListener("click", (event) => {
     event.stopPropagation();
+    // 커서를 올려 이미 펼쳐진 상태에서 클릭하면 닫지 않고 그대로 둔다.
+    if (plusOpenedByHover && plusMenuOpen) return;
+    plusOpenedByHover = false;
     setPlusMenuOpen(!plusMenuOpen);
   });
 
@@ -1551,7 +1585,7 @@ export function createAiPanel({
           if (item.type === "rent") {
             quickBtn.textContent = activeDates
               ? `바로 예약 (${formatShortDate(activeDates.start)}~${formatShortDate(activeDates.end)})`
-              : "📅 날짜 골라 바로 예약";
+              : "날짜 골라 바로 예약";
           } else {
             quickBtn.textContent = "바로 구매 신청";
           }
@@ -3109,7 +3143,6 @@ export function createAiPanel({
   }
 
   $("aiLiveVoiceButton")?.addEventListener("click", () => {
-    setPlusMenuOpen(false);
     startLiveVoice();
   });
   $("aiMicButton")?.addEventListener("click", () => {

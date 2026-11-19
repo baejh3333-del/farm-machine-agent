@@ -84,7 +84,6 @@ export async function openLivePage(browser, port, { agent, holdListings = null }
   await page.goto(`http://127.0.0.1:${port}`);
   await page.locator("#aiLauncher").click();
   await page.locator("#aiPanel.is-fullscreen").waitFor({ state: "visible" });
-  await page.locator("#aiPlusButton").click();
   await page.locator("#aiLiveVoiceButton").click();
   await page.waitForFunction(() => document.querySelector("#aiVoiceLiveBar").dataset.voiceState === "listening");
   return { page, errors, agentRequests };

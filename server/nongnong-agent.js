@@ -2643,14 +2643,46 @@ async function runTurn(
  * 사용자가 승인한 대여 요청을 실행하고, 실제 저장 상태를 다시 조회해 결과를 분류한다.
  * outcome: completed(요청 저장·확인됨) | partial(저장됐지만 상태 확인 실패) | failed(실행 안 됨)
  */
-export async function executeRentalRequest(user, action, { requestId, today = kstToday(), pool } = {}) {
+/** 확인 카드에서 받은 희망 네고 가격(1일)·대리운용 희망 여부를 정리한다. 둘 다 없으면 null. */
+export function rentalTermsOf(action) {
+  const price = Number(action?.negotiatedDailyPrice);
+  const negotiatedDailyPrice = action?.negotiatedDailyPrice != null && Number.isSafeInteger(price) && price > 0 ? price : null;
+  const operatorWanted = typeof action?.operatorWanted === "boolean" ? action.operatorWanted : null;
+  if (negotiatedDailyPrice === null && operatorWanted === null) return null;
+  return { negotiatedDailyPrice, operatorWanted: operatorWanted === true };
+}
+
+function rentalTermsLines(terms, listedDailyPrice) {
+  const listed = Number(listedDailyPrice) > 0 ? Number(listedDailyPrice) : null;
+  return [
+    terms.negotiatedDailyPrice !== null
+      ? `희망 네고 가격: 1일 ${won(terms.negotiatedDailyPrice)}${listed ? ` (등록가 1일 ${won(listed)})` : ""}`
+      : "희망 네고 가격: 없음 (등록가 그대로)",
+    `대리운용: ${terms.operatorWanted ? "희망 (기계 운전·작업까지 맡기고 싶어요)" : "희망 안 함"}`,
+  ];
+}
+
+/** 대여 요청과 함께 게시자에게 보낼 채팅 본문. */
+export function rentalTermsMessage({ title, start, end, days }, terms, listedDailyPrice) {
+  const period = start ? ` ${start}${end && end !== start ? ` ~ ${end}` : ""}${days ? ` (${days}일)` : ""}` : "";
+  return [
+    `[농농 대여 요청] '${title}'${period} 대여를 요청했어요.`,
+    ...rentalTermsLines(terms, listedDailyPrice),
+    "대여 요청 화면에서 승인하시거나 채팅으로 조건을 조율해 주세요.",
+  ].join("\n").slice(0, 500);
+}
+
+export async function executeRentalRequest(user, action, { requestId, today = kstToday(), pool, sendTermsMessage = sendChatMessage } = {}) {
   const options = pool ? { today, pool } : { today };
+  const terms = rentalTermsOf(action);
+  const baseNote = typeof action?.note === "string" ? action.note.trim() : "";
+  const termsNote = terms ? rentalTermsLines(terms, action?.dailyPrice).join(" · ") : "";
   const created = await createRentalRequest(user, {
     id: requestId,
     listingId: action?.listingId,
     start: action?.start,
     end: action?.end,
-    note: typeof action?.note === "string" ? action.note.slice(0, 200) : "",
+    note: [baseNote, termsNote].filter(Boolean).join(" / ").slice(0, 200),
   }, options);
 
   let verified = null;
@@ -2667,9 +2699,31 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       message: "대여 요청은 보냈지만 저장 상태를 바로 확인하지 못했어요. ‘대여 요청’ 화면에서 요청이 보이는지 확인해 주세요.",
     };
   }
+
+  // 희망 네고 가격·대리운용 희망 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
+  let conversation = null;
+  if (terms) {
+    try {
+      const body = rentalTermsMessage(
+        { title: verified.listingTitle || action?.title || "매물", start: verified.start, end: verified.end, days: verified.days },
+        terms,
+        action?.dailyPrice,
+      );
+      const sent = await sendTermsMessage(user, { id: requestId, listingId: verified.listingId, body }, pool ? { pool } : {});
+      conversation = sent?.conversation || null;
+    } catch (error) {
+      console.warn("rental terms chat failed", error?.message);
+      return {
+        outcome: "partial",
+        request: verified,
+        message: "대여 요청은 보냈지만 희망 네고 가격·대리운용 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
+      };
+    }
+  }
   return {
     outcome: "completed",
     request: verified,
+    ...(conversation ? { conversation } : {}),
     idempotent: Boolean(created.idempotent),
     reservation: {
       kind: "rental",
@@ -2682,7 +2736,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       days: verified.days,
       totalPrice: verified.totalPrice,
     },
-    message: `대여 요청을 보냈어요. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
+    message: `대여 요청을 보냈어요${conversation ? "(희망 네고 가격·대리운용 여부는 게시자 채팅으로 전달했어요)" : ""}. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
   };
 }
 

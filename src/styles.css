@@ -4412,6 +4412,19 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
 .ai-draft-photo { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; }
 .ai-draft-title { font-weight: 700; font-size: 0.9375rem; }
 .ai-draft-desc { margin: 0; font-size: 0.8125rem; line-height: 1.6; white-space: pre-wrap; }
+.ai-draft-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.ai-draft-option-box { margin: 0; min-width: 0; padding: 6px 10px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; }
+.ai-draft-option-box legend { padding: 0 4px; font-size: 0.8125rem; font-weight: 700; }
+.ai-draft-option-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-draft-option { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 1.5px solid var(--line-strong); border-radius: 999px; font-size: 0.8125rem; cursor: pointer; }
+.ai-draft-option input { margin: 0; width: 16px; height: 16px; accent-color: var(--primary); }
+.ai-draft-option:has(input:checked) { border-color: var(--primary); color: var(--primary); font-weight: 700; }
+.ai-draft-option:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ai-rental-terms { margin-top: 4px; }
+.ai-rental-price { display: flex; align-items: center; gap: 6px; font-size: 0.8125rem; }
+.ai-rental-price input { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border: 1.5px solid var(--line-strong); border-radius: 8px; font: inherit; font-size: 0.9375rem; }
+.ai-rental-price input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.ai-rental-terms .ai-draft-option-box small { display: block; margin-top: 4px; font-size: 0.75rem; color: var(--text-muted); }
 .ai-sources { margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); }
 .ai-sources a { color: inherit; }
 .ai-confirm-actions .button { min-height: 44px; }

@@ -298,7 +298,7 @@ function renderConvAiBadges(conv, role) {
   } else if (conv.aiPausedReason) {
     badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⚠️ 확인 필요</span>`);
   } else if (mode && mode !== "off") {
-    const label = policy?.fullDelegation ? "🤖 거래 전담 중" : "🤖 대리 중";
+    const label = policy?.fullDelegation ? "거래 전담 중" : "🤖 대리 중";
     badges.push(`<span class="conv-ai-badge conv-ai-badge-active">${label}</span>`);
   }
   return badges.join("");
@@ -478,7 +478,7 @@ function chatForm(target) {
         <label class="chat-full-delegation-toggle" for="chatFullDelegationToggle">
           <input type="checkbox" id="chatFullDelegationToggle">
           <span>
-            <strong>🤖 거래 전담 (부재중 자동 진행)</strong>
+            <strong>거래 전담 (부재중 자동 진행)</strong>
             <small>내가 없어도 조건에 맞으면 예약·거래까지 자동 진행해요</small>
           </span>
           <span id="chatFullDelegationBadge" class="delegated-full-badge">OFF</span>

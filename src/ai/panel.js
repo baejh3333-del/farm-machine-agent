@@ -519,6 +519,8 @@ export function createAiPanel({
   // 마지막으로 올린 사진의 인식 결과. 사진은 첫 턴에만 보내므로, 세부사항을 답하는 다음 턴에 함께 보낸다.
   let lastPhotoSummary = null;
   let plusMenuOpen = false;
+  let plusHoverCloseTimer = null;
+  let plusOpenedByHover = false;
   let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
   let enterAnimTimer = null;
@@ -555,6 +557,11 @@ export function createAiPanel({
 
   function setPlusMenuOpen(nextOpen) {
     plusMenuOpen = Boolean(nextOpen);
+    if (!plusMenuOpen) {
+      clearTimeout(plusHoverCloseTimer);
+      plusHoverCloseTimer = null;
+      plusOpenedByHover = false;
+    }
     const menu = $("aiPlusMenu");
     const btn = $("aiPlusButton");
     if (menu) menu.hidden = !plusMenuOpen;
@@ -564,8 +571,35 @@ export function createAiPanel({
     }
   }
 
+  // 마우스는 + 위에 커서만 올려도 메뉴가 펼쳐진다. 버튼과 메뉴 사이 틈을 지나갈 때 닫히지 않도록 잠깐 늦게 닫는다.
+  // 터치·키보드는 기존처럼 눌러서 연다.
+  const cancelPlusHoverClose = () => {
+    clearTimeout(plusHoverCloseTimer);
+    plusHoverCloseTimer = null;
+  };
+  $("aiPlusWrap")?.addEventListener("pointerenter", (event) => {
+    if (event.pointerType !== "mouse") return;
+    cancelPlusHoverClose();
+    if (!plusMenuOpen) {
+      plusOpenedByHover = true;
+      setPlusMenuOpen(true);
+    }
+  });
+  $("aiPlusWrap")?.addEventListener("pointerleave", (event) => {
+    if (event.pointerType !== "mouse" || !plusOpenedByHover) return;
+    cancelPlusHoverClose();
+    plusHoverCloseTimer = setTimeout(() => {
+      plusHoverCloseTimer = null;
+      plusOpenedByHover = false;
+      setPlusMenuOpen(false);
+    }, 250);
+  });
+
   $("aiPlusButton")?.addEventListener("click", (event) => {
     event.stopPropagation();
+    // 커서를 올려 이미 펼쳐진 상태에서 클릭하면 닫지 않고 그대로 둔다.
+    if (plusOpenedByHover && plusMenuOpen) return;
+    plusOpenedByHover = false;
     setPlusMenuOpen(!plusMenuOpen);
   });
 
@@ -1375,16 +1409,16 @@ export function createAiPanel({
       onDone: (outcome) => {
         if (!triggerButton) return;
         if (outcome === "completed") {
-          triggerButton.textContent = "🤖 전담 진행중";
+          triggerButton.textContent = "전담 진행중";
         } else {
           triggerButton.disabled = false;
-          triggerButton.textContent = "🤖 거래 전담";
+          triggerButton.textContent = "거래 전담";
         }
       },
       onError: (kind) => {
         if (triggerButton) {
           triggerButton.disabled = false;
-          triggerButton.textContent = "🤖 거래 전담";
+          triggerButton.textContent = "거래 전담";
         }
         if (kind !== "aborted") {
           appendAiMessage("거래 전담을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.", "assistant");
@@ -1458,10 +1492,7 @@ export function createAiPanel({
       titleRow.className = "ai-result-title";
       const titleLabel = document.createElement("span");
       titleLabel.textContent = `농농이가 찾은 맞춤 매물 (${listingIds.length}건)`;
-      const railHint = document.createElement("span");
-      railHint.className = "ai-result-rail-hint";
-      railHint.textContent = "좌우로 넘겨 비교 ›";
-      titleRow.append(titleLabel, railHint);
+      titleRow.append(titleLabel);
       results.append(titleRow);
 
       const cardsRail = document.createElement("div");
@@ -1557,10 +1588,10 @@ export function createAiPanel({
           quickBtn.className = "button button-primary";
           if (item.type === "rent") {
             quickBtn.textContent = activeDates
-              ? `⚡ 바로 예약 (${formatShortDate(activeDates.start)}~${formatShortDate(activeDates.end)})`
-              : "📅 날짜 골라 바로 예약";
+              ? `바로 예약 (${formatShortDate(activeDates.start)}~${formatShortDate(activeDates.end)})`
+              : "날짜 골라 바로 예약";
           } else {
-            quickBtn.textContent = "⚡ 바로 구매 신청";
+            quickBtn.textContent = "바로 구매 신청";
           }
           quickBtn.addEventListener("click", () => startOneTapListingAction(item, activeDates, null, quickBtn));
           actions.append(quickBtn);
@@ -1569,7 +1600,7 @@ export function createAiPanel({
           delegateBtn.type = "button";
           delegateBtn.className = "button button-secondary ai-rec-delegate-btn";
           delegateBtn.dataset.aiDelegate = item.id;
-          delegateBtn.textContent = "🤖 거래 전담";
+          delegateBtn.textContent = "거래 전담";
           delegateBtn.addEventListener("click", () => startFullDelegationAction(item, activeDates, delegateBtn));
           actions.append(delegateBtn);
         }
@@ -1617,7 +1648,7 @@ export function createAiPanel({
     title.textContent = isMyPage
       ? "마이페이지 변경 확인"
       : isDelegation
-        ? "🤖 부재중 거래 전담 확인"
+        ? "부재중 거래 전담 확인"
         : isPurchase
           ? "구매 신청 확인"
           : "대여 요청 확인";
@@ -3205,7 +3236,6 @@ export function createAiPanel({
   }
 
   $("aiLiveVoiceButton")?.addEventListener("click", () => {
-    setPlusMenuOpen(false);
     startLiveVoice();
   });
   $("aiMicButton")?.addEventListener("click", () => {

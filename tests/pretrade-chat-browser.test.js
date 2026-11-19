@@ -174,14 +174,15 @@ test("매물 상세 1:1 채팅은 직접 대화와 입력창만 보이고 거래
       messagesByConv,
     });
 
-    // 매물 카드·상세 모두 1:1 대화만 있고 거래전담 버튼은 없다
-    await page.locator('header [data-view="browse"]').click();
-    await page.locator("#listingGrid .listing-card [data-detail]").first().waitFor({ state: "visible" });
-    assert.equal(await page.locator("#listingGrid [data-delegated-trade], #listingGrid .btn-delegated-trade").count(), 0, "매물 카드에 거래전담 버튼이 없어야 함");
-    assert.ok(await page.locator("#listingGrid [data-direct-chat]").count() > 0, "매물 카드의 1:1 대화 버튼은 유지되어야 함");
-    await page.locator("#listingGrid .listing-card [data-detail]").first().click();
-    assert.equal(await page.locator("#detailBackdrop [data-delegated-trade]").count(), 0, "상세 모달에 거래전담 버튼이 없어야 함");
-    await page.locator("[data-detail-chat]").click();
+    // 매물 찾기(2.2 디자인) 카드·상세 모두 거래전담 버튼은 없고, 상세의 '소유주에게 묻기'로 1:1 대화를 연다
+    await page.locator('#homeDesignHost header[style*="position: relative"] a:has-text("매물 찾기")').click();
+    const firstCard = page.locator("#browseDesignHost article[data-card]").first();
+    await firstCard.waitFor({ state: "visible" });
+    assert.equal(await page.locator("#browseDesignHost [data-delegated-trade], #browseDesignHost .btn-delegated-trade").count(), 0, "매물 카드에 거래전담 버튼이 없어야 함");
+    await firstCard.click();
+    await page.locator("#detailDesignHost h1").waitFor({ state: "visible" });
+    assert.equal(await page.locator("#detailDesignHost [data-delegated-trade]").count(), 0, "상세 화면에 거래전담 버튼이 없어야 함");
+    await page.locator('#detailDesignHost button:has-text("소유주에게 묻기")').click();
 
     await page.locator("#chatLog").waitFor({ state: "visible" });
     await page.locator("#chatForm").waitFor({ state: "visible" });
@@ -244,7 +245,7 @@ test("구매자·소유자 보조 대화 목록에서 제목과 최근 메시지
       messagesByConv: buyerMsgs,
     });
 
-    await buyerCtx.page.locator("#myPageButton").click();
+    await buyerCtx.page.locator('#homeDesignHost header[style*="position: relative"] a:has-text("마이페이지")').click();
     await buyerCtx.page.locator('#myPageMenu [data-view="requests"]').click();
     const buyerRow = buyerCtx.page.locator("#buyerConversations .conv-row-open");
     await buyerRow.waitFor({ state: "visible" });
@@ -272,7 +273,7 @@ test("구매자·소유자 보조 대화 목록에서 제목과 최근 메시지
       messagesByConv: ownerMsgs,
     });
 
-    await ownerCtx.page.locator("#myPageButton").click();
+    await ownerCtx.page.locator('#homeDesignHost header[style*="position: relative"] a:has-text("마이페이지")').click();
     await ownerCtx.page.locator('#myPageMenu [data-view="owner"]').click();
     const ownerRow = ownerCtx.page.locator("#ownerConversations [data-open-chat]");
     assert.equal(await ownerRow.count(), 1, "소유자 대화 행당 data-open-chat 요소는 1개여야 함");

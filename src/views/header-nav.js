@@ -6,10 +6,13 @@ export function createHeaderNav(deps) {
   let closePanel = () => {};
   function closeAll() { closePanel(); }
 
+  // 홈은 모아농 2.1 디자인 화면이라 그 안의 구역으로 이동한다
+  const HOME_SECTION = { homeBooking: "search", homeAbout: "about", homeFaq: "faq" };
   function scrollHomeSection(sectionId) {
     deps.setView("home");
     requestAnimationFrame(() => {
-      $(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (deps.scrollHome) deps.scrollHome(HOME_SECTION[sectionId] || sectionId);
+      else $(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 

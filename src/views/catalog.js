@@ -1263,6 +1263,8 @@ function renderListings() {
 }
 
 function openDetail(id) {
+  // 매물 상세는 모아농 2.2 상세 화면(디자인)으로 연다
+  if (deps.openListingPage) return deps.openListingPage(id);
   const item = listingById(id);
   if (!item) return;
   const date = state.filters.date;

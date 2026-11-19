@@ -1172,7 +1172,6 @@ function card(item) {
             </div>
             <div class="trade-action-pair card-trade-pair">
               <button type="button" class="button button-secondary button-sm btn-direct-chat" data-direct-chat="${escapeHtml(item.id)}">1:1 대화</button>
-              <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(item.id)}">거래전담</button>
             </div>
           `}
         </div>
@@ -1360,7 +1359,6 @@ function openDetail(id) {
             <button type="button" class="button button-outline detail-cart-btn" data-detail-cart="${escapeHtml(item.id)}" ${unavailable ? "disabled" : ""}>장바구니</button>
             <div class="trade-action-pair detail-trade-pair">
               <button type="button" class="button button-secondary btn-direct-chat" data-detail-chat="${escapeHtml(item.id)}">1:1 대화</button>
-              <button type="button" class="button btn-delegated-trade" data-delegated-trade="${escapeHtml(item.id)}">거래전담</button>
             </div>
             <button type="button" class="button button-primary button-large" data-detail-action="${escapeHtml(item.id)}" ${unavailable || booked ? "disabled" : ""}>
               ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? "이 농기계 대여 신청하기" : "판매자에게 구매 문의하기"}

@@ -2,8 +2,7 @@
 // - 역할은 항상 서버가 대화방 참여 관계(conversations.buyer_id / listings.owner_id)로 결정한다.
 // - 같은 terms_version에 구매자·판매자 수락이 모두 기록되어야 합의(status = 'accepted')다.
 // - 운송비가 미정이면 조건 미완성이며 수락·신청할 수 없다. 명시적 직접 인수('none')만 0원이다.
-// - 신청은 구매자 본인 또는 신청 권한을 받은 구매자 AI만 만들 수 있고, 저장 금액은 합의 금액이다.
-// - 비공개 한도(목표가·최대 예산·최저가)는 본인 역할 평가에만 쓰이며 DTO에 원값을 싣지 않는다.
+// - 제안·수락·신청은 모두 사람(대화 참여자 본인)만 한다. 신청은 구매자 본인만 만들 수 있고, 저장 금액은 합의 금액이다.
 import { randomUUID } from "node:crypto";
 import { getPool, kstToday, withTransaction } from "./db.js";
 import { fail, HttpError } from "./http.js";
@@ -11,10 +10,8 @@ import { MAX_RENTAL_DAYS } from "./rentals.js";
 import { formatIsoDate } from "./validate.js";
 
 const ROLES = new Set(["buyer", "owner"]);
-const SENDER_KINDS = new Set(["human", "ai_proxy"]);
 const TRANSPORT_PAYERS = new Set(["buyer", "owner", "none"]);
 const OPEN_ORDER_STATUSES = new Set(["pending", "approved", "accepted"]);
-export const DEFAULT_MAX_AI_ROUNDS = 3;
 
 // ───────────────────────── 공용 유틸 ─────────────────────────
 
@@ -57,10 +54,6 @@ function pick(...values) {
   return undefined;
 }
 
-function roundingUnit(listingType) {
-  return listingType === "sale" ? 10_000 : 1_000;
-}
-
 // ───────────────────────── 금액 계산 ─────────────────────────
 
 /** 제안 행(또는 같은 형태의 객체)으로 운송비 포함 총액과 판매자 순수령액을 계산한다. 미정이면 null. */
@@ -80,7 +73,7 @@ export function computeOfferTotals({ item_total, transport_fee, transport_payer 
 }
 
 /**
- * 클라이언트·AI 입력을 검증된 조건으로 정규화한다.
+ * 클라이언트 입력을 검증된 조건으로 정규화한다.
  * amountUnit 'daily'는 대여만 허용되며 itemTotal = amount × days.
  */
 export function normalizeOfferTerms(input, listing) {
@@ -222,141 +215,6 @@ function toOrderDto(row, kind, { legacy = false } = {}) {
   };
 }
 
-// ───────────────────────── 정책 평가 (본인 역할 전용) ─────────────────────────
-
-function policyNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null;
-}
-
-/** 정책 한도를 이 제안의 총액 기준으로 환산한다(budgetUnit 'daily'는 대여 일수를 곱함). */
-export function resolvePolicyLimits(policy, role, { listingType, days }) {
-  const p = policy && typeof policy === "object" ? policy : {};
-  const daily = p.budgetUnit === "daily" && listingType === "rent" && days > 0;
-  const scale = (v) => (v === null ? null : daily ? v * days : v);
-  const target = scale(policyNumber(p.targetPrice));
-  const hard = scale(policyNumber(role === "buyer" ? p.maxBudget : p.minPrice));
-  return { target, hard };
-}
-
-function roundTowards(value, unit, direction) {
-  return direction === "down" ? Math.floor(value / unit) * unit : Math.ceil(value / unit) * unit;
-}
-
-/**
- * 본인 역할의 정책으로 제안을 평가한다. 결과는 본인에게만 노출하며 한도 원값을 포함하지 않는다.
- * verdict:
- *  - accept_ok: 목표가 이내(또는 목표가 없이 한도 이내) → 수락 가능
- *  - counter_in_range: 한도 이내지만 목표가보다 불리 → 역제안 권장(라운드 소진 시 수락 가능)
- *  - outside_limit: 한도 밖 → 수락 불가
- *  - needs_user: 운송비 미정·한도 미설정 등 사용자 판단 필요
- */
-export function evaluateOfferForRole(offer, role, policy, { roundsUsed = 0, maxRounds } = {}) {
-  if (!offer || !ROLES.has(role)) return null;
-  const p = policy && typeof policy === "object" ? policy : {};
-  const limitRounds = Number(p.maxNegotiationRounds) > 0
-    ? Math.min(10, Math.trunc(Number(p.maxNegotiationRounds)))
-    : (maxRounds ?? DEFAULT_MAX_AI_ROUNDS);
-  const roundsLeft = Math.max(0, limitRounds - roundsUsed);
-  const base = { verdict: "needs_user", counterSuggestion: null, reasons: [], roundsUsed, roundsLeft };
-  const { target, hard } = resolvePolicyLimits(p, role, { listingType: offer.listingType, days: offer.days });
-
-  if (!offer.termsComplete) {
-    return { ...base, reasons: ["transport_unknown"] };
-  }
-  if (target === null && hard === null) {
-    return { ...base, reasons: ["no_price_policy"] };
-  }
-
-  const unit = roundingUnit(offer.listingType);
-  if (role === "buyer") {
-    const cost = offer.totalAmount;
-    const transportOnBuyer = offer.transportPayer === "buyer" ? offer.transportFee : 0;
-    const suggestTotal = (() => {
-      const goal = target ?? hard;
-      if (cost <= goal) return null;
-      let mid = roundTowards((goal + cost) / 2, unit, "down");
-      if (mid < goal) mid = goal;
-      if (hard !== null && mid > hard) mid = hard;
-      return mid >= cost ? null : mid;
-    })();
-    const counterSuggestion = suggestTotal === null
-      ? null
-      : {
-          amount: Math.max(0, suggestTotal - transportOnBuyer),
-          amountUnit: "total",
-          totalAmount: suggestTotal,
-          transportFee: offer.transportFee,
-          transportPayer: offer.transportPayer,
-        };
-    if (hard !== null && cost > hard) {
-      return { ...base, verdict: "outside_limit", reasons: ["above_buyer_limit"], counterSuggestion };
-    }
-    if (target !== null && cost <= target) return { ...base, verdict: "accept_ok", reasons: ["within_target"] };
-    if (target === null) return { ...base, verdict: "accept_ok", reasons: ["within_limit"] };
-    if (hard === null) {
-      return { ...base, verdict: "needs_user", reasons: ["above_target_no_limit"], counterSuggestion };
-    }
-    return { ...base, verdict: "counter_in_range", reasons: ["above_target_within_limit"], counterSuggestion };
-  }
-
-  // owner
-  const net = offer.ownerNet;
-  const transportOnOwner = offer.transportPayer === "owner" ? offer.transportFee : 0;
-  const suggestNet = (() => {
-    const goal = target ?? hard;
-    if (net >= goal) return null;
-    let mid = roundTowards((goal + net) / 2, unit, "up");
-    if (mid > goal) mid = goal;
-    if (hard !== null && mid < hard) mid = hard;
-    return mid <= net ? null : mid;
-  })();
-  const counterSuggestion = suggestNet === null
-    ? null
-    : {
-        amount: suggestNet + transportOnOwner,
-        amountUnit: "total",
-        ownerNet: suggestNet,
-        transportFee: offer.transportFee,
-        transportPayer: offer.transportPayer,
-      };
-  if (hard !== null && net < hard) {
-    return { ...base, verdict: "outside_limit", reasons: ["below_owner_floor"], counterSuggestion };
-  }
-  if (target !== null && net >= target) return { ...base, verdict: "accept_ok", reasons: ["within_target"] };
-  if (target === null) return { ...base, verdict: "accept_ok", reasons: ["within_limit"] };
-  if (hard === null) {
-    return { ...base, verdict: "needs_user", reasons: ["below_target_no_floor"], counterSuggestion };
-  }
-  return { ...base, verdict: "counter_in_range", reasons: ["below_target_within_floor"], counterSuggestion };
-}
-
-/** 비공개 한도 원값 목록(누설 검사용, 본인 서버 측에서만 사용). */
-export function privateLimitValues(policy, role, { listingType, days } = {}) {
-  const p = policy && typeof policy === "object" ? policy : {};
-  const values = new Set();
-  for (const key of ["targetPrice", role === "buyer" ? "maxBudget" : "minPrice"]) {
-    const v = policyNumber(p[key]);
-    if (v === null || v === 0) continue;
-    values.add(v);
-    if (listingType === "rent" && days > 0 && p.budgetUnit === "daily") values.add(v * days);
-  }
-  return values;
-}
-
-/** 사용자 정책이 AI의 조건 수락(합의)을 명시적으로 허용하는지. */
-export function aiMayAgree(policy) {
-  const p = policy && typeof policy === "object" ? policy : {};
-  return p.fullDelegation === true || p.autoAcceptWithinLimits === true;
-}
-
-/** 구매자 정책이 AI의 신청 자동 접수를 명시적으로 허용하는지. */
-export function aiMayApply(policy) {
-  const p = policy && typeof policy === "object" ? policy : {};
-  return p.fullDelegation === true && p.autoExecuteTransaction === true;
-}
-
 // ───────────────────────── 조회 ─────────────────────────
 
 const CONV_SELECT = `
@@ -385,8 +243,8 @@ async function resolveContext(db, args, { lock }) {
     fail(403, "ROLE_MISMATCH", "요청한 역할이 대화 참여 관계와 일치하지 않습니다.");
   }
   const senderKind = pick(args.senderKind, args.source) ?? "human";
-  if (!SENDER_KINDS.has(senderKind)) fail(400, "INVALID_SENDER_KIND", "올바르지 않은 발신 주체입니다.");
-  return { conv, role, senderKind };
+  if (senderKind !== "human") fail(400, "INVALID_SENDER_KIND", "올바르지 않은 발신 주체입니다.");
+  return { conv, role };
 }
 
 async function loadOfferRows(db, conversationId, limit = 10) {
@@ -403,15 +261,6 @@ async function latestVersion(db, conversationId) {
     [conversationId]
   );
   return Number(res.rows[0].v);
-}
-
-async function countAiRounds(db, conversationId, role) {
-  const res = await db.query(
-    `SELECT COUNT(*)::int AS n FROM trade_offers
-     WHERE conversation_id = $1 AND from_role = $2 AND sender_kind = 'ai_proxy'`,
-    [conversationId, role]
-  );
-  return Number(res.rows[0].n);
 }
 
 /** 합의에 명시적으로 연결된 신청(우선) → 없으면 표시용 레거시 역조회. */
@@ -464,11 +313,6 @@ export function deriveTradeStage({ currentOffer, agreed, order }) {
   return "inquiry";
 }
 
-function policyForRole(conv, role) {
-  const raw = role === "buyer" ? conv.buyer_ai_policy : conv.owner_ai_policy;
-  return raw && typeof raw === "object" ? raw : {};
-}
-
 async function buildState(db, conv, role, { includeOffers = true } = {}) {
   const rows = await loadOfferRows(db, conv.id, includeOffers ? 10 : 3);
   const offers = rows.map(toOfferDto);
@@ -476,11 +320,6 @@ async function buildState(db, conv, role, { includeOffers = true } = {}) {
   const open = offers.find((o) => o.status === "open") || null;
   const currentOffer = open || agreed || null;
   const order = await loadLinkedOrder(db, conv);
-  let myEvaluation = null;
-  if (open && role) {
-    const roundsUsed = await countAiRounds(db, conv.id, role);
-    myEvaluation = evaluateOfferForRole(open, role, policyForRole(conv, role), { roundsUsed });
-  }
   const stage = deriveTradeStage({ currentOffer, agreed, order });
   const negotiation = {
     termsVersion: offers[0]?.termsVersion ?? 0,
@@ -488,9 +327,8 @@ async function buildState(db, conv, role, { includeOffers = true } = {}) {
     agreed,
     ...(includeOffers ? { offers: offers.slice().reverse() } : {}),
     linkedOrder: order,
-    myEvaluation,
   };
-  return { myRole: role, stage, negotiation, order, linkedOrder: order, myEvaluation };
+  return { myRole: role, stage, negotiation, order, linkedOrder: order };
 }
 
 function runInTx(opts, fn) {
@@ -511,12 +349,11 @@ function splitArgs(args, opts) {
 
 /**
  * 새 조건 버전을 제안한다. 이전 열린 제안·미신청 합의는 superseded가 되고 제안자는 자동 수락한다.
- * AI 제안은 본인 정책의 한도 밖이면 거부한다(서버 방어선).
  */
 export async function submitOffer(rawArgs = {}, rawOpts = {}) {
   const [args, opts] = splitArgs(rawArgs, rawOpts);
   return runInTx(opts, async (db) => {
-    const { conv, role, senderKind } = await resolveContext(db, args, { lock: true });
+    const { conv, role } = await resolveContext(db, args, { lock: true });
     if (conv.listing_status !== "open") {
       fail(409, "LISTING_NOT_OPEN", "지금은 거래 조건을 제안할 수 없는 매물입니다.");
     }
@@ -536,22 +373,6 @@ export async function submitOffer(rawArgs = {}, rawOpts = {}) {
       fail(409, "OFFER_VERSION_STALE", "그사이 거래 조건이 바뀌었습니다. 최신 조건을 확인해 주세요.");
     }
 
-    if (senderKind === "ai_proxy") {
-      const totals = computeOfferTotals({
-        item_total: terms.itemTotal,
-        transport_fee: terms.transportFee,
-        transport_payer: terms.transportPayer,
-      });
-      const evaluation = evaluateOfferForRole(
-        { ...terms, ...totals },
-        role,
-        policyForRole(conv, role)
-      );
-      if (evaluation?.verdict === "outside_limit") {
-        fail(409, "OFFER_OUTSIDE_POLICY", "위임 범위를 벗어난 조건이라 농농이가 제안할 수 없습니다.");
-      }
-    }
-
     await db.query(
       `UPDATE trade_offers SET status = 'superseded', updated_at = now()
        WHERE conversation_id = $1 AND status IN ('open', 'accepted')`,
@@ -567,11 +388,11 @@ export async function submitOffer(rawArgs = {}, rawOpts = {}) {
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11::date,$12,$13,$14,$15,$16,'open',$17,$18,$19,$20,$21)
        RETURNING *`,
       [
-        id, conv.id, latest + 1, role, senderKind, args.actorUserId, terms.listingType,
+        id, conv.id, latest + 1, role, "human", args.actorUserId, terms.listingType,
         terms.amount, terms.amountUnit, terms.start, terms.end, terms.days, terms.itemTotal,
         terms.transportFee, terms.transportPayer, terms.note,
-        role === "buyer" ? now : null, role === "buyer" ? senderKind : null,
-        role === "owner" ? now : null, role === "owner" ? senderKind : null,
+        role === "buyer" ? now : null, role === "buyer" ? "human" : null,
+        role === "owner" ? now : null, role === "owner" ? "human" : null,
         args.messageId ?? null,
       ]
     );
@@ -589,7 +410,7 @@ export async function submitOffer(rawArgs = {}, rawOpts = {}) {
 export async function acceptOffer(rawArgs = {}, rawOpts = {}) {
   const [args, opts] = splitArgs(rawArgs, rawOpts);
   return runInTx(opts, async (db) => {
-    const { conv, role, senderKind } = await resolveContext(db, args, { lock: true });
+    const { conv, role } = await resolveContext(db, args, { lock: true });
     const offerId = args.offerId;
     if (!offerId) fail(400, "OFFER_ID_REQUIRED", "수락할 제안을 지정해 주세요.");
     const res = await db.query(
@@ -618,17 +439,6 @@ export async function acceptOffer(rawArgs = {}, rawOpts = {}) {
     if (conv.listing_status !== "open") {
       fail(409, "LISTING_NOT_OPEN", "지금은 거래할 수 없는 매물입니다.");
     }
-    if (senderKind === "ai_proxy") {
-      const policy = policyForRole(conv, role);
-      if (!aiMayAgree(policy)) {
-        fail(403, "AI_AGREE_NOT_AUTHORIZED", "농농이에게 조건 수락 권한이 위임되지 않았습니다.");
-      }
-      const roundsUsed = await countAiRounds(db, conv.id, role);
-      const evaluation = evaluateOfferForRole(dto, role, policy, { roundsUsed });
-      const ok = evaluation.verdict === "accept_ok" ||
-        (evaluation.verdict === "counter_in_range" && (evaluation.roundsLeft === 0 || policy.allowNegotiation !== true));
-      if (!ok) fail(409, "OFFER_OUTSIDE_POLICY", "위임 범위 밖의 조건이라 농농이가 수락할 수 없습니다.");
-    }
     if (mine) {
       const state = await buildState(db, conv, role);
       return { offer: dto, agreed: false, order: null, idempotent: true, negotiation: state.negotiation, stage: state.stage };
@@ -637,12 +447,12 @@ export async function acceptOffer(rawArgs = {}, rawOpts = {}) {
     const col = role === "buyer" ? "buyer" : "owner";
     const upd = await db.query(
       `UPDATE trade_offers
-       SET ${col}_accepted_at = now(), ${col}_accepted_kind = $2,
+       SET ${col}_accepted_at = now(), ${col}_accepted_kind = 'human',
            status = CASE WHEN ${role === "buyer" ? "owner" : "buyer"}_accepted_at IS NOT NULL THEN 'accepted' ELSE status END,
            updated_at = now()
        WHERE id = $1
        RETURNING *`,
-      [row.id, senderKind]
+      [row.id]
     );
     await db.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conv.id]);
     const offer = toOfferDto(upd.rows[0]);
@@ -674,14 +484,14 @@ export async function rejectOffer(rawArgs = {}, rawOpts = {}) {
 }
 
 /**
- * 합의된 조건으로 신청서를 만든다. 구매자 본인 또는 신청 권한을 받은 구매자 AI만 가능.
+ * 합의된 조건으로 신청서를 만든다. 구매자 본인만 가능.
  * 저장 금액 = 합의 금액(대여 총액 포함). 같은 합의로는 한 번만 생성된다(offer_id 유니크 + 대화방 잠금).
  */
 export async function applyAgreedOffer(rawArgs = {}, rawOpts = {}) {
   const [args, opts] = splitArgs(rawArgs, rawOpts);
   const today = opts.today || kstToday();
   return runInTx(opts, async (db) => {
-    const { conv, role, senderKind } = await resolveContext(db, args, { lock: true });
+    const { conv, role } = await resolveContext(db, args, { lock: true });
     if (role !== "buyer") {
       fail(403, "SELLER_CANNOT_APPLY", "판매자(빌려주는 분)는 구매자 명의로 신청할 수 없습니다.");
     }
@@ -701,25 +511,14 @@ export async function applyAgreedOffer(rawArgs = {}, rawOpts = {}) {
     const dto = toOfferDto(row);
     if (!dto.termsComplete) fail(409, "TERMS_INCOMPLETE", "운송비 등 미정 조건이 있어 신청할 수 없습니다.");
 
-    const policy = policyForRole(conv, "buyer");
-    if (senderKind === "ai_proxy") {
-      if (conv.buyer_ai_mode !== "autonomous" || !aiMayApply(policy)) {
-        fail(403, "AI_APPLY_NOT_AUTHORIZED", "농농이에게 신청 접수 권한이 위임되지 않았습니다.");
-      }
-      const evaluation = evaluateOfferForRole(dto, "buyer", policy, { roundsUsed: 0, maxRounds: 0 });
-      if (!evaluation || evaluation.verdict === "outside_limit" || evaluation.verdict === "needs_user") {
-        fail(409, "OFFER_OUTSIDE_POLICY", "합의 금액이 위임 범위를 벗어나 자동 신청하지 않았습니다.");
-      }
-    }
-
     const listingRes = await db.query(`SELECT * FROM listings WHERE id = $1 FOR UPDATE`, [conv.listing_id]);
     const listing = listingRes.rows[0];
     if (!listing || listing.status !== "open" || listing.type !== conv.listing_type) {
       fail(409, "LISTING_NOT_OPEN", "지금은 신청할 수 없는 매물입니다.");
     }
     if (listing.owner_id === conv.buyer_id) fail(403, "SELF_INQUIRY_FORBIDDEN", "본인 매물에는 신청할 수 없습니다.");
-    const createdVia = senderKind === "ai_proxy" ? "buyer_ai" : "human";
-    const note = (dto.note || (senderKind === "ai_proxy" ? "농농이가 합의 조건으로 접수한 신청입니다." : "합의 조건으로 접수한 신청입니다.")).slice(0, 500);
+    const createdVia = "human";
+    const note = (dto.note || "합의 조건으로 접수한 신청입니다.").slice(0, 500);
 
     if (kind === "rental") {
       if (dto.start < today) fail(409, "INVALID_SCHEDULE", "지난 날짜로는 대여 신청할 수 없습니다.");
@@ -778,7 +577,7 @@ export async function applyAgreedOffer(rawArgs = {}, rawOpts = {}) {
   });
 }
 
-/** 상세 화면용: 역할 확인 후 조건 이력·합의·연결 신청·본인 평가. 읽기 전용. */
+/** 상세 화면용: 역할 확인 후 조건 이력·합의·연결 신청. 읽기 전용. */
 export async function getNegotiationState(rawArgs = {}, rawOpts = {}) {
   const [args, opts] = splitArgs(rawArgs, rawOpts);
   const db = opts.client || opts.pool || getPool();

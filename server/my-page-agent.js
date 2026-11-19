@@ -102,8 +102,6 @@ function dealView(c) {
     myRole: c.myRole,
     counterpartName: clip(c.myRole === "owner" ? c.buyerName : c.ownerName, 40),
     unreadCount: Number(c.unreadCount) || 0,
-    waitingForUser: Boolean(c.waitingForUser),
-    myAiMode: c.myRole === "owner" ? c.ownerAiMode : c.buyerAiMode,
     ...(typeof stage === "string" ? { stage } : {}),
   };
 }

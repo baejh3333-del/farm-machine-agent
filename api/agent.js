@@ -25,7 +25,6 @@ import { scheduleWaitUntil } from "../server/wait-until.js";
 import { createListing, updateListing } from "../server/listings-service.js";
 import {
   cleanSavedDraft,
-  executeDelegatedTransaction,
   executeListingAction,
   executePurchaseRequest,
   executeRentalRequest,
@@ -47,13 +46,12 @@ const PHOTO_MESSAGE = "JPG·PNG·WebP 사진을 1MB 이하로 올려 주세요."
 const CHAT_WRITE_RATE_KIND = {
   create_rental_request: "rental",
   create_purchase_request: "message",
-  delegate_transaction: "message",
   create_listing: "listing",
   update_listing: "listing",
   toggle_favorite: "message",
 };
 
-/** 대여·구매 예약·거래 위임 또는 수리 안내 응답이면, 이 대화에서 아직 안 물었을 때 "보험 추천해드릴까요?"를 덧붙인다. */
+/** 대여·구매 예약 또는 수리 안내 응답이면, 이 대화에서 아직 안 물었을 때 "보험 추천해드릴까요?"를 덧붙인다. */
 export async function attachInsuranceAsk(result, { asked, loadListings }) {
   if (asked || !result || result.pendingAction || result.choices?.length) return result;
   let offer = null;
@@ -61,11 +59,6 @@ export async function attachInsuranceAsk(result, { asked, loadListings }) {
     const listings = await loadListings().catch(() => []);
     const listing = listings.find((item) => item.id === result.reservation.listingId) || null;
     offer = insuranceOfferFor(result.reservation, listing);
-  } else if (result.delegatedTransaction) {
-    const kind = result.delegatedTransaction.type === "sale" ? "purchase" : "rental";
-    const listings = await loadListings().catch(() => []);
-    const listing = listings.find((item) => item.id === result.delegatedTransaction.listingId) || null;
-    offer = insuranceOfferFor({ kind, listingId: result.delegatedTransaction.listingId }, listing);
   } else if (Array.isArray(result.repairCenters) && result.repairCenters.length > 0) {
     offer = repairInsuranceOffer({ machineType: result.photoSummary?.machineType || null });
   }
@@ -88,10 +81,6 @@ const EXECUTE_ACTIONS = {
   create_listing: {
     rateKind: "listing",
     run: (user, pending, requestId) => executeListingAction(user, pending, { requestId }),
-  },
-  delegate_transaction: {
-    rateKind: "message",
-    run: (user, pending, requestId) => executeDelegatedTransaction(user, pending, { requestId }),
   },
   toggle_favorite: {
     rateKind: "message",
@@ -261,7 +250,6 @@ async function chatTurn(request, body, started, progress) {
     getWeather: (options) => getWeatherAndMapConfig(options),
     createRentalRequest: (u, payload) => createRentalRequest(u, payload),
     sendPurchaseMessage: (u, payload) => sendMessage(u, payload),
-    delegateTransaction: (u, payload, opts) => executeDelegatedTransaction(u, payload, opts),
     createListing: (u, payload) => createListing(u, payload),
     updateListing: (u, payload) => updateListing(u, payload),
     toggleFavorite: (u, { listingId, favorite }) => toggleFavorite(u.id, listingId, { favorite }),

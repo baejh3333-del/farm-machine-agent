@@ -522,7 +522,6 @@ export function createAiPanel({
   let plusMenuOpen = false;
   let plusHoverCloseTimer = null;
   let plusOpenedByHover = false;
-  let fullDelegationEnabled = false;
   let aiLayoutMode = "fullscreen";
   let enterAnimTimer = null;
   let reflowAnimTimer = null;
@@ -652,23 +651,6 @@ export function createAiPanel({
   }
 
   applyWelcomeStagger();
-
-  function setFullDelegation(nextEnabled) {
-    fullDelegationEnabled = Boolean(nextEnabled);
-    const toggle = $("aiFullDelegationToggle");
-    const stateLabel = $("aiDelegationState");
-    const banner = $("aiDelegationBanner");
-    if (toggle) {
-      toggle.setAttribute("aria-pressed", String(fullDelegationEnabled));
-      toggle.classList.toggle("is-active", fullDelegationEnabled);
-    }
-    if (stateLabel) stateLabel.textContent = fullDelegationEnabled ? "ON" : "OFF";
-    if (banner) banner.hidden = !fullDelegationEnabled;
-  }
-
-  $("aiFullDelegationToggle")?.addEventListener("click", () => {
-    setFullDelegation(!fullDelegationEnabled);
-  });
 
   function setAiLayoutMode(mode, { animate = false, reflow = false } = {}) {
     const nextMode = mode === "docked" ? "docked" : "fullscreen";
@@ -1028,7 +1010,6 @@ export function createAiPanel({
       ...(selectedOwnedModelId ? { selectedOwnedModelId } : {}),
       ...(favIds.length ? { favoriteIds: favIds.slice(0, 30) } : {}),
       ...(state.ownedNote ? { ownedMachineNote: state.ownedNote } : {}),
-      ...(fullDelegationEnabled ? { fullDelegation: true } : {}),
       ...(lastShownListingIds.length ? { lastShownListings: lastShownListingIds.map((id, index) => ({ no: index + 1, id })) } : {}),
       ...(openConfirmation?.card.isConnected
         ? {
@@ -1040,53 +1021,6 @@ export function createAiPanel({
           }
         : {}),
     };
-  }
-
-  function renderDelegatedTransactionBox(bubble, delegated) {
-    if (!delegated) return;
-    const box = document.createElement("div");
-    box.className = "ai-rec-overview ai-delegation-card";
-    const rows = [
-      ["전담 매물", delegated.title],
-      ["지역", delegated.region],
-      delegated.start
-        ? ["희망 일정", `${formatReservationDate(delegated.start)}${delegated.end && delegated.end !== delegated.start ? ` ~ ${formatReservationDate(delegated.end)}` : ""}`]
-        : null,
-      Number.isFinite(Number(delegated.maxBudget)) ? ["최대 예산(상대에게 비공개)", money(Number(delegated.maxBudget))] : null,
-      ["전담 상태", delegated.statusLabel || "부재중 자동 협상·응대 활성화"],
-    ].filter((row) => row && row[1]);
-    for (const [label, value] of rows) {
-      const row = document.createElement("div");
-      row.className = "ai-rec-row";
-      const labelNode = document.createElement("strong");
-      labelNode.textContent = `${label}:`;
-      row.append(labelNode, document.createTextNode(` ${value}`));
-      box.append(row);
-    }
-    const policy = delegated.aiPolicy || delegated.policy;
-    const go = document.createElement("button");
-    go.type = "button";
-    go.className = "ai-rec-card-btn ai-delegation-open-btn";
-    go.textContent = "거래 채팅방에서 전담 진행 보기 ›";
-    go.addEventListener("click", () => {
-      handleOpenChat({
-        listingId: delegated.listingId || null,
-        conversationId: delegated.conversationId || null,
-        aiMode: delegated.mode || "autonomous",
-        ...(policy ? { aiPolicy: policy } : {}),
-      });
-    });
-    box.append(go);
-    if (typeof openDeal === "function") {
-      const manage = document.createElement("button");
-      manage.type = "button";
-      manage.className = "ai-rec-card-btn ai-delegation-manage-btn";
-      manage.textContent = "거래 관리에서 보낸 메시지·확인할 일 보기 ›";
-      manage.addEventListener("click", () => openDeal(delegated.conversationId || null));
-      box.append(manage);
-    }
-    bubble.append(box);
-    refreshAuthenticatedData?.({ includeRequests: true, includeConversations: true }).catch(() => {});
   }
 
   /** 추천 카드용 짧은 운송 표시: "직접 운송·픽업", "직접 운송", "직접 픽업" */
@@ -1167,7 +1101,6 @@ export function createAiPanel({
         const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
         if (result.reservation) renderReservationBox(bubble, result.reservation);
         if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
-        if (result.delegatedTransaction) renderDelegatedTransactionBox(bubble, result.delegatedTransaction);
         appendInsuranceAsk(result);
         if (result.createdListing) {
           savedDraft = null;
@@ -1213,9 +1146,7 @@ export function createAiPanel({
           ? "🔒 로그인이 풀렸어요. 다시 로그인한 뒤 마이페이지 변경을 요청해 주세요."
           : pendingAction.type === "create_listing"
           ? "🔒 매물 등록은 로그인한 뒤 할 수 있어요. 로그인하면 입력한 초안으로 이어서 등록해요."
-          : pendingAction.type === "delegate_transaction"
-            ? "🔒 거래 전담은 로그인한 뒤 맡길 수 있어요. 로그인하면 바로 이어서 진행해요."
-            : "🔒 예약·신청은 로그인한 뒤 보낼 수 있어요. 로그인하면 바로 이어서 진행해요.";
+          : "🔒 예약·신청은 로그인한 뒤 보낼 수 있어요. 로그인하면 바로 이어서 진행해요.";
         appendAiMessage(loginMsg, "assistant");
         onDone?.("login", null);
         if (pendingAction.type === "rental_request") {
@@ -1227,11 +1158,6 @@ export function createAiPanel({
           savePendingIntentAndRedirectLogin?.(
             { type: "chat", listingId: pendingAction.listingId, draftBody: "구매 신청을 희망합니다." },
             "로그인 후 구매 신청을 이어서 보낼 수 있어요.",
-          );
-        } else if (pendingAction.type === "delegate_transaction") {
-          savePendingIntentAndRedirectLogin?.(
-            { type: "chat", listingId: pendingAction.listingId, draftBody: "조건 확인 후 부재중 거래 전담을 시작합니다.", aiMode: "autonomous" },
-            "로그인 후 거래 전담을 이어서 시작할 수 있어요.",
           );
         } else if (pendingAction.type === "create_listing") {
           const formDraft = { ...pendingAction, type: pendingAction.listingType || "rent" };
@@ -1400,50 +1326,6 @@ export function createAiPanel({
         executeOneTapAction({
           pendingAction: { type: "rental_request", listingId: item.id, title: item.title, region: item.region, start: pickedStart, end: pickedEnd, note: "농농 채팅 원탭 예약" },
         });
-      },
-    });
-  }
-
-  function startFullDelegationAction(item, activeDates = null, triggerButton = null) {
-    const start = activeDates?.start || state.filters?.date || null;
-    const end = activeDates?.end || state.filters?.dateEnd || start || null;
-    rememberAgentTurn({ role: "user", content: `'${item.title}' 거래 전담 맡기기` });
-    return executeOneTapAction({
-      pendingAction: {
-        type: "delegate_transaction",
-        listingId: item.id,
-        title: item.title,
-        region: item.region,
-        start,
-        end,
-        maxBudget: state.filters?.maxPrice || item.price,
-        areaPyeong: state.filters?.areaPyeong || null,
-        cropIds: state.filters?.cropIds || [],
-        operations: state.filters?.operations || [],
-        ownedModelId: getGarageInfo().selectedOwnedModelId || null,
-        fullDelegation: true,
-      },
-      triggerButton,
-      onBusy: () => {
-        if (triggerButton) triggerButton.textContent = "전담 설정 중…";
-      },
-      onDone: (outcome) => {
-        if (!triggerButton) return;
-        if (outcome === "completed") {
-          triggerButton.textContent = "전담 진행중";
-        } else {
-          triggerButton.disabled = false;
-          triggerButton.textContent = "거래 전담";
-        }
-      },
-      onError: (kind) => {
-        if (triggerButton) {
-          triggerButton.disabled = false;
-          triggerButton.textContent = "거래 전담";
-        }
-        if (kind !== "aborted") {
-          appendAiMessage("거래 전담을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.", "assistant");
-        }
       },
     });
   }
@@ -1617,13 +1499,6 @@ export function createAiPanel({
           quickBtn.addEventListener("click", () => startOneTapListingAction(item, activeDates, null, quickBtn));
           actions.append(quickBtn);
 
-          const delegateBtn = document.createElement("button");
-          delegateBtn.type = "button";
-          delegateBtn.className = "button button-secondary ai-rec-delegate-btn";
-          delegateBtn.dataset.aiDelegate = item.id;
-          delegateBtn.textContent = "거래 전담";
-          delegateBtn.addEventListener("click", () => startFullDelegationAction(item, activeDates, delegateBtn));
-          actions.append(delegateBtn);
         }
 
         card.append(media, info, actions);
@@ -1661,28 +1536,18 @@ export function createAiPanel({
     // 마이페이지 변경은 서버가 만든 requestId를 써서, 버튼과 "네"가 겹쳐도 한 번만 반영된다.
     const requestId = isMyPage && typeof action.requestId === "string" && action.requestId ? action.requestId : crypto.randomUUID();
     const isPurchase = action.type === "purchase_request";
-    const isDelegation = action.type === "delegate_transaction";
     const card = document.createElement("div");
     card.className = "ai-confirm";
     const title = document.createElement("strong");
     title.className = "ai-confirm-title";
     title.textContent = isMyPage
       ? "마이페이지 변경 확인"
-      : isDelegation
-        ? "부재중 거래 전담 확인"
-        : isPurchase
-          ? "구매 신청 확인"
-          : "대여 요청 확인";
+      : isPurchase
+        ? "구매 신청 확인"
+        : "대여 요청 확인";
     card.append(title);
     const rows = isMyPage
       ? [["변경 내용", action.summary]]
-      : isDelegation
-      ? [
-          ["매물", action.title],
-          ["지역", action.region],
-          action.start ? ["희망 일정", `${action.start}${action.end && action.end !== action.start ? ` ~ ${action.end}` : ""}`] : null,
-          Number.isFinite(Number(action.maxBudget)) ? ["희망 예산", money(Number(action.maxBudget))] : null,
-        ].filter(Boolean)
       : isPurchase
         ? [
             ["매물", action.title],
@@ -1712,8 +1577,6 @@ export function createAiPanel({
     notice.className = "ai-rec-notice";
     notice.textContent = isMyPage
       ? "승인하면 내 계정에 바로 반영돼요."
-      : isDelegation
-      ? "승인하면 1:1 거래 채팅방에서 농농이 자동 협상·응대 모드가 시작돼요."
       : isPurchase
         ? "승인하면 판매자에게 구매 신청 채팅이 전송돼요."
         : "승인하면 게시자에게 대여 요청과 아래 희망 조건이 채팅으로 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
@@ -1787,7 +1650,7 @@ export function createAiPanel({
     const approve = document.createElement("button");
     approve.type = "button";
     approve.className = "button button-primary";
-    const approveLabel = isMyPage ? "승인하고 변경하기" : isDelegation ? "승인하고 전담 시작" : "승인하고 요청 보내기";
+    const approveLabel = isMyPage ? "승인하고 변경하기" : "승인하고 요청 보내기";
     approve.textContent = approveLabel;
     const cancel = document.createElement("button");
     cancel.type = "button";
@@ -2274,7 +2137,7 @@ export function createAiPanel({
     btn.addEventListener("click", () => {
       handleOpenChat({ listingId: chatTarget.listingId, draftBody: chatTarget.prefill || "" });
     });
-    // 신청 직후 버튼: 메시지는 사용자가 직접 보내므로 대리 채팅 버튼은 두지 않는다.
+    // 신청 직후 버튼: 메시지는 사용자가 직접 보낸다.
     if (chatTarget.afterRequest) {
       const hint = document.createElement("p");
       hint.className = "ai-chat-cta-hint";
@@ -2283,14 +2146,7 @@ export function createAiPanel({
       bubble.append(wrap);
       return;
     }
-    const autoBtn = document.createElement("button");
-    autoBtn.type = "button";
-    autoBtn.className = "ai-chat-cta-btn ai-chat-auto-btn";
-    autoBtn.textContent = "🤖 대리 채팅 맡기기";
-    autoBtn.addEventListener("click", () => {
-      handleOpenChat({ listingId: chatTarget.listingId, draftBody: chatTarget.prefill || "", aiMode: "autonomous" });
-    });
-    wrap.append(btn, autoBtn);
+    wrap.append(btn);
     bubble.append(wrap);
   }
 
@@ -2317,7 +2173,6 @@ export function createAiPanel({
     if (result.weatherInfo) renderWeatherInfoBar(bubble, result.weatherInfo);
     if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
     if (result.reservation) renderReservationBox(bubble, result.reservation);
-    if (result.delegatedTransaction) renderDelegatedTransactionBox(bubble, result.delegatedTransaction);
     const listed = result.createdListing || result.updatedListing;
     if (listed) renderCreatedListingButton(bubble, listed);
     if (Array.isArray(result.repairCenters) && result.repairCenters.length) {
@@ -2350,7 +2205,6 @@ export function createAiPanel({
     if (
       result.pendingAction?.type === "rental_request"
       || result.pendingAction?.type === "purchase_request"
-      || result.pendingAction?.type === "delegate_transaction"
       || result.pendingAction?.type === "my_page_action"
     ) {
       appendConfirmation(bubble, result.pendingAction);
@@ -2871,7 +2725,6 @@ export function createAiPanel({
         photoSummary: lastPhotoSummary,
         insuranceOffer,
         insuranceAsked,
-        fullDelegation: fullDelegationEnabled,
         pendingAction: sentPending,
         ...(voicePhoto ? { image: voicePhoto } : {}),
         onProgress,
@@ -3044,7 +2897,6 @@ export function createAiPanel({
         image: photo,
         sessionId: agentSessionId,
         insuranceAsked,
-        fullDelegation: fullDelegationEnabled,
       });
       if (gen !== sessionGeneration || liveGen !== liveVoiceGeneration) return;
       if (result?.mode === "agent" && resultListingIds(result).length && catalogWait && runtime.catalogState !== "ready") {
@@ -3466,7 +3318,6 @@ export function createAiPanel({
         photoSummary: lastPhotoSummary,
         insuranceOffer,
         insuranceAsked,
-        fullDelegation: fullDelegationEnabled,
         pendingAction: sendingPhoto ? null : takePendingAction(),
         // 서버가 실제 내부 조회를 실행할 때만 단계가 온다(조회가 없으면 아무것도 보이지 않는다).
         onProgress: ({ label }) => {
@@ -3569,7 +3420,6 @@ export function createAiPanel({
     savedDraft = null;
     lastPhotoDataUrl = null;
     lastPhotoSummary = null;
-    setFullDelegation(false);
     setPlusMenuOpen(false);
     renderStarterBar();
     clearPhoto();

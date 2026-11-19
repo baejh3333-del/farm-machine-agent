@@ -1,5 +1,5 @@
-// 역할·대화 API(worker1) 검증: 서버 역할 권한, 상대 비공개 정보 차단, 역할별 일시정지·초안·정책 버전,
-// 명시적 읽음, 직접 이어받기/다시 맡기기, 판매자 매물 단위 문의 위임, 0008 레거시 이행.
+// 역할·대화 API 검증: 서버 역할 권한, 레거시 비공개 시스템 메시지 차단, 명시적 읽음,
+// 제거된 AI 대리 응대 액션 거부, 구조화 제안 역할 결정, 0008 레거시 이행.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -9,10 +9,8 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 
 import accountHandler from "../api/account.js";
-import agentChatReplyHandler from "../api/agent-chat-reply.js";
 import conversationsHandler from "../api/conversations.js";
 import { resetAuthCache } from "../server/account-auth.js";
-import { sanitizeAiPolicy } from "../server/chat.js";
 import { createPglitePool, setPool } from "../server/db.js";
 import { createListing } from "../server/listings-service.js";
 import { DEFAULT_MIGRATIONS_DIR, initEnvironment, runMigrations } from "../server/migrator.js";
@@ -87,7 +85,7 @@ async function convRow(id) {
   return (await pool.query(`SELECT * FROM conversations WHERE id = $1`, [id])).rows[0];
 }
 
-/** 런타임(delegated-chat)이 판매자 역할 에스컬레이션을 기록하는 모양을 그대로 흉내 낸다. */
+/** 제거된 AI 대리 응대 기능이 남긴 판매자 역할 에스컬레이션(기존 DB 행)을 흉내 낸다. */
 async function simulateOwnerEscalation(conversationId, ownerId, summary) {
   await pool.query(
     `UPDATE conversations
@@ -128,7 +126,6 @@ before(async () => {
   const routeMap = new Map([
     ["/api/account", accountHandler],
     ["/api/conversations", conversationsHandler],
-    ["/api/agent-chat-reply", agentChatReplyHandler],
   ]);
   server = createServer(async (req, res) => {
     patchRes(res);
@@ -171,18 +168,16 @@ after(async () => {
   }
 });
 
-test("1. 상대방의 비공개 한도·초안·에스컬레이션은 API 응답에 포함되지 않는다", async () => {
+test("1. 레거시 AI 상태·본인 전용 시스템 메시지는 상대방 API 응답에 포함되지 않는다", async () => {
   const first = await send(buyer, { listingId: listing.id, body: "11/22~24 대여 가능할까요?" });
   const convId = first.conversation.id;
   assert.equal(first.conversation.myRole, "buyer");
 
-  const bp = await post(buyer, { action: "update_ai_policy", conversationId: convId, mode: "autonomous", policy: { maxBudget: 271828, targetPrice: 240000, budgetUnit: "total" } });
-  assert.equal(bp.status, 200, bp.raw);
-  const op = await post(owner, { action: "update_ai_policy", conversationId: convId, mode: "autonomous", policy: { minPrice: 314159 } });
-  assert.equal(op.status, 200, op.raw);
-  assert.equal(op.body.role, "owner");
-
   const secret = "최소 수락가 314,159원보다 낮아 멈췄어요";
+  await pool.query(
+    `UPDATE conversations SET owner_ai_mode = 'autonomous', owner_ai_policy = $2::jsonb WHERE id = $1`,
+    [convId, JSON.stringify({ minPrice: 314159 })]
+  );
   await simulateOwnerEscalation(convId, owner.user.id, secret);
 
   const buyerView = await get(buyer, `conversationId=${convId}`);
@@ -191,88 +186,60 @@ test("1. 상대방의 비공개 한도·초안·에스컬레이션은 API 응답
   assert.ok(!buyerView.raw.includes("314,159"), "판매자 에스컬레이션 요약 노출");
   assert.ok(!buyerView.raw.includes("비공개 초안 답장"), "판매자 초안 노출");
   const bc = buyerView.body.conversation;
-  assert.deepEqual(bc.ownerAiPolicy, {});
-  assert.equal(bc.buyerAiPolicy.maxBudget, 271828);
-  assert.equal(bc.aiPausedReason, null);
-  assert.equal(bc.waitingForUser, false);
-  assert.equal(bc.escalationSummary, null);
-  assert.equal(bc.aiDraftJson, null);
-  assert.equal(bc.myAiState.mode, "autonomous");
-  assert.equal(bc.counterpartAiActive, false, "상대가 확인 대기 중이면 상대 AI는 비활성으로 표시");
+  for (const key of ["buyerAiMode", "ownerAiMode", "buyerAiPolicy", "ownerAiPolicy", "aiPausedReason", "aiDraftJson", "waitingForUser", "escalationSummary", "myAiState", "counterpartAiActive", "aiConsecutiveTurns", "aiLastRunAt"]) {
+    assert.equal(Object.hasOwn(bc, key), false, `AI 대리 응대 필드가 남아 있음: ${key}`);
+  }
   assert.ok(buyerView.body.messages.every((m) => m.visibility === "both"));
-  assert.ok(buyerView.body.messages.every((m) => m.senderRole === "buyer" || m.senderRole === "owner" || m.senderRole === "system"));
+  assert.ok(buyerView.body.messages.every((m) => !Object.hasOwn(m, "aiConfidence") && !Object.hasOwn(m, "escalationReason")));
 
   const buyerList = await get(buyer, "mode=list");
   assert.ok(!buyerList.raw.includes("314159") && !buyerList.raw.includes("314,159"));
   const listed = buyerList.body.conversations.find((c) => c.id === convId);
   assert.equal(listed.lastMessage.body, "11/22~24 대여 가능할까요?", "상대의 비공개 시스템 메시지가 목록 마지막 메시지로 노출되면 안 됨");
+  assert.equal(listed.unreadCount, 0, "상대의 비공개 시스템 메시지는 안 읽음으로 세지 않는다");
 
   const ownerView = await get(owner, `conversationId=${convId}`);
-  assert.ok(!ownerView.raw.includes("271828"), "구매자 상한 원값 노출");
-  const oc = ownerView.body.conversation;
-  assert.equal(oc.myRole, "owner");
-  assert.deepEqual(oc.buyerAiPolicy, {});
-  assert.equal(oc.ownerAiPolicy.minPrice, 314159);
-  assert.equal(oc.waitingForUser, true);
-  assert.equal(oc.escalationSummary, secret);
-  assert.equal(oc.myAiState.pause, "escalated:price_below_minimum");
+  assert.equal(ownerView.body.conversation.myRole, "owner");
+  assert.ok(!ownerView.raw.includes("314159"), "레거시 AI 정책은 더 이상 내려주지 않는다");
   assert.ok(ownerView.body.messages.some((m) => m.visibility === "self" && m.body === secret));
 
   const forbidden = await get(outsider, `conversationId=${convId}`);
   assert.equal(forbidden.status, 403);
 });
 
-test("2. 상대 메시지는 내 확인 대기를 풀지 않고, 내가 직접 보내면 내 역할만 직접 이어받기 상태가 된다", async () => {
+test("2. 제거된 AI 대리 응대 액션은 거부되고, 사람 메시지는 AI 상태를 건드리지 않으며 새 대화에 문의 위임이 복사되지 않는다", async () => {
   const first = await send(buyer2, { listingId: listing.id, body: "문의드립니다" });
   const convId = first.conversation.id;
-  await post(owner, { action: "update_ai_policy", conversationId: convId, mode: "autonomous", policy: {} });
-  await post(buyer2, { action: "update_ai_policy", conversationId: convId, mode: "autonomous", policy: {} });
-  await simulateOwnerEscalation(convId, owner.user.id, "수리 이력을 확인해 주세요");
-
-  await send(buyer2, { conversationId: convId, body: "답변 기다릴게요" });
-  let row = await convRow(convId);
-  assert.equal(row.owner_ai_pause, "escalated:price_below_minimum", "상대 메시지로 판매자 대기가 풀리면 안 됨");
-  assert.equal(row.buyer_ai_pause, "takeover", "자동 응대 중 직접 보낸 구매자는 직접 이어받기");
-
-  const versionBefore = row.owner_ai_policy_version;
-  await send(owner, { conversationId: convId, body: "작년 봄에 엔진 수리했습니다" });
-  row = await convRow(convId);
-  assert.equal(row.owner_ai_pause, "takeover");
-  assert.equal(row.owner_ai_draft_json, null, "내 초안은 직접 발신 시 비움");
-  assert.equal(row.buyer_ai_pause, "takeover", "판매자 발신이 구매자 상태를 바꾸면 안 됨");
-
-  // 정책 저장만으로는 직접 이어받기가 풀리지 않는다(정책 버전은 증가).
-  const upd = await post(owner, { action: "update_ai_policy", conversationId: convId, mode: "autonomous", policy: { minPrice: 90000 } });
-  assert.equal(upd.status, 200, upd.raw);
-  row = await convRow(convId);
-  assert.equal(row.owner_ai_pause, "takeover");
-  assert.ok(row.owner_ai_policy_version > versionBefore);
-
-  // 다시 맡기기는 내 역할 일시정지만 해제한다.
-  const resumed = await post(owner, { action: "resume", conversationId: convId });
-  assert.equal(resumed.status, 200, resumed.raw);
-  row = await convRow(convId);
+  assert.equal(Object.hasOwn(first, "aiReplyScheduled"), false);
+  for (const action of ["update_ai_policy", "takeover", "resume", "dismiss_ai_draft", "retry_ai_job", "generate_ai_draft", "set_inbound_policy"]) {
+    const res = await post(owner, { action, conversationId: convId, listingId: listing.id, mode: "autonomous", policy: {}, triggerSeq: 1 });
+    assert.equal(res.status, 400, `${action}: ${res.raw}`);
+    assert.equal(res.body.code, "UNKNOWN_ACTION", action);
+  }
+  const row = await convRow(convId);
+  assert.equal(row.owner_ai_mode, "off");
   assert.equal(row.owner_ai_pause, null);
-  assert.equal(row.buyer_ai_pause, "takeover");
-  assert.equal(resumed.body.conversation.myAiState.pause, null);
-  assert.equal(resumed.body.aiReplyScheduled, false, "마지막 메시지가 내 것이면 응답 예약 없음");
 
-  const takeover = await post(owner, { action: "takeover", conversationId: convId });
-  assert.equal(takeover.status, 200);
-  assert.equal(takeover.body.conversation.myAiState.pause, "takeover");
-  assert.equal(takeover.body.conversation.aiPausedReason, "takeover");
-  assert.ok((await convRow(convId)).owner_ai_policy_version > row.owner_ai_policy_version, "이어받기는 정책 버전을 올려 생성 중 응답을 무효화");
+  const sent = await send(owner, { conversationId: convId, body: "네 가능합니다" });
+  assert.equal(sent.message.senderKind, "human");
+  assert.equal(sent.message.senderRole, "owner");
 
-  await post(owner, { action: "update_ai_policy", conversationId: convId, mode: "off" });
-  const resumeOff = await post(owner, { action: "resume", conversationId: convId });
-  assert.equal(resumeOff.status, 400);
-  assert.equal(resumeOff.body.code, "AI_MODE_OFF");
-
-  const outsiderTakeover = await post(outsider, { action: "takeover", conversationId: convId });
-  assert.equal(outsiderTakeover.status, 403);
+  // 운영 DB에 남아 있는 매물 단위 위임 행이 있어도 새 대화에 복사하지 않는다.
+  const rent2 = (await createListing(owner.user, {
+    id: randomUUID(), title: "트랙터 임대", type: "rent", price: 200000, modelId: "asia-amc900",
+    cropIds: ["pepper"], operations: ["till"], region: "영양읍", condition: "good", included: "", pickup: "직접", description: "설명",
+  }, { pool })).listing;
+  await pool.query(
+    `INSERT INTO listing_ai_policies (listing_id, owner_id, mode, policy, policy_version) VALUES ($1, $2, 'autonomous', $3::jsonb, 1)`,
+    [rent2.id, owner.user.id, JSON.stringify({ minPrice: 161803 })]
+  );
+  const fresh = await send(buyer2, { listingId: rent2.id, body: "새 문의" });
+  const freshRow = await convRow(fresh.conversation.id);
+  assert.equal(freshRow.owner_ai_mode, "off");
+  assert.ok(!JSON.stringify(fresh).includes("161803"));
 });
 
-test("3. 읽음은 GET·폴링·내 AI 발신으로 바뀌지 않고 mark_read로만 갱신된다", async () => {
+test("3. 읽음은 GET·폴링으로 바뀌지 않고 mark_read로만 갱신된다", async () => {
   const first = await send(buyer, { listingId: saleListing.id, body: "판매 문의합니다" });
   const convId = first.conversation.id;
   await send(owner, { conversationId: convId, body: "네 가능합니다" });
@@ -306,100 +273,6 @@ test("3. 읽음은 GET·폴링·내 AI 발신으로 바뀌지 않고 mark_read�
   assert.equal(other.status, 403);
 });
 
-test("4. /api/agent-chat-reply는 클라이언트 targetRole로 상대 AI를 실행하지 못한다", async () => {
-  const conv = (await get(buyer, `listingId=${listing.id}`)).body.conversation;
-  await post(owner, { action: "update_ai_policy", conversationId: conv.id, mode: "autonomous", policy: {} });
-
-  const cross = await apiReq(baseUrl, "/api/agent-chat-reply", {
-    method: "POST",
-    cookie: buyer.cookie,
-    json: { conversationId: conv.id, targetRole: "owner" },
-  });
-  assert.equal(cross.status, 403);
-  assert.equal(cross.body.code, "TARGET_ROLE_FORBIDDEN");
-
-  const self = await apiReq(baseUrl, "/api/agent-chat-reply", {
-    method: "POST",
-    cookie: buyer.cookie,
-    json: { conversationId: conv.id, targetRole: "buyer", forceDraft: true },
-  });
-  assert.equal(self.status, 200, self.raw);
-  assert.equal(self.body.result.skipped, true, "LLM 키가 없으면 안전 종료");
-
-  const outsiderCall = await apiReq(baseUrl, "/api/agent-chat-reply", {
-    method: "POST",
-    cookie: outsider.cookie,
-    json: { conversationId: conv.id },
-  });
-  assert.equal(outsiderCall.status, 403);
-});
-
-test("5. 판매자 매물 단위 문의 위임은 명시 저장 시에만, 새 대화에만 복사된다", async () => {
-  const rent2 = (await createListing(owner.user, {
-    id: randomUUID(), title: "트랙터 임대", type: "rent", price: 200000, modelId: "asia-amc900",
-    cropIds: ["pepper"], operations: ["till"], region: "영양읍", condition: "good", included: "", pickup: "직접", description: "설명",
-  }, { pool })).listing;
-
-  // 위임 저장 전 대화: 판매자 자동 응대 없음
-  const before = await send(buyer, { listingId: rent2.id, body: "가능할까요" });
-  assert.equal(before.conversation.ownerAiMode, "off");
-  assert.equal(before.aiReplyScheduled, false);
-
-  const notOwner = await post(buyer, { action: "set_inbound_policy", listingId: rent2.id, mode: "autonomous", policy: {} });
-  assert.equal(notOwner.status, 403);
-  const peek = await get(buyer, `mode=inbound_policy&listingId=${rent2.id}`);
-  assert.equal(peek.status, 403);
-
-  const set = await post(owner, {
-    action: "set_inbound_policy",
-    listingId: rent2.id,
-    mode: "autonomous",
-    policy: { minPrice: 161803, targetPrice: 190000, requiredQuestions: ["사용 면적"], transportFee: "" },
-  });
-  assert.equal(set.status, 200, set.raw);
-  assert.equal(set.body.inboundPolicy.mode, "autonomous");
-  assert.equal(set.body.inboundPolicy.policy.transportFee, null, "빈 운송비는 0이 아니라 미정");
-  assert.equal(set.body.inboundPolicy.policyVersion, 1);
-  const again = await post(owner, { action: "set_inbound_policy", listingId: rent2.id, mode: "autonomous", policy: { minPrice: 161803 } });
-  assert.equal(again.body.inboundPolicy.policyVersion, 2);
-  const read = await get(owner, `mode=inbound_policy&listingId=${rent2.id}`);
-  assert.equal(read.body.inboundPolicy.policy.minPrice, 161803);
-
-  // 기존 대화는 그대로
-  assert.equal((await convRow(before.conversation.id)).owner_ai_mode, "off");
-
-  // 새 대화는 판매자 정책을 복사하고, 구매자 응답에는 판매자 정책이 없다.
-  const fresh = await send(buyer2, { listingId: rent2.id, body: "새 문의" });
-  const row = await convRow(fresh.conversation.id);
-  assert.equal(row.owner_ai_mode, "autonomous");
-  assert.equal(row.owner_ai_policy.minPrice, 161803);
-  assert.equal(row.owner_ai_policy_version, 2);
-  assert.equal(fresh.aiReplyScheduled, true, "새 문의에 판매자 대리 응답 예약");
-  assert.equal(fresh.conversation.counterpartAiActive, true);
-  assert.ok(!JSON.stringify(fresh).includes("161803"), "구매자 응답에 판매자 최저가 노출");
-});
-
-test("6. 시연 농가(demo-owner) 매물도 명시 위임 없이 자동 응답을 예약하지 않는다", async () => {
-  await pool.query(
-    `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-     VALUES ('demo-owner', '시연 농가', 'demo-owner@users.moa-farm.example.com', false, now(), now())
-     ON CONFLICT (id) DO NOTHING`
-  );
-  const demoListingId = `demo-${randomUUID().slice(0, 8)}`;
-  await pool.query(
-    `INSERT INTO listings (id, owner_id, type, title, brand, machine_type, crop_ids, operations, area_min, area_max, price, region, condition, inspected_at, included, pickup, description, summary, status)
-     SELECT $1, 'demo-owner', 'rent', '시연 관리기', brand, machine_type, crop_ids, operations, area_min, area_max, 50000, region, condition, inspected_at, included, pickup, description, summary, 'open'
-     FROM listings WHERE id = $2`,
-    [demoListingId, listing.id]
-  );
-  const policy = await post(buyer, { action: "update_ai_policy", listingId: demoListingId, mode: "autonomous", policy: { fullDelegation: true } });
-  assert.equal(policy.status, 200, policy.raw);
-  assert.equal(policy.body.aiReplyScheduled, false);
-  const sent = await send(buyer, { conversationId: policy.body.conversation.id, body: "시연 문의" });
-  assert.equal(sent.aiReplyScheduled, false, "암묵적 시연 농가 자동 응답 금지");
-  assert.equal((await convRow(policy.body.conversation.id)).owner_ai_mode, "off");
-});
-
 test("7. 판매자는 구매자 명의 신청(apply_offer)을 할 수 없고 제안 액션은 서버가 역할을 결정한다", async () => {
   const conv = (await get(buyer, `listingId=${saleListing.id}`)).body.conversation;
   const apply = await post(owner, { action: "apply_offer", conversationId: conv.id, offerId: randomUUID() });
@@ -423,18 +296,6 @@ test("7. 판매자는 구매자 명의 신청(apply_offer)을 할 수 없고 제
   assert.equal(offer.body.offer.fromRole, "buyer");
   assert.equal(offer.body.conversation.stage, "negotiating");
   assert.ok(offer.body.conversation.negotiation?.currentOffer, "대화 DTO에 현재 제안 요약 포함");
-});
-
-test("8. 정책 정규화: 미입력 한도는 null, 운송비 미정은 0이 아님, 알 수 없는 값 무시", () => {
-  const p = sanitizeAiPolicy({ maxBudget: "", targetPrice: "240000", budgetUnit: "weekly", transportFee: null, transportPayer: "alien", requiredQuestions: ["누유 여부", "", 3] });
-  assert.equal(p.maxBudget, null);
-  assert.equal(p.minPrice, null);
-  assert.equal(p.targetPrice, 240000);
-  assert.equal(p.budgetUnit, null);
-  assert.equal(p.transportFee, null);
-  assert.equal(p.transportPayer, null);
-  assert.deepEqual(p.requiredQuestions, ["누유 여부"]);
-  assert.equal(sanitizeAiPolicy({ transportFee: 0, transportPayer: "none" }).transportFee, 0);
 });
 
 test("9. 0008 이행: 레거시 공유 초안·일시정지가 대상 역할 칸으로만 옮겨지고 기존 메시지는 읽음 처리된다", async () => {

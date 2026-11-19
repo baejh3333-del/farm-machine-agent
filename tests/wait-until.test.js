@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { waitUntil as vercelWaitUntil } from "@vercel/functions";
-import { scheduleDelegatedReply } from "../server/delegated-chat.js";
 import { scheduleWaitUntil } from "../server/wait-until.js";
 
 const REQ_CONTEXT_SYMBOL = Symbol.for("@vercel/request-context");
@@ -115,32 +113,4 @@ test("scheduleWaitUntil detaches locally when not on VERCEL and no request conte
   });
 
   assert.equal(await task, "local-done");
-});
-
-test("scheduleDelegatedReply registers task with waitUntil when active and awaits on fallback", async () => {
-  const registered = [];
-  await withMockedVercelEnv("1", () => ({ waitUntil: (p) => registered.push(p) }), async () => {
-    const { task } = await scheduleDelegatedReply({
-      conversationId: randomUUID(),
-      triggerSeq: 1,
-      targetRole: "owner",
-    });
-    assert.equal(registered.length, 1);
-    assert.equal(registered[0], task);
-    await task;
-  });
-
-  await withMockedVercelEnv("1", undefined, async () => {
-    let settled = false;
-    const { task } = await scheduleDelegatedReply({
-      conversationId: randomUUID(),
-      triggerSeq: 1,
-      targetRole: "owner",
-    });
-    void task.then(() => {
-      settled = true;
-    });
-    await Promise.resolve();
-    assert.equal(settled, true);
-  });
 });

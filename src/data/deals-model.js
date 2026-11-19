@@ -31,29 +31,6 @@ export const STAGE_SHORT_LABEL = {
   cancelled: "취소",
 };
 
-export const ESCALATION_REASON_LABEL = {
-  price_negotiation: "가격 할인·흥정 요청",
-  budget_exceeded: "예산 상한 초과",
-  price_below_minimum: "최소 수락 금액 미달",
-  outside_limit: "내 한도를 벗어난 제안",
-  needs_user: "내 판단이 필요한 제안",
-  schedule_conflict: "일정 중복·예약 불가",
-  invalid_schedule: "일정 확인 필요",
-  listing_unavailable: "매물 상태 변경",
-  warranty: "보증·수리 책임 확인",
-  warranty_claim: "보증·수리 책임 확인",
-  personal_info: "연락처·상세 주소 요청",
-  privacy_info: "연락처·상세 주소 요청",
-  low_confidence: "확신 부족 / 추가 확인 필요",
-  out_of_scope: "위임 범위 외 문의",
-  policy_exceeded: "위임 정책 범위 초과",
-  condition_check: "실물 상태 확인 필요",
-  unknown_condition: "매물 정보에 없는 문의",
-  unknown_cost: "확정되지 않은 비용",
-  terms_incomplete: "운송비 등 미확정 조건",
-  full_delegation_disabled: "거래 전담 모드 비활성",
-};
-
 const ORDER_STATUS_TO_STAGE = {
   pending: "applied",
   requested: "applied",
@@ -90,8 +67,7 @@ export function counterpartLabel(role, listingType) {
 }
 
 /**
- * 메시지 발신 주체 6종 중 하나(초안은 메시지가 아니므로 draftState로 따로 표시).
- * me_human | me_ai | other_human | other_ai | system
+ * 메시지 발신 주체: me_human | other_human | system
  */
 export function senderState(msg, { meId, myRole } = {}) {
   if (!msg) return null;
@@ -102,27 +78,19 @@ export function senderState(msg, { meId, myRole } = {}) {
   } else {
     mine = Boolean(meId) && msg.senderId === meId;
   }
-  const ai = msg.senderKind === "ai_proxy";
-  if (mine) return ai ? "me_ai" : "me_human";
-  return ai ? "other_ai" : "other_human";
+  return mine ? "me_human" : "other_human";
 }
 
 export const SENDER_LABEL = {
   me_human: "내가 보냄",
-  me_ai: "내 농농이가 보냄",
   other_human: "상대가 보냄",
-  other_ai: "상대 농농이가 보냄",
   system: "시스템 안내",
-  draft: "미발송 초안",
 };
 
 export const SENDER_ICON = {
   me_human: "🙋",
-  me_ai: "🤖",
   other_human: "💬",
-  other_ai: "🤖",
   system: "ℹ️",
-  draft: "📝",
 };
 
 function finiteOrNull(value) {
@@ -190,66 +158,6 @@ export function offerAcceptedBy(offer, role) {
   return role === "buyer" ? offer.acceptedByBuyer : offer.acceptedByOwner;
 }
 
-/** 내 일시정지·대기 상태를 표시용 상태 하나로 요약 */
-export function aiStatus(conv, myRole) {
-  const st = conv?.myAiState;
-  const mode = st?.mode ?? (myRole === "buyer" ? conv?.buyerAiMode : conv?.ownerAiMode) ?? "off";
-  const pause = st ? (st.pause ?? null) : (conv?.aiPausedReason ?? null);
-  const policy = st?.policy ?? (myRole === "buyer" ? conv?.buyerAiPolicy : conv?.ownerAiPolicy) ?? {};
-  const waitingForUser = Boolean(st ? st.waitingForUser : conv?.waitingForUser) ||
-    (typeof pause === "string" && pause.startsWith("escalated:"));
-  let key;
-  if (pause === "takeover") key = "takeover";
-  else if (pause === "user_paused") key = "paused";
-  else if (typeof pause === "string" && pause.startsWith("failed:")) key = "failed";
-  else if (waitingForUser) key = "waiting";
-  else if (pause === "max_turns_reached") key = "turns";
-  else if (pause === "both_ai_handoff") key = "handoff";
-  else if (pause === "transaction_completed") key = "submitted";
-  else if (pause) key = "paused";
-  else if (mode === "autonomous") key = policy?.fullDelegation ? "full" : "active";
-  else if (mode === "copilot") key = "copilot";
-  else key = "off";
-  let reasonCode = "";
-  if (typeof pause === "string" && pause.includes(":")) reasonCode = pause.slice(pause.indexOf(":") + 1).trim();
-  const draft = st ? (st.draft ?? null) : (conv?.aiDraftJson ?? conv?.aiDraft ?? null);
-  if (!reasonCode && draft?.reasonCode) reasonCode = draft.reasonCode;
-  return {
-    key,
-    mode,
-    pause,
-    policy: policy || {},
-    policyVersion: st?.policyVersion ?? null,
-    waitingForUser,
-    reasonCode,
-    reasonLabel: reasonCode ? (ESCALATION_REASON_LABEL[reasonCode] || reasonCode) : "",
-    summary: draft?.summaryForUser || conv?.escalationSummary || "",
-    draft: draft && (draft.body || draft.suggestedReplyDraft) ? {
-      body: draft.body || draft.suggestedReplyDraft,
-      reasonCode: draft.reasonCode || "",
-      createdAt: draft.createdAt || null,
-    } : null,
-    evaluation: st?.evaluation ?? conv?.negotiation?.myEvaluation ?? null,
-    jobs: st?.jobs ?? null,
-    canResume: Boolean(pause) && pause !== "transaction_completed",
-    canTakeover: mode !== "off" && pause !== "takeover",
-  };
-}
-
-export const AI_STATUS_LABEL = {
-  off: "농농이 꺼짐",
-  copilot: "📝 초안만 작성",
-  active: "🤖 농농이 응대 중",
-  full: "거래 전담 중",
-  waiting: "⏸ 내 확인 대기",
-  paused: "⏸ 일시정지",
-  takeover: "✋ 직접 진행 중",
-  failed: "⚠ 응답 실패",
-  turns: "⏸ 응답 횟수 상한",
-  handoff: "🤝 조건 정리 완료",
-  submitted: "📨 신청 접수",
-};
-
 /**
  * 표시 단계. 서버(stage) 우선, 주문 상태로 대여 중/완료를 보강.
  * 서버 stage가 없을 때만(구버전 응답) 주문으로 임시 추정한다.
@@ -282,7 +190,6 @@ export function normalizeDeal(conv, { meId = null, legacyOrder = null } = {}) {
   const listingType = conv.listingType === "sale" ? "sale" : "rent";
   const order = conv.order || legacyOrder || null;
   const stage = deriveStage(conv, { order });
-  const ai = aiStatus(conv, myRole);
   const neg = conv.negotiation || {};
   const currentOffer = normalizeOffer(neg.currentOffer);
   const agreed = normalizeOffer(neg.agreed) || (currentOffer?.status === "accepted" ? currentOffer : null);
@@ -302,10 +209,8 @@ export function normalizeDeal(conv, { meId = null, legacyOrder = null } = {}) {
     roleLabel: roleLabel(myRole, listingType),
     counterpartRoleLabel: counterpartLabel(myRole, listingType),
     counterpartName: counterpartName || "상대 농가",
-    counterpartAiActive: Boolean(conv.counterpartAiActive),
     stage,
     stageLabel: STAGE_LABEL[stage] || stage,
-    ai,
     termsVersion: finiteOrNull(neg.termsVersion) ?? currentOffer?.termsVersion ?? 0,
     currentOffer,
     agreed,
@@ -327,12 +232,7 @@ export function normalizeDeal(conv, { meId = null, legacyOrder = null } = {}) {
 /** 다음 할 일. attention=true 이면 '내 확인 필요'에 들어간다. */
 export function nextActions(deal) {
   const actions = [];
-  const { ai, currentOffer, agreed, order, myRole } = deal;
-  if (ai.key === "waiting") actions.push({ key: "escalation", attention: true, label: `농농이 확인 요청${ai.reasonLabel ? ` · ${ai.reasonLabel}` : ""}` });
-  if (ai.key === "failed") actions.push({ key: "failed", attention: true, label: "농농이 응답 실패 · 재시도 필요" });
-  if (ai.key === "turns") actions.push({ key: "turns", attention: true, label: "응답 횟수 상한 · 다시 맡기거나 직접 진행" });
-  if (ai.key === "handoff") actions.push({ key: "handoff", attention: true, label: "양측 농농이 조건 정리 완료 · 확인 필요" });
-  if (ai.draft && ai.key !== "waiting") actions.push({ key: "draft", attention: true, label: "보내지 않은 초안 확인" });
+  const { currentOffer, agreed, order, myRole } = deal;
   if (
     currentOffer && currentOffer.status === "open" &&
     currentOffer.fromRole && currentOffer.fromRole !== myRole &&
@@ -364,7 +264,6 @@ export const DEAL_FILTERS = [
   { key: "owner", label: "판매·빌려주기" },
   { key: "attention", label: "내 확인 필요" },
   { key: "unread", label: "안 읽음" },
-  { key: "ai", label: "농농이 진행 중" },
 ];
 
 export function matchesFilter(deal, filter) {
@@ -373,7 +272,6 @@ export function matchesFilter(deal, filter) {
     case "owner": return deal.myRole === "owner";
     case "attention": return deal.needsAttention;
     case "unread": return (deal.unreadCount || 0) > 0;
-    case "ai": return deal.ai.key === "active" || deal.ai.key === "full" || deal.ai.key === "copilot";
     default: return true;
   }
 }
@@ -399,13 +297,13 @@ export function dealsBadge(deals) {
   return { attention, unread };
 }
 
-/** 메시지 목록 탭 필터: all | sent | received | drafts */
+/** 메시지 목록 탭 필터: all | sent | received */
 export function filterMessages(messages, tab, ctx) {
   if (tab === "all" || !tab) return messages;
   return messages.filter((m) => {
     const s = senderState(m, ctx);
-    if (tab === "sent") return s === "me_human" || s === "me_ai";
-    if (tab === "received") return s === "other_human" || s === "other_ai";
+    if (tab === "sent") return s === "me_human";
+    if (tab === "received") return s === "other_human";
     return false;
   });
 }
@@ -415,53 +313,12 @@ export function readSeqFor(messages, ctx, currentReadSeq = 0) {
   let max = null;
   for (const m of messages) {
     const s = senderState(m, ctx);
-    if (s === "me_human" || s === "me_ai") continue;
+    if (s === "me_human") continue;
     const seq = Number(m.seq);
     if (Number.isFinite(seq) && (max === null || seq > max)) max = seq;
   }
   if (max === null || max <= (Number(currentReadSeq) || 0)) return null;
   return max;
-}
-
-/** 위임 조건 폼 값 → 서버 policy. 비워 둔 한도는 null(정가로 채우지 않음). */
-export function buildPolicyFromForm(values, myRole) {
-  const num = (v) => {
-    if (v === null || v === undefined || String(v).trim() === "") return null;
-    const n = Number(String(v).replace(/[,\s원]/g, ""));
-    return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
-  };
-  const transportKnown = values.transportKnown === true || values.transportKnown === "known";
-  const policy = {
-    targetPrice: num(values.targetPrice),
-    budgetUnit: values.budgetUnit === "daily" ? "daily" : "total",
-    allowNegotiation: Boolean(values.allowNegotiation),
-    requiredQuestions: String(values.requiredQuestions || "")
-      .split(/\n+/).map((s) => s.trim()).filter(Boolean).slice(0, 8),
-    transportFee: values.transportPayer === "none" ? 0 : (transportKnown ? num(values.transportFee) : null),
-    transportPayer: ["buyer", "owner", "split", "none"].includes(values.transportPayer) ? values.transportPayer : null,
-    pickupPreference: String(values.pickupPreference || "").trim().slice(0, 120),
-  };
-  if (myRole === "buyer") {
-    policy.maxBudget = num(values.limit);
-    policy.autoExecuteTransaction = Boolean(values.autoExecuteTransaction);
-  } else {
-    policy.minPrice = num(values.limit);
-    policy.autoExecuteTransaction = false;
-  }
-  policy.fullDelegation = Boolean(values.fullDelegation);
-  return policy;
-}
-
-/** 정책 검증: 목표가가 한도를 넘거나(구매) 하한보다 낮으면(판매) 오류 */
-export function validatePolicy(policy, myRole) {
-  const errors = [];
-  if (myRole === "buyer" && policy.targetPrice != null && policy.maxBudget != null && policy.targetPrice > policy.maxBudget) {
-    errors.push("목표가는 최대 예산보다 클 수 없어요.");
-  }
-  if (myRole === "owner" && policy.targetPrice != null && policy.minPrice != null && policy.targetPrice < policy.minPrice) {
-    errors.push("희망가는 최저 허용가보다 낮을 수 없어요.");
-  }
-  return errors;
 }
 
 /** 제안 폼 → submit_offer 본문(양측 명명 별칭 포함) */
@@ -513,100 +370,4 @@ export function dealsHash({ conversationId = null, filter = null } = {}) {
   if (conversationId) h += `/${encodeURIComponent(conversationId)}`;
   if (filter && filter !== "all") h += `?filter=${encodeURIComponent(filter)}`;
   return h;
-}
-
-/** 외부 '거래전담' 빠른 시작 프리셋 (대여/판매 공용) */
-export const DELEGATION_PRESETS = [
-  {
-    id: "quick_rental",
-    label: "⚡ 빠른 대여 진행",
-    desc: "일정·인수 조율 후 조건이 맞으면 대여 신청까지 자동 진행",
-    listingTypes: ["rent"],
-    policy: {
-      allowNegotiation: true,
-      fullDelegation: true,
-      autoExecuteTransaction: true,
-      autoReplyOn: ["schedule", "availability", "compatibility"],
-      chips: ["pickupTime", "availability", "compatibility"],
-    },
-    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 대여 가능 여부와 인수 일정 확인 부탁드립니다.`,
-  },
-  {
-    id: "purchase_inquiry",
-    label: "🤝 중고 구매 전담",
-    desc: "기계 상태·구성품 확인 및 구매 조건 자동 협의",
-    listingTypes: ["sale"],
-    policy: {
-      allowNegotiation: true,
-      fullDelegation: true,
-      autoExecuteTransaction: true,
-      autoReplyOn: ["schedule", "compatibility"],
-      chips: ["pickupTime", "compatibility"],
-    },
-    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 현재 상태와 인수·거래 조건 문의드립니다.`,
-  },
-  {
-    id: "price_negotiation",
-    label: "💰 가격·조건 협상",
-    desc: "설정한 예산·조건 한도 안에서 유연하게 가격 조율",
-    listingTypes: ["rent", "sale"],
-    policy: {
-      allowNegotiation: true,
-      fullDelegation: true,
-      autoExecuteTransaction: false,
-      autoReplyOn: ["schedule", "availability"],
-      chips: ["pickupTime", "availability"],
-    },
-    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 가격 및 거래 조건 협의 가능할까요?`,
-  },
-  {
-    id: "schedule_pickup",
-    label: "📅 일정·인수 조율",
-    desc: "가격 흥정 없이 가능한 날짜와 인수 방법만 빠르게 확인",
-    listingTypes: ["rent", "sale"],
-    policy: {
-      allowNegotiation: false,
-      fullDelegation: true,
-      autoExecuteTransaction: false,
-      autoReplyOn: ["schedule", "availability", "compatibility"],
-      chips: ["pickupTime", "availability", "compatibility", "noNegotiation"],
-    },
-    starterTemplate: (title) => `안녕하세요! ${title || "농기계"} 인수 가능한 날짜와 시간대 알려주실 수 있을까요?`,
-  },
-];
-
-export function presetsForListingType(listingType) {
-  const type = listingType === "sale" ? "sale" : "rent";
-  return DELEGATION_PRESETS.filter((p) => p.listingTypes.includes(type));
-}
-
-export function getDelegationPreset(presetId, listingType = "rent") {
-  const list = presetsForListingType(listingType);
-  return list.find((p) => p.id === presetId) || DELEGATION_PRESETS.find((p) => p.id === presetId) || list[0];
-}
-
-/**
- * 빠른 거래전담 시작용 기본 정책 생성.
- * 사용자가 명시한 검색 필터(일정·최대 예산·면적)만 반영하며, 매물 정가로 한도를 임의 채우지 않는다.
- */
-export function buildQuickDelegationPolicy({ listing = null, role = "buyer", presetId = null, filters = {}, overrides = {} } = {}) {
-  const listingType = listing?.type === "sale" ? "sale" : "rent";
-  const preset = getDelegationPreset(presetId, listingType);
-  const isBuyer = role !== "owner";
-  const maxBudgetFromFilter = isBuyer && Number(filters?.maxPrice) > 0 ? Math.trunc(Number(filters.maxPrice)) : null;
-  const areaFromFilter = Number(filters?.areaPyeong) > 0 ? Number(filters.areaPyeong) : null;
-  const targetStart = overrides.targetStart ?? (filters?.date || null);
-  const targetEnd = overrides.targetEnd ?? (filters?.dateEnd || targetStart || null);
-
-  return {
-    ...preset.policy,
-    autoExecuteTransaction: isBuyer ? Boolean(preset.policy.autoExecuteTransaction) : false,
-    intent: listingType,
-    targetStart,
-    targetEnd,
-    ...(isBuyer ? { maxBudget: overrides.maxBudget ?? maxBudgetFromFilter } : { minPrice: overrides.minPrice ?? null }),
-    areaPyeong: overrides.areaPyeong ?? areaFromFilter,
-    ...overrides,
-    ...(isBuyer ? {} : { autoExecuteTransaction: false }),
-  };
 }

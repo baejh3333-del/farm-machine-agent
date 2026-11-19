@@ -669,7 +669,7 @@
 
 .card-trade-pair {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 6px;
 }
 
@@ -679,21 +679,6 @@
   font-size: 0.78rem;
   border-radius: 10px;
   width: 100%;
-}
-
-/* Fallback cohesive styling for .btn-delegated-trade in case loaded independently */
-.card-trade-pair .btn-delegated-trade,
-.detail-trade-pair .btn-delegated-trade {
-  background: var(--forest);
-  color: var(--accent-lime, #dcf29d);
-  border: 1px solid var(--forest);
-  font-weight: 800;
-}
-
-.card-trade-pair .btn-delegated-trade:hover,
-.detail-trade-pair .btn-delegated-trade:hover {
-  background: var(--forest-deep);
-  border-color: var(--forest-deep);
 }
 
 .detail-trade-pair {

@@ -805,21 +805,6 @@ test("음성: 말로 \"네 살게예\"·\"네 올려 주세요\"·\"네 고쳐 �
   assert.deepEqual(writes, ["purchase", "listing", "update"]);
 });
 
-test("음성: 말로 \"네\"라고 해도 거래 전담 위임은 자동 실행하지 않고 확인 카드로 넘긴다", async (t) => {
-  withKey(t, "test");
-  let executed = false;
-  const deps = { beforeWrite: async () => {}, delegateTransaction: async () => { executed = true; return { delegatedTransaction: {} }; } };
-  const { call } = scripted([
-    { content: [{ type: "tool_use", id: "d1", name: "delegate_transaction", input: { listingId: saleItem.id } }] },
-    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
-  ]);
-  const result = await runAgentTurn("네 맡길게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
-  assert.equal(executed, false);
-  assert.equal(result.delegatedTransaction, undefined);
-  assert.equal(result.pendingAction.type, "delegate_transaction");
-  assert.equal(result.pendingAction.listingId, saleItem.id);
-});
-
 test("OpenAI로 사진 상담을 하면 같은 모델에 image_url을 보내고 웹 검색 표시는 보내지 않는다", async (t) => {
   withEnv(t, { OPENAI_API_KEY: "okey" });
   let body;

@@ -43,7 +43,6 @@ const appDeps = {
   openForm: (...args) => txViews.openForm(...args),
   rentalForm: (...args) => txViews.rentalForm(...args),
   chatForm: (...args) => txViews.chatForm(...args),
-  startDelegatedTradeForListing: (...args) => txViews.startDelegatedTradeForListing?.(...args),
   addToCart: (...args) => cartCheckout.addToCart(...args),
   openCheckout: (...args) => cartCheckout.openCheckout(...args),
   openDetail: (...args) => catalogViews.openDetail(...args),
@@ -1171,8 +1170,6 @@ function bindEvents() {
       if (target) txViews.openEditListing(target);
       return;
     }
-    const inboundBtn = event.target.closest("[data-owner-inbound]");
-    if (inboundBtn) return dealsView.openInboundPolicy(listingById(inboundBtn.dataset.ownerInbound));
     const removeBtn = event.target.closest("[data-owner-remove]");
     if (removeBtn) {
       const id = removeBtn.dataset.ownerRemove;
@@ -1384,8 +1381,6 @@ function initLoginForm() {
         listingId: intent.listingId,
         conversationId: intent.conversationId,
         draftBody: intent.draftBody || "",
-        ...(intent.aiMode ? { aiMode: intent.aiMode } : {}),
-        ...(intent.aiPolicy ? { aiPolicy: intent.aiPolicy } : {}),
       });
       return true;
     }
@@ -1403,8 +1398,6 @@ function initLoginForm() {
     }
     if (intent.type === "inbound") {
       setView("owner");
-      const target = listingById(intent.listingId);
-      if (target) dealsView.openInboundPolicy(target);
       return true;
     }
     if (intent.type === "newListing") {

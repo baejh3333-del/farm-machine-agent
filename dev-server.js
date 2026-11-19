@@ -31,37 +31,11 @@ const apiRouteLoaders = new Map([
   ["/api/orders", () => import("./api/orders.js")],
   ["/api/requests", () => import("./api/requests.js")],
   ["/api/conversations", () => import("./api/conversations.js")],
-  ["/api/agent-chat-reply", () => import("./api/agent-chat-reply.js")],
   ["/api/photos", () => import("./api/photos.js")],
   ["/api/weather", () => import("./api/weather.js")],
   ["/api/voice", () => import("./server/voice-api.js")],
   ["/api/integrations", () => import("./api/integrations.js")],
-  ["/api/delegation-jobs", () => import("./server/delegation-sweep-api.js")],
 ]);
-
-/**
- * 로컬 개발 서버용 대리 응대 큐 소비자. 배포 환경의 Vercel Cron(/api/delegation-jobs)과 같은
- * processDelegationJobs를 주기적으로 실행해, 브라우저를 닫아도 대기·재시도 작업이 처리되게 한다.
- * DELEGATION_SWEEP_INTERVAL_MS=0 이면 끈다. 기본 30초.
- */
-export function startLocalDelegationSweeper({ intervalMs = Number(process.env.DELEGATION_SWEEP_INTERVAL_MS ?? 30_000) } = {}) {
-  if (process.env.VERCEL || !Number.isFinite(intervalMs) || intervalMs <= 0) return null;
-  let running = false;
-  const timer = setInterval(async () => {
-    if (running) return;
-    running = true;
-    try {
-      const { processDelegationJobs } = await import("./server/delegation-queue.js");
-      await processDelegationJobs({ limit: 10, concurrency: 2, budgetMs: 25_000, backfill: true });
-    } catch (error) {
-      console.warn("local delegation sweep failed", error instanceof Error ? error.name : "unknown");
-    } finally {
-      running = false;
-    }
-  }, Math.max(5_000, intervalMs));
-  timer.unref?.();
-  return timer;
-}
 
 function patchResponse(response) {
   let pendingStatus = 200;
@@ -165,10 +139,8 @@ if (isMain) {
   const addr = server.address();
   const actualPort = typeof addr === "object" && addr ? addr.port : requestedPort;
   console.log(`moa dev-server listening on http://${host}:${actualPort}`);
-  const sweeper = startLocalDelegationSweeper();
 
   const shutdown = async () => {
-    if (sweeper) clearInterval(sweeper);
     await new Promise((r) => server.close(r));
     await closePool();
     process.exit(0);

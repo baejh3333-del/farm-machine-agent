@@ -53,7 +53,6 @@ export function isWriteOutcome(result) {
     result.reservation
     || result.createdListing
     || result.updatedListing
-    || result.delegatedTransaction
     || result.executedAction
     || result.outcome === "completed"
     || result.outcome === "partial"
@@ -70,7 +69,6 @@ export function describeWriteOutcome(result) {
   }
   if (result.createdListing) return "매물 등록을 마쳤어요.";
   if (result.updatedListing) return "매물 정보를 고쳤어요.";
-  if (result.delegatedTransaction) return "거래 전담을 시작했어요.";
   if (result.favoriteAction) return result.favoriteAction.favorite ? "찜 목록에 저장했어요." : "찜 목록에서 뺐어요.";
   return "요청하신 작업을 처리했어요.";
 }

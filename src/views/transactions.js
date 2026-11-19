@@ -8,26 +8,14 @@ import { renderBookingWeatherPanel } from "./map-weather.js";
 import { deliveryOf, pickupLabel } from "../data/delivery.js";
 import {
   senderState, SENDER_LABEL, roleOf, readSeqFor,
-  presetsForListingType, getDelegationPreset, buildQuickDelegationPolicy,
 } from "../data/deals-model.js";
 import { formatOrderChatMessage, parseOrderChatMessage } from "./cart-checkout.js";
 
-export const DELEGATED_TRADE_EVENT = "moa:start-delegated-trade";
-
-let _activeStartDelegatedTrade = null;
 let _activeOpenChat = null;
-let _delegatedEventListener = null;
 let _openChatEventListener = null;
 let _orderCompletedListener = null;
-let _delegatedClickListener = null;
+let _directChatClickListener = null;
 const _syncedOrderNumbers = new Set();
-
-export function startDelegatedTradeForListing(listingId, options = {}) {
-  if (typeof _activeStartDelegatedTrade === "function") {
-    return _activeStartDelegatedTrade(listingId, options);
-  }
-  return false;
-}
 
 export function createTransactionViews(deps) {
 function openForm(html) {
@@ -220,91 +208,6 @@ function rentalForm(id, draftValues = null) {
   });
 }
 
-const AI_POLICY_CHIPS = [
-  { id: "pickupTime", label: "인수 시간 조율" },
-  { id: "compatibility", label: "작업기·호환성 안내" },
-  { id: "availability", label: "빈 날짜 확인" },
-  { id: "noNegotiation", label: "가격 흥정 거절" },
-];
-
-const ESCALATION_REASON_LABEL = {
-  price_negotiation: "가격 할인·흥정 요청",
-  budget_exceeded: "예산 상한 초과",
-  price_below_minimum: "최소 수락 금액 미달",
-  schedule_conflict: "일정 중복·예약 불가",
-  invalid_schedule: "일정 확인 필요",
-  listing_unavailable: "매물 상태 변경",
-  warranty: "보증·수리 책임 확인",
-  warranty_claim: "보증·수리 책임 확인",
-  personal_info: "연락처·상세 주소 요청",
-  privacy_info: "연락처·상세 주소 요청",
-  low_confidence: "확신 부족 / 추가 확인 필요",
-  out_of_scope: "위임 범위 외 문의",
-  policy_exceeded: "위임 정책 범위 초과",
-  condition_check: "실물 상태 확인 필요",
-  unknown_condition: "매물 정보에 없는 문의",
-  full_delegation_disabled: "거래 전담 모드 비활성",
-};
-
-function formatPausedReason(reason) {
-  if (!reason) return "";
-  if (reason === "transaction_completed") {
-    return "농농이가 합의 조건으로 신청을 접수했어요. 상대 승인 전이며 거래 완료가 아니에요.";
-  }
-  if (reason === "max_turns_reached") {
-    return "연속 AI 응답 상한에 도달해 대리 응대를 잠시 멈췄어요. 직접 답장하시면 대화가 이어집니다.";
-  }
-  if (reason === "both_ai_handoff") {
-    return "양측 농농이가 핵심 조건을 정리하고 바통을 넘겼어요. 확인 후 직접 답장하거나 대여를 진행해 주세요.";
-  }
-  if (reason.startsWith("escalated:")) {
-    const code = reason.slice("escalated:".length).trim();
-    const label = ESCALATION_REASON_LABEL[code] || code || "추가 확인 필요";
-    return `농농이가 확인이 필요해 답변을 멈췄어요 (사유: ${label}). 직접 답장하시면 대화가 이어집니다.`;
-  }
-  if (reason === "takeover") {
-    return "직접 진행 중이에요. '다시 맡기기'를 누르기 전까지 농농이는 자동으로 보내지 않아요.";
-  }
-  if (reason === "user_paused") {
-    return "농농이 자동 응대를 일시정지했어요. '다시 맡기기'를 누르면 이어서 응대해요.";
-  }
-  if (reason.startsWith("failed:")) {
-    return "농농이 답장 생성에 실패했어요. 거래 관리에서 재시도하거나 직접 답장해 주세요.";
-  }
-  return `농농이 대리 응대가 일시정지되었어요 (${reason}). '다시 맡기기'로 재개할 수 있어요.`;
-}
-
-function isWaitingForUserConv(conv) {
-  if (!conv) return false;
-  const draft = conv.aiDraft || conv.aiDraftJson;
-  return Boolean(
-    (typeof conv.aiPausedReason === "string" && conv.aiPausedReason.startsWith("escalated:")) ||
-    conv.waitingForUser ||
-    draft?.waitingForUser
-  );
-}
-
-function renderConvAiBadges(conv, role) {
-  if (!conv) return "";
-  const mode = role === "buyer" ? conv.buyerAiMode : conv.ownerAiMode;
-  const policy = role === "buyer" ? conv.buyerAiPolicy : conv.ownerAiPolicy;
-  const badges = [];
-  const myPause = conv.myAiState ? conv.myAiState.pause : conv.aiPausedReason;
-  if (myPause === "transaction_completed") {
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-done">📨 신청 접수 · 승인 대기</span>`);
-  } else if (myPause === "takeover") {
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">✋ 직접 진행 중</span>`);
-  } else if (isWaitingForUserConv(conv)) {
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⏸️ 직접 답변 대기</span>`);
-  } else if (conv.aiPausedReason) {
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-warn">⚠️ 확인 필요</span>`);
-  } else if (mode && mode !== "off") {
-    const label = policy?.fullDelegation ? "거래 전담 중" : "🤖 대리 중";
-    badges.push(`<span class="conv-ai-badge conv-ai-badge-active">${label}</span>`);
-  }
-  return badges.join("");
-}
-
 function renderChatOrderCard(parsed) {
   return `
     <div class="chat-order-card" data-order-number="${escapeHtml(parsed.orderNumber)}">
@@ -353,13 +256,11 @@ function renderChatListingContextHtml(listing, conv = null) {
         <span class="chat-context-title">${escapeHtml(title)}${effective?.region ? ` · ${escapeHtml(effective.region)}` : ""}</span>
       </div>
     </div>
+    ${!isOwner && targetListingId ? `
     <div class="chat-context-pills" role="group" aria-label="매물 빠른 실행">
-      ${!isOwner && targetListingId ? `
-        <button type="button" id="chatQuickAddCart" class="chat-context-pill" data-chat-cart-add="${escapeHtml(targetListingId)}">🛒 장바구니 담기</button>
-        <button type="button" id="chatQuickCheckout" class="chat-context-pill is-primary" data-chat-checkout="${escapeHtml(targetListingId)}">🛡️ 바로 결제/예약</button>
-      ` : ""}
-      <button type="button" id="chatQuickDelegationPill" class="chat-context-pill is-ai" aria-controls="chatAiControlBar">🤖 거래전담</button>
-    </div>
+      <button type="button" id="chatQuickAddCart" class="chat-context-pill" data-chat-cart-add="${escapeHtml(targetListingId)}">🛒 장바구니 담기</button>
+      <button type="button" id="chatQuickCheckout" class="chat-context-pill is-primary" data-chat-checkout="${escapeHtml(targetListingId)}">🛡️ 바로 결제/예약</button>
+    </div>` : ""}
   `;
 }
 
@@ -371,34 +272,6 @@ function chatForm(target) {
   const pendingOrderReceipt = opts.orderReceipt || null;
   const autoSendReceipt = Boolean(opts.autoSendReceipt && pendingOrderReceipt);
   const item = listingId ? listingById(listingId) : null;
-  const quickDelegation = Boolean(opts.quickDelegation);
-  const listingType = item?.type === "sale" ? "sale" : "rent";
-  const presets = presetsForListingType(listingType);
-  let selectedPresetId = opts.preset || presets[0]?.id || "quick_rental";
-  const incomingPolicy = opts.policy && typeof opts.policy === "object"
-    ? opts.policy
-    : (opts.aiPolicy && typeof opts.aiPolicy === "object" ? opts.aiPolicy : null);
-  const requestedFullDelegation = Boolean(opts.fullDelegation ?? incomingPolicy?.fullDelegation);
-  const requestedAiMode = opts.aiMode || (requestedFullDelegation ? "autonomous" : "off");
-  const initialPolicyOverride = incomingPolicy || requestedFullDelegation
-    ? {
-        ...(incomingPolicy || {}),
-        ...(requestedFullDelegation
-          ? {
-              fullDelegation: true,
-              autoExecuteTransaction: incomingPolicy?.autoExecuteTransaction !== false,
-            }
-          : {}),
-      }
-    : (quickDelegation
-      ? buildQuickDelegationPolicy({
-          listing: item,
-          role: item?.ownerId && item.ownerId === runtime.accountUser?.id ? "owner" : "buyer",
-          presetId: selectedPresetId,
-          filters: state.filters || {},
-          overrides: { fullDelegation: false },
-        })
-      : null);
 
   if (!isLoggedIn()) {
     deps.savePendingIntentAndRedirectLogin({
@@ -406,119 +279,26 @@ function chatForm(target) {
       listingId,
       conversationId,
       draftBody,
-      ...(quickDelegation ? { quickDelegation: true, preset: selectedPresetId } : {}),
-      ...(requestedAiMode !== "off" ? { aiMode: requestedAiMode } : (quickDelegation ? { aiMode: "autonomous" } : {})),
-      ...(requestedFullDelegation || quickDelegation ? { fullDelegation: true } : {}),
-      ...(initialPolicyOverride ? { policy: initialPolicyOverride, aiPolicy: initialPolicyOverride } : {}),
     });
     return;
   }
 
-  const minToday = today();
-  const filterStart = state.filters?.date >= minToday ? state.filters.date : "";
-  const filterEnd = state.filters?.dateEnd >= filterStart ? state.filters.dateEnd : filterStart;
-  // 한도는 사용자가 직접 정한 값만 쓴다. 매물 정가로 몰래 채우지 않는다.
-  const filterBudget = Number(state.filters?.maxPrice) > 0
-    ? String(Math.trunc(Number(state.filters.maxPrice)))
-    : "";
-  const filterArea = Number(state.filters?.areaPyeong) > 0 ? String(Number(state.filters.areaPyeong)) : "";
-
-  const initialDelegationOpen = Boolean(quickDelegation || requestedFullDelegation || (requestedAiMode && requestedAiMode !== "off"));
-  const initialPolicyPanelOpen = Boolean(requestedFullDelegation || quickDelegation);
-  const activePreset = getDelegationPreset(selectedPresetId, listingType);
-
   openForm(`
-    <span class="step-pill">${quickDelegation ? "🤖 AI 농농이 거래전담 · 1:1 대화" : "1:1 농기계 채팅 문의"}</span>
+    <span class="step-pill">1:1 농기계 채팅 문의</span>
     <h2 id="formTitle">${item ? escapeHtml(item.title) : "1:1 대화"}</h2>
-    <p id="chatSubtitle">${quickDelegation ? "원하는 조건을 고르고 버튼 한 번으로 AI 농농이에게 자동 대화·협상을 맡기세요." : "대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요."}</p>
+    <p id="chatSubtitle">대화 상대와 기계 상태·인수 일정을 안전하게 조율하세요.</p>
     <div id="chatListingContext" class="chat-listing-context">${renderChatListingContextHtml(item, null)}</div>
     <div class="chat-load-older-wrap">
       <button type="button" id="chatLoadOlder" class="button button-secondary button-sm" hidden>이전 대화 더 보기</button>
     </div>
     <div id="chatLog" class="chat-log"><div class="chat-empty">대화 내역을 불러오는 중입니다…</div></div>
-    <div id="chatPausedBanner" class="chat-paused-banner" role="status" hidden></div>
-    <div id="chatDraftBar" class="chat-draft-bar" hidden></div>
     <form id="chatForm" class="chat-send">
       <input id="chatMessage" maxlength="500" placeholder="예: 이번 주 토요일 오전 인수 가능할까요?" aria-label="메시지 입력" required value="${escapeHtml(draftBody)}">
       <button type="submit" id="chatSendButton" class="button button-primary">보내기</button>
     </form>
     <div class="chat-secondary-actions">
-      <button type="button" id="chatDelegationTrigger" class="button button-secondary button-sm chat-delegation-trigger${initialDelegationOpen ? " is-open" : ""}" aria-expanded="${initialDelegationOpen ? "true" : "false"}" aria-controls="chatAiControlBar">
-        <span>농농이 거래 전담</span>
-        <span id="chatDelegationTriggerStatus" class="chat-delegation-trigger-status" hidden></span>
-      </button>
       <button type="button" id="chatOpenDeal" class="button button-secondary button-sm chat-open-deal" hidden>거래 관리에서 진행 보기 ↗</button>
     </div>
-    <section id="chatAiControlBar" class="chat-ai-bar${quickDelegation ? " is-quick-start" : ""}" aria-label="농농이 거래 전담 설정" ${initialDelegationOpen ? "" : "hidden"}>
-      <div id="chatQuickDelegationCard" class="delegated-quickstart-card">
-        <div class="delegated-quickstart-head">
-          <strong>⚡ 빠른 거래전담 프리셋</strong>
-          <small>목적을 고르면 조건이 자동 채워져요</small>
-        </div>
-        <div class="delegated-preset-list" role="group" aria-label="거래전담 빠른 프리셋">
-          ${presets.map((p) => `<button type="button" class="delegated-preset-btn${p.id === selectedPresetId ? " is-selected" : ""}" data-delegation-preset="${escapeHtml(p.id)}" aria-pressed="${p.id === selectedPresetId ? "true" : "false"}" title="${escapeHtml(p.desc)}">${escapeHtml(p.label)}</button>`).join("")}
-        </div>
-        <p id="chatQuickPresetDesc" class="delegated-quickstart-desc">${escapeHtml(activePreset?.desc || "")}</p>
-        <div class="delegated-quickstart-cta">
-          <label id="chatQuickSendFirstWrap" class="delegated-quickstart-check">
-            <input type="checkbox" id="chatQuickSendFirst" checked>
-            <span>첫 문의 메시지도 자동으로 보내기</span>
-          </label>
-          <button type="button" id="chatQuickStartAiBtn" class="button btn-delegated-trade button-sm">🤖 AI 거래전담 바로 시작</button>
-        </div>
-      </div>
-      <div class="chat-ai-bar-head">
-        <span class="chat-ai-title">🤖 농농이 대리 응대</span>
-        <div class="chat-ai-modes" role="group" aria-label="대리 응대 모드">
-          <button type="button" class="chat-ai-mode-btn active" data-ai-mode="off" aria-pressed="true">끄기</button>
-          <button type="button" class="chat-ai-mode-btn" data-ai-mode="autonomous" aria-pressed="false">자동 응대</button>
-        </div>
-        <button type="button" id="chatAiPolicyToggle" class="button button-secondary button-sm chat-ai-policy-toggle" aria-expanded="${initialPolicyPanelOpen ? "true" : "false"}">${initialPolicyPanelOpen ? "위임 조건 ▴" : "위임 조건 ▾"}</button>
-      </div>
-      <div class="delegated-full-panel">
-        <label class="chat-full-delegation-toggle" for="chatFullDelegationToggle">
-          <input type="checkbox" id="chatFullDelegationToggle">
-          <span>
-            <strong>거래 전담 (부재중 자동 진행)</strong>
-            <small>내가 없어도 조건에 맞으면 예약·거래까지 자동 진행해요</small>
-          </span>
-          <span id="chatFullDelegationBadge" class="delegated-full-badge">OFF</span>
-        </label>
-        <div id="chatDelegationSummary" class="chat-delegation-summary" hidden></div>
-      </div>
-      <div id="chatAiPolicyPanel" class="chat-ai-policy-panel${initialPolicyPanelOpen ? " is-open" : ""}" ${initialPolicyPanelOpen ? "" : "hidden"}>
-        <div class="chat-ai-policy-inner">
-          <div class="delegated-policy-grid">
-            <label>희망 대여 시작일
-              <input id="chatPolicyTargetStart" type="date" min="${minToday}" value="${escapeHtml(filterStart)}">
-            </label>
-            <label>희망 반납일
-              <input id="chatPolicyTargetEnd" type="date" min="${escapeHtml(filterStart || minToday)}" value="${escapeHtml(filterEnd)}">
-            </label>
-            <label><span id="chatPolicyBudgetLabel">최대 예산 상한 (원)</span>
-              <input id="chatPolicyBudgetInput" type="number" min="0" step="1000" placeholder="예: 150000" value="${escapeHtml(item?.ownerId && item.ownerId === runtime.accountUser?.id ? "" : filterBudget)}">
-            </label>
-            <label>내 작업 면적 (평)
-              <input id="chatPolicyAreaPyeong" type="number" min="1" step="1" placeholder="예: 500" value="${escapeHtml(filterArea)}">
-            </label>
-            <label class="delegated-policy-wide">인수/배달 조건 메모
-              <input id="chatPolicyPickupPreference" type="text" maxlength="120" placeholder="예: 직접 픽업 가능, 오전 9시 인수 희망">
-            </label>
-            <label class="chat-delegation-check delegated-policy-wide">
-              <input id="chatPolicyAllowNegotiation" type="checkbox">
-              <span>가격 협의 허용 (설정 예산/조건 범위 내에서 유연하게 조율)</span>
-            </label>
-          </div>
-          <div class="chat-ai-chips" role="group" aria-label="위임 조건 빠른 설정">
-            ${AI_POLICY_CHIPS.map((c) => `<button type="button" class="chat-ai-chip" data-policy-chip="${escapeHtml(c.id)}" aria-pressed="false">${escapeHtml(c.label)}</button>`).join("")}
-          </div>
-          <div class="chat-ai-instruction-row">
-            <input id="chatAiInstructions" type="text" maxlength="300" placeholder="추가 요청·주의사항 (예: 비 오는 날 제외, 로터리 작업기 필수)" aria-label="대리 응대 상세 지침">
-            <button type="button" id="chatAiSavePolicy" class="button button-primary button-sm">저장</button>
-          </div>
-        </div>
-      </div>
-    </section>
   `);
 
   const epoch = runtime.authEpoch;
@@ -526,75 +306,9 @@ function chatForm(target) {
   const renderedSeqs = new Set();
   let hasMoreOlder = false;
   let busy = false;
-  let aiBusy = false;
   let draftMessageId = crypto.randomUUID();
   let lastSubmittedBody = null;
   let currentConv = null;
-  let currentAiMode = requestedAiMode;
-  let fullDelegationEnabled = requestedFullDelegation;
-  let pendingInitialAi =
-    (requestedAiMode && requestedAiMode !== "off") || requestedFullDelegation
-      ? {
-          mode: requestedAiMode === "off" ? "autonomous" : requestedAiMode,
-          fullDelegation: requestedFullDelegation,
-          policy: initialPolicyOverride,
-        }
-      : null;
-  const activeChips = new Set(Array.isArray(initialPolicyOverride?.chips) ? initialPolicyOverride.chips : []);
-  let instructionsDirty = false;
-
-  const applyPolicyValuesToInputs = (policy) => {
-    const p = policy && typeof policy === "object" ? policy : {};
-    if (typeof p.fullDelegation === "boolean") {
-      fullDelegationEnabled = p.fullDelegation;
-    }
-    if ($("chatPolicyTargetStart") && document.activeElement !== $("chatPolicyTargetStart")) {
-      if (p.targetStart) $("chatPolicyTargetStart").value = p.targetStart;
-      else if (!$("chatPolicyTargetStart").value && filterStart) $("chatPolicyTargetStart").value = filterStart;
-    }
-    if ($("chatPolicyTargetEnd") && document.activeElement !== $("chatPolicyTargetEnd")) {
-      if (p.targetEnd) $("chatPolicyTargetEnd").value = p.targetEnd;
-      else if (!$("chatPolicyTargetEnd").value && filterEnd) $("chatPolicyTargetEnd").value = filterEnd;
-      if ($("chatPolicyTargetStart")?.value) $("chatPolicyTargetEnd").min = $("chatPolicyTargetStart").value;
-    }
-    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
-    const budgetVal = isBuyer ? p.maxBudget : (p.minPrice ?? p.maxBudget);
-    const fallbackBudget = isBuyer ? filterBudget : "";
-    if ($("chatPolicyBudgetInput") && document.activeElement !== $("chatPolicyBudgetInput")) {
-      if (budgetVal !== null && budgetVal !== undefined && budgetVal !== "") {
-        $("chatPolicyBudgetInput").value = String(budgetVal);
-      } else if (!$("chatPolicyBudgetInput").value && fallbackBudget) {
-        $("chatPolicyBudgetInput").value = fallbackBudget;
-      }
-    }
-    if ($("chatPolicyAreaPyeong") && document.activeElement !== $("chatPolicyAreaPyeong")) {
-      if (p.areaPyeong !== null && p.areaPyeong !== undefined && p.areaPyeong !== "") {
-        $("chatPolicyAreaPyeong").value = String(p.areaPyeong);
-      } else if (!$("chatPolicyAreaPyeong").value && filterArea) {
-        $("chatPolicyAreaPyeong").value = filterArea;
-      }
-    }
-    if ($("chatPolicyPickupPreference") && document.activeElement !== $("chatPolicyPickupPreference") && typeof p.pickupPreference === "string") {
-      $("chatPolicyPickupPreference").value = p.pickupPreference;
-    }
-    const textRule = p.customRules || p.instructions;
-    if ($("chatAiInstructions") && typeof textRule === "string" && document.activeElement !== $("chatAiInstructions")) {
-      $("chatAiInstructions").value = textRule;
-    }
-    if (p.allowNegotiation === false) activeChips.add("noNegotiation");
-    else if (p.allowNegotiation === true) activeChips.delete("noNegotiation");
-  };
-
-  if (initialPolicyOverride) {
-    if (Array.isArray(initialPolicyOverride.autoReplyOn)) {
-      if (initialPolicyOverride.autoReplyOn.includes("schedule")) activeChips.add("pickupTime");
-      if (initialPolicyOverride.autoReplyOn.includes("compatibility") || initialPolicyOverride.autoReplyOn.includes("spec")) activeChips.add("compatibility");
-      if (initialPolicyOverride.autoReplyOn.includes("availability") || initialPolicyOverride.autoReplyOn.includes("weather")) activeChips.add("availability");
-    }
-    applyPolicyValuesToInputs(initialPolicyOverride);
-  } else {
-    applyPolicyValuesToInputs({});
-  }
 
   const sortedMessages = () => [...bySeq.values()].sort((a, b) => a.seq - b.seq);
   const maxSeq = () => {
@@ -606,364 +320,14 @@ function chatForm(target) {
     return list.length ? list[0].seq : null;
   };
 
-  function updateDelegationSummary() {
-    const el = $("chatDelegationSummary");
-    if (!el) return;
-    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
-    if ($("chatPolicyBudgetLabel")) {
-      $("chatPolicyBudgetLabel").textContent = isBuyer ? "예산 상한(원)" : "최소 수락 금액(원)";
-    }
-    const startVal = $("chatPolicyTargetStart")?.value || "";
-    const endVal = $("chatPolicyTargetEnd")?.value || "";
-    const budgetRaw = $("chatPolicyBudgetInput")?.value || "";
-    const areaRaw = $("chatPolicyAreaPyeong")?.value || "";
-    const pickupRaw = $("chatPolicyPickupPreference")?.value.trim() || "";
-    const allowNeg = !activeChips.has("noNegotiation");
-
-    const parts = [];
-    if (startVal) parts.push(`일정 ${startVal}${endVal && endVal !== startVal ? `~${endVal}` : ""}`);
-    if (budgetRaw && Number(budgetRaw) >= 0) parts.push(`${isBuyer ? "예산" : "최소가"} ${money(Number(budgetRaw))}`);
-    if (areaRaw && Number(areaRaw) > 0) parts.push(`${areaRaw}평`);
-    parts.push(allowNeg ? "흥정 가능" : "흥정 불가");
-    if (pickupRaw) parts.push(pickupRaw);
-
-    if (fullDelegationEnabled || parts.length > 1) {
-      el.hidden = false;
-      el.innerHTML = parts.map((p) => `<span class="chat-delegation-pill">${escapeHtml(p)}</span>`).join("");
-    } else {
-      el.hidden = true;
-      el.innerHTML = "";
-    }
-  }
-
-  function syncAiControlUi() {
-    const bar = $("chatAiControlBar");
-    if (!bar) return;
-    bar.querySelectorAll(".chat-ai-mode-btn").forEach((btn) => {
-      const isSelected = btn.dataset.aiMode === currentAiMode;
-      btn.classList.toggle("active", isSelected);
-      btn.setAttribute("aria-pressed", String(isSelected));
-      btn.disabled = aiBusy;
-    });
-    bar.querySelectorAll(".chat-ai-chip").forEach((chip) => {
-      const active = activeChips.has(chip.dataset.policyChip);
-      chip.classList.toggle("active", active);
-      chip.setAttribute("aria-pressed", String(active));
-    });
-    if ($("chatFullDelegationToggle")) {
-      $("chatFullDelegationToggle").checked = fullDelegationEnabled;
-      $("chatFullDelegationToggle").disabled = aiBusy;
-    }
-    const isFullActive = fullDelegationEnabled && currentAiMode === "autonomous";
-    const fullBadge = $("chatFullDelegationBadge");
-    if (fullBadge) {
-      fullBadge.textContent = isFullActive ? "ON" : "OFF";
-      fullBadge.classList.toggle("is-active", isFullActive);
-    }
-    const triggerBtn = $("chatDelegationTrigger");
-    const triggerStatus = $("chatDelegationTriggerStatus");
-    const isAiActive = currentAiMode !== "off";
-    if (triggerBtn) {
-      triggerBtn.classList.toggle("is-active", isAiActive);
-    }
-    if (triggerStatus) {
-      if (isFullActive) {
-        triggerStatus.textContent = "전담 ON";
-        triggerStatus.hidden = false;
-      } else if (isAiActive) {
-        triggerStatus.textContent = "대리 ON";
-        triggerStatus.hidden = false;
-      } else {
-        triggerStatus.textContent = "";
-        triggerStatus.hidden = true;
-      }
-    }
-    bar.querySelector(".delegated-full-panel")?.classList.toggle("is-active", isFullActive);
-    if ($("chatPolicyAllowNegotiation")) {
-      $("chatPolicyAllowNegotiation").checked = !activeChips.has("noNegotiation");
-    }
-    if ($("chatAiSavePolicy")) $("chatAiSavePolicy").disabled = aiBusy;
-    const quickStartBtn = $("chatQuickStartAiBtn");
-    if (quickStartBtn) {
-      quickStartBtn.disabled = aiBusy;
-      quickStartBtn.classList.toggle("is-active", isFullActive);
-      quickStartBtn.textContent = isFullActive
-        ? "✓ AI 거래전담 진행 중 (조건 다시 저장)"
-        : "🤖 AI 거래전담 바로 시작";
-    }
-    const quickSendWrap = $("chatQuickSendFirstWrap");
-    if (quickSendWrap) {
-      const hasMessages = bySeq.size > 0;
-      quickSendWrap.hidden = hasMessages;
-    }
-    bar.querySelectorAll("[data-delegation-preset]").forEach((btn) => {
-      const active = btn.dataset.delegationPreset === selectedPresetId;
-      btn.classList.toggle("is-selected", active);
-      btn.setAttribute("aria-pressed", String(active));
-    });
-    updateDelegationSummary();
-  }
-
-  function hydratePolicyFromConv(conv) {
-    if (!conv) return;
-    const isBuyer = conv.buyerId === runtime.accountUser?.id;
-    const mode = isBuyer ? conv.buyerAiMode : conv.ownerAiMode;
-    const policy = isBuyer ? conv.buyerAiPolicy : conv.ownerAiPolicy;
-    if (mode) currentAiMode = mode;
-    if (policy && typeof policy === "object" && !instructionsDirty) {
-      activeChips.clear();
-      if (Array.isArray(policy.chips)) {
-        for (const c of policy.chips) activeChips.add(c);
-      } else {
-        if (policy.allowNegotiation === false) activeChips.add("noNegotiation");
-        if (Array.isArray(policy.autoReplyOn)) {
-          if (policy.autoReplyOn.includes("schedule")) activeChips.add("pickupTime");
-          if (policy.autoReplyOn.includes("compatibility") || policy.autoReplyOn.includes("spec")) activeChips.add("compatibility");
-          if (policy.autoReplyOn.includes("availability") || policy.autoReplyOn.includes("weather")) activeChips.add("availability");
-        }
-      }
-      fullDelegationEnabled = Boolean(policy.fullDelegation);
-      applyPolicyValuesToInputs(policy);
-    }
-    syncAiControlUi();
-  }
-
-  function collectPolicy() {
-    const autoReplyOn = [];
-    if (activeChips.has("pickupTime")) autoReplyOn.push("schedule");
-    if (activeChips.has("compatibility")) autoReplyOn.push("compatibility", "spec");
-    if (activeChips.has("availability")) autoReplyOn.push("availability", "weather");
-    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
-    const startVal = $("chatPolicyTargetStart")?.value || null;
-    const endRaw = $("chatPolicyTargetEnd")?.value || null;
-    const endVal = startVal && endRaw && endRaw < startVal ? startVal : (endRaw || startVal);
-    const budgetRaw = $("chatPolicyBudgetInput")?.value;
-    const budgetNum = budgetRaw !== "" && budgetRaw != null && Number.isFinite(Number(budgetRaw)) && Number(budgetRaw) >= 0
-      ? Math.trunc(Number(budgetRaw))
-      : null;
-    const areaRaw = $("chatPolicyAreaPyeong")?.value;
-    const areaNum = areaRaw !== "" && areaRaw != null && Number.isFinite(Number(areaRaw)) && Number(areaRaw) > 0
-      ? Number(areaRaw)
-      : null;
-    const pickupPreference = $("chatPolicyPickupPreference")?.value.trim().slice(0, 120) || "";
-    const customText = $("chatAiInstructions")?.value.trim() || "";
-    const fullDelegation = Boolean($("chatFullDelegationToggle")?.checked ?? fullDelegationEnabled);
-    // 거래 관리에서 설정한 목표가·운송비·필수 질문·명시적 신청 권한 등은 채팅 화면에 입력칸이 없으므로 그대로 보존한다.
-    const existingPolicy = currentConv
-      ? ((isBuyer ? currentConv.buyerAiPolicy : currentConv.ownerAiPolicy) || {})
-      : (initialPolicyOverride || {});
-
-    return {
-      ...existingPolicy,
-      fullDelegation,
-      autoExecuteTransaction: isBuyer
-        ? (typeof existingPolicy.autoExecuteTransaction === "boolean" && !fullDelegation
-          ? existingPolicy.autoExecuteTransaction
-          : fullDelegation)
-        : false,
-      intent: currentConv?.listingType || item?.type || (state.transaction === "sale" ? "sale" : "rent"),
-      targetStart: startVal,
-      targetEnd: endVal,
-      maxBudget: isBuyer ? budgetNum : null,
-      minPrice: isBuyer ? null : budgetNum,
-      allowNegotiation: !activeChips.has("noNegotiation"),
-      areaPyeong: areaNum,
-      cropIds: Array.isArray(state.filters?.cropIds) ? state.filters.cropIds : [],
-      operations: Array.isArray(state.filters?.operations) ? state.filters.operations : [],
-      ownedModelId: runtime.selectedOwnedMachineId || null,
-      region: state.region || null,
-      pickupPreference,
-      customRules: customText.slice(0, 300),
-      instructions: customText,
-      autoReplyOn,
-      chips: [...activeChips],
-    };
-  }
-
-  function renderPausedBanner(conv) {
-    const banner = $("chatPausedBanner");
-    if (!banner) return;
-    const reason = conv?.aiPausedReason || "";
-    const draft = conv?.aiDraft || conv?.aiDraftJson || null;
-    const waitingForUser = isWaitingForUserConv(conv);
-
-    if (!reason && !waitingForUser) {
-      banner.hidden = true;
-      banner.className = "chat-paused-banner";
-      banner.innerHTML = "";
-      return;
-    }
-
-    banner.hidden = false;
-    if (reason === "transaction_completed") {
-      const ct = draft?.completedTransaction;
-      const lastSys = [...sortedMessages()].reverse().find((m) => m.senderKind === "system");
-      const detailText = ct?.kind === "rental" && ct.start
-        ? `${ct.start} ~ ${ct.end} (${ct.days}일 · ${money(ct.totalPrice)}) 대여 요청이 접수되었어요.`
-        : ct?.kind === "purchase" && Number.isFinite(Number(ct.price))
-          ? `${money(ct.price)} 구매 신청이 접수되었어요.`
-          : (conv?.escalationSummary || lastSys?.body || "조건과 예산에 맞춰 거래 요청이 자동으로 접수되었습니다.");
-      banner.className = "delegated-complete-banner";
-      banner.innerHTML = `
-        <div class="delegated-banner-copy">
-          <strong>📨 농농이가 합의 조건으로 신청을 접수했어요 (상대 승인 대기 · 거래 완료 아님)</strong>
-          <small>${escapeHtml(detailText)}</small>
-        </div>
-        <div class="delegated-banner-actions">
-          <button type="button" id="chatGoRequestsBtn" class="button button-primary button-sm">거래 관리에서 신청 상태 보기 ›</button>
-        </div>
-      `;
-      $("chatGoRequestsBtn")?.addEventListener("click", () => {
-        stopChatPolling();
-        hideDialog($("formBackdrop"));
-        deps.refreshAuthenticatedData?.();
-        if (conversationId && deps.openDeal) deps.openDeal(conversationId);
-        else deps.setView?.("deals");
-      });
-      return;
-    }
-
-    if (waitingForUser) {
-      const code = reason.startsWith("escalated:")
-        ? reason.slice("escalated:".length).trim()
-        : (draft?.reasonCode || draft?.rationale || "");
-      const label = code ? (ESCALATION_REASON_LABEL[code] || code) : "";
-      const lastSys = [...sortedMessages()].reverse().find((m) => m.senderKind === "system");
-      const summary = conv?.escalationSummary || draft?.summaryForUser || lastSys?.body || "";
-      const subtitleParts = [
-        label ? `사유: ${label}` : "",
-        summary && summary !== label ? summary : "",
-        "상대방에게는 대답하지 않고 조용히 대기 중이에요. 확인 후 직접 답장해 주세요.",
-      ].filter(Boolean);
-      const isMine = !draft?.targetUserId || draft.targetUserId === runtime.accountUser?.id;
-      const suggestedDraft = isMine ? (draft?.body || draft?.suggestedReplyDraft || "") : "";
-
-      banner.className = "delegated-wait-banner";
-      banner.innerHTML = `
-        <div class="delegated-banner-copy">
-          <strong>⏸️ 적합한 정보가 없어 농농이가 대답하지 않고 기다리고 있어요</strong>
-          <small>${escapeHtml(subtitleParts.join(" · "))}</small>
-        </div>
-        <div class="delegated-banner-actions">
-          <button type="button" id="chatFillSuggestedReply" class="button button-primary button-sm">✍️ 내가 직접 답장하기</button>
-          <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 맡기기</button>
-        </div>
-      `;
-      $("chatFillSuggestedReply")?.addEventListener("click", () => {
-        const input = $("chatMessage");
-        if (!input) return;
-        if (suggestedDraft && !input.value.trim()) {
-          input.value = suggestedDraft;
-        }
-        input.focus();
-      });
-      $("chatResumeAiBtn")?.addEventListener("click", () => {
-        saveAiPolicy("autonomous", collectPolicy(), { resume: true });
-      });
-      return;
-    }
-
-    banner.className = "chat-paused-banner";
-    banner.innerHTML = `
-      <span class="chat-paused-text">⚠️ ${escapeHtml(formatPausedReason(reason))}</span>
-      <button type="button" id="chatResumeAiBtn" class="button button-secondary button-sm">다시 맡기기</button>
-    `;
-    $("chatResumeAiBtn")?.addEventListener("click", () => {
-      saveAiPolicy("autonomous", collectPolicy(), { resume: true });
-    });
-  }
-
-  function renderDraftBar(conv) {
-    const bar = $("chatDraftBar");
-    if (!bar) return;
-    const draft = conv?.aiDraft || conv?.aiDraftJson;
-    if (
-      !draft ||
-      !draft.body ||
-      draft.targetUserId !== runtime.accountUser?.id ||
-      isWaitingForUserConv(conv) ||
-      conv?.aiPausedReason === "transaction_completed"
-    ) {
-      bar.hidden = true;
-      bar.innerHTML = "";
-      return;
-    }
-    bar.hidden = false;
-    bar.innerHTML = `
-      <div class="chat-draft-head">
-        <strong>🤖 농농이 추천 답장 초안</strong>
-        <div class="chat-draft-actions">
-          <button type="button" id="chatDraftSend" class="button button-primary button-sm">이대로 보내기</button>
-          <button type="button" id="chatDraftEdit" class="button button-secondary button-sm">입력창에 불러오기</button>
-          <button type="button" id="chatDraftRegen" class="button button-secondary button-sm">초안 다시 생성</button>
-          <button type="button" id="chatDraftDismiss" class="button button-secondary button-sm">무시</button>
-        </div>
-      </div>
-      <p class="chat-draft-body">${escapeHtml(draft.body)}</p>
-    `;
-    $("chatDraftSend")?.addEventListener("click", () => sendMessageBody(draft.body));
-    $("chatDraftEdit")?.addEventListener("click", () => {
-      if ($("chatMessage")) {
-        $("chatMessage").value = draft.body;
-        $("chatMessage").focus();
-      }
-    });
-    $("chatDraftRegen")?.addEventListener("click", async () => {
-      if (!conversationId || aiBusy) return;
-      aiBusy = true;
-      if ($("chatDraftRegen")) $("chatDraftRegen").disabled = true;
-      try {
-        const res = await apiFetch("/api/conversations", {
-          method: "POST",
-          json: { action: "generate_ai_draft", conversationId },
-        });
-        if (epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
-        if (res?.conversation) applyConvMetadata(res.conversation);
-        toast("새 답장 초안을 생성했습니다.");
-      } catch (error) {
-        if (error?.name !== "AbortError" && error?.code !== "AUTH_CHANGED") {
-          toast(error?.message || "초안을 다시 생성하지 못했습니다.");
-        }
-      } finally {
-        aiBusy = false;
-        if ($("chatDraftRegen")) $("chatDraftRegen").disabled = false;
-      }
-    });
-    $("chatDraftDismiss")?.addEventListener("click", async () => {
-      if (!conversationId || aiBusy) return;
-      aiBusy = true;
-      if ($("chatDraftDismiss")) $("chatDraftDismiss").disabled = true;
-      try {
-        const res = await apiFetch("/api/conversations", {
-          method: "POST",
-          json: { action: "dismiss_ai_draft", conversationId },
-        });
-        if (epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
-        if (res?.conversation) {
-          applyConvMetadata(res.conversation);
-        } else if (currentConv) {
-          currentConv = { ...currentConv, aiDraftJson: null };
-          renderDraftBar(currentConv);
-        }
-      } catch (error) {
-        if (error?.name !== "AbortError" && error?.code !== "AUTH_CHANGED") {
-          toast(error?.message || "초안을 닫지 못했습니다.");
-        }
-      } finally {
-        aiBusy = false;
-        if ($("chatDraftDismiss")) $("chatDraftDismiss").disabled = false;
-      }
-    });
-  }
-
   function renderChat({ keepScroll = false } = {}) {
     if (!$("chatLog")) return;
     const log = $("chatLog");
     const prevHeight = log.scrollHeight;
     const list = sortedMessages().filter((msg) => {
       if (msg.senderKind !== "system") return true;
-      const sharedReason = !msg.escalationReason || msg.escalationReason === "rental_handoff" || msg.escalationReason === "both_ai_handoff" || msg.escalationReason === "transaction_completed";
-      return sharedReason || msg.senderId === runtime.accountUser?.id;
+      // 나에게만 보이는 안내는 내 화면에만 표시한다(서버도 상대에게는 내려주지 않는다).
+      return msg.visibility !== "self" || msg.senderId === runtime.accountUser?.id;
     });
     let enterIndex = 0;
     log.innerHTML = list.length
@@ -977,24 +341,18 @@ function chatForm(target) {
               <div>${escapeHtml(msg.body)}</div>
             </div>`;
           }
-          const sstate = senderState(msg, { meId: runtime.accountUser?.id, myRole: roleOf(currentConv, runtime.accountUser?.id) });
-          const mine = sstate === "me_human" || sstate === "me_ai";
-          const isAiProxy = msg.senderKind === "ai_proxy";
-          const aiBadge = isAiProxy ? `<span class="chat-ai-badge" data-sender-state="${sstate}">🤖 ${escapeHtml(SENDER_LABEL[sstate])}</span>` : "";
+          const mine = senderState(msg, { meId: runtime.accountUser?.id, myRole: roleOf(currentConv, runtime.accountUser?.id) }) === "me_human";
           const parsedOrder = parseOrderChatMessage(msg.body);
           const bodyHtml = parsedOrder
             ? renderChatOrderCard(parsedOrder)
             : `<div>${escapeHtml(msg.body)}</div>`;
-          return `<div class="chat-line ${mine ? "mine" : ""}${isAiProxy ? " ai-proxy" : ""}${parsedOrder ? " has-order-card" : ""}${enterClass}"${staggerStyle}>
-            <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}${aiBadge}</b>
+          return `<div class="chat-line ${mine ? "mine" : ""}${parsedOrder ? " has-order-card" : ""}${enterClass}"${staggerStyle}>
+            <b>${escapeHtml(mine ? "나" : (msg.senderName || "상대 농가"))}</b>
             ${bodyHtml}
           </div>`;
         }).join("")
       : `<div class="chat-empty">아직 나눈 대화가 없어요. 기계 상태와 인수 조건을 먼저 물어보세요!</div>`;
     $("chatLoadOlder").hidden = !hasMoreOlder;
-    if ($("chatQuickSendFirstWrap")) {
-      $("chatQuickSendFirstWrap").hidden = bySeq.size > 0;
-    }
     if (keepScroll) {
       log.scrollTop += log.scrollHeight - prevHeight;
     } else {
@@ -1004,7 +362,6 @@ function chatForm(target) {
 
   function applyConvMetadata(conv) {
     if (!conv) return;
-    const prevPausedReason = currentConv?.aiPausedReason;
     currentConv = conv;
     conversationId = conv.id;
     const isBuyer = conv.buyerId === runtime.accountUser?.id;
@@ -1022,56 +379,6 @@ function chatForm(target) {
         hideDialog($("formBackdrop"));
         deps.openDeal(conversationId);
       });
-    }
-    hydratePolicyFromConv(conv);
-    renderPausedBanner(conv);
-    renderDraftBar(conv);
-    if (conv.aiPausedReason === "transaction_completed" && prevPausedReason && prevPausedReason !== "transaction_completed") {
-      deps.loadCatalog?.({ quiet: true });
-      deps.refreshAuthenticatedData?.();
-    }
-  }
-
-  async function saveAiPolicy(mode, policy, { quiet = false, resume = false } = {}) {
-    if (aiBusy) return;
-    if (!conversationId && !listingId) return;
-    aiBusy = true;
-    const prevMode = currentAiMode;
-    currentAiMode = mode;
-    syncAiControlUi();
-    try {
-      const res = await apiFetch("/api/conversations", {
-        method: "POST",
-        json: {
-          action: "update_ai_policy",
-          ...(conversationId ? { conversationId } : {}),
-          ...(listingId ? { listingId } : {}),
-          mode,
-          policy,
-          ...(resume ? { resume: true } : {}),
-        },
-      });
-      if (epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
-      instructionsDirty = false;
-      if (res?.conversation) {
-        applyConvMetadata(res.conversation);
-        startPolling();
-      }
-      deps.refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
-      if (!quiet) {
-        const modeLabel = mode === "autonomous"
-          ? (policy?.fullDelegation ? "거래 전담(자동 진행)" : "자동 응대")
-          : "끄기";
-        toast(`농농이 대리 응대를 '${modeLabel}'(으)로 저장했습니다.`);
-      }
-    } catch (error) {
-      if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
-      currentAiMode = prevMode;
-      syncAiControlUi();
-      toast(error?.message || "대리 응대 설정을 저장하지 못했습니다.");
-    } finally {
-      aiBusy = false;
-      syncAiControlUi();
     }
   }
 
@@ -1102,9 +409,6 @@ function chatForm(target) {
       }
       renderChat();
       startPolling();
-      if (res.aiReplyScheduled) {
-        setTimeout(pollNewMessages, 1000);
-      }
       deps.refreshAuthenticatedData({ includeRequests: false, includeConversations: true });
     } catch (error) {
       if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
@@ -1151,24 +455,6 @@ function chatForm(target) {
           }
         }
       }
-      if (pendingInitialAi) {
-        const init = pendingInitialAi;
-        pendingInitialAi = null;
-        const isBuyer = currentConv ? currentConv.buyerId === runtime.accountUser?.id : true;
-        const existingMode = currentConv ? (isBuyer ? currentConv.buyerAiMode : currentConv.ownerAiMode) : "off";
-        const existingPolicy = currentConv ? (isBuyer ? currentConv.buyerAiPolicy : currentConv.ownerAiPolicy) : null;
-        const needsDelegation = Boolean(init.fullDelegation && !existingPolicy?.fullDelegation);
-        if (!existingMode || existingMode === "off" || needsDelegation) {
-          const mergedPolicy = {
-            ...collectPolicy(),
-            ...(init.policy || {}),
-            ...(init.fullDelegation ? { fullDelegation: true, autoExecuteTransaction: true } : {}),
-          };
-          applyPolicyValuesToInputs(mergedPolicy);
-          syncAiControlUi();
-          await saveAiPolicy(init.mode, mergedPolicy, { quiet: true });
-        }
-      }
     } catch (error) {
       if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
       if ($("chatLog")) {
@@ -1200,7 +486,6 @@ function chatForm(target) {
   async function pollNewMessages() {
     if (!conversationId || epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
     try {
-      const prevPaused = currentConv?.aiPausedReason;
       const data = await apiFetch(`/api/conversations?conversationId=${encodeURIComponent(conversationId)}&after_seq=${maxSeq()}&limit=50`);
       if (epoch !== runtime.authEpoch || $("formBackdrop").hidden || !$("chatLog")) return;
       const incoming = data.messages || [];
@@ -1208,13 +493,7 @@ function chatForm(target) {
         for (const m of incoming) bySeq.set(m.seq, m);
         renderChat();
       }
-      if (data.conversation) {
-        applyConvMetadata(data.conversation);
-        if (data.conversation.aiPausedReason === "transaction_completed" && prevPaused !== "transaction_completed") {
-          deps.loadCatalog?.({ quiet: true });
-          deps.refreshAuthenticatedData?.();
-        }
-      }
+      if (data.conversation) applyConvMetadata(data.conversation);
     } catch {
       // Transient polling errors recover on next tick unless auth changed
     }
@@ -1225,26 +504,6 @@ function chatForm(target) {
     if (!conversationId || epoch !== runtime.authEpoch || $("formBackdrop").hidden) return;
     runtime.chatPollTimer = setInterval(pollNewMessages, 2500);
   }
-
-  syncAiControlUi();
-
-  let delegationPanelOpen = initialDelegationOpen;
-  const setDelegationPanelOpen = (open) => {
-    const bar = $("chatAiControlBar");
-    const trigger = $("chatDelegationTrigger");
-    if (!bar) return;
-    delegationPanelOpen = Boolean(open);
-    bar.hidden = !delegationPanelOpen;
-    if (trigger) {
-      trigger.setAttribute("aria-expanded", String(delegationPanelOpen));
-      trigger.classList.toggle("is-open", delegationPanelOpen);
-    }
-  };
-
-  $("chatDelegationTrigger")?.addEventListener("click", () => {
-    // 설정 패널을 여는 동작만으로 대리 응대나 거래 전담을 켜지 않는다.
-    setDelegationPanelOpen(!delegationPanelOpen);
-  });
 
   $("chatListingContext")?.addEventListener("click", (event) => {
     const cartBtn = event.target.closest("[data-chat-cart-add]");
@@ -1272,15 +531,6 @@ function chatForm(target) {
           },
         }));
       }
-      return;
-    }
-    if (event.target.closest("#chatQuickDelegationPill")) {
-      setDelegationPanelOpen(!delegationPanelOpen);
-      if (delegationPanelOpen) {
-        requestAnimationFrame(() => {
-          $("chatAiControlBar")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-        });
-      }
     }
   });
 
@@ -1290,135 +540,6 @@ function chatForm(target) {
       hideDialog($("formBackdrop"));
       window.dispatchEvent(new CustomEvent("moanong:cart-open", { detail: { tab: "orders" } }));
     }
-  });
-
-  let policyPanelOpen = initialPolicyPanelOpen;
-  let policyCollapseTimer = null;
-  const setPolicyPanelOpen = (open) => {
-    const panel = $("chatAiPolicyPanel");
-    if (!panel) return;
-    policyPanelOpen = Boolean(open);
-    clearTimeout(policyCollapseTimer);
-    $("chatAiPolicyToggle")?.setAttribute("aria-expanded", String(policyPanelOpen));
-    if ($("chatAiPolicyToggle")) {
-      $("chatAiPolicyToggle").textContent = policyPanelOpen ? "위임 조건 ▴" : "위임 조건 ▾";
-    }
-    if (policyPanelOpen) {
-      panel.hidden = false;
-      void panel.offsetWidth;
-      panel.classList.add("is-open");
-    } else {
-      panel.classList.remove("is-open");
-      policyCollapseTimer = setTimeout(() => {
-        if (!policyPanelOpen && panel.isConnected) {
-          panel.hidden = true;
-        }
-      }, 280);
-    }
-  };
-
-  $("chatAiControlBar")?.querySelectorAll("[data-delegation-preset]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const pid = btn.dataset.delegationPreset;
-      const preset = getDelegationPreset(pid, listingType);
-      if (!preset) return;
-      selectedPresetId = preset.id;
-      instructionsDirty = true;
-      activeChips.clear();
-      for (const c of preset.policy.chips || []) activeChips.add(c);
-      if (preset.policy.allowNegotiation === false) activeChips.add("noNegotiation");
-      else activeChips.delete("noNegotiation");
-      if ($("chatQuickPresetDesc")) $("chatQuickPresetDesc").textContent = preset.desc || "";
-      syncAiControlUi();
-    });
-  });
-
-  $("chatQuickStartAiBtn")?.addEventListener("click", async () => {
-    if (aiBusy) return;
-    const preset = getDelegationPreset(selectedPresetId, listingType);
-    const isBuyer = !currentConv || currentConv.buyerId === runtime.accountUser?.id;
-    fullDelegationEnabled = true;
-    instructionsDirty = true;
-    if ($("chatFullDelegationToggle")) $("chatFullDelegationToggle").checked = true;
-    const policy = {
-      ...collectPolicy(),
-      fullDelegation: true,
-      autoExecuteTransaction: isBuyer ? Boolean(preset?.policy?.autoExecuteTransaction ?? true) : false,
-    };
-    await saveAiPolicy("autonomous", policy, { resume: true });
-    const shouldSendStarter = Boolean($("chatQuickSendFirst")?.checked) && bySeq.size === 0;
-    if (shouldSendStarter && preset?.starterTemplate && !busy) {
-      const title = currentConv?.listingTitle || item?.title || "농기계";
-      const starter = ($("chatMessage")?.value.trim()) || preset.starterTemplate(title);
-      await sendMessageBody(starter, { fromForm: Boolean($("chatMessage")?.value.trim()) });
-    }
-  });
-
-  $("chatAiPolicyToggle")?.addEventListener("click", () => {
-    const panel = $("chatAiPolicyPanel");
-    if (!panel) return;
-    setPolicyPanelOpen(!policyPanelOpen);
-  });
-
-  $("chatFullDelegationToggle")?.addEventListener("change", () => {
-    fullDelegationEnabled = Boolean($("chatFullDelegationToggle")?.checked);
-    instructionsDirty = true;
-    if (fullDelegationEnabled) {
-      setPolicyPanelOpen(true);
-      saveAiPolicy("autonomous", collectPolicy());
-    } else {
-      syncAiControlUi();
-      saveAiPolicy(currentAiMode, collectPolicy());
-    }
-  });
-
-  $("chatAiControlBar")?.querySelectorAll(".chat-ai-mode-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const mode = btn.dataset.aiMode;
-      if (!mode || mode === currentAiMode) return;
-      if (mode === "off") fullDelegationEnabled = false;
-      saveAiPolicy(mode, collectPolicy());
-    });
-  });
-
-  $("chatAiControlBar")?.querySelectorAll(".chat-ai-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const id = chip.dataset.policyChip;
-      if (!id) return;
-      if (activeChips.has(id)) activeChips.delete(id);
-      else activeChips.add(id);
-      instructionsDirty = true;
-      syncAiControlUi();
-    });
-  });
-
-  $("chatPolicyAllowNegotiation")?.addEventListener("change", () => {
-    if ($("chatPolicyAllowNegotiation")?.checked) activeChips.delete("noNegotiation");
-    else activeChips.add("noNegotiation");
-    instructionsDirty = true;
-    syncAiControlUi();
-  });
-
-  ["chatPolicyTargetStart", "chatPolicyTargetEnd", "chatPolicyBudgetInput", "chatPolicyAreaPyeong", "chatPolicyPickupPreference", "chatAiInstructions"].forEach((id) => {
-    $(id)?.addEventListener("input", () => {
-      instructionsDirty = true;
-      if (id === "chatPolicyTargetStart") {
-        const startVal = $("chatPolicyTargetStart")?.value || "";
-        const endEl = $("chatPolicyTargetEnd");
-        if (endEl) {
-          endEl.min = startVal || minToday;
-          if (startVal && (!endEl.value || endEl.value < startVal)) {
-            endEl.value = startVal;
-          }
-        }
-      }
-      updateDelegationSummary();
-    });
-  });
-
-  $("chatAiSavePolicy")?.addEventListener("click", () => {
-    const nextMode = fullDelegationEnabled && currentAiMode === "off" ? "autonomous" : currentAiMode;
-    saveAiPolicy(nextMode, collectPolicy());
   });
 
   $("chatLoadOlder").addEventListener("click", async () => {
@@ -1455,52 +576,10 @@ function chatForm(target) {
   });
 
   loadInitialMessages();
-  if (quickDelegation) {
-    requestAnimationFrame(() => {
-      $("chatQuickDelegationCard")?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-    });
-  }
 }
 
-function startDelegatedTrade(target, options = {}) {
-  const opts = typeof target === "object" && target !== null
-    ? { ...target, ...options }
-    : { listingId: target || null, ...options };
-  const listingId = opts.listingId || null;
-  const conversationId = opts.conversationId || null;
-  if (!listingId && !conversationId) return false;
-  if ($("detailBackdrop") && !$("detailBackdrop").hidden) {
-    hideDialog($("detailBackdrop"));
-  }
-  const item = listingId ? listingById(listingId) : null;
-  const preset = opts.preset || (item?.type === "sale" ? "purchase_inquiry" : "quick_rental");
-  const autoActivate = Boolean(opts.autoActivate);
-  chatForm({
-    listingId,
-    conversationId,
-    draftBody: typeof opts.draftBody === "string" ? opts.draftBody : "",
-    quickDelegation: true,
-    preset,
-    autoActivate,
-    ...(autoActivate ? { aiMode: "autonomous", fullDelegation: true } : {}),
-    ...(opts.policy && typeof opts.policy === "object" ? { policy: opts.policy } : {}),
-  });
-  return true;
-}
-
-_activeStartDelegatedTrade = startDelegatedTrade;
 _activeOpenChat = chatForm;
 if (typeof window !== "undefined") {
-  window.startDelegatedTradeForListing = startDelegatedTradeForListing;
-  if (_delegatedEventListener) {
-    window.removeEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
-  }
-  _delegatedEventListener = (event) => {
-    const detail = event?.detail || {};
-    startDelegatedTrade(detail.listingId || null, detail);
-  };
-  window.addEventListener(DELEGATED_TRADE_EVENT, _delegatedEventListener);
-
   if (_openChatEventListener) {
     window.removeEventListener("moanong:open-chat", _openChatEventListener);
   }
@@ -1544,21 +623,11 @@ if (typeof window !== "undefined") {
   window.addEventListener("moanong:order-completed", _orderCompletedListener);
 }
 if (typeof document !== "undefined") {
-  if (_delegatedClickListener) {
-    document.removeEventListener("click", _delegatedClickListener);
+  if (_directChatClickListener) {
+    document.removeEventListener("click", _directChatClickListener);
   }
-  _delegatedClickListener = (event) => {
+  _directChatClickListener = (event) => {
     if (event.defaultPrevented) return;
-    const delegatedBtn = event.target?.closest?.("[data-delegated-trade]");
-    if (delegatedBtn) {
-      event.preventDefault();
-      startDelegatedTrade(delegatedBtn.dataset.delegatedTrade || null, {
-        conversationId: delegatedBtn.dataset.delegatedConv || null,
-        preset: delegatedBtn.dataset.delegatedPreset || undefined,
-        autoActivate: delegatedBtn.dataset.delegatedAuto === "true",
-      });
-      return;
-    }
     const directChatBtn = event.target?.closest?.("[data-direct-chat]");
     if (directChatBtn) {
       event.preventDefault();
@@ -1568,7 +637,7 @@ if (typeof document !== "undefined") {
       chatForm({ listingId: directChatBtn.dataset.directChat || null });
     }
   };
-  document.addEventListener("click", _delegatedClickListener);
+  document.addEventListener("click", _directChatClickListener);
 }
 
 async function handleRequestAction(action, requestId, button) {
@@ -1633,10 +702,7 @@ function renderBuyerRequests() {
           ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
-          <div class="trade-action-pair">
-            <button type="button" class="button button-secondary button-sm btn-direct-chat" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 대화</button>
-            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(req.listingId)}">🤖 거래전담</button>
-          </div>
+          <button type="button" class="button button-secondary button-sm btn-direct-chat" data-open-chat-listing="${escapeHtml(req.listingId)}">1:1 대화</button>
           ${req.canCancel ? `<button type="button" class="button button-secondary button-sm" data-req-cancel="${escapeHtml(req.id)}">요청 취소</button>` : ""}
         </div>
       </div>`).join("")
@@ -1644,20 +710,18 @@ function renderBuyerRequests() {
 
   if (convEl) {
     const buyerConvs = runtime.userConversations.filter((c) => c.buyerId === runtime.accountUser?.id);
-    const dealsLink = `<div class="deals-crosslink"><span>농농이가 보낸 메시지·제안·확인할 일은 거래 관리에서 한눈에 볼 수 있어요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="buyer">거래 관리 열기 ›</button></div>`;
+    const dealsLink = `<div class="deals-crosslink"><span>주고받은 메시지·제안·확인할 일은 거래 관리에서 한눈에 볼 수 있어요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="buyer">거래 관리 열기 ›</button></div>`;
     convEl.innerHTML = buyerConvs.length
       ? buyerConvs.map((c) => `
         <div class="request-row conv-list-row">
           <button type="button" class="owner-row-info conv-row-open" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">
             <span class="owner-row-badges">
               <span class="step-pill">판매자: ${escapeHtml(c.ownerName)}</span>
-              ${renderConvAiBadges(c, "buyer")}
             </span>
             <strong class="conv-row-title">${escapeHtml(c.listingTitle)}</strong>
             <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "대화 시작하기"}</small>
           </button>
           <div class="owner-row-actions">
-            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(c.listingId)}" data-delegated-conv="${escapeHtml(c.id)}">🤖 거래전담</button>
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
           </div>
         </div>`).join("")
@@ -1741,7 +805,6 @@ function renderOwner() {
           </select>
           <button type="button" class="button button-secondary button-sm" data-owner-detail="${escapeHtml(item.id)}">상세</button>
           <button type="button" class="button button-secondary button-sm" data-owner-edit="${escapeHtml(item.id)}">수정</button>
-          <button type="button" class="button button-secondary button-sm owner-inbound-btn" data-owner-inbound="${escapeHtml(item.id)}">🤖 문의 자동응대</button>
           <button type="button" class="button button-secondary button-sm" data-owner-remove="${escapeHtml(item.id)}">숨기기</button>
         </div>
       </div>`).join("")
@@ -1769,18 +832,16 @@ function renderOwner() {
   if (ownerConvsEl) {
     const ownerConvs = runtime.userConversations.filter((c) => c.ownerId === runtime.accountUser?.id);
     ownerConvsEl.innerHTML = ownerConvs.length
-      ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div><div class="deals-crosslink"><span>농농이 응대 내역·받은 제안은 거래 관리에서 확인하세요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="owner">거래 관리 열기 ›</button></div>` + ownerConvs.map((c) => `
+      ? `<div class="panel-header" style="margin-top:8px"><h3>도착한 1:1 채팅 문의</h3><small>${ownerConvs.length}개 대화</small></div><div class="deals-crosslink"><span>주고받은 메시지·받은 제안은 거래 관리에서 확인하세요.</span><button type="button" class="button button-primary button-sm" data-goto-deals="owner">거래 관리 열기 ›</button></div>` + ownerConvs.map((c) => `
         <div class="request-row conv-list-row">
           <button type="button" class="owner-row-info conv-row-open" data-open-chat="${escapeHtml(c.id)}" data-chat-listing="${escapeHtml(c.listingId)}">
             <span class="owner-row-badges">
               <span class="step-pill">문의자: ${escapeHtml(c.buyerName)}</span>
-              ${renderConvAiBadges(c, "owner")}
             </span>
             <strong class="conv-row-title">${escapeHtml(c.listingTitle)}</strong>
             <small class="conv-row-preview">${c.lastMessage ? escapeHtml(c.lastMessage.body) : "새 대화"}</small>
           </button>
           <div class="owner-row-actions">
-            <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(c.listingId)}" data-delegated-conv="${escapeHtml(c.id)}">🤖 거래전담</button>
             <button type="button" class="button button-secondary button-sm" data-open-deal="${escapeHtml(c.id)}">거래 관리</button>
           </div>
         </div>`).join("")
@@ -2190,7 +1251,6 @@ function openEditListing(item, draftValues = null) {
     renderRequestBadge,
     rentalForm,
     chatForm,
-    startDelegatedTradeForListing: startDelegatedTrade,
     handleRequestAction,
     renderRequestActionsHtml,
     renderBuyerRequests,

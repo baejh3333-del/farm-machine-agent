@@ -892,24 +892,6 @@ body.ai-fullscreen .ai-launcher {
   margin-inline: auto;
 }
 
-.ai-delegation-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 12px;
-  border: 1px solid #d4d4d4;
-  background: linear-gradient(90deg, #f2f2f2 0%, #f6f6f6 100%);
-  color: var(--forest, #111111);
-  font-size: 0.78rem;
-  line-height: 1.35;
-  animation: aiBubbleSlideIn 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.ai-delegation-banner[hidden] {
-  display: none;
-}
-
 #aiPanel .ai-photo-preview {
   display: flex;
   align-items: center;
@@ -1082,84 +1064,13 @@ body.ai-fullscreen .ai-launcher {
   transform: scale(0.96);
 }
 
-.ai-delegation-toggle,
-.ai-delegate-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong, #d4d4d4);
-  background: var(--bg-warm, #f7f7f7);
-  color: var(--text-body, #333333);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background-color 0.22s ease,
-    border-color 0.22s ease,
-    color 0.22s ease,
-    box-shadow 0.22s ease,
-    transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.ai-delegation-toggle:hover,
-.ai-delegate-toggle:hover {
-  border-color: #111111;
-  background: #f2f2f2;
-  color: var(--forest, #111111);
-}
-
-.ai-delegation-toggle:active,
-.ai-delegate-toggle:active {
-  transform: scale(0.96);
-}
-
-.ai-toggle-state {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  background: var(--bg-subtle, #ededed);
-  color: var(--text-body, #333333);
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.ai-delegation-toggle[aria-pressed="true"],
-.ai-delegation-toggle.is-active,
-.ai-delegate-toggle[aria-pressed="true"],
-.ai-delegate-toggle.is-active {
-  border-color: #222222;
-  background: linear-gradient(135deg, #e8f6ee 0%, #f2f2f2 100%);
-  color: var(--forest, #111111);
-  box-shadow: 0 0 0 3px rgba(232, 246, 238, 0.48), 0 4px 14px rgba(0, 0, 0, 0.16);
-}
-
-.ai-delegation-toggle[aria-pressed="true"] .ai-toggle-state,
-.ai-delegation-toggle.is-active .ai-toggle-state,
-.ai-delegate-toggle[aria-pressed="true"] .ai-toggle-state,
-.ai-delegate-toggle.is-active .ai-toggle-state {
-  background: var(--forest, #111111);
-  color: var(--bg-surface, #ffffff);
-}
-
 #aiPanel:not(.is-fullscreen) .ai-composer-dock,
 #aiPanel[data-layout-mode="docked"] .ai-composer-dock {
   padding: 8px 12px 10px;
 }
 
 #aiPanel:not(.is-fullscreen) #aiForm .ai-tool-btn,
-#aiPanel[data-layout-mode="docked"] #aiForm .ai-tool-btn,
-#aiPanel:not(.is-fullscreen) .ai-delegation-toggle,
-#aiPanel:not(.is-fullscreen) .ai-delegate-toggle,
-#aiPanel[data-layout-mode="docked"] .ai-delegation-toggle,
-#aiPanel[data-layout-mode="docked"] .ai-delegate-toggle {
+#aiPanel[data-layout-mode="docked"] #aiForm .ai-tool-btn {
   min-height: 30px;
   padding: 0 9px;
   font-size: 0.72rem;
@@ -1233,8 +1144,7 @@ body.ai-fullscreen .ai-launcher {
 .ai-weather-bar,
 .ai-weather-caution,
 .ai-chat-cta-wrap,
-.ai-starter-card,
-.ai-delegation-card {
+.ai-starter-card {
   white-space: normal;
 }
 
@@ -1382,18 +1292,6 @@ body.ai-fullscreen .ai-launcher {
   font-weight: 700;
 }
 
-.ai-rec-delegate-btn {
-  border-color: #d4d4d4;
-  background: #f2f2f2;
-  color: var(--forest, #111111);
-  font-weight: 700;
-}
-
-.ai-rec-delegate-btn:hover {
-  background: #e8f6ee;
-  border-color: #222222;
-}
-
 /* Right-Docked Mode: vertical list, HIDE machinery images completely */
 #aiPanel:not(.is-fullscreen) .ai-result-cards,
 #aiPanel[data-layout-mode="docked"] .ai-result-cards {
@@ -1519,21 +1417,6 @@ body.ai-fullscreen .ai-launcher {
 #aiPanel[data-layout-mode="fullscreen"] .ai-result-cards::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.06);
   border-radius: 999px;
-}
-
-/* Delegated Transaction Summary Box */
-.ai-delegation-card {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid #d4d4d4;
-  background: linear-gradient(135deg, #f2f2f2 0%, #ffffff 100%);
-  display: grid;
-  gap: 6px;
-}
-
-.ai-delegation-open-btn {
-  margin-top: 4px;
 }
 
 /* 2. Pre-Favorite 1:1 Chat CTA inside assistant bubble */
@@ -2383,9 +2266,6 @@ body.ai-fullscreen .ai-launcher {
   .ai-voice-wave span,
   .ai-voice-bar-btn,
   .ai-speech-bar,
-  .ai-delegation-toggle,
-  .ai-delegate-toggle,
-  .ai-delegation-banner,
   #aiPanel .ai-photo-preview,
   .ai-setup-form,
   .ai-rec-card,

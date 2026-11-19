@@ -25,7 +25,6 @@ test("isWriteOutcome / describeWriteOutcome only treat server-confirmed writes a
   assert.equal(isWriteOutcome({ pendingAction: { type: "rental_request" } }), false, "pending confirmation is not a write");
   assert.equal(isWriteOutcome({ favoriteAction: { listingId: "a", favorite: true, synced: false } }), false, "client-side sync pending");
   assert.equal(isWriteOutcome({ reservation: { kind: "rental", number: "R-1" } }), true);
-  assert.equal(isWriteOutcome({ delegatedTransaction: { listingId: "a" } }), true);
   assert.equal(isWriteOutcome({ executedAction: "purchase_request" }), true);
   assert.match(describeWriteOutcome({ reservation: { kind: "rental", number: "R-7" } }), /대여 예약 요청.*R-7/);
   assert.match(describeWriteOutcome({ reservation: { kind: "purchase" } }), /구매 신청/);

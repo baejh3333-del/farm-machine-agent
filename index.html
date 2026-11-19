@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="/src/garage.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261119-2" />
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261119" />
-  <link rel="stylesheet" href="/src/styles/delegated-chat.css?v=20261119" />
+  <link rel="stylesheet" href="/src/styles/chat.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/map-layout.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261119" />
@@ -541,7 +541,7 @@
           <div class="deals-list-pane">
             <header class="deals-head">
               <h1 id="dealsTitle">거래 관리</h1>
-              <p>최근 대화를 선택해 바로 채팅하고, 필요할 때만 농농이 거래 전담을 설정하세요.</p>
+              <p>최근 대화를 선택해 바로 채팅하세요.</p>
             </header>
             <div class="deals-filters" id="dealsFilters" role="group" aria-label="거래 필터"></div>
             <div class="deals-list" id="dealsList" aria-live="polite"></div>
@@ -755,9 +755,6 @@
     </div>
 
     <div class="ai-composer-dock">
-      <div class="ai-delegation-banner" id="aiDelegationBanner" hidden>
-        <span><strong>거래 전담 ON</strong>: 조건 맞으면 부재중에도 자동 협상·진행</span>
-      </div>
       <div class="ai-photo-preview" id="aiPhotoPreview" hidden>
         <img id="aiPhotoThumb" alt="올릴 기계 사진 미리보기" />
         <div class="ai-photo-meta">
@@ -812,10 +809,6 @@
             </div>
           </div>
           <div class="ai-composer-actions">
-            <button type="button" class="ai-delegation-toggle" id="aiFullDelegationToggle" aria-pressed="false" title="조건 맞으면 부재중에도 자동 협상·진행">
-              <span>거래 전담</span>
-              <span class="ai-toggle-state" id="aiDelegationState">OFF</span>
-            </button>
             <button type="button" class="ai-voice-control" id="aiMicButton" aria-label="음성으로 질문하기" title="음성으로 질문하기" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>
           </div>
         </div>

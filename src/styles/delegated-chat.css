@@ -57,12 +57,67 @@
   }
 }
 
+.chat-load-older-wrap {
+  margin-bottom: 8px;
+}
+
+.chat-load-older-wrap:has(button[hidden]) {
+  display: none;
+}
+
+.chat-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-delegation-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-delegation-trigger.is-open {
+  border-color: var(--forest, #174233);
+  background: #f3f7f4;
+  color: var(--forest, #174233);
+}
+
+.chat-delegation-trigger.is-active {
+  border-color: #23533a;
+  background: #edf5e1;
+  color: var(--forest, #174233);
+}
+
+.chat-delegation-trigger-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: var(--forest, #174233);
+  color: var(--accent-lime, #dcf29d);
+}
+
+.chat-delegation-trigger-status[hidden] {
+  display: none;
+}
+
 .chat-ai-bar {
   background: var(--bg-warm, #f6f6f6);
   border: 1px solid var(--line, #e8e8e8);
   border-radius: 14px;
   padding: 10px 12px;
-  margin-bottom: 10px;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+.chat-ai-bar[hidden] {
+  display: none;
 }
 
 .chat-ai-bar-head {
@@ -599,6 +654,56 @@
   background: var(--accent-lime, #dcf29d);
   color: var(--forest, #174233);
   border: 1px solid #96b868;
+}
+
+/* 구매자·소유자 보조 대화 목록 행: 제목 + 최근 메시지 클릭 시 채팅 바로 열기 */
+.conv-list-row {
+  gap: 10px;
+}
+
+.conv-row-open {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  border-radius: 10px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: background-color 0.16s ease;
+}
+
+.conv-row-open:hover {
+  background: #f3f7f4;
+}
+
+.conv-row-open:focus-visible {
+  outline: 2px solid var(--forest, #174233);
+  outline-offset: 2px;
+  background: #f3f7f4;
+}
+
+.conv-row-open .owner-row-badges {
+  flex-wrap: wrap;
+}
+
+.conv-row-title {
+  max-width: 100%;
+  color: var(--text-strong, #162a22);
+}
+
+.conv-row-preview {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 600px) {

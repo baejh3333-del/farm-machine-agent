@@ -2623,3 +2623,69 @@ body.ai-fullscreen .ai-launcher {
   line-height: 1.5;
   color: #5c6660;
 }
+
+/* 매물 초안 카드: 운송 방식 체크 */
+.ai-draft-delivery {
+  display: grid;
+  gap: 6px;
+  min-inline-size: 0;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #d6e4da;
+  border-radius: 12px;
+  background: #f6faf7;
+}
+.ai-draft-delivery legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.ai-draft-delivery-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ai-draft-delivery-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--forest, #1f4a36);
+}
+.ai-draft-delivery-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 26px;
+}
+.ai-draft-delivery-fields[hidden],
+.ai-draft-delivery-missing[hidden] {
+  display: none;
+}
+.ai-draft-delivery-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 160px;
+  font-size: 0.75rem;
+  color: #4a554e;
+}
+.ai-draft-delivery-input input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #c9d6cd;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: #1d2a23;
+  background: #fff;
+}
+.ai-draft-delivery-missing {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #9a5b00;
+}

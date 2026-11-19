@@ -432,7 +432,10 @@ test("사진+'팔고싶어'만 말하면 초안 대신 세부사항을 먼저 �
   assert.match(description, /\[확인 필요\] 연식 · 사용시간 · 포함 작업기/);
   assert.match(second.calls[0].system, /앞서 사용자가 올린 사진 인식 결과\] 기종=트랙터/);
   const out = JSON.parse(second.calls[1].messages.at(-1).content[0].content);
-  assert.match(out.replyGuide, /이대로 올릴까요/);
+  // 운송 방식을 아직 말하지 않았으므로 올릴지 묻기 전에 운송 방식을 한 번 묻는다(체크는 비워 둔다).
+  assert.match(out.replyGuide, /가져다주실 수 있나요, 아니면 가지러 와야 하나요/);
+  assert.deepEqual(r2.listingDraft.delivery.methods, []);
+  assert.ok(out.needsCheck.includes("운송 방식"));
 });
 
 test("세부사항을 답하면 그 내용으로 초안을 만든다", async (t) => {
@@ -789,7 +792,8 @@ test("음성: 말로 \"네 살게예\"·\"네 올려 주세요\"·\"네 고쳐 �
     { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "tractor", title: "트랙터 빌려드려요", price: 80000, region: "영양읍" } }] },
     { content: [{ type: "text", text: "등록했어요." }] },
   ]);
-  const created = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
+  // 운송 방식(가지러 오시면 됨)을 앞에서 말해 둔 매물 등록
+  const created = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice", history: [{ role: "user", content: "트랙터 빌려줄게요. 가지러 오시면 돼요." }] }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
   assert.ok(created.createdListing);
 
   const update = scripted([
@@ -918,7 +922,7 @@ test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능
     { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "cultivator", title: "아세아 관리기 빌려드려요", price: 45000 } }] },
     { content: [{ type: "text", text: "매물을 등록했어요!" }] },
   ]);
-  const r3 = await runAgentTurn("이대로 올려 주세요", { user: USER, uiContext: { region: "청기면", cropIds: ["pepper"] } }, { listings: LISTINGS, call: sellFlow.call, today: TODAY, deps });
+  const r3 = await runAgentTurn("이대로 올려 주세요", { user: USER, uiContext: { region: "청기면", cropIds: ["pepper"] }, history: [{ role: "user", content: "관리기 빌려줄게요. 직접 가져다 드릴 수 있어요." }] }, { listings: LISTINGS, call: sellFlow.call, today: TODAY, deps });
   assert.equal(actions.listing.length, 1);
   assert.equal(actions.listing[0].region, "청기면");
   assert.equal(r3.createdListing.title, "아세아 관리기 빌려드려요");

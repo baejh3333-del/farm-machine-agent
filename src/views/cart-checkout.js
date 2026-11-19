@@ -4,6 +4,7 @@ import {
 } from "../core/utils.js";
 import { state, runtime, apiFetch, listingById, isLoggedIn } from "../core/store.js";
 import { MACHINE_BY_ID } from "../data/farm-machines.js";
+import { deliveryOf } from "../data/delivery.js";
 
 const LOCAL_CART_KEY = "moa-cart-v1";
 const LOCAL_CART_PREFS_KEY = "moa-cart-prefs-v1";
@@ -78,6 +79,17 @@ export function parseOrderChatMessage(body) {
   };
 }
 
+
+/** 장바구니 수령 방법 중 이 매물이 허용한 것: "pickup"(직접 수령) · "delivery"(배달 요청) */
+export function cartDeliveryOptions(listing) {
+  if (!listing) return ["pickup", "delivery"];
+  const methods = deliveryOf(listing).methods;
+  const options = [];
+  if (methods.includes("self_pickup")) options.push("pickup");
+  if (methods.includes("owner_delivery")) options.push("delivery");
+  return options.length ? options : ["pickup"];
+}
+
 function diffDaysInclusive(startIso, endIso) {
   if (!startIso) return 1;
   const s = new Date(`${startIso}T12:00:00+09:00`);
@@ -135,7 +147,12 @@ function normalizeCartItem(raw, fallbackListing = null) {
     ? (raw?.endDate && raw.endDate >= startDate ? raw.endDate : addDays(startDate, Math.max(0, (Number(raw?.days) || 1) - 1)))
     : "";
   const startTime = type === "rent" ? (raw?.startTime || prefs.startTime || "09:00") : "";
-  const deliveryMethod = raw?.deliveryMethod || prefs.deliveryMethod || "pickup";
+  // 매물이 허용한 수령 방법만 고를 수 있다(직접 운송이 없는 매물은 배달 요청 불가, 직접 픽업이 없으면 직접 수령 불가).
+  const allowedDelivery = cartDeliveryOptions(listing);
+  const wantedDelivery = raw?.deliveryMethod || prefs.deliveryMethod || "pickup";
+  const deliveryMethod = allowedDelivery.includes(wantedDelivery === "delivery" ? "delivery" : "pickup")
+    ? wantedDelivery
+    : allowedDelivery[0];
   const days = type === "rent" ? (Number(raw?.days) || diffDaysInclusive(startDate, endDate)) : 1;
   const quantity = type === "rent" ? 1 : Math.max(1, Number(raw?.quantity) || 1);
   const subtotal = Number(raw?.subtotal) || (type === "rent" ? unitPrice * days : unitPrice * quantity);
@@ -627,7 +644,7 @@ export function createCartCheckout(deps = {}) {
                       type="button"
                       class="cart-delivery-badge is-${isDelivery ? "delivery" : "pickup"}"
                       data-cart-toggle-delivery="${escapeHtml(item.id)}"
-                      title="클릭하여 직접 수령 / 배달 요청 전환"
+                      ${cartDeliveryOptions(listingById(item.listingId)).length < 2 ? `disabled aria-disabled="true" title="${isDelivery ? "이 매물은 직접 운송만 가능해요" : "이 매물은 직접 픽업만 가능해요"}"` : `title="클릭하여 직접 수령 / 배달 요청 전환"`}
                     >${isDelivery ? "🚚 배달 요청" : "🚜 직접 수령"}</button>
                   </div>
                   <button type="button" class="cart-remove-btn" data-cart-remove="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 삭제">삭제</button>
@@ -787,7 +804,12 @@ export function createCartCheckout(deps = {}) {
     const defaultName = runtime.accountUser?.name || "";
     const defaultPhone = runtime.accountUser?.phone || "";
     const defaultAddress = state.region || "";
-    const defaultDelivery = items.some((item) => item.deliveryMethod === "delivery") ? "delivery" : "pickup";
+    // 결제 화면의 수령 방식은 주문하는 모든 매물이 허용한 것만 고를 수 있다.
+    const allowedAll = ["pickup", "delivery"].filter((option) => items.every((item) => cartDeliveryOptions(listingById(item.listingId)).includes(option)));
+    const checkoutOptions = allowedAll.length ? allowedAll : ["pickup", "delivery"];
+    const wantedDefault = items.some((item) => item.deliveryMethod === "delivery") ? "delivery" : "pickup";
+    const defaultDelivery = checkoutOptions.includes(wantedDefault) ? wantedDefault : checkoutOptions[0];
+    const mixedDelivery = !allowedAll.length;
 
     body.innerHTML = `
       <form id="checkoutForm" class="checkout-form" novalidate>
@@ -840,14 +862,15 @@ export function createCartCheckout(deps = {}) {
             <span>수령 방식</span>
             <div class="checkout-radio-row" role="radiogroup" aria-label="수령 방식">
               <label class="checkout-radio-pill">
-                <input type="radio" name="deliveryMethod" value="pickup" ${defaultDelivery === "pickup" ? "checked" : ""} />
-                <span>🚜 직접 방문 수령 <small>무료</small></span>
+                <input type="radio" name="deliveryMethod" value="pickup" ${defaultDelivery === "pickup" ? "checked" : ""} ${checkoutOptions.includes("pickup") ? "" : "disabled"} />
+                <span>🚜 직접 방문 수령 <small>${checkoutOptions.includes("pickup") ? "무료" : "이 매물은 불가"}</small></span>
               </label>
               <label class="checkout-radio-pill">
-                <input type="radio" name="deliveryMethod" value="delivery" ${defaultDelivery === "delivery" ? "checked" : ""} />
-                <span>🚚 배달 요청 <small>농가·밭 협의</small></span>
+                <input type="radio" name="deliveryMethod" value="delivery" ${defaultDelivery === "delivery" ? "checked" : ""} ${checkoutOptions.includes("delivery") ? "" : "disabled"} />
+                <span>🚚 배달 요청 <small>${checkoutOptions.includes("delivery") ? "농가·밭 협의" : "직접 운송 없는 매물"}</small></span>
               </label>
             </div>
+            ${mixedDelivery ? `<p class="checkout-delivery-note">매물마다 운송 방식이 달라요. 수령 방법은 각 판매자·소유자와 채팅에서 정해 주세요.</p>` : ""}
           </div>
 
           <label class="checkout-field" id="checkoutAddressField" ${defaultDelivery === "delivery" ? "" : "hidden"}>
@@ -1249,6 +1272,10 @@ export function createCartCheckout(deps = {}) {
         const item = cartItems.find((i) => i.id === id);
         if (item) {
           const next = item.deliveryMethod === "delivery" ? "pickup" : "delivery";
+          if (!cartDeliveryOptions(listingById(item.listingId)).includes(next)) {
+            toast(next === "delivery" ? "이 매물은 판매자·소유자가 직접 운송하지 않아요. 직접 수령해 주세요." : "이 매물은 직접 운송으로만 받을 수 있어요.");
+            return;
+          }
           updateCartItem(id, { deliveryMethod: next });
         }
         return;

@@ -1,6 +1,7 @@
 // 농농 통합 오케스트레이션 에이전트 (OpenAI · Claude 공통, server/llm.js 기반).
 // 흐름: 화면 컨텍스트 + 발화 의도 파악 → (모호하면) 원탭 선택지 제공 → (조회/날씨/사진/수리/시세)
 //      → 사용자가 긍정·예약 요청하면 즉시 대여·구매·매물 등록 실행 (미확정·비로그인 시 확인 카드 제안).
+import { cleanDeliveryMethods, deliveryLine, deliveryOf, hasDeliverySignal, readDeliveryFromText } from "../src/data/delivery.js";
 import { randomUUID } from "node:crypto";
 import { rentalDays } from "../src/data/compatibility.js";
 import {
@@ -103,6 +104,30 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 비밀번호, 아이디, 전화번호, 결제 정보, 다른 사람의 정보는 조회·변경하지 않는다. 교육이수증 사진 올리기는 [교육이수증] 화면에서 직접 하도록 안내한다.
 - 변경은 반드시 get_my_page 결과의 ID로 propose_my_page_action을 불러 확인 카드를 띄우고, 사용자가 승인해야만 실행된다. 확인 없이 "바꿨어요"라고 말하지 않는다. 대상이 여러 개면 추측하지 말고 어느 것인지 묻는다.
 
+## 매물의 운송 방식 (판매·대여 공통)
+- 운송 방식은 판매글·대여글의 조건이다. 두 가지 중 하나 이상을 고른다(둘 다 가능).
+  · "직접 운송": 판매자·대여해 주는 사람이 기계를 상대 농가까지 가져다준다.
+  · "직접 픽업": 구매자·대여자가 기계가 있는 곳에 와서 직접 가져간다.
+- 매물 초안을 만들 때(prepare_listing_draft) 사용자가 운송 방식을 말하지 않았으면 다른 질문과 겹치지 않게 한 번만 묻는다: "기계는 직접 가져다주실 수 있나요, 아니면 가지러 와야 하나요? 둘 다 괜찮으시면 둘 다 체크해 둘게요."
+- 사용자의 말을 이렇게 해석한다(글과 음성 모두):
+  · 직접 운송: "가져다 드려요", "실어다 드릴게요", "배달해 드려요", "트럭으로 갖다 줄 수 있어요", "운반해 드려요"
+  · 직접 픽업: "가지러 오세요", "와서 가져가세요", "직접 실어 가셔야 해요", "창고에서 인수", "현장 인수"
+  · 둘 다: "둘 다 돼요", "가져다 드릴 수도 있고 오셔도 돼요", "협의 가능"
+  · 애매하면("알아서 해요", "상관없어요") 체크하지 말고 한 번만 다시 묻는다. 추측해서 체크하지 않는다.
+- 사용자가 운송 방식에 답하면 prepare_listing_draft를 delivery 값을 넣어 다시 불러 초안 카드를 갱신한다.
+- 직접 운송을 고르면 운송비와 운송 가능 범위를 함께 받는다(예: "운송비 3만 원", "영양군 안은 무료"). 모르면 null로 두고 초안 카드에서 [확인 필요]로 보여 준다.
+- 직접 픽업을 고르면 픽업 장소를 메모로 받는다(예: "영양읍 창고"). 자세한 주소·전화번호는 받지 않고, 동네 이름까지만 쓴다.
+- prepare_listing_draft와 create_listing을 부를 때 delivery 값(methods, fee, area, pickupPlace)을 넣는다. 운송 방식이 없으면 등록할 수 없다.
+- 매물을 찾는 사용자가 "가져다주는 거", "배달되는 거", "운송해 주는 거"를 찾으면 search_listings에 delivery="owner_delivery"를 넣고, "직접 가지러 갈게요"면 delivery="self_pickup"을 넣는다. 결과를 말할 때 운송 방식(직접 운송이면 운송비도)을 함께 말한다.
+- 대여·구매 확인 카드와 신청 완료 박스에는 화면이 그 매물의 운송 방식을 한 줄로 보여 준다.
+- 운송비 결제는 농농이 처리하지 않는다. 운송 일정과 비용은 소유자·판매자와 채팅에서 정하도록 안내한다.
+
+## 음성 대화에서의 운송 방식
+- 음성으로 매물을 등록할 때도 같은 순서로 한 번만 묻고, 답을 들으면 위 해석 규칙으로 체크한다.
+- 음성은 잘못 들릴 수 있으므로 체크한 결과를 짧게 다시 말해 확인한다: "직접 운송과 직접 픽업 둘 다로 해 둘게요. 운송비는 3만 원 맞으세요?"
+- "아니 가지러 오셔야 해", "운송은 빼 줘"처럼 고치는 말을 하면 그 항목만 바꾸고 나머지는 그대로 둔다.
+- 음성 답변에서는 체크박스·버튼 이름을 읽지 않고 "가져다드림", "가지러 오셔야 함"처럼 쉬운 말로 말한다.
+
 ## 신청 후 채팅으로 이어주기 (대여·구매 공통)
 - 대여 승인 신청(create_rental_request) 또는 구매 신청(create_purchase_request)이 성공하면, 같은 답변 안에서 바로 open_listing_chat을 그 매물의 listingId로 호출한다. 화면에 "소유자와 1:1 채팅 열기" 버튼이 나타난다(서버도 신청 성공 시 버튼을 붙인다).
 - 채팅은 신청한 사람(지금 사용자: 빌리는 사람 또는 사는 사람)이 먼저 시작하는 입장이다.
@@ -165,6 +190,7 @@ const TOOLS = [
         maxPrice: { type: ["integer", "null"], description: "최대 가격(원). 대여는 하루 대여료" },
         start: { type: ["string", "null"], description: "대여 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "반납일 YYYY-MM-DD" },
+        delivery: { type: ["string", "null"], enum: [null, "owner_delivery", "self_pickup"], description: "운송 방식 조건. 가져다주는(직접 운송) 매물만 owner_delivery, 직접 가지러 갈 매물만 self_pickup" },
       },
       required: ["transaction"],
     },
@@ -368,6 +394,16 @@ const TOOLS = [
         condition: { type: ["string", "null"], enum: [null, "good", "used", "repair"] },
         year: { type: ["string", "null"], description: "연식(예: 2019년식)" },
         deposit: { type: ["integer", "null"], description: "대여 보증금(원)" },
+        delivery: {
+          type: ["object", "null"],
+          description: "운송 방식(판매·대여 조건). 사용자가 말한 것만 넣는다. 말하지 않았으면 null로 두고 한 번만 묻는다.",
+          properties: {
+            methods: { type: "array", items: { type: "string", enum: ["owner_delivery", "self_pickup"] }, description: "owner_delivery: 판매자·소유자가 직접 가져다줌, self_pickup: 구매자·대여자가 직접 가지러 옴. 둘 다 가능" },
+            fee: { type: ["integer", "null"], description: "직접 운송 운송비(원). 무료면 0, 모르면 null" },
+            area: { type: ["string", "null"], description: "직접 운송 가능 범위(예: 영양군 안)" },
+            pickupPlace: { type: ["string", "null"], description: "픽업 장소(동네까지만, 예: 영양읍 창고)" },
+          },
+        },
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
         operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) } },
       },
@@ -389,6 +425,16 @@ const TOOLS = [
         condition: { type: ["string", "null"], enum: [null, "good", "used", "repair"] },
         price: { type: "integer", description: "가격(원). 대여는 하루 대여료" },
         deposit: { type: ["integer", "null"], description: "빌려주기일 때 보증금(원)" },
+        delivery: {
+          type: ["object", "null"],
+          description: "운송 방식(판매·대여 조건). 사용자가 말한 것만 넣는다. 말하지 않았으면 null로 두고 한 번만 묻는다.",
+          properties: {
+            methods: { type: "array", items: { type: "string", enum: ["owner_delivery", "self_pickup"] }, description: "owner_delivery: 판매자·소유자가 직접 가져다줌, self_pickup: 구매자·대여자가 직접 가지러 옴. 둘 다 가능" },
+            fee: { type: ["integer", "null"], description: "직접 운송 운송비(원). 무료면 0, 모르면 null" },
+            area: { type: ["string", "null"], description: "직접 운송 가능 범위(예: 영양군 안)" },
+            pickupPlace: { type: ["string", "null"], description: "픽업 장소(동네까지만, 예: 영양읍 창고)" },
+          },
+        },
         region: { type: ["string", "null"], enum: [null, ...REGIONS] },
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
         operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) } },
@@ -641,6 +687,7 @@ function listingView(item) {
     areaRangeM2: [item.areaMin, item.areaMax],
     included: String(item.included || "").slice(0, 120),
     pickup: String(item.pickup || "").slice(0, 80),
+    delivery: deliveryLine(deliveryOf(item), { type: item.type }),
     inspectedAt: item.inspectedAt,
     bookedRanges: (item.booked || []).slice(0, 6),
   };
@@ -760,8 +807,11 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
     dateEnd: end,
     region: effectiveRegion,
   };
-  const selection = selectMatchingListings("", context, scoped);
-  const what = describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction });
+  // 운송 방식 조건: 가져다주는 매물만(owner_delivery) 또는 직접 가지러 갈 매물만(self_pickup)
+  const deliveryWanted = ["owner_delivery", "self_pickup"].includes(input?.delivery) ? input.delivery : null;
+  const deliveryScoped = deliveryWanted ? scoped.filter((item) => deliveryOf(item).methods.includes(deliveryWanted)) : scoped;
+  const selection = selectMatchingListings("", context, deliveryScoped);
+  const what = `${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
   let candidates = selection.candidates;
   let regionFallback = null;
   if (requestedRegion) {
@@ -785,7 +835,9 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   } else if (regionFallback) {
     note = `${regionFallback.reason} 이 문장을 먼저 짧게 말한 뒤, 가장 가까운 ${regionFallback.nearestRegion} 등 가까운 지역의 조건에 맞는 매물을 거리순으로 추천한다. ${order}`;
   } else {
-    note = context.transaction === "rent"
+    note = deliveryWanted
+      ? `${order} 각 매물의 운송 방식(delivery)을 함께 말한다(직접 운송이면 운송비도).${context.transaction === "rent" ? " 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다." : ""}`
+      : context.transaction === "rent"
       ? `${order} 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다.`
       : order;
   }
@@ -1181,7 +1233,7 @@ export function missingListingDetails(saidText, latestText = "", { alreadyAsked 
   return UNVERIFIED_FACTS.filter((fact) => fact.label && !fact.said.test(String(saidText || ""))).map((fact) => fact.label);
 }
 
-function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText = null } = {}) {
+function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText = null, latestText = null } = {}) {
   const type = input?.type === "sale" ? "sale" : "rent";
   const modelId = Object.hasOwn(SPEC_BY_ID, input?.modelId) ? input.modelId : null;
   const spec = modelId ? SPEC_BY_ID[modelId] : null;
@@ -1225,7 +1277,9 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
     ? groundListingDescription(input?.description || "", { saidText, observations: photoSummary?.observations, year })
     : input?.description || "";
   const description = composeListingDescription({ year, deposit, description: bodyText });
+  const delivery = resolveDelivery(input?.delivery, { saidText: grounded ? saidText : null, latestText });
   return {
+    delivery,
     type,
     modelId,
     machineType,
@@ -1242,6 +1296,43 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
     year,
     deposit,
     description,
+  };
+}
+
+// 운송비를 말한 흔적("운송비 3만 원", "배달비는 무료")
+const DELIVERY_FEE_SAID = /(?:운송|배송|운반|배달|탁송|기름)\s*(?:비|값|료)|무료로\s*(?:가져|갖다|실어|배달)/;
+
+/**
+ * 매물의 운송 방식을 정한다.
+ * - 대화에서 만든 초안(saidText 있음): 사용자가 운송을 말한 흔적이 없으면 비워 둔다(모델 추측 금지). 말했으면 모델 값,
+ *   모델이 비웠으면 사용자 말에서 읽은 값을 쓰고, "운송은 빼 줘"처럼 뺀 방식은 지운다.
+ * - 화면 카드·등록 화면에서 온 값(saidText 없음): 사용자가 직접 고른 값이므로 그대로 쓴다.
+ * 개인정보(전화번호·상세 주소)는 픽업 장소·운송 범위에서 지운다.
+ */
+export function resolveDelivery(raw, { saidText = null, latestText = null } = {}) {
+  const given = raw && typeof raw === "object" ? raw : {};
+  let methods = cleanDeliveryMethods(given.methods);
+  const grounded = typeof saidText === "string";
+  if (grounded) {
+    if (!hasDeliverySignal(saidText)) {
+      methods = [];
+    } else {
+      const read = readDeliveryFromText(saidText);
+      if (!methods.length && read.methods) methods = read.methods;
+      // "운송은 빼 줘"는 가장 최근 말에서만 읽는다(그 뒤에 다시 넣었을 수 있다).
+      const latest = readDeliveryFromText(typeof latestText === "string" ? latestText : saidText);
+      if (latest.methods) methods = cleanDeliveryMethods([...methods, ...latest.methods]);
+      if (latest.drop.length) methods = methods.filter((m) => !latest.drop.includes(m));
+    }
+  }
+  const owner = methods.includes("owner_delivery");
+  const pickup = methods.includes("self_pickup");
+  const feeOk = Number.isSafeInteger(given.fee) && given.fee >= 0 && given.fee <= 10_000_000 && (!grounded || DELIVERY_FEE_SAID.test(saidText));
+  return {
+    methods,
+    fee: owner && feeOk ? given.fee : null,
+    area: owner ? cleanPrefill(given.area).slice(0, 80) : "",
+    pickupPlace: pickup ? cleanPrefill(given.pickupPlace).slice(0, 120) : "",
   };
 }
 
@@ -1422,7 +1513,7 @@ function inferRepairBrand(text) {
   return undefined;
 }
 
-const EXTENDED_CONTEXT_PATTERN = /사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|누수|연기|점검|정비|센터|수리점|공업사|경고등|과열|파손|부서|망가|고치|이상하|이상해|a\/s|repair|broken|smoke|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
+const EXTENDED_CONTEXT_PATTERN = /운송|픽업|가져다|갖다\s*(?:드|줄)|가지러|실어다|배달|배송|사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|누수|연기|점검|정비|센터|수리점|공업사|경고등|과열|파손|부서|망가|고치|이상하|이상해|a\/s|repair|broken|smoke|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
 
 /**
  * 턴의 맥락(이미지, 발화, 대화 이력, 슬롯)에 따라 LLM에 전달할 도구 집합을 동적으로 고른다.
@@ -2336,7 +2427,7 @@ async function runTurn(
         // 세부사항(연식·사용시간·포함 작업기)을 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
       } else if (block.name === "prepare_listing_draft") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
+        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
         const price = resolved.estimated ?? estimatePrice(catalogRows, { purpose: resolved.type, modelId: resolved.modelId, machineType: resolved.machineType });
         const finalPrice = Number.isSafeInteger(block.input?.price) && block.input.price > 0 ? block.input.price : price.median;
         let photoNote = null;
@@ -2368,23 +2459,30 @@ async function runTurn(
           areaMax: resolved.areaMax,
           year: resolved.year,
           deposit: resolved.deposit,
+          delivery: resolved.delivery,
         };
         const needsCheck = /\[확인 필요\]\s*(.+)/.exec(out.listingDraft.description)?.[1]?.split(" · ") || [];
+        if (!resolved.delivery.methods.length) needsCheck.push("운송 방식");
         output = {
           ok: true,
           price,
           description: out.listingDraft.description,
           needsCheck,
-          replyGuide: "초안 카드가 화면에 보인다. 제목·소개글을 다시 읽지 말고, \"말씀해 주신 내용으로 초안을 만들었어요\"와 참고가를 한 번 말한 뒤 \"이대로 올릴까요?\"라고 해요체로 묻는다.",
+          replyGuide: resolved.delivery.methods.length
+            ? "초안 카드가 화면에 보인다. 제목·소개글을 다시 읽지 말고, \"말씀해 주신 내용으로 초안을 만들었어요\"와 참고가를 한 번 말한 뒤 \"이대로 올릴까요?\"라고 해요체로 묻는다."
+            : "초안 카드가 화면에 보인다. 운송 방식이 아직 없다. 참고가를 한 번 말한 뒤 \"기계는 직접 가져다주실 수 있나요, 아니면 가지러 와야 하나요? 둘 다 괜찮으시면 둘 다 체크해 둘게요.\"라고 한 번만 묻는다.",
+          delivery: resolved.delivery,
           photoSaved: Boolean(draft),
           ...(user ? {} : { loginRequired: true, note: "로그인하지 않아 사진은 저장하지 않았어요. 등록하기를 누르면 로그인 후 이어서 등록해요." }),
           ...(photoNote ? { photoNote } : {}),
         };
       } else if (block.name === "create_listing") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
+        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
         if (resolved.price === null || !Number.isSafeInteger(resolved.price)) {
           output = { ok: false, error: "가격을 정해야 등록할 수 있어요. 희망 가격을 물어보세요." };
+        } else if (!resolved.delivery.methods.length) {
+          output = { ok: false, error: "운송 방식을 정해야 등록할 수 있어요. 직접 가져다줄 수 있는지, 가지러 와야 하는지(둘 다 가능) 한 번만 물어보세요. 초안 카드에서 직접 체크해도 된다고 안내하세요." };
         } else if (user && spokenApproval && deps?.createListing && !writeDone) {
           try {
             await deps.beforeWrite?.("create_listing");
@@ -2404,6 +2502,8 @@ async function runTurn(
               areaMin: resolved.areaMin,
               areaMax: resolved.areaMax,
               description: resolved.description,
+              delivery: resolved.delivery,
+              pickup: resolved.delivery.pickupPlace,
               ...(draft?.photoKey ? { draftPhotoKey: draft.photoKey } : (image?.dataUrl ? { photoDataUrl: image.dataUrl } : {})),
             });
             const listing = result.listing || {};
@@ -2918,6 +3018,9 @@ export async function executeListingAction(user, action, { requestId, pool = get
   if (resolved.price === null || !Number.isSafeInteger(resolved.price) || resolved.price < 0) {
     return { outcome: "failed", code: "PRICE_REQUIRED", message: "가격이 정해지지 않았어요. ‘상세 수정 후 등록’에서 가격을 입력해 주세요." };
   }
+  if (!resolved.delivery.methods.length) {
+    return { outcome: "failed", code: "DELIVERY_REQUIRED", message: "운송 방식을 하나 이상 골라 주세요. 초안 카드에서 ‘직접 운송’ 또는 ‘직접 픽업’을 체크하면 돼요." };
+  }
   const photoDataUrl = typeof action?.photoDataUrl === "string" && action.photoDataUrl.startsWith("data:image/")
     ? action.photoDataUrl
     : null;
@@ -2937,6 +3040,8 @@ export async function executeListingAction(user, action, { requestId, pool = get
     areaMin: resolved.areaMin,
     areaMax: resolved.areaMax,
     description: resolved.description,
+    delivery: resolved.delivery,
+    pickup: resolved.delivery.pickupPlace,
     ...(cleanDraft ? { draftPhotoKey: cleanDraft.photoKey } : {}),
     ...(photoDataUrl ? { photoDataUrl } : {}),
   }, { pool });

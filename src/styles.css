@@ -5723,3 +5723,47 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* 매물 등록·수정: 운송 방식(직접 운송 / 직접 픽업) 체크 */
+.delivery-option {
+  display: grid;
+  gap: 9px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #cfe3d4;
+  border-radius: 12px;
+  background: #f4f9f5;
+}
+.delivery-option legend {
+  padding: 0 4px;
+  font-weight: 700;
+}
+.delivery-option-hint {
+  font-weight: 400;
+  color: #5c6660;
+  font-size: 0.85em;
+}
+.stack-form .delivery-option-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+}
+.stack-form .delivery-option-toggle input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.delivery-option-fields[hidden],
+.delivery-option-error[hidden] {
+  display: none;
+}
+.delivery-option-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.85rem;
+  font-weight: 600;
+}

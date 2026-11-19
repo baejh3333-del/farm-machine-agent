@@ -2,6 +2,7 @@ import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { getPool } from "./db.js";
 import { buildMockListings } from "./listing-seed.js";
 import { photoPublicUrl } from "./storage.js";
+import { cleanDeliveryMethods, inferDeliveryMethods } from "../src/data/delivery.js";
 
 /**
  * Legacy synchronous seed accessor retained strictly for pure unit test fixtures.
@@ -39,6 +40,13 @@ export function toListingDto(row, booked = [], viewerId = null) {
       : new Date(row.inspected_at).toISOString().slice(0, 10),
     included: row.included ?? "",
     pickup: row.pickup ?? "",
+    // 마이그레이션 전(컬럼 없음)에는 pickup 글로 추정한다.
+    delivery: {
+      methods: cleanDeliveryMethods(row.delivery_methods).length ? cleanDeliveryMethods(row.delivery_methods) : inferDeliveryMethods(row.pickup),
+      fee: row.delivery_fee === null || row.delivery_fee === undefined ? null : Number(row.delivery_fee),
+      area: row.delivery_area ?? "",
+      pickupPlace: row.pickup ?? "",
+    },
     description: row.description ?? "",
     summary: row.summary ?? "",
     photoKey: row.photo_key ?? null,

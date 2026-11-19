@@ -132,7 +132,7 @@ test("문제5: 오류가 난 다음 대화에서도 '너가 바로 구매해줘'
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.equal(res.body.reservation.kind, "purchase");
   assert.equal(res.body.reservation.listingId, saleListing.id);
-  assert.match(res.body.reply, /^두루기계통상 DRGH-1400 청기면 구매 신청을 완료했어요\. 신청 번호는 P-[0-9A-F]{8}예요\.$/);
+  assert.match(res.body.reply, /^'두루기계통상 DRGH-1400 · 청기면' 구매 신청이 완료되었어요![\s\S]*신청 번호는 P-[0-9A-F]{8}예요\.$/);
 
   const rows = await pool.query("SELECT c.listing_id, m.body FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.id = $1", [requestId]);
   assert.equal(rows.rows.length, 1);
@@ -152,7 +152,7 @@ test("문제5: 대여 예약도 '네'라고 하면 같은 응답 안에서 예�
   const res = await chat("네", { type: "rental_request", listingId: rentListing.id, title: rentListing.title, start, end, requestId: randomUUID() });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.equal(res.body.reservation.kind, "rental");
-  assert.match(res.body.reply, /대여 예약 요청을 완료했어요\. 신청 번호는 R-[0-9A-F]{8}예요\./);
+  assert.match(res.body.reply, /대여 신청이 완료되었어요![\s\S]*신청 번호는 R-[0-9A-F]{8}예요\./);
   const rows = await pool.query("SELECT listing_id, start_date::text AS s FROM rental_requests WHERE listing_id = $1", [rentListing.id]);
   assert.equal(rows.rows.length, 1);
 });
@@ -167,6 +167,7 @@ test("문제5: 판매글은 '올려줘'라고 하면 바로 등록된다", async
     region: "청기면",
     cropIds: ["sweetPotato"],
     operations: ["potatoHarvest"],
+    delivery: { methods: ["self_pickup"] },
     description: "직접 쓰던 수확기입니다.",
     requestId: randomUUID(),
   });

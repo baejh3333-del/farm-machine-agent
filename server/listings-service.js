@@ -1,3 +1,4 @@
+import { cleanDeliveryMethods, inferDeliveryMethods } from "../src/data/delivery.js";
 import { CROP_BY_ID, MACHINE_BY_ID, OPERATION_BY_ID } from "../src/data/farm-machines.js";
 import { SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { getPool, kstToday, withTransaction } from "./db.js";
@@ -39,7 +40,7 @@ function normalizePositiveInt(value, { min = 0, max = 1_000_000_000, field }) {
   return num;
 }
 
-function normalizeListingFields(payload, fallback = {}) {
+export function normalizeListingFields(payload, fallback = {}) {
   const type = typeof payload.type === "string" ? payload.type.trim() : fallback.type;
   if (!LISTING_TYPES.has(type)) {
     fail(400, "INVALID_TYPE", "거래 방식은 대여 또는 구매여야 합니다.");
@@ -88,7 +89,10 @@ function normalizeListingFields(payload, fallback = {}) {
   }
 
   const included = normalizeText(payload.included ?? fallback.included ?? "", { min: 0, max: 120, field: "포함 구성" });
-  const pickup = normalizeText(payload.pickup ?? fallback.pickup ?? "", { min: 0, max: 120, field: "인수 방식" });
+  const pickupInput = payload.delivery && typeof payload.delivery === "object" && typeof payload.delivery.pickupPlace === "string"
+    ? payload.delivery.pickupPlace
+    : payload.pickup;
+  const pickup = normalizeText(pickupInput ?? fallback.pickup ?? "", { min: 0, max: 120, field: "인수 방식" });
   const description = normalizeText(payload.description ?? fallback.description ?? "", {
     min: 0,
     max: 1000,
@@ -102,6 +106,26 @@ function normalizeListingFields(payload, fallback = {}) {
     summary = `${brand} ${title} · ${region}`.slice(0, 300);
   }
 
+  // 운송 방식: 화면·농농이 보낸 값이 우선. 보내지 않았으면(예전 화면·수정 시 생략) 저장된 값, 그것도 없으면 pickup 글로 추정한다.
+  const deliveryInput = payload.delivery && typeof payload.delivery === "object" ? payload.delivery : null;
+  let deliveryMethods;
+  if (deliveryInput) {
+    deliveryMethods = cleanDeliveryMethods(deliveryInput.methods);
+    const unknown = Array.isArray(deliveryInput.methods) && deliveryInput.methods.some((m) => !["owner_delivery", "self_pickup"].includes(m));
+    if (!deliveryMethods.length || unknown) fail(400, "INVALID_DELIVERY", "운송 방식을 하나 이상 골라 주세요.");
+  } else {
+    deliveryMethods = cleanDeliveryMethods(fallback.delivery_methods);
+    if (!deliveryMethods.length) deliveryMethods = inferDeliveryMethods(pickup);
+  }
+  const ownerDelivers = deliveryMethods.includes("owner_delivery");
+  const feeInput = deliveryInput ? deliveryInput.fee : fallback.delivery_fee;
+  const deliveryFee = ownerDelivers && feeInput !== null && feeInput !== undefined && feeInput !== ""
+    ? normalizePositiveInt(feeInput, { min: 0, max: 10_000_000, field: "운송비" })
+    : null;
+  const areaInput = deliveryInput ? deliveryInput.area : fallback.delivery_area;
+  const deliveryArea = ownerDelivers ? normalizeText(areaInput ?? "", { min: 0, max: 80, field: "운송 가능 범위" }) : "";
+  const delivery = { methods: deliveryMethods, fee: deliveryFee, area: deliveryArea };
+
   const operatorInput = payload.rentalOperator === undefined ? fallback.rental_operator : payload.rentalOperator;
   const rentalOperator = type === "rent" && operatorInput != null ? {
     name: normalizeText(operatorInput.name, { min: 1, max: 40, field: "작업자 이름" }),
@@ -111,6 +135,7 @@ function normalizeListingFields(payload, fallback = {}) {
 
   return {
     rentalOperator,
+    delivery,
     type,
     modelId,
     title,
@@ -156,6 +181,9 @@ function matchesExistingListing(row, fields) {
     formatIsoDate(row.inspected_at) === fields.inspectedAt &&
     row.included === fields.included &&
     row.pickup === fields.pickup &&
+    sameStringArray(cleanDeliveryMethods(row.delivery_methods), fields.delivery.methods) &&
+    (row.delivery_fee ?? null) === fields.delivery.fee &&
+    (row.delivery_area ?? "") === fields.delivery.area &&
     row.description === fields.description
   );
 }
@@ -228,12 +256,14 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
           id, owner_id, type, model_id, title, brand, machine_type,
           crop_ids, operations, area_min, area_max, price, region,
           condition, inspected_at, included, pickup, description, summary,
-          photo_key, status, is_demo, sort_order, rental_operator
+          photo_key, status, is_demo, sort_order, rental_operator,
+          delivery_methods, delivery_fee, delivery_area
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12, $13,
           $14, $15, $16, $17, $18, $19,
-          $20, 'open', false, 0, $21
+          $20, 'open', false, 0, $21,
+          $22, $23, $24
         )`,
         [
           id,
@@ -257,6 +287,9 @@ export async function createListing(user, payload, { pool = getPool() } = {}) {
           fields.summary,
           uploadedKey || draftKey,
           fields.rentalOperator,
+          fields.delivery.methods,
+          fields.delivery.fee,
+          fields.delivery.area,
         ]
       );
 
@@ -395,7 +428,8 @@ export async function updateListing(user, payload, { pool = getPool() } = {}) {
              crop_ids = $7, operations = $8, area_min = $9, area_max = $10, price = $11,
              region = $12, condition = $13, inspected_at = $14, included = $15,
              pickup = $16, description = $17, summary = $18, photo_key = $19,
-             rental_operator = $20, updated_at = now()
+             rental_operator = $20, delivery_methods = $21, delivery_fee = $22,
+             delivery_area = $23, updated_at = now()
          WHERE id = $1`,
         [
           id,
@@ -418,6 +452,9 @@ export async function updateListing(user, payload, { pool = getPool() } = {}) {
           fields.summary,
           nextPhotoKey,
           fields.rentalOperator,
+          fields.delivery.methods,
+          fields.delivery.fee,
+          fields.delivery.area,
         ]
       );
     }, pool);

@@ -126,6 +126,7 @@ test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/
     await pageA.locator("#editPrice").fill("65000");
     await pageA.locator("#editPhoto").setInputFiles(pngFixturePath);
     await pageA.locator("#editIncluded").fill("로터리, 두둑성형기 포함");
+    await pageA.locator("#editDeliveryPickup").check();
     await pageA.locator("#editPickup").fill("영양읍 창고 직거래");
     await pageA.locator("#editDescription").fill("Playwright E2E 테스트 매물입니다.");
     await pageA.locator("#editOperatorEnabled").check();

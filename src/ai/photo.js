@@ -42,6 +42,18 @@ export function listingDraftToFormValues(draft, photoDataUrl) {
     ...(draft?.operations?.length ? { operations: draft.operations } : {}),
     ...(Number.isFinite(draft?.areaMin) ? { areaMin: draft.areaMin } : {}),
     ...(Number.isFinite(draft?.areaMax) ? { areaMax: draft.areaMax } : {}),
+    // 운송 방식: 초안 카드에서 고른 값을 등록 화면 체크박스로 옮긴다.
+    ...(draft?.delivery && typeof draft.delivery === "object"
+      ? {
+          delivery: {
+            methods: Array.isArray(draft.delivery.methods) ? draft.delivery.methods.filter((m) => m === "owner_delivery" || m === "self_pickup") : [],
+            fee: Number.isSafeInteger(draft.delivery.fee) && draft.delivery.fee >= 0 ? draft.delivery.fee : null,
+            area: typeof draft.delivery.area === "string" ? draft.delivery.area : "",
+            pickupPlace: typeof draft.delivery.pickupPlace === "string" ? draft.delivery.pickupPlace : "",
+          },
+          ...(typeof draft.delivery.pickupPlace === "string" ? { pickup: draft.delivery.pickupPlace } : {}),
+        }
+      : {}),
     ...(saved ? { draftPhotoKey: draft.photoKey, draftPhotoUrl: draft.photoUrl || undefined } : {}),
     ...(photoDataUrl ? { photoDataUrl } : {}),
   };

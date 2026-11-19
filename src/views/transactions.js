@@ -5,6 +5,7 @@ import { $, escapeHtml, money, areaLabel, today, addDays, koreanDateParts, pictu
 import { state, runtime, isLoggedIn, apiFetch, allListings, listingById, statusLabel, statusClass, stopChatPolling, readGuestFavorites, clearGuestFavorites } from "../core/store.js";
 import { openCameraCapture, shrinkPhoto } from "../ai/panel.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
+import { deliveryOf, pickupLabel } from "../data/delivery.js";
 import {
   senderState, SENDER_LABEL, roleOf, readSeqFor,
   presetsForListingType, getDelegationPreset, buildQuickDelegationPolicy,
@@ -1822,6 +1823,14 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   const initialInspected = val("inspectedAt", today());
   const initialIncluded = val("included", "");
   const initialPickup = val("pickup", "");
+  // 운송 방식: 초안·수정 값이 있으면 그대로, 없으면(예전 매물) 인수·전달 방법 글로 추정한다. 새 매물은 아무것도 체크하지 않는다.
+  const initialDelivery = (() => {
+    const draftDelivery = draftValues && draftValues.delivery !== undefined ? draftValues.delivery : null;
+    if (draftDelivery) return { methods: Array.isArray(draftDelivery.methods) ? draftDelivery.methods : [], fee: draftDelivery.fee ?? null, area: draftDelivery.area || "", pickupPlace: draftDelivery.pickupPlace ?? initialPickup };
+    if (item) return deliveryOf(item);
+    return { methods: [], fee: null, area: "", pickupPlace: initialPickup };
+  })();
+  const hasMethod = (method) => initialDelivery.methods.includes(method);
   const initialDescription = val("description", "");
   const regionKeys = Object.keys(REGION_COORDS);
   const regionOptions = initialRegion && !regionKeys.includes(initialRegion)
@@ -1901,8 +1910,26 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       ${isEdit && hasListingPhoto(item) ? `<label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="editRemovePhoto" style="width:auto"> 등록된 기존 사진 삭제하기</label>` : ""}
       <div class="form-row-2">
         <label>포함 작업기·부속품<input id="editIncluded" maxlength="120" required value="${escapeHtml(initialIncluded)}" placeholder="예: 로터리, 두둑성형기 포함"></label>
-        <label>인수·전달 방법<input id="editPickup" maxlength="120" required value="${escapeHtml(initialPickup)}" placeholder="예: 영양읍 창고 직접 방문 인수"></label>
       </div>
+      <fieldset class="delivery-option" id="editDeliveryFieldset" aria-describedby="editDeliveryError">
+        <legend>운송 방식 <span class="delivery-option-hint">(하나 이상, 둘 다 가능)</span></legend>
+        <label class="delivery-option-toggle">
+          <input type="checkbox" id="editDeliveryOwner" ${hasMethod("owner_delivery") ? "checked" : ""} aria-controls="editDeliveryOwnerFields" aria-expanded="${hasMethod("owner_delivery") ? "true" : "false"}">
+          직접 운송 (내가 가져다드려요)
+        </label>
+        <div class="delivery-option-fields form-row-2" id="editDeliveryOwnerFields" ${hasMethod("owner_delivery") ? "" : "hidden"}>
+          <label>운송비(원, 비우면 협의)<input id="editDeliveryFee" type="number" min="0" max="10000000" step="1000" value="${escapeHtml(initialDelivery.fee ?? "")}" placeholder="예: 30000"></label>
+          <label>운송 가능 범위<input id="editDeliveryArea" maxlength="80" value="${escapeHtml(initialDelivery.area || "")}" placeholder="예: 영양군 안"></label>
+        </div>
+        <label class="delivery-option-toggle">
+          <input type="checkbox" id="editDeliveryPickup" ${hasMethod("self_pickup") ? "checked" : ""} aria-controls="editDeliveryPickupFields" aria-expanded="${hasMethod("self_pickup") ? "true" : "false"}">
+          <span id="editDeliveryPickupLabel">${escapeHtml(pickupLabel(initialType))}</span>
+        </label>
+        <div class="delivery-option-fields" id="editDeliveryPickupFields" ${hasMethod("self_pickup") ? "" : "hidden"}>
+          <label>픽업 장소 (동네까지만)<input id="editPickup" maxlength="120" value="${escapeHtml(initialDelivery.pickupPlace || "")}" placeholder="예: 영양읍 창고"></label>
+        </div>
+        <p class="delivery-option-error" id="editDeliveryError" role="alert" hidden>운송 방식을 하나 이상 골라 주세요.</p>
+      </fieldset>
       <div id="editOperatorOption" class="rental-operator rental-operator-option">
         <label class="rental-operator-toggle">
           <input type="checkbox" id="editOperatorEnabled" ${initialOperator ? "checked" : ""}>
@@ -1982,6 +2009,20 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
   };
   syncOperatorFields();
   $("editType").addEventListener("change", syncOperatorFields);
+  const syncDeliveryFields = () => {
+    const owner = $("editDeliveryOwner").checked;
+    const pickup = $("editDeliveryPickup").checked;
+    $("editDeliveryOwnerFields").hidden = !owner;
+    $("editDeliveryPickupFields").hidden = !pickup;
+    $("editDeliveryOwner").setAttribute("aria-expanded", String(owner));
+    $("editDeliveryPickup").setAttribute("aria-expanded", String(pickup));
+    $("editDeliveryPickupLabel").textContent = pickupLabel($("editType").value);
+    if (owner || pickup) $("editDeliveryError").hidden = true;
+  };
+  syncDeliveryFields();
+  $("editType").addEventListener("change", syncDeliveryFields);
+  $("editDeliveryOwner").addEventListener("change", syncDeliveryFields);
+  $("editDeliveryPickup").addEventListener("change", syncDeliveryFields);
   $("editOperatorEnabled").addEventListener("change", syncOperatorFields);
   let lastSubmitHash = null;
   let capturedPhotoDataUrl = null;
@@ -2046,6 +2087,23 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       return toast("권장 면적 범위를 올바르게 입력해 주세요.");
     }
 
+    const deliveryMethods = [
+      ...($("editDeliveryOwner").checked ? ["owner_delivery"] : []),
+      ...($("editDeliveryPickup").checked ? ["self_pickup"] : []),
+    ];
+    if (!deliveryMethods.length) {
+      $("editDeliveryError").hidden = false;
+      $("editDeliveryOwner").focus();
+      return toast("운송 방식을 하나 이상 골라 주세요.");
+    }
+    const feeRaw = $("editDeliveryFee").value.trim();
+    const delivery = {
+      methods: deliveryMethods,
+      fee: deliveryMethods.includes("owner_delivery") && feeRaw !== "" ? Number(feeRaw) : null,
+      area: deliveryMethods.includes("owner_delivery") ? $("editDeliveryArea").value.trim() : "",
+      pickupPlace: deliveryMethods.includes("self_pickup") ? $("editPickup").value.trim() : "",
+    };
+
     const file = $("editPhoto").files[0];
     if (file && file.size > 1024 * 1024) {
       return toast("JPG·PNG·WebP 사진을 1MB 이하로 선택해 주세요.");
@@ -2083,7 +2141,8 @@ function listingFormModal({ mode = "create", item = null, draftValues = null } =
       condition: $("editCondition").value,
       inspectedAt: $("editInspection").value,
       included: $("editIncluded").value.trim(),
-      pickup: $("editPickup").value.trim(),
+      pickup: delivery.pickupPlace,
+      delivery,
       description: $("editDescription").value.trim(),
       ...(draftPhotoKey ? { draftPhotoKey } : {}),
       ...(photoDataUrl ? { photoDataUrl } : {}),

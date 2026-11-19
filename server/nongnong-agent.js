@@ -1,6 +1,7 @@
 // 농농 통합 오케스트레이션 에이전트 (OpenAI · Claude 공통, server/llm.js 기반).
 // 흐름: 화면 컨텍스트 + 발화 의도 파악 → (모호하면) 원탭 선택지 제공 → (조회/날씨/사진/수리/시세)
 //      → 사용자가 긍정·예약 요청하면 즉시 대여·구매·매물 등록 실행 (미확정·비로그인 시 확인 카드 제안).
+import { cleanDeliveryMethods, deliveryLine, deliveryOf, hasDeliverySignal, readDeliveryFromText } from "../src/data/delivery.js";
 import { randomUUID } from "node:crypto";
 import { rentalDays } from "../src/data/compatibility.js";
 import {
@@ -104,6 +105,43 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 비밀번호, 아이디, 전화번호, 결제 정보, 다른 사람의 정보는 조회·변경하지 않는다. 교육이수증 사진 올리기는 [교육이수증] 화면에서 직접 하도록 안내한다.
 - 변경은 반드시 get_my_page 결과의 ID로 propose_my_page_action을 불러 확인 카드를 띄우고, 사용자가 승인해야만 실행된다. 확인 없이 "바꿨어요"라고 말하지 않는다. 대상이 여러 개면 추측하지 말고 어느 것인지 묻는다.
 
+## 매물의 운송 방식 (판매·대여 공통)
+- 운송 방식은 판매글·대여글의 조건이다. 두 가지 중 하나 이상을 고른다(둘 다 가능).
+  · "직접 운송": 판매자·대여해 주는 사람이 기계를 상대 농가까지 가져다준다.
+  · "직접 픽업": 구매자·대여자가 기계가 있는 곳에 와서 직접 가져간다.
+- 매물 초안을 만들 때(prepare_listing_draft) 사용자가 운송 방식을 말하지 않았으면 다른 질문과 겹치지 않게 한 번만 묻는다: "기계는 직접 가져다주실 수 있나요, 아니면 가지러 와야 하나요? 둘 다 괜찮으시면 둘 다 체크해 둘게요."
+- 사용자의 말을 이렇게 해석한다(글과 음성 모두):
+  · 직접 운송: "가져다 드려요", "실어다 드릴게요", "배달해 드려요", "트럭으로 갖다 줄 수 있어요", "운반해 드려요"
+  · 직접 픽업: "가지러 오세요", "와서 가져가세요", "직접 실어 가셔야 해요", "창고에서 인수", "현장 인수"
+  · 둘 다: "둘 다 돼요", "가져다 드릴 수도 있고 오셔도 돼요", "협의 가능"
+  · 애매하면("알아서 해요", "상관없어요") 체크하지 말고 한 번만 다시 묻는다. 추측해서 체크하지 않는다.
+- 사용자가 운송 방식에 답하면 prepare_listing_draft를 delivery 값을 넣어 다시 불러 초안 카드를 갱신한다.
+- 직접 운송을 고르면 운송비와 운송 가능 범위를 함께 받는다(예: "운송비 3만 원", "영양군 안은 무료"). 모르면 null로 두고 초안 카드에서 [확인 필요]로 보여 준다.
+- 직접 픽업을 고르면 픽업 장소를 메모로 받는다(예: "영양읍 창고"). 자세한 주소·전화번호는 받지 않고, 동네 이름까지만 쓴다.
+- prepare_listing_draft와 create_listing을 부를 때 delivery 값(methods, fee, area, pickupPlace)을 넣는다. 운송 방식이 없으면 등록할 수 없다.
+- 매물을 찾는 사용자가 "가져다주는 거", "배달되는 거", "운송해 주는 거"를 찾으면 search_listings에 delivery="owner_delivery"를 넣고, "직접 가지러 갈게요"면 delivery="self_pickup"을 넣는다. 결과를 말할 때 운송 방식(직접 운송이면 운송비도)을 함께 말한다.
+- 대여·구매 확인 카드와 신청 완료 박스에는 화면이 그 매물의 운송 방식을 한 줄로 보여 준다.
+- 운송비 결제는 농농이 처리하지 않는다. 운송 일정과 비용은 소유자·판매자와 채팅에서 정하도록 안내한다.
+
+## 음성 대화에서의 운송 방식
+- 음성으로 매물을 등록할 때도 같은 순서로 한 번만 묻고, 답을 들으면 위 해석 규칙으로 체크한다.
+- 음성은 잘못 들릴 수 있으므로 체크한 결과를 짧게 다시 말해 확인한다: "직접 운송과 직접 픽업 둘 다로 해 둘게요. 운송비는 3만 원 맞으세요?"
+- "아니 가지러 오셔야 해", "운송은 빼 줘"처럼 고치는 말을 하면 그 항목만 바꾸고 나머지는 그대로 둔다.
+- 음성 답변에서는 체크박스·버튼 이름을 읽지 않고 "가져다드림", "가지러 오셔야 함"처럼 쉬운 말로 말한다.
+
+## 신청 후 채팅으로 이어주기 (대여·구매 공통)
+- 대여 승인 신청(create_rental_request) 또는 구매 신청(create_purchase_request)이 성공하면, 같은 답변 안에서 바로 open_listing_chat을 그 매물의 listingId로 호출한다. 화면에 "소유자와 1:1 채팅 열기" 버튼이 나타난다(서버도 신청 성공 시 버튼을 붙인다).
+- 채팅은 신청한 사람(지금 사용자: 빌리는 사람 또는 사는 사람)이 먼저 시작하는 입장이다.
+- 채팅 메시지는 농농이가 대신 보내지 않는다. 버튼을 누르고 보내기를 누르는 것은 사용자가 직접 한다.
+- prefillMessage에는 예약·신청 결과에 있는 값(매물명, 날짜, 가격)만 쓴다. 사용자의 전화번호, 주소, 결제 정보는 넣지 않는다.
+- 신청이 실패하면 채팅 버튼을 띄우지 않고, 실패 이유와 다음에 할 일만 알려준다.
+- 대여 신청 후 prefillMessage 예: "안녕하세요. [매물명]을 [11월 20일(목)~11월 21일(금)]에 대여 신청했어요. 수령 방법과 시간 여쭤보고 싶어요."
+  답변: "n번 매물 대여 신청이 완료되었어요! 소유 농가가 승인하면 예약이 확정돼요. 궁금한 점은 아래 버튼을 눌러 소유 농가와 바로 이야기해 보세요."
+- 구매 신청을 하면 판매자에게 구매 희망 메시지가 이미 한 번 보내진다. 그래서 prefillMessage는 비우거나, 같은 말을 반복하지 않는 짧은 질문만 넣는다. 예: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요."
+  답변: "n번 매물 구매 신청이 완료되었어요! 판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요. 아래 버튼을 눌러 판매자와 바로 이야기해 보세요."
+- "n번"은 [직전에 보여준 매물]의 번호다. 번호를 모르면 매물 이름으로 말한다.
+- 신청 전에 사용자가 "주인한테 먼저 물어볼래요", "판매자한테 연락할래요"라고 하면, 신청 없이 open_listing_chat만 호출해 채팅 버튼을 보여준다.
+
 ## 이미 보여준 매물로 예약 진행 (반복 추천 금지)
 - [직전에 보여준 매물] 목록이 있으면 "1번/2번/3번", "첫 번째", "그거", "아까 그 트랙터", "청기면 거", "제일 싼 거"는 이 목록에서만 찾는다. 번호는 목록 번호와 정확히 같다.
 - 이 목록이 있고 사용자가 그중 하나를 고르거나 고른 매물에 대해 묻는 중이면 search_listings를 다시 호출하지 않는다. 다시 검색하는 경우는 다른 조건(기종·작물·지역·날짜·예산)을 말했거나 "다른 거 보여줘/다시 찾아줘"라고 했거나, 목록 매물이 그 날짜에 안 될 때뿐이다.
@@ -158,6 +196,7 @@ const TOOLS = [
         start: { type: ["string", "null"], description: "대여 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "반납일 YYYY-MM-DD" },
         operatorService: { type: ["boolean", "null"], description: "대여에서 대행운영서비스(작업자 동반) 사용 여부. 사용 true면 제공 매물만, false면 제공 안 하는 매물만. 정하지 않았으면 null" },
+        delivery: { type: ["string", "null"], enum: [null, "owner_delivery", "self_pickup"], description: "운송 방식 조건. 가져다주는(직접 운송) 매물만 owner_delivery, 직접 가지러 갈 매물만 self_pickup" },
       },
       required: ["transaction"],
     },
@@ -368,6 +407,16 @@ const TOOLS = [
           description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
           properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
         },
+        delivery: {
+          type: ["object", "null"],
+          description: "운송 방식(판매·대여 조건). 사용자가 말한 것만 넣는다. 말하지 않았으면 null로 두고 한 번만 묻는다.",
+          properties: {
+            methods: { type: "array", items: { type: "string", enum: ["owner_delivery", "self_pickup"] }, description: "owner_delivery: 판매자·소유자가 직접 가져다줌, self_pickup: 구매자·대여자가 직접 가지러 옴. 둘 다 가능" },
+            fee: { type: ["integer", "null"], description: "직접 운송 운송비(원). 무료면 0, 모르면 null" },
+            area: { type: ["string", "null"], description: "직접 운송 가능 범위(예: 영양군 안)" },
+            pickupPlace: { type: ["string", "null"], description: "픽업 장소(동네까지만, 예: 영양읍 창고)" },
+          },
+        },
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
         operations: { type: "array", items: { type: "string", enum: OPERATIONS.map(({ id }) => id) } },
       },
@@ -393,6 +442,16 @@ const TOOLS = [
           type: ["object", "null"],
           description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
           properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
+        },
+        delivery: {
+          type: ["object", "null"],
+          description: "운송 방식(판매·대여 조건). 사용자가 말한 것만 넣는다. 말하지 않았으면 null로 두고 한 번만 묻는다.",
+          properties: {
+            methods: { type: "array", items: { type: "string", enum: ["owner_delivery", "self_pickup"] }, description: "owner_delivery: 판매자·소유자가 직접 가져다줌, self_pickup: 구매자·대여자가 직접 가지러 옴. 둘 다 가능" },
+            fee: { type: ["integer", "null"], description: "직접 운송 운송비(원). 무료면 0, 모르면 null" },
+            area: { type: ["string", "null"], description: "직접 운송 가능 범위(예: 영양군 안)" },
+            pickupPlace: { type: ["string", "null"], description: "픽업 장소(동네까지만, 예: 영양읍 창고)" },
+          },
         },
         region: { type: ["string", "null"], enum: [null, ...REGIONS] },
         cropIds: { type: "array", items: { type: "string", enum: CROPS.map(({ id }) => id) } },
@@ -646,6 +705,7 @@ function listingView(item) {
     areaRangeM2: [item.areaMin, item.areaMax],
     included: String(item.included || "").slice(0, 120),
     pickup: String(item.pickup || "").slice(0, 80),
+    delivery: deliveryLine(deliveryOf(item), { type: item.type }),
     inspectedAt: item.inspectedAt,
     bookedRanges: (item.booked || []).slice(0, 6),
     operatorService: hasOperatorService(item)
@@ -772,8 +832,11 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
     dateEnd: end,
     region: effectiveRegion,
   };
-  const selection = selectMatchingListings("", context, scoped);
-  const what = `${operatorWanted === true ? "대행운영서비스를 제공하는 " : operatorWanted === false ? "대행운영서비스 없는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
+  // 운송 방식 조건: 가져다주는 매물만(owner_delivery) 또는 직접 가지러 갈 매물만(self_pickup)
+  const deliveryWanted = ["owner_delivery", "self_pickup"].includes(input?.delivery) ? input.delivery : null;
+  const deliveryScoped = deliveryWanted ? scoped.filter((item) => deliveryOf(item).methods.includes(deliveryWanted)) : scoped;
+  const selection = selectMatchingListings("", context, deliveryScoped);
+  const what = `${operatorWanted === true ? "대행운영서비스를 제공하는 " : operatorWanted === false ? "대행운영서비스 없는 " : ""}${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
   let candidates = selection.candidates;
   let regionFallback = null;
   if (requestedRegion) {
@@ -797,7 +860,9 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   } else if (regionFallback) {
     note = `${regionFallback.reason} 이 문장을 먼저 짧게 말한 뒤, 가장 가까운 ${regionFallback.nearestRegion} 등 가까운 지역의 조건에 맞는 매물을 거리순으로 추천한다. ${order}`;
   } else {
-    note = context.transaction === "rent"
+    note = deliveryWanted
+      ? `${order} 각 매물의 운송 방식(delivery)을 함께 말한다(직접 운송이면 운송비도).${context.transaction === "rent" ? " 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다." : ""}`
+      : context.transaction === "rent"
       ? `${order} 대여 안내 시 기종·임대사업소 규정에 따라 '+ 교육이수증 필요' 안내와 '보험 추천해드릴까요?' 제안을 함께 고려한다.`
       : order;
   }
@@ -1200,7 +1265,7 @@ export function missingListingDetails(saidText, latestText = "", { alreadyAsked 
   return UNVERIFIED_FACTS.filter((fact) => fact.label && !fact.said.test(String(saidText || ""))).map((fact) => fact.label);
 }
 
-function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText = null } = {}) {
+function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText = null, latestText = null } = {}) {
   const type = input?.type === "sale" ? "sale" : "rent";
   const modelId = Object.hasOwn(SPEC_BY_ID, input?.modelId) ? input.modelId : null;
   const spec = modelId ? SPEC_BY_ID[modelId] : null;
@@ -1246,7 +1311,9 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
   // 대행운영서비스는 대여글에만: 작업자 정보가 모두 있으면 소개글 맨 위에 "대행운영서비스 제공중"을 적는다.
   const rentalOperator = type === "rent" ? cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator) : null;
   const description = withOperatorLine(composeListingDescription({ year, deposit, description: bodyText }), rentalOperator);
+  const delivery = resolveDelivery(input?.delivery, { saidText: grounded ? saidText : null, latestText });
   return {
+    delivery,
     type,
     modelId,
     machineType,
@@ -1264,6 +1331,43 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
     deposit,
     rentalOperator,
     description,
+  };
+}
+
+// 운송비를 말한 흔적("운송비 3만 원", "배달비는 무료")
+const DELIVERY_FEE_SAID = /(?:운송|배송|운반|배달|탁송|기름)\s*(?:비|값|료)|무료로\s*(?:가져|갖다|실어|배달)/;
+
+/**
+ * 매물의 운송 방식을 정한다.
+ * - 대화에서 만든 초안(saidText 있음): 사용자가 운송을 말한 흔적이 없으면 비워 둔다(모델 추측 금지). 말했으면 모델 값,
+ *   모델이 비웠으면 사용자 말에서 읽은 값을 쓰고, "운송은 빼 줘"처럼 뺀 방식은 지운다.
+ * - 화면 카드·등록 화면에서 온 값(saidText 없음): 사용자가 직접 고른 값이므로 그대로 쓴다.
+ * 개인정보(전화번호·상세 주소)는 픽업 장소·운송 범위에서 지운다.
+ */
+export function resolveDelivery(raw, { saidText = null, latestText = null } = {}) {
+  const given = raw && typeof raw === "object" ? raw : {};
+  let methods = cleanDeliveryMethods(given.methods);
+  const grounded = typeof saidText === "string";
+  if (grounded) {
+    if (!hasDeliverySignal(saidText)) {
+      methods = [];
+    } else {
+      const read = readDeliveryFromText(saidText);
+      if (!methods.length && read.methods) methods = read.methods;
+      // "운송은 빼 줘"는 가장 최근 말에서만 읽는다(그 뒤에 다시 넣었을 수 있다).
+      const latest = readDeliveryFromText(typeof latestText === "string" ? latestText : saidText);
+      if (latest.methods) methods = cleanDeliveryMethods([...methods, ...latest.methods]);
+      if (latest.drop.length) methods = methods.filter((m) => !latest.drop.includes(m));
+    }
+  }
+  const owner = methods.includes("owner_delivery");
+  const pickup = methods.includes("self_pickup");
+  const feeOk = Number.isSafeInteger(given.fee) && given.fee >= 0 && given.fee <= 10_000_000 && (!grounded || DELIVERY_FEE_SAID.test(saidText));
+  return {
+    methods,
+    fee: owner && feeOk ? given.fee : null,
+    area: owner ? cleanPrefill(given.area).slice(0, 80) : "",
+    pickupPlace: pickup ? cleanPrefill(given.pickupPlace).slice(0, 120) : "",
   };
 }
 
@@ -1444,7 +1548,7 @@ function inferRepairBrand(text) {
   return undefined;
 }
 
-const EXTENDED_CONTEXT_PATTERN = /사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|누수|연기|점검|정비|센터|수리점|공업사|경고등|과열|파손|부서|망가|고치|이상하|이상해|a\/s|repair|broken|smoke|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
+const EXTENDED_CONTEXT_PATTERN = /운송|픽업|가져다|갖다\s*(?:드|줄)|가지러|실어다|배달|배송|사진|이미지|카메라|찍은|무슨\s*기계|이게\s*뭐|정체|photo|image|팔(?:고|래|아|기|겠)|판매|내놓|등록|올려|올릴|빌려\s*주|임대\s*하|초안|내\s*매물|매물\s*수정|바꿔|고쳐|고장|수리|안\s*걸|안\s*되|안되|시동|소음|진동|누유|누수|연기|점검|정비|센터|수리점|공업사|경고등|과열|파손|부서|망가|고치|이상하|이상해|a\/s|repair|broken|smoke|시세|참고가|얼마에\s*팔|얼마\s*받|가격\s*책정|estimate|보험|공제|insurance|sell|listing|draft/i;
 
 /**
  * 턴의 맥락(이미지, 발화, 대화 이력, 슬롯)에 따라 LLM에 전달할 도구 집합을 동적으로 고른다.
@@ -1641,6 +1745,75 @@ const WRITE_LABEL = {
 // "잠시 후 진행할게요", "기다려 주세요"처럼 실행을 미루기만 하는 말
 const DEFERRED_PROMISE = /잠시\s*(?:후|만)|기다려\s*주|곧\s*(?:진행|처리|신청)|(?:진행|처리|신청|요청)(?:을|를)?\s*(?:해\s*)?드릴게|진행할게|처리할게|다시\s*(?:한\s*번\s*)?(?:매물\s*정보를\s*)?확인해\s*보겠/;
 
+// 채팅 첫 메시지에 넣으면 안 되는 개인정보(전화번호·계좌·카드·주소). 농농이 미리 채우는 문장에서는 빼고 쓴다.
+const PRIVATE_INFO_RE = /(?:0\d{1,2}[-\s.)]?\d{3,4}[-\s.]?\d{4}|\d{4}[-\s]\d{4}[-\s]\d{4}|계좌|카드\s*번호|비밀번호|주민\s*(?:등록)?\s*번호|주소|번지|\d+\s*동\s*\d+\s*호|\d+\s*호(?!\S*(?:기|번))|도로명|아파트)/;
+
+/** 미리 채울 문장에 개인정보가 섞였으면 비운다(사용자가 채팅 창에서 직접 쓰게 한다). */
+export function cleanPrefill(text) {
+  const value = typeof text === "string" ? text.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  return value && !PRIVATE_INFO_RE.test(value) ? value : "";
+}
+
+function hasBatchim(word) {
+  const last = String(word || "").trim().replace(/[^가-힣A-Za-z0-9]+$/u, "").slice(-1);
+  if (!last) return false;
+  const code = last.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 !== 0;
+  return /[013678lmnLMN]$/.test(last);
+}
+
+/** 신청 결과에 있는 값(매물명·날짜)만으로 신청 후 1:1 채팅 버튼을 만든다. */
+export function requestChatTarget(reservation) {
+  if (!reservation || typeof reservation !== "object" || typeof reservation.listingId !== "string" || !reservation.listingId) return null;
+  const title = String(reservation.title || "매물").trim().slice(0, 80);
+  if (reservation.kind === "purchase") {
+    // 구매 신청 메시지는 이미 판매자에게 한 번 갔으므로 같은 말을 반복하지 않는 짧은 질문만 채운다.
+    return {
+      listingId: reservation.listingId,
+      title,
+      kind: "purchase",
+      afterRequest: true,
+      prefill: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요.",
+    };
+  }
+  const start = DATE.test(reservation.start || "") ? reservation.start : "";
+  const end = DATE.test(reservation.end || "") && reservation.end >= start ? reservation.end : start;
+  const period = start ? (end && end !== start ? `${formatKoreanDate(start)}~${formatKoreanDate(end)}` : formatKoreanDate(start)) : "";
+  const object = `${title}${hasBatchim(title) ? "을" : "를"}`;
+  return {
+    listingId: reservation.listingId,
+    title,
+    kind: "rental",
+    afterRequest: true,
+    prefill: period
+      ? `안녕하세요. ${object} ${period}에 대여 신청했어요. 수령 방법과 시간 여쭤보고 싶어요.`
+      : `안녕하세요. ${object} 대여 신청했어요. 수령 방법과 시간 여쭤보고 싶어요.`,
+  };
+}
+
+/** 신청 완료 답변. 직전에 보여준 목록의 번호를 알면 "n번 매물", 모르면 매물 이름으로 부른다. */
+export function requestDoneMessage(reservation, { shownNo = null } = {}) {
+  const no = Number.isInteger(shownNo) && shownNo >= 1 && shownNo <= 9 ? shownNo : null;
+  const label = no ? `${no}번 매물` : `'${String(reservation?.title || "매물").trim()}'`;
+  if (reservation?.kind === "purchase") {
+    return [
+      `${label} 구매 신청이 완료되었어요!`,
+      "판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요.",
+      "아래 버튼을 눌러 판매자와 바로 이야기해 보세요.",
+    ].join("\n");
+  }
+  return [
+    `${label} 대여 신청이 완료되었어요!`,
+    "소유 농가가 승인하면 예약이 확정돼요.",
+    "궁금한 점은 아래 버튼을 눌러 소유 농가와 바로 이야기해 보세요.",
+  ].join("\n");
+}
+
+function shownNoOf(listingId, ids) {
+  const index = Array.isArray(ids) ? ids.indexOf(listingId) : -1;
+  return index >= 0 ? index + 1 : null;
+}
+
 /**
  * 쓰기 도구 결과와 답변이 어긋나지 않게 한다.
  * - 실행에 성공했는데 번호를 말하지 않으면 번호를 붙인다.
@@ -1659,6 +1832,7 @@ export function settleReply(reply, { out = {}, toolCalls = [] } = {}) {
       if (text && !DEFERRED_PROMISE.test(text) && /완료|마쳤|보냈|접수|등록했|신청했/.test(text)) {
         return `${text} 신청 번호는 ${number}예요.`;
       }
+      if (out.reservation) return `${requestDoneMessage(out.reservation, { shownNo: out.shownNo ?? null })}\n신청 번호는 ${number}예요.`;
       return `${title}${what}을 완료했어요. 신청 번호는 ${number}예요.`;
     }
     return null;
@@ -2236,8 +2410,11 @@ async function runTurn(
               days: req.days ?? prop.proposal.days,
               totalPrice: req.totalPrice ?? prop.proposal.totalPrice,
             };
+            out.chatTarget = requestChatTarget(out.reservation);
+            out.shownNo = shownNoOf(out.reservation.listingId, uiCtx.lastShownListingIds);
             output = {
               ok: true,
+              chatButton: "신청 후 소유자와 1:1 채팅 버튼을 화면에 띄웠습니다(메시지는 사용자가 직접 보냄).",
               reservationNumber: out.reservation.number,
               title: out.reservation.title,
               period: `${formatKoreanDate(prop.proposal.start)} ~ ${formatKoreanDate(prop.proposal.end)}`,
@@ -2284,8 +2461,11 @@ async function runTurn(
               region: item.region,
               totalPrice: item.price,
             };
+            out.chatTarget = requestChatTarget(out.reservation);
+            out.shownNo = shownNoOf(item.id, uiCtx.lastShownListingIds);
             output = {
               ok: true,
+              chatButton: "신청 후 판매자와 1:1 채팅 버튼을 화면에 띄웠습니다(메시지는 사용자가 직접 보냄).",
               reservationNumber: out.reservation.number,
               title: item.title,
               price: won(item.price),
@@ -2320,7 +2500,7 @@ async function runTurn(
         // 세부사항(연식·사용시간·포함 작업기), 대여글이면 대행운영서비스 제공 여부를 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
       } else if (block.name === "prepare_listing_draft") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
+        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
         const price = resolved.estimated ?? estimatePrice(catalogRows, { purpose: resolved.type, modelId: resolved.modelId, machineType: resolved.machineType });
         const finalPrice = Number.isSafeInteger(block.input?.price) && block.input.price > 0 ? block.input.price : price.median;
         let photoNote = null;
@@ -2353,14 +2533,19 @@ async function runTurn(
           year: resolved.year,
           deposit: resolved.deposit,
           rentalOperator: resolved.rentalOperator,
+          delivery: resolved.delivery,
         };
         const needsCheck = /\[확인 필요\]\s*(.+)/.exec(out.listingDraft.description)?.[1]?.split(" · ") || [];
+        if (!resolved.delivery.methods.length) needsCheck.push("운송 방식");
         output = {
           ok: true,
           price,
           description: out.listingDraft.description,
           needsCheck,
-          replyGuide: "초안 카드가 화면에 보인다. 제목·소개글을 다시 읽지 말고, \"말씀해 주신 내용으로 초안을 만들었어요\"와 참고가를 한 번 말한 뒤 \"이대로 올릴까요?\"라고 해요체로 묻는다.",
+          replyGuide: resolved.delivery.methods.length
+            ? "초안 카드가 화면에 보인다. 제목·소개글을 다시 읽지 말고, \"말씀해 주신 내용으로 초안을 만들었어요\"와 참고가를 한 번 말한 뒤 \"이대로 올릴까요?\"라고 해요체로 묻는다."
+            : "초안 카드가 화면에 보인다. 운송 방식이 아직 없다. 참고가를 한 번 말한 뒤 \"기계는 직접 가져다주실 수 있나요, 아니면 가지러 와야 하나요? 둘 다 괜찮으시면 둘 다 체크해 둘게요.\"라고 한 번만 묻는다.",
+          delivery: resolved.delivery,
           photoSaved: Boolean(draft),
           ...(user ? {} : { loginRequired: true, note: "로그인하지 않아 사진은 저장하지 않았어요. 등록하기를 누르면 로그인 후 이어서 등록해요." }),
           ...(photoNote ? { photoNote } : {}),
@@ -2369,9 +2554,11 @@ async function runTurn(
         // 대여글을 바로 올리기 전에도 대행운영서비스 제공 여부·작업자 정보부터 받는다.
       } else if (block.name === "create_listing") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText });
+        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
         if (resolved.price === null || !Number.isSafeInteger(resolved.price)) {
           output = { ok: false, error: "가격을 정해야 등록할 수 있어요. 희망 가격을 물어보세요." };
+        } else if (!resolved.delivery.methods.length) {
+          output = { ok: false, error: "운송 방식을 정해야 등록할 수 있어요. 직접 가져다줄 수 있는지, 가지러 와야 하는지(둘 다 가능) 한 번만 물어보세요. 초안 카드에서 직접 체크해도 된다고 안내하세요." };
         } else if (user && spokenApproval && deps?.createListing && !writeDone) {
           try {
             await deps.beforeWrite?.("create_listing");
@@ -2391,6 +2578,8 @@ async function runTurn(
               areaMin: resolved.areaMin,
               areaMax: resolved.areaMax,
               description: resolved.description,
+              delivery: resolved.delivery,
+              pickup: resolved.delivery.pickupPlace,
               ...(resolved.rentalOperator ? { rentalOperator: resolved.rentalOperator } : {}),
               ...(draft?.photoKey ? { draftPhotoKey: draft.photoKey } : (image?.dataUrl ? { photoDataUrl: image.dataUrl } : {})),
             });
@@ -2508,8 +2697,14 @@ async function runTurn(
           output = { ok: false, error: "매물을 찾을 수 없습니다." };
         } else if (user && item.ownerId === user.id) {
           output = { ok: false, error: "본인이 등록한 매물에는 1:1 채팅을 열 수 없습니다." };
+        } else if (!out.reservation && toolCalls.some((call) => (call.tool === "create_rental_request" || call.tool === "create_purchase_request") && call.ok === false)) {
+          // 신청이 실패한 턴에는 채팅 버튼을 띄우지 않고 실패 이유와 다음 할 일만 말한다.
+          output = { ok: false, error: "신청이 실패해 채팅 버튼을 띄우지 않습니다. 실패 이유와 다음에 할 일만 알려 주세요." };
+        } else if (out.chatTarget?.afterRequest && out.chatTarget.listingId === item.id) {
+          // 신청 직후에는 서버가 신청 결과 값으로만 만든 버튼을 그대로 쓴다.
+          output = { ok: true, listingId: item.id, title: item.title, prefill: out.chatTarget.prefill, note: "신청 후 1:1 채팅 버튼이 이미 화면에 있습니다." };
         } else {
-          const prefill = typeof block.input?.prefillMessage === "string" ? block.input.prefillMessage.trim().slice(0, 200) : "";
+          const prefill = cleanPrefill(block.input?.prefillMessage);
           out.chatTarget = { listingId: item.id, title: item.title, prefill };
           output = { ok: true, listingId: item.id, title: item.title, prefill, note: "판매자·소유자와의 1:1 채팅 창을 열도록 화면에 전달했습니다." };
         }
@@ -2742,7 +2937,7 @@ async function runTurn(
   const fallbackReply = out.delegatedTransaction
     ? `'${out.delegatedTransaction.title}' 거래를 농농이 전담 모드로 시작했어요.`
     : out.reservation
-      ? `접수가 완료되었어요. 번호는 ${out.reservation.number}이에요.`
+      ? `${requestDoneMessage(out.reservation, { shownNo: out.shownNo ?? null })}\n신청 번호는 ${out.reservation.number}예요.`
       : out.createdListing
         ? `매물 등록을 완료했어요. 등록 번호는 ${out.createdListing.number}이에요.`
         : "요청을 처리하지 못했어요. 찾으시는 작업을 조금 더 자세히 말씀해 주세요.";
@@ -2832,7 +3027,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       };
     }
   }
-  return {
+  const result = {
     outcome: "completed",
     request: verified,
     ...(conversation ? { conversation } : {}),
@@ -2848,8 +3043,14 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       days: verified.days,
       totalPrice: verified.totalPrice,
     },
-    message: `대여 요청을 보냈어요${conversation ? "(희망 네고 가격·대행운영서비스 여부는 게시자 채팅으로 전달했어요)" : ""}. 현재 상태는 ‘${verified.status === "pending" ? "승인 대기" : verified.status}’예요. 게시자가 승인하면 예약이 확정돼요. (+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)`,
+    message: [
+      requestDoneMessage({ kind: "rental", title: verified.listingTitle }, { shownNo: Number(action?.shownNo) }),
+      ...(conversation ? ["희망 네고 가격·대행운영서비스 여부는 게시자 채팅으로 전달했어요."] : []),
+      "(+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)",
+    ].join("\n"),
   };
+  result.chatTarget = requestChatTarget(result.reservation);
+  return result;
 }
 
 /**
@@ -2867,7 +3068,7 @@ export async function executePurchaseRequest(user, action, { requestId, pool = g
     ? `[농농 구매 신청] '${item.title}' 구매를 희망합니다. (${note})`
     : `[농농 구매 신청] '${item.title}' 구매를 희망합니다. 확인 후 답장 부탁드립니다.`;
   const sent = await sendPurchaseMessage(user, { id: requestId, listingId: item.id, body }, { pool });
-  return {
+  const result = {
     outcome: "completed",
     idempotent: Boolean(sent.idempotent),
     conversation: sent.conversation,
@@ -2880,8 +3081,10 @@ export async function executePurchaseRequest(user, action, { requestId, pool = g
       region: item.region,
       totalPrice: item.price,
     },
-    message: `구매 신청을 보냈어요. 판매자가 확인하면 채팅에서 거래를 이어갈 수 있어요.`,
+    message: requestDoneMessage({ kind: "purchase", title: item.title }, { shownNo: Number(action?.shownNo) }),
   };
+  result.chatTarget = requestChatTarget(result.reservation);
+  return result;
 }
 
 /**
@@ -2893,6 +3096,9 @@ export async function executeListingAction(user, action, { requestId, pool = get
   const resolved = resolveListingPayload({ ...(action || {}), type: listingType });
   if (resolved.price === null || !Number.isSafeInteger(resolved.price) || resolved.price < 0) {
     return { outcome: "failed", code: "PRICE_REQUIRED", message: "가격이 정해지지 않았어요. ‘상세 수정 후 등록’에서 가격을 입력해 주세요." };
+  }
+  if (!resolved.delivery.methods.length) {
+    return { outcome: "failed", code: "DELIVERY_REQUIRED", message: "운송 방식을 하나 이상 골라 주세요. 초안 카드에서 ‘직접 운송’ 또는 ‘직접 픽업’을 체크하면 돼요." };
   }
   const photoDataUrl = typeof action?.photoDataUrl === "string" && action.photoDataUrl.startsWith("data:image/")
     ? action.photoDataUrl
@@ -2913,6 +3119,8 @@ export async function executeListingAction(user, action, { requestId, pool = get
     areaMin: resolved.areaMin,
     areaMax: resolved.areaMax,
     description: resolved.description,
+    delivery: resolved.delivery,
+    pickup: resolved.delivery.pickupPlace,
     ...(resolved.rentalOperator ? { rentalOperator: resolved.rentalOperator } : {}),
     ...(cleanDraft ? { draftPhotoKey: cleanDraft.photoKey } : {}),
     ...(photoDataUrl ? { photoDataUrl } : {}),

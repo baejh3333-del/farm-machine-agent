@@ -5,6 +5,7 @@ import { getMigrations } from "better-auth/db/migration";
 import { buildAccountAuthOptions } from "./account-auth.js";
 import { describeDatabaseTarget, getPool, usesLocalDatabase, withTransaction } from "./db.js";
 import { buildMockListings } from "./listing-seed.js";
+import { inferDeliveryMethods } from "../src/data/delivery.js";
 import { CROPS, CROP_OPERATIONS, MACHINE_TYPES, OPERATIONS, STAGES } from "../src/data/farm-machines.js";
 import { MACHINE_SPECIFICATIONS } from "../src/data/machine-specifications.js";
 
@@ -462,12 +463,12 @@ export async function seedDemoListings({
           id, owner_id, type, model_id, title, brand, machine_type,
           crop_ids, operations, area_min, area_max, price, region,
           condition, inspected_at, included, pickup, description, summary,
-          photo_key, status, is_demo, sort_order, rental_operator
+          photo_key, status, is_demo, sort_order, delivery_methods, rental_operator
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12, $13,
           $14, $15, $16, $17, $18, $19,
-          NULL, $20, true, $21, $22
+          NULL, $20, true, $21, $22, $23
         )
         ON CONFLICT (id) DO UPDATE SET
           model_id = EXCLUDED.model_id,
@@ -484,6 +485,7 @@ export async function seedDemoListings({
           inspected_at = EXCLUDED.inspected_at,
           included = EXCLUDED.included,
           pickup = EXCLUDED.pickup,
+          delivery_methods = EXCLUDED.delivery_methods,
           description = EXCLUDED.description,
           summary = EXCLUDED.summary,
           sort_order = EXCLUDED.sort_order,
@@ -505,6 +507,7 @@ export async function seedDemoListings({
             OR listings.inspected_at IS DISTINCT FROM EXCLUDED.inspected_at
             OR listings.included IS DISTINCT FROM EXCLUDED.included
             OR listings.pickup IS DISTINCT FROM EXCLUDED.pickup
+            OR listings.delivery_methods IS DISTINCT FROM EXCLUDED.delivery_methods
             OR listings.description IS DISTINCT FROM EXCLUDED.description
             OR listings.summary IS DISTINCT FROM EXCLUDED.summary
             OR listings.sort_order IS DISTINCT FROM EXCLUDED.sort_order
@@ -532,6 +535,7 @@ export async function seedDemoListings({
           item.summary,
           item.status || "open",
           index,
+          item.delivery?.methods?.length ? item.delivery.methods : inferDeliveryMethods(item.pickup),
           item.rentalOperator ?? null,
         ]
       );

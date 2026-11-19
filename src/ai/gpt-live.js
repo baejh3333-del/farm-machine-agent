@@ -59,7 +59,7 @@ export function isWriteDelegationResult(result) {
 }
 
 // 작업(위임 발화)과 정정 발화에서 명시적인 조건(슬롯)을 뽑는다. 정정이 어느 작업을 바로잡는지 고를 때 쓴다.
-// values: 실제로 말한 낱말(예: "트랙터", "내일"), cats: 그 종류(machine·weather·date·region·price·deal).
+// values: 실제로 말한 낱말(예: "트랙터", "내일"), cats: 그 종류(machine·weather·date·region·price·deal·delivery).
 const MACHINE_WORDS = [
   "트랙터", "콤바인", "이앙기", "관리기", "경운기", "방제기", "드론", "운반차", "파종기", "정식기", "굴취기",
   "멀칭기", "로터리", "베일러", "탈곡기", "건조기", "선별기", "예초기", "굴착기", "지게차", "스피드스프레이어",
@@ -71,6 +71,8 @@ const SLOT_PATTERNS = [
   ["region", /[가-힣]{1,5}(?:읍|면|군)(?=$|[\s,.?!을를에의로으은는이가도])/g, null],
   ["price", /얼마|가격|비싸|저렴|예산|\d+\s*만\s*원/g, "가격"],
   ["deal", /대여|빌리|빌려|빌릴|임대|구매|구입|살래|사고\s*싶|판매|팔래|팔고/g, null],
+  // 운송 방식(직접 운송·직접 픽업): "아니 가지러 오셔야 해", "운송은 빼 줘"가 매물 등록 작업을 바로잡게 한다.
+  ["delivery", /운송|운반|배달|배송|픽업|가져다|갖다\s*(?:드|줄)|실어다|가지러|가져가/g, "운송"],
 ];
 
 export function extractTaskSlots(text) {

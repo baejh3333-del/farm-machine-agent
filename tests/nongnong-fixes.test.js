@@ -259,7 +259,10 @@ test("문제5: 확인 대기 작업 실행 중 연결 오류가 나면 무한 �
   assert.match(first.reply, /구매 신청을 하지 못했어요\. 이유: 서버 연결이 잠시 불안정했어요\. "다시 해줘"라고 말씀하시면 바로 다시 시도할게요\./);
   assert.deepEqual(first.pendingAction, pending);
   const second = await runConfirmedAction({ message: "다시 해줘", pending: first.pendingAction, user: USER, requestId: "r1", run });
-  assert.equal(second.reply, "두루기계통상 DRB-1200PC 청기면 구매 신청을 완료했어요. 신청 번호는 P-ABCDEF12예요.");
+  assert.equal(second.reply, "'두루기계통상 DRB-1200PC · 청기면' 구매 신청이 완료되었어요!\n판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요.\n아래 버튼을 눌러 판매자와 바로 이야기해 보세요.\n신청 번호는 P-ABCDEF12예요.");
+  // 신청이 끝나면 판매자와의 1:1 채팅 버튼(신청 후 버튼)이 같이 온다.
+  assert.equal(second.chatTarget.listingId, "s2");
+  assert.equal(second.chatTarget.afterRequest, true);
   assert.equal(await runConfirmedAction({ message: "고민해볼게", pending, user: USER, requestId: "r1", run }), null);
   assert.equal(await runConfirmedAction({ message: "네", pending, user: null, requestId: "r1", run }), null);
 });

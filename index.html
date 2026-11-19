@@ -795,15 +795,18 @@
         <div class="ai-composer-toolbar" role="toolbar" aria-label="입력 도구">
           <div class="ai-composer-tools-left">
             <div class="ai-plus-wrap" id="aiPlusWrap">
-              <button type="button" class="ai-plus-btn" id="aiPlusButton" aria-controls="aiPlusMenu" aria-expanded="false" aria-label="사진 첨부 메뉴 열기" title="사진·카메라">
+              <button type="button" class="ai-plus-btn" id="aiPlusButton" aria-controls="aiPlusMenu" aria-expanded="false" aria-label="첨부·음성 메뉴 열기" title="사진·카메라·실시간 음성">
                 <span class="ai-plus-icon" aria-hidden="true">+</span>
               </button>
-              <div class="ai-plus-menu" id="aiPlusMenu" role="menu" aria-label="사진·카메라 메뉴" hidden>
+              <div class="ai-plus-menu" id="aiPlusMenu" role="menu" aria-label="사진·카메라·음성 메뉴" hidden>
                 <button type="button" class="ai-plus-menu-item ai-camera-btn" id="aiCameraButton" role="menuitem" aria-label="카메라로 기계 사진 찍기">
                   <span aria-hidden="true">📷</span><span>카메라</span>
                 </button>
                 <button type="button" class="ai-plus-menu-item ai-photo-btn" id="aiPhotoButton" role="menuitem" aria-label="기계 사진 올리기">
                   <span aria-hidden="true">🖼️</span><span>사진</span>
+                </button>
+                <button type="button" class="ai-plus-menu-item ai-live-voice-btn" id="aiLiveVoiceButton" role="menuitem" aria-pressed="false" aria-label="실시간 음성 대화" title="농농이와 실시간 음성 대화">
+                  <span aria-hidden="true">🎙️</span><span>실시간 음성 대화</span>
                 </button>
               </div>
             </div>
@@ -813,7 +816,6 @@
               <span>거래 전담</span>
               <span class="ai-toggle-state" id="aiDelegationState">OFF</span>
             </button>
-            <button type="button" class="ai-voice-control" id="aiLiveVoiceButton" aria-label="실시간 음성 대화" title="실시간 음성 대화" aria-pressed="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>
             <button type="button" class="ai-voice-control" id="aiMicButton" aria-label="음성으로 질문하기" title="음성으로 질문하기" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>
           </div>
         </div>

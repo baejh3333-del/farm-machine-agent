@@ -23,10 +23,10 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createDesignApp } from "./design/app.js?v=20261120-5";
-import { createHeaderNav } from "./views/header-nav.js";
+import { createDesignApp } from "./design/app.js?v=20261120-6";
+import { createHeaderNav } from "./views/header-nav.js?v=20261120-6";
 import { createCartCheckout } from "./views/cart-checkout.js";
-import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
+import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js?v=20261120-6";
 
 initFontScale();
 
@@ -458,7 +458,7 @@ function setView(view, options = {}) {
   if (view === "browse") designApp.showBrowse();
   if (view === "detail") designApp.showDetail(options.id || state.detailId);
   if (view === "detail" && options.id) state.detailId = options.id;
-  window.scrollTo({ top: 0 });
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
 }
 
 // 스크롤 위치에 따라 상단 메뉴의 홈/매물 찾기 표시를 바꾼다

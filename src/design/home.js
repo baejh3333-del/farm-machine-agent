@@ -98,7 +98,31 @@ export class HomeDesign extends DCLogic {
     this.deps.goBrowse?.();
   }
 
-  jump(w) {
+  hdrBounds(w, triggerEl) {
+    const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+    const widths = { loc: 420, date: 740, time: 500, task: 400 };
+    const popW = Math.min(widths[w] || 420, vw - 32);
+    const pill = triggerEl?.closest?.('[role="search"]')
+      || this.$root?.querySelector?.(this.state.compact ? '[data-sticky-hdr] [role="search"]' : 'header [role="search"]');
+    const pillRect = pill?.getBoundingClientRect?.();
+    const btnRect = triggerEl?.getBoundingClientRect?.();
+    const top = Math.max(76, Math.round((pillRect?.bottom || 74) + 12));
+    let left;
+    if (w === 'date' || w === 'time' || !btnRect) {
+      const center = pillRect ? pillRect.left + pillRect.width / 2 : vw / 2;
+      left = Math.round(center - popW / 2);
+    } else if (w === 'task') {
+      left = Math.round(btnRect.right - popW);
+    } else {
+      left = Math.round(btnRect.left);
+    }
+    const clampedLeft = Math.max(16, Math.min(vw - popW - 16, left));
+    const anchorCenter = btnRect ? btnRect.left + btnRect.width / 2 : clampedLeft + popW / 2;
+    const arrowLeft = Math.max(24, Math.min(popW - 38, Math.round(anchorCenter - clampedLeft - 7)));
+    return { hdrTop: top + 'px', hdrLeft: clampedLeft + 'px', hdrArrowLeft: arrowLeft + 'px' };
+  }
+
+  jump(w, e) {
     if (!w) {
       const el = this.$root.getElementById('search');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -106,7 +130,12 @@ export class HomeDesign extends DCLogic {
       return;
     }
     const same = this.state.pop === w && this.state.hdrPop;
-    this.setState({ pop: same ? null : w, hdrPop: !same });
+    if (same) {
+      this.setState({ pop: null, hdrPop: false });
+      return;
+    }
+    const bounds = this.hdrBounds(w, e?.currentTarget);
+    this.setState({ pop: w, hdrPop: true, ...bounds });
   }
 
   // 세부 메뉴 항목 → 앱 화면. 홈에서 '빠른 예약 검색'은 예약창으로 바로 내려가요.
@@ -212,7 +241,7 @@ export class HomeDesign extends DCLogic {
       headFont: serif ? "'Noto Serif KR', serif" : "'Noto Sans KR', sans-serif",
       sum: s.searched ? bits.join(' · ') : '추천하는 매물', countText: s.searched ? (count ? (s.tab === 'rent' ? '농기계 ' : '중고 매물 ') + count + '대' : '조건에 맞는 매물이 아직 없어요') : '우리 동네에서 많이 찾는 농기계예요',
       seeAll: e => this.seeAll(e),
-      wrapZ: s.pop ? 35 : 3,
+      wrapZ: s.pop && !s.hdrPop ? 35 : 3,
       locText: s.locSet ? (s.loc === '현재 위치' ? '전체 지역' : s.loc) + ' · ' + s.radius + 'km 이내' : '이용할 위치', locTextColor: s.locSet ? '#111111' : '#9A9A9A',
       dateText, dateTextColor: s.start ? '#111111' : '#9A9A9A',
       timeShow: s.timeSet ? timeText : '시간', timeTextColor: s.timeSet ? '#111111' : '#9A9A9A',
@@ -220,26 +249,32 @@ export class HomeDesign extends DCLogic {
       doSearch: e => { if (e && e.preventDefault) e.preventDefault(); this.setState({ searched: true, pop: null, hdrPop: false }); },
       openLoc: toggle('loc'), openDate: toggle('date'), openTask: toggle('task'),
       locRing: ring('loc'), dateRing: ring('date'), taskRing: ring('task'),
-      locOpen: s.pop === 'loc', dateOpen: s.pop === 'date', taskOpen: s.pop === 'task', anyOpen: !!s.pop,
+      locOpen: s.pop === 'loc' && !s.hdrPop, dateOpen: s.pop === 'date' && !s.hdrPop, taskOpen: s.pop === 'task' && !s.hdrPop,
+      hdrLocOpen: s.pop === 'loc' && !!s.hdrPop, dateOpenHdr: s.pop === 'date' && !!s.hdrPop, timeOpenHdr: s.pop === 'time' && !!s.hdrPop, hdrTaskOpen: s.pop === 'task' && !!s.hdrPop,
+      hdrTop: s.hdrTop || '86px', hdrLeft: s.hdrLeft || '16px', hdrArrowLeft: s.hdrArrowLeft || '32px',
+      anyOpen: !!s.pop,
       closePop: () => this.setState({ pop: null, hdrPop: false }),
       locs: LOCS().map(l => ({
         name: l.name, sub: l.type === 'pin' ? '' : l.sub, isNav: l.type === 'nav', isRecent: l.type === 'recent', isPin: l.type === 'pin',
         color: l.type === 'nav' ? '#1E9B4B' : '#111111', bg: s.loc === l.value ? '#F4F4F4' : 'transparent',
-        pick: () => this.setState({ loc: l.value, locSet: true, pop: s.tab === 'rent' ? 'date' : 'task' })
+        pick: () => {
+          const next = s.tab === 'rent' ? 'date' : 'task';
+          this.setState({ loc: l.value, locSet: true, pop: next, ...(s.hdrPop ? this.hdrBounds(next) : {}) });
+        }
       })),
       radii: [5, 10, 20, 30].map(r => ({ label: r + 'km', bg: s.radius === r ? '#111111' : '#FFFFFF', color: s.radius === r ? '#FFFFFF' : '#111111', border: s.radius === r ? '#111111' : '#E2E2E2', pick: () => this.setState({ radius: r }) })),
       m1: this.month(s.ym), m2: this.month(s.ym + 1),
       prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
       prevColor: s.ym <= TODAY_YM ? '#C8C8C8' : '#111111',
       rangeHint, timeText, timeBad,
-      openTime: toggle('time'), timeRing: ring('time'), timeOpen: s.pop === 'time',
+      openTime: toggle('time'), timeRing: ring('time'), timeOpen: s.pop === 'time' && !s.hdrPop,
       pickHCol: col('pickH', 24, s.pickH, 'pickDraft'), pickMCol: col('pickM', 2, s.pickM, 'pickDraft', 30),
       retHCol: col('retH', 24, s.retH, 'retDraft'), retMCol: col('retM', 2, s.retM, 'retDraft', 30),
       pickIn: input('pick'), retIn: input('ret'), pickCol: tcol('pick'), retCol: tcol('ret'),
       pickDay: s.start ? FULL(s.start) : '빌리는 날', retDay: s.end ? FULL(s.end) : '반납하는 날',
-      applyTime: () => this.setState({ pop: 'task', pickDraft: null, retDraft: null, timeSet: true }),
+      applyTime: () => this.setState({ pop: 'task', pickDraft: null, retDraft: null, timeSet: true, ...(s.hdrPop ? this.hdrBounds('task') : {}) }),
       resetDate: () => this.setState({ start: null, end: null }),
-      applyDate: () => this.setState({ pop: 'time', dateSet: true }),
+      applyDate: () => this.setState({ pop: 'time', dateSet: true, ...(s.hdrPop ? this.hdrBounds('time') : {}) }),
       tasks: TASKS.map(t => {
         const sel = s.task === t.name;
         return { name: t.name, bg: sel ? '#111111' : '#FFFFFF', color: sel ? '#FFFFFF' : '#111111', border: sel ? '#111111' : '#E2E2E2', pick: () => this.setState({ task: t.name, taskSet: true, pop: null, hdrPop: false }) };
@@ -287,10 +322,10 @@ export class HomeDesign extends DCLogic {
       pillLoc: s.locSet ? (s.loc === '현재 위치' ? '전체 지역' : s.loc) + ' · ' + s.radius + 'km' : '동네 검색', pillLocColor: s.locSet ? '#111111' : '#9A9A9A',
       pillDate: s.dateSet && ranged ? dateText : '날짜 추가', pillDateColor: s.dateSet && ranged ? '#111111' : '#9A9A9A',
       pillTask: s.taskSet && task ? task.name : '작업 추가', pillTaskColor: s.taskSet && task ? '#111111' : '#9A9A9A',
-      popAt: s.hdrPop ? 'position: fixed; z-index: 40; top: 96px; left: 50%; transform: translateX(-50%);' : 'position: absolute; z-index: 32; top: calc(100% + 14px); left: 0;',
-      arrowDisp: s.hdrPop ? 'none' : 'block',
-      cardFx: s.hdrPop ? '' : '-webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);',
-      jumpLoc: () => this.jump('loc'), jumpDate: () => this.jump('date'), jumpTask: () => this.jump('task'), jumpGo: () => this.jump(null),
+      popAt: 'position: absolute; z-index: 32; top: calc(100% + 14px); left: 0;',
+      arrowDisp: 'block',
+      cardFx: '-webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);',
+      jumpLoc: e => this.jump('loc', e), jumpDate: e => this.jump('date', e), jumpTask: e => this.jump('task', e), jumpGo: () => this.jump(null),
       isRent: s.tab === 'rent', rentSel: s.tab === 'rent' ? 'true' : 'false', buySel: s.tab === 'rent' ? 'false' : 'true',
       knobLeft: s.tab === 'rent' ? '4px' : '50%',
       rentColor: s.tab === 'rent' ? '#111111' : '#767676', buyColor: s.tab === 'rent' ? '#767676' : '#111111',

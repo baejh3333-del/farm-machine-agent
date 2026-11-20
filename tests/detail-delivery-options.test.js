@@ -359,7 +359,7 @@ test("브라우저 E2E: 상세 화면에서 받는 방법·5개 옵션 선택 �
     await host.locator("button[data-opt]", { hasText: "연료 가득 채워 받기" }).click();
     await host.locator("button[data-opt]", { hasText: "고장 걱정 없는 안심 보장" }).click();
 
-    await host.locator("text=총 19.5만원").first().waitFor({ state: "visible" });
+    await host.locator("#bookingCard").getByText("총 19.5만원", { exact: true }).waitFor({ state: "visible" });
 
     // 대여 요청 보내기 → 회원가입 → 대여 폼 자동 복원
     await host.locator("a[data-cta]", { hasText: "대여 요청 보내기" }).click();

@@ -131,5 +131,5 @@ export function createHeaderNav(deps) {
     });
   }
 
-  return { bind, closeAll };
+  return { bind, closeAll, runDestination };
 }

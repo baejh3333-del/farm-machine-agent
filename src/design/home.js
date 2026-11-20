@@ -1,5 +1,6 @@
 // 모아농 2.1 홈 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
+import { menuVals } from "./menu.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey,
   openListings, available, doesTask, shared, locationChoices,
@@ -108,6 +109,25 @@ export class HomeDesign extends DCLogic {
     this.setState({ pop: same ? null : w, hdrPop: !same });
   }
 
+  // 세부 메뉴 항목 → 앱 화면. 홈에서 '빠른 예약 검색'은 예약창으로 바로 내려가요.
+  menuAct(label) {
+    if (label === '빠른 예약 검색') { this.jump(null); return; }
+    this.deps.navigate?.(label);
+  }
+
+  // 로고를 누르면 새로고침했을 때처럼 첫 화면 모션이 다시 나와요
+  replay() {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    this._pick = null;
+    this.setState({ open: 0, pop: null, hdrPop: false, menu: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, task: null, ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent', locSet: false, dateSet: false, timeSet: false, taskSet: false, faqCat: 'all', risen: false, compact: false });
+    try {
+      const host = this.$root && this.$root.getAnimations ? this.$root : document;
+      host.getAnimations().forEach(a => { if (a.animationName) { a.cancel(); a.play(); } });
+    } catch (err) {}
+    clearTimeout(this._riseT);
+    this._riseT = setTimeout(() => { if (!this.state.risen) this.setState({ risen: true }); }, 1300);
+  }
+
   renderVals() {
     const s = this.state;
     const serif = (this.props.headingFont ?? '고딕') === '명조';
@@ -187,6 +207,8 @@ export class HomeDesign extends DCLogic {
       .map(it => ({ img: photoOf(it), hasImg: true, noImg: false, name: nameOf(it), place: placeOf(it), price: it.type === 'rent' ? '1일 ' + won(it.price) : bigWon(it.price), badge: it.type === 'rent' ? '대여 가능' : '중고 매물', open: () => this.deps.openDetail?.(it.id) }));
 
     return {
+      ...menuVals(this, null, label => this.menuAct(label)),
+      goHome: e => { if (e && e.preventDefault) e.preventDefault(); this.replay(); },
       headFont: serif ? "'Noto Serif KR', serif" : "'Noto Sans KR', sans-serif",
       sum: s.searched ? bits.join(' · ') : '추천하는 매물', countText: s.searched ? (count ? (s.tab === 'rent' ? '농기계 ' : '중고 매물 ') + count + '대' : '조건에 맞는 매물이 아직 없어요') : '우리 동네에서 많이 찾는 농기계예요',
       seeAll: e => this.seeAll(e),

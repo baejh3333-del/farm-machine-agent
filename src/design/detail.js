@@ -1,5 +1,6 @@
 // 모아농 2.2 매물 상세 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
+import { menuVals } from "./menu.js";
 import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, isoToKey, keyToIso, photoOf, nameOf, placeOf, ratingOf,
@@ -116,6 +117,8 @@ export class DetailDesign extends DCLogic {
     });
   }
 
+  menuAct(label) { this.deps.navigate?.(label); }
+
   renderVals() {
     const s = this.state;
     const it = this.item();
@@ -188,6 +191,7 @@ export class DetailDesign extends DCLogic {
     const favOn = this.deps.isFavorite?.(it.id);
 
     return {
+      ...menuVals(this, 'find', label => this.menuAct(label)),
       title, typeLabel: label, maker: brandModel || label, crumbLoc: placeOf(it),
       photo, shotCount: shots.length, placeLine: placeOf(it),
       hasReviews: !!r, noReviews: !r, rating: r ? r.avg.toFixed(1) : '', rentCount: r ? '후기 ' + r.count + '개' : '', reviewCount: r ? r.count : 0, newBadge: '새 매물',

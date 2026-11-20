@@ -28,7 +28,14 @@ export function openMenu(self, e, id, hover) {
   clearTimeout(self._menuT);
   const root = self._mega;
   if (!root) return;
-  if (!hover && root.getAttribute('data-open') === id) { closeMenu(self); return; }
+  // 마우스를 올리면(휴대폰 탭도 mouseenter가 먼저 옴) 이미 열려 있으므로, 그 직후의 클릭은 닫지 않고 열린 채로 둬요.
+  // 클릭으로 열린 메뉴를 다시 누를 때만 닫아요.
+  if (!hover && root.getAttribute('data-open') === id) {
+    if (!self._menuByHover) { closeMenu(self); return; }
+    self._menuByHover = false;
+    return;
+  }
+  self._menuByHover = !!hover;
   const a = e && e.currentTarget;
   const box = a && a.closest && a.closest('header');
   const top = box ? Math.round(box.getBoundingClientRect().bottom) : 72;
@@ -64,6 +71,8 @@ export function menuVals(self, active, act) {
   self._menuAct = act;
   return {
     ...self._menuFns,
+    // 머리말 오른쪽 버튼: 로그인하면 '마이페이지'로 바뀌어요(눌렀을 때 동작은 app.js navAction).
+    authLabel: self.deps?.isLoggedIn?.() ? '마이페이지' : '로그인',
     navs: MENU.map(([id, label]) => {
       const on = active === id;
       return {

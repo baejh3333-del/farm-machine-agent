@@ -23,7 +23,7 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createDesignApp } from "./design/app.js?v=20261120-3";
+import { createDesignApp } from "./design/app.js?v=20261120-5";
 import { createHeaderNav } from "./views/header-nav.js";
 import { createCartCheckout } from "./views/cart-checkout.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
@@ -78,6 +78,7 @@ const designApp = createDesignApp({
   openDetail: (id) => openListingPage(id),
   listingById,
   favorites: () => activeFavorites(),
+  isLoggedIn: () => isLoggedIn(),
   isFavorite: (id) => activeFavorites().includes(id),
   toggleFavorite: (id) => toggleFavorite(id),
   rentalForm: (...args) => txViews.rentalForm(...args),
@@ -1415,6 +1416,7 @@ function initLoginForm() {
     const loggedIn = isLoggedIn();
     headerButton.hidden = loggedIn;
     logout.hidden = !loggedIn;
+    designApp.refresh();
     updateBadges();
   }
 

@@ -251,17 +251,21 @@ export class HomeDesign extends DCLogic {
         this._trOn = true;
         const svg = el.querySelector('svg');
         if (!svg) return;
-        svg.style.position = 'relative'; svg.style.zIndex = '1'; svg.style.flex = 'none'; svg.style.transition = 'transform 0.25s linear';
+        svg.style.zIndex = '1'; svg.style.transition = 'transform 0.18s ease-out';
+        // 섹션이 화면에 들어오기 직전부터 출발해서, 조금만 내려도 반대편 끝까지 연결선 가운데를 달려요
         const upd = () => {
-          const r = el.getBoundingClientRect();
           const vh = Math.min(window.innerHeight || 800, 1000);
-          const p = Math.max(0, Math.min(1, (vh - r.top - 120) / (vh * 0.55)));
-          svg.style.transform = 'translateX(' + Math.round(p * 84) + 'px)';
+          const sec = el.closest('section') || el;
+          const st = sec.getBoundingClientRect().top;
+          const p = Math.max(0, Math.min(1, (vh + 40 - st) / (vh * 0.6)));
+          const room = Math.max(0, el.offsetWidth - svg.getBoundingClientRect().width);
+          svg.style.transform = 'translate(' + Math.round(p * room) + 'px, -50%)';
         };
         window.addEventListener('scroll', upd, { passive: true });
+        window.addEventListener('resize', upd, { passive: true });
         upd();
       },
-      cardRise: s.risen ? 'none' : 'translateY(150px)', cardOp: 1,
+      cardRise: 'none', cardOp: 1,
       riseRef: el => {
         if (!el || this._riseOn) return;
         this._riseOn = true;
@@ -269,9 +273,9 @@ export class HomeDesign extends DCLogic {
         ['wheel', 'scroll', 'touchmove', 'keydown'].forEach(t => window.addEventListener(t, go, { passive: true }));
         setTimeout(() => { if (!this.state.risen) this.setState({ risen: true }); }, 1300);
         if (typeof IntersectionObserver !== 'undefined') {
-          const els = this.$root.querySelectorAll('#search + section > div, #about > div > *, [data-feat-dim] > section > div, #about ~ section > div');
-          const io = new IntersectionObserver(list => list.forEach(e => { if (e.isIntersecting) { e.target.style.opacity = '1'; e.target.style.transform = 'none'; io.unobserve(e.target); } }), { threshold: 0.12 });
-          els.forEach((x, i) => { x.style.opacity = '0'; x.style.transform = 'translateY(28px)'; x.style.transition = 'opacity 0.8s ease ' + ((i % 3) * 0.08) + 's, transform 0.9s cubic-bezier(0.22, 1, 0.36, 1) ' + ((i % 3) * 0.08) + 's'; io.observe(x); });
+          const els = this.$root.querySelectorAll('#search + section > div, #about > div > *, [data-feat-dim] > section > div > div, #about ~ section > div > *, #about ~ section [style*="grid-template-columns: repeat(4"] > div');
+          const io = new IntersectionObserver(list => list.forEach(e => { if (e.isIntersecting) { e.target.style.opacity = '1'; e.target.style.transform = 'none'; e.target.style.filter = 'none'; io.unobserve(e.target); } }), { threshold: 0.12 });
+          els.forEach(x => { const k = x.parentNode ? [...x.parentNode.children].indexOf(x) : 0; const d = (Math.min(k, 4) * 0.1) + 's'; x.style.opacity = '0'; x.style.transform = 'translateY(30px)'; x.style.filter = 'blur(6px)'; x.style.transition = 'opacity 0.9s ease ' + d + ', transform 1s cubic-bezier(0.22, 1, 0.36, 1) ' + d + ', filter 0.9s ease ' + d; io.observe(x); });
         }
       },
       hdrShift: s.compact ? 'translateY(0)' : 'translateY(-110%)', hdrHidden: s.compact ? 'false' : 'true',

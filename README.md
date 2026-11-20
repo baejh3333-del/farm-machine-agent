@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="src/nongnong-icon.png" width="80" alt="농기계 상담 도우미 농농이" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo/moanong-logo-white.svg" />
+  <img src="docs/brand/logo/moanong-logo.svg" width="200" alt="모아농 브랜드 로고" />
+</picture>
 
 # 모아농
 

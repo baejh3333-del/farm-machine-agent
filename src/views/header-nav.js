@@ -109,7 +109,8 @@ export function createHeaderNav(deps) {
         if (event.key !== "ArrowDown") return;
         event.preventDefault();
         show(trigger);
-        panel.querySelector('[data-column="' + trigger.dataset.view + '"] button').focus();
+        // 판(panel) 자체에도 data-column이 붙으므로 칸(.nav-column)으로 좁혀야 숨은 다른 칸의 버튼을 잡지 않는다
+        panel.querySelector('.nav-column[data-column="' + trigger.dataset.view + '"] button')?.focus();
       });
     }
     panel.addEventListener("click", event => {

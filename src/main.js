@@ -377,7 +377,9 @@ let scrollSpyPausedUntil = 0;
 
 function markNav(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
+    const NAV_GROUP = { map: "browse", guide: "garage", favorites: "owner", deals: "owner", requests: "owner" };
     const active = button.dataset.view === view
+      || (button.classList.contains("nav-item") && NAV_GROUP[view] === button.dataset.view)
       || (view === "ownerLoginRequired" && button.dataset.view === "owner")
       || (view === "dealsLoginRequired" && button.dataset.view === "deals")
       || (view === "requestsLoginRequired" && button.dataset.view === "requests");
@@ -451,6 +453,7 @@ function setView(view, options = {}) {
   scrollSpyPausedUntil = Date.now() + 1000;
   designApp.closePop();
   document.body.classList.toggle("design-page", DESIGN_VIEWS.has(view));
+  document.body.dataset.view = view;
   if (view === "browse") designApp.showBrowse();
   if (view === "detail") designApp.showDetail(options.id || state.detailId);
   if (view === "detail" && options.id) state.detailId = options.id;
@@ -1370,6 +1373,13 @@ function initLoginForm() {
   const submit = $("loginSubmit");
   const eye = $("loginEye");
   const switchButton = $("switchAccount");
+  // 로그인 · 회원가입 탭(모아농 2.3): 지금 모드와 다른 탭을 누르면 전환 버튼을 대신 누른다
+  document.querySelectorAll("[data-auth-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const signupNow = !$("signupNameField")?.hidden;
+      if ((tab.dataset.authTab === "signup") !== signupNow) switchButton?.click();
+    });
+  });
   const headerButton = $("loginButton");
   const logout = $("accountLogoutButton");
   let signup = false;
@@ -1688,6 +1698,12 @@ function initLoginForm() {
     .catch(() => {})
     .finally(() => { submit.disabled = false; });
 }
+
+// 도움말 카드 속 바로가기 버튼(data-nav-go) → 머리말 메뉴와 같은 곳으로
+document.addEventListener("click", (event) => {
+  const go = event.target.closest?.("[data-nav-go]");
+  if (go) headerNav.runDestination(go.dataset.navGo);
+});
 
 runtime.garage = createGarage({
   root: $("garageView"), getListings: allListings, getCatalogState: () => runtime.catalogState,

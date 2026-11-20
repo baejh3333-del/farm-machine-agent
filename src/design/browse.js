@@ -4,6 +4,7 @@ import { menuVals } from "./menu.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey, ratingOf,
   TYPE_GROUPS, groupOf, openListings, available, isFav, shared, locationChoices, typeLabel,
+  machineFilterLabel, matchesMachineFilter, buildTypeChoices,
 } from "./data.js";
 
 let TODAY = todayKey();
@@ -53,7 +54,6 @@ const ICON = {
   buy: 'M4 7h16l-1.5 11h-13zM9 7V5a3 3 0 0 1 6 0v2',
   service: 'M7 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3 15c0-3.2 1.8-5.5 4-5.5 1.6 0 2.8 1 3.4 2.5M12 11h5l3 4v3h-8zM14.5 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM3 21h6'
 };
-const TYPES = [['all', '전체'], ['tractor', '트랙터'], ['cultivator', '관리기'], ['tiller', '경운기'], ['harvester', '수확기'], ['sprayer', '방제기'], ['carrier', '운반차'], ['combine', '콤바인']];
 const TIMES = [6, 8, 9, 10, 13, 18];
 const sel = on => on ? { bg: '#111111', color: '#FFFFFF', border: '#111111' } : { bg: '#FFFFFF', color: '#111111', border: '#E2E2E2' };
 
@@ -62,7 +62,7 @@ export class BrowseDesign extends DCLogic {
     super(props);
     TODAY = todayKey(); TODAY_YM = todayYm();
     this.deps = props.deps || {};
-    this.state = { pop: null, loc: shared.loc, start: shared.start, end: shared.end, time: null, type: shared.type || 'all', tab: shared.tab || null, mini: false, ym: TODAY_YM };
+    this.state = { pop: null, loc: shared.loc, start: shared.start, end: shared.end, time: null, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || null, mini: false, ym: TODAY_YM };
     this.rails = {};
   }
 
@@ -96,12 +96,12 @@ export class BrowseDesign extends DCLogic {
   setState(patch) {
     super.setState(patch);
     const s = this.state;
-    Object.assign(shared, { loc: s.loc, start: s.start, end: s.end, type: s.type, tab: s.tab });
+    Object.assign(shared, { loc: s.loc, start: s.start, end: s.end, type: s.type, typeQuery: s.typeQuery, tab: s.tab });
   }
 
   syncShared() {
     TODAY = todayKey(); TODAY_YM = todayYm();
-    this.setState({ loc: shared.loc, start: shared.start, end: shared.end, type: shared.type || 'all', tab: shared.tab || this.state.tab, pop: null });
+    this.setState({ loc: shared.loc, start: shared.start, end: shared.end, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || this.state.tab, pop: null });
   }
 
   openFromTop(w) {
@@ -122,7 +122,7 @@ export class BrowseDesign extends DCLogic {
     const fieldBg = on => on ? '#F2F2F2' : 'transparent';
     const days = (s.tab === 'month') ? 30 : (s.tab === 'today') ? 1 : (s.start && s.end ? DAYS(s.start, s.end) : 3);
     const tm = s.time != null ? ' ' + String(s.time).padStart(2, '0') + ':00' : '';
-    const typeOk = mc => s.type === 'all' || mc.type === s.type;
+    const typeOk = mc => matchesMachineFilter(mc.raw, s.type, s.typeQuery);
     const tab = s.tab || 'all';
     const startIso = tab === 'today' ? keyToIso(TODAY) : keyToIso(s.start);
     const endIso = tab === 'today' ? keyToIso(TODAY) : keyToIso(s.end || s.start);
@@ -178,6 +178,7 @@ export class BrowseDesign extends DCLogic {
     let rangeHint = '빌리는 날을 눌러 주세요';
     if (s.start && !s.end) rangeHint = '돌려주는 날을 눌러 주세요';
     if (s.start && s.end) rangeHint = days + '일 동안 빌려요';
+    const pickedLabel = machineFilterLabel(s.type, s.typeQuery);
 
     return {
       ...menuVals(this, 'find', label => this.menuAct(label)),
@@ -188,14 +189,18 @@ export class BrowseDesign extends DCLogic {
       locText: s.loc ? s.loc : '동네, 주소', locColor: s.loc ? '#111111' : '#9A9A9A',
       startText: s.start ? MDW(s.start) + tm : '날짜 · 시간', startColor: s.start ? '#111111' : '#9A9A9A',
       endText: s.end ? MDW(s.end) + tm : '날짜 · 시간', endColor: s.end ? '#111111' : '#9A9A9A',
-      typeText: s.type === 'all' ? '전체 기계' : TYPES.find(t => t[0] === s.type)[1], typeColor: s.type === 'all' ? '#9A9A9A' : '#111111',
+      typeText: pickedLabel || '전체 기계', typeColor: pickedLabel ? '#111111' : '#9A9A9A',
+      typeQuery: s.typeQuery || '',
+      onTypeInput: e => this.setState({ typeQuery: e.target.value, type: 'all' }),
+      resetType: () => this.setState({ type: 'all', typeQuery: '' }),
+      applyType: () => this.setState({ pop: null }),
       locs: [{ name: '현재 위치', sub: '전체 지역에서 보여드려요', value: '현재 위치', nav: true }, ...locationChoices(4).map(c => ({ name: c.key, sub: '매물 ' + c.n + '대', value: c.key }))].map(l => ({ name: l.name, sub: l.sub, color: l.nav ? '#1E9B4B' : '#111111', bg: s.loc === l.value ? '#F4F4F4' : 'transparent', pick: () => this.setState({ loc: l.value, pop: 'date' }) })),
       m1: this.month(s.ym), m2: this.month(s.ym + 1), rangeHint,
       prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
       prevColor: s.ym <= TODAY_YM ? '#C8C8C8' : '#111111',
       times: TIMES.map(h => ({ label: String(h).padStart(2, '0') + ':00', ...sel(s.time === h), pick: () => this.setState({ time: h }) })),
       resetDate: () => this.setState({ start: null, end: null, time: null }), applyDate: () => this.setState({ pop: 'type' }),
-      types: TYPES.map(([id, label]) => ({ label, ...sel(s.type === id), pick: () => this.setState({ type: id, pop: null }) })),
+      types: buildTypeChoices(s.type, s.typeQuery, id => this.setState({ type: id, typeQuery: '', pop: null })),
       tabs: [['all', '전체 보기', ICON.all], ['today', '당일 대여', ICON.today], ['month', '한 달 대여', ICON.month], ['buy', '중고 구매', ICON.buy], ['service', '농작업 대행', ICON.service]].map(([id, label, icon]) => {
         const on = (s.tab || 'all') === id;
         return { label, icon, sel: on ? 'true' : 'false', bg: on ? '#111111' : '#F6F6F6', color: on ? '#FFFFFF' : '#111111', pick: () => this.setState({ tab: id }) };
@@ -208,7 +213,7 @@ export class BrowseDesign extends DCLogic {
         img: mc.img, hasImg: !!mc.img, noImg: !mc.img, icon: ICON[ICON_OF(mc.raw)],
         open: e => { e?.preventDefault?.(); this.deps.openDetail?.(mc.id); }
       })),
-      keepTitle: (s.type === 'all' ? '농기계' : TYPES.find(t => t[0] === s.type)[1]) + '를 계속 찾아보세요',
+      keepTitle: (pickedLabel || '농기계') + '를 계속 찾아보세요',
       keepSub: (s.loc && s.loc !== '현재 위치' ? s.loc : '전체 지역') + ' · ' + (M.length + SALE.length) + '대 있어요',
       rows,
       searchRef: el => {
@@ -221,7 +226,7 @@ export class BrowseDesign extends DCLogic {
       miniSegs: [
         { icon: ICON.near, text: s.loc ? s.loc : '동네, 주소', on: !!s.loc, w: 'loc', flex: '1.3 1 0' },
         { icon: ICON.week, text: s.start ? MDW(s.start) + (s.end ? ' – ' + MDW(s.end) : '') + tm : '빌리는 날 – 돌려주는 날', on: !!s.start, w: 'date', flex: '1.6 1 0' },
-        { icon: ICON.machine, text: s.type === 'all' ? '전체 기계' : TYPES.find(t => t[0] === s.type)[1], on: s.type !== 'all', w: 'type', flex: '1 1 0' }
+        { icon: ICON.machine, text: pickedLabel || '전체 기계', on: !!pickedLabel, w: 'type', flex: '1 1 0' }
       ].map((g, i) => ({ ...g, color: g.on ? '#111111' : '#9A9A9A', line: i ? '1px solid #EEEEEE' : 'none', pick: () => this.openFromTop(g.w) }))
     };
   }

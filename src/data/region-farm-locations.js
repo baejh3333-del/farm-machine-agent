@@ -1213,9 +1213,7 @@ export const FARM_LOCATIONS_BY_REGION = {
       "village": "강원 홍천군 서석면 농가",
       "lat": 37.72782,
       "lng": 128.20562
-    }
-  ],
-  "홍천 비발디파크": [
+    },
     {
       "village": "강원 홍천군 서면 굴업리 농가",
       "lat": 37.62742,

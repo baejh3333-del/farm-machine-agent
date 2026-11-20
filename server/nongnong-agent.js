@@ -15,6 +15,7 @@ import {
   REGION_COORDS,
 } from "../src/data/farm-machines.js";
 import { selectMatchingListings } from "../src/data/recommendation.js";
+import { KOREA_REGIONS, regionsMatchForSearch } from "../src/data/korea-regions.js";
 import { DIALECT_TO_STANDARD, normalizeDialect } from "../src/data/speech-glossary.js";
 import { checkModelCompatibility, SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { loadFarmProfile } from "./agent-session-store.js";
@@ -57,6 +58,34 @@ const MAX_CONTENT = 1000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REGIONS = Object.keys(REGION_COORDS);
+const REGIONS_BY_LENGTH = [...REGIONS].sort((a, b) => b.length - a.length);
+const CITY_ALIASES = (() => {
+  const counts = new Map();
+  const entries = [];
+  for (const prov of KOREA_REGIONS) {
+    for (const city of prov.cities) {
+      const full = `${prov.name} ${city.name}`;
+      const stem = city.name.replace(/(?:특별시|광역시|특별자치시|특별자치도|시|군|구)$/, "");
+      for (const token of [city.name, stem]) {
+        if (token.length < 2) continue;
+        counts.set(token, (counts.get(token) || 0) + 1);
+        entries.push([token, full]);
+      }
+    }
+  }
+  return entries
+    .filter(([token]) => counts.get(token) === 1)
+    .sort((a, b) => b[0].length - a[0].length);
+})();
+
+function matchSpokenRegion(rawText) {
+  const exact = REGIONS_BY_LENGTH.find((r) => rawText.includes(r));
+  if (exact) return exact;
+  const alias = CITY_ALIASES.find(([token]) =>
+    new RegExp(`(?<![가-힣])${token}(?=$|[\\s,.;!?]|에|에서|근처|주변|지역|쪽)`).test(rawText)
+  );
+  return alias ? alias[1] : null;
+}
 const won = (n) => `${Number(n).toLocaleString("ko-KR")}원`;
 
 const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모아농"의 통합 AI 도우미 '농농'이다. 초보 농부와 어르신도 이해하기 쉬운 짧고 친절한 한국어 존댓말로, 정해진 틀에 얽매이지 않고 사용자 질문 맥락에 맞춰 자연스럽게 답한다.
@@ -814,12 +843,12 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   // 운송 방식 조건: 가져다주는 매물만(owner_delivery) 또는 직접 가지러 갈 매물만(self_pickup)
   const deliveryWanted = ["owner_delivery", "self_pickup"].includes(input?.delivery) ? input.delivery : null;
   const deliveryScoped = deliveryWanted ? scoped.filter((item) => deliveryOf(item).methods.includes(deliveryWanted)) : scoped;
-  const selection = selectMatchingListings("", context, deliveryScoped);
+  const selection = selectMatchingListings("", context, deliveryScoped, { limit: deliveryScoped.length });
   const what = `${operatorWanted === true ? "대행운용서비스를 제공하는 " : operatorWanted === false ? "대행운용서비스 없는 " : ""}${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
   let candidates = selection.candidates;
   let regionFallback = null;
   if (requestedRegion) {
-    const inRegion = candidates.filter((item) => item.region === requestedRegion);
+    const inRegion = candidates.filter((item) => regionsMatchForSearch(item.region, requestedRegion));
     if (inRegion.length) {
       candidates = inRegion;
     } else if (candidates.length) {
@@ -1591,7 +1620,7 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
   // 사투리 낱말(나락·꼬치·배차·트랙타 등)은 표준어로 풀어서 조건을 찾는다.
   const rawText = normalizeDialect(String(text || ""));
   if (rawText) {
-    const matchedRegion = REGIONS.find((r) => rawText.includes(r));
+    const matchedRegion = matchSpokenRegion(rawText);
     if (matchedRegion) slots.region = matchedRegion;
 
     const matchedCrops = CROPS.filter(({ name }) => rawText.includes(name)).map(({ id }) => id);

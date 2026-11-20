@@ -203,7 +203,7 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
       if (url.pathname === "/api/weather") {
         return route.fulfill({
           json: {
-            region: "홍천 비발디파크",
+            region: "강원특별자치도 홍천군",
             mapConfig: { provider: "kakao", kakaoAppKey: "test-key" },
             weather: { suitability: "good", advice: "작업하기 좋아요", slots: [], workTips: [] },
             forecastDays: [],
@@ -431,7 +431,7 @@ test("폴백 지도: 25m 축척 경계 일관성, 통합 문구 제거, 에이�
       if (url.pathname === "/api/weather") {
         return route.fulfill({
           json: {
-            region: "홍천 비발디파크",
+            region: "강원특별자치도 홍천군",
             mapConfig: { provider: "unavailable", kakaoAppKey: null },
             weather: { suitability: "good", advice: "좋아요", slots: [], workTips: [] },
             forecastDays: [],
@@ -534,7 +534,7 @@ test("모바일(320/390px) 및 데스크톱(1280px) 지도 레이아웃: 겹침�
       if (url.pathname === "/api/weather") {
         return route.fulfill({
           json: {
-            region: "홍천 비발디파크",
+            region: "강원특별자치도 홍천군",
             mapConfig: { provider: "kakao", kakaoAppKey: "test-key" },
             weather: { suitability: "good", advice: "작업하기 좋아요", slots: [], workTips: [] },
             forecastDays: [],

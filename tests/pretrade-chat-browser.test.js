@@ -31,8 +31,8 @@ async function startStatic() {
   return server;
 }
 
-const BUYER_USER = { id: "u-buyer", username: "buyer1", name: "김구매", role: "member", region: "홍천 비발디파크" };
-const OWNER_USER = { id: "u-owner", username: "owner1", name: "박소유", role: "member", region: "홍천 비발디파크" };
+const BUYER_USER = { id: "u-buyer", username: "buyer1", name: "김구매", role: "member", region: "강원특별자치도 홍천군" };
+const OWNER_USER = { id: "u-owner", username: "owner1", name: "박소유", role: "member", region: "강원특별자치도 홍천군" };
 
 const BASE_RENT_LISTING = listListings().find((l) => l.type === "rent" && l.status === "open");
 const SAMPLE_LISTINGS = [

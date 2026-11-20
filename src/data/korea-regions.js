@@ -160,7 +160,6 @@ export const KOREA_REGIONS = [
         lat: 37.697,
         lng: 127.8886,
         subRegions: [
-          { name: "홍천 비발디파크", lat: 37.6456, lng: 127.6844 },
           { name: "서면 팔봉리", lat: 37.6538, lng: 127.6942 },
         ],
       },
@@ -390,6 +389,9 @@ for (const prov of KOREA_REGIONS) {
     }
 
     if (Array.isArray(city.subRegions) && city.subRegions.length) {
+      if (city.name === "홍천군") {
+        searchableEntries.push(cityEntry);
+      }
       for (const sub of city.subRegions) {
         const subEntry = makeEntry({
           name: sub.name,
@@ -415,11 +417,11 @@ for (const prov of KOREA_REGIONS) {
 const DEFAULT_REGION_ENTRY = exactIndex.get("영양읍");
 
 /**
- * 지역명(예: "영양읍", "경상북도 영양군", "경기도 수원시", "영양군 청기면")을 좌표 및 기상청 격자로 변환합니다.
+ * 등록된 행정구역·하위 지역 엔트리를 찾습니다(없으면 null, 기본값 대체 없음).
  */
-export function getRegionCoords(regionName) {
+export function findRegionEntry(regionName) {
   const raw = typeof regionName === "string" ? regionName.trim() : "";
-  if (!raw) return DEFAULT_REGION_ENTRY;
+  if (!raw) return null;
 
   if (exactIndex.has(raw)) return exactIndex.get(raw);
   const normalized = raw.replace(/\s*·\s*/g, " ").replace(/\s+/g, " ").trim();
@@ -427,7 +429,6 @@ export function getRegionCoords(regionName) {
   if (cityIndex.has(normalized)) return cityIndex.get(normalized);
   if (provinceIndex.has(normalized)) return provinceIndex.get(normalized);
 
-  // 공백 구분 토큰 마지막 요소(예: "경상북도 영양군 영양읍"의 끝) 또는 부분 일치
   const parts = normalized.split(" ");
   if (parts.length >= 2) {
     const last = parts[parts.length - 1];
@@ -441,7 +442,31 @@ export function getRegionCoords(regionName) {
     }
   }
 
-  return DEFAULT_REGION_ENTRY;
+  return null;
+}
+
+/**
+ * 두 지역 문자열이 검색 조건상 같은 시·군권인지 판정합니다.
+ * 시·군 단위("강원특별자치도 홍천군")와 그 하위 지역("서면 팔봉리")은 서로 매칭하고,
+ * 서로 다른 읍·면("청기면" vs "입암면")은 구분합니다.
+ */
+export function regionsMatchForSearch(listingRegion, requestedRegion) {
+  const a = typeof listingRegion === "string" ? listingRegion.trim() : "";
+  const b = typeof requestedRegion === "string" ? requestedRegion.trim() : "";
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const infoA = findRegionEntry(a);
+  const infoB = findRegionEntry(b);
+  if (!infoA || !infoB) return false;
+  if (infoA.province !== infoB.province || infoA.city !== infoB.city) return false;
+  return !infoA.subRegion || !infoB.subRegion;
+}
+
+/**
+ * 지역명(예: "영양읍", "경상북도 영양군", "경기도 수원시", "영양군 청기면")을 좌표 및 기상청 격자로 변환합니다.
+ */
+export function getRegionCoords(regionName) {
+  return findRegionEntry(regionName) || DEFAULT_REGION_ENTRY;
 }
 
 function haversineDistanceKm(lat1, lng1, lat2, lng2) {

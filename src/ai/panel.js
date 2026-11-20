@@ -1435,8 +1435,8 @@ export function createAiPanel({
         if (item.type === "rent" && item.rentalOperator) {
           const operatorBadge = document.createElement("span");
           operatorBadge.className = "ai-rec-badge-operator";
-          operatorBadge.textContent = "대행운영";
-          operatorBadge.title = `대행운영서비스 제공중 · 작업자 +${money(item.rentalOperator.dailyPrice)}/일`;
+          operatorBadge.textContent = "대행운용";
+          operatorBadge.title = `대행운용서비스 제공중 · 작업자 +${money(item.rentalOperator.dailyPrice)}/일`;
           badges.append(operatorBadge);
         }
         if (item.region) {
@@ -1452,7 +1452,7 @@ export function createAiPanel({
         const infoTitle = document.createElement("strong");
         infoTitle.textContent = item.title || "";
         const infoMeta = document.createElement("small");
-        infoMeta.textContent = `${item.region || ""} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}${item.type === "rent" && item.rentalOperator ? ` · 대행운영 +${money(item.rentalOperator.dailyPrice)}/일` : ""}`;
+        infoMeta.textContent = `${item.region || ""} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}${item.type === "rent" && item.rentalOperator ? ` · 대행운용 +${money(item.rentalOperator.dailyPrice)}/일` : ""}`;
         const infoSub = document.createElement("small");
         infoSub.textContent = `${areaLabel(item.areaMin, item.areaMax)} · ${shortDeliveryText(item)}`;
         info.append(infoTitle, infoMeta, infoSub);
@@ -1567,7 +1567,7 @@ export function createAiPanel({
             ["매물", action.title],
             ["지역", action.region],
             ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
-            ["대행운영서비스", action.rentalOperator
+            ["대행운용서비스", action.rentalOperator
               ? `사용 · 작업자 ${action.rentalOperator.name} (+${money(action.rentalOperator.dailyPrice)}/일)`
               : "사용 안 함"],
             ["대여료", action.rentalOperator
@@ -1594,7 +1594,7 @@ export function createAiPanel({
         : "승인하면 게시자에게 대여 요청과 아래 희망 조건이 채팅으로 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
     card.append(notice);
 
-    // 대여 요청: 희망 네고 가격(1일)을 받아, 대행운영서비스 사용 여부와 함께 게시자 채팅으로 보낸다.
+    // 대여 요청: 희망 네고 가격(1일)을 받아, 대행운용서비스 사용 여부와 함께 게시자 채팅으로 보낸다.
     const isRental = action.type === "rental_request";
     let rentalTerms = null;
     if (isRental) {
@@ -1629,7 +1629,7 @@ export function createAiPanel({
           if (raw !== "" && !(Number.isSafeInteger(price) && price > 0)) return { error: "희망 네고 가격은 0보다 큰 숫자로 입력해 주세요." };
           return {
             negotiatedDailyPrice: price,
-            // 대행운영서비스는 대화에서 정한 대로 요청에 담기고, 게시자 채팅에도 함께 알린다.
+            // 대행운용서비스는 대화에서 정한 대로 요청에 담기고, 게시자 채팅에도 함께 알린다.
             operatorWanted: Boolean(action.rentalOperator),
           };
         },
@@ -1976,7 +1976,7 @@ export function createAiPanel({
     const operatorRow = document.createElement("div");
     operatorRow.className = "ai-rec-row ai-draft-operator";
     operatorRow.textContent = draft.rentalOperator
-      ? `✅ 대행운영서비스 제공중 · 작업자 ${draft.rentalOperator.name} · +${money(draft.rentalOperator.dailyPrice)}/일`
+      ? `✅ 대행운용서비스 제공중 · 작업자 ${draft.rentalOperator.name} · +${money(draft.rentalOperator.dailyPrice)}/일`
       : "";
     card.append(name, price, ...(draft.rentalOperator ? [operatorRow] : []), desc, deliveryBox, notice, actions);
     syncMissing();

@@ -2592,3 +2592,57 @@ body.ai-fullscreen .ai-launcher {
   font-weight: 700;
   color: #9a5b00;
 }
+
+/* 대여 신청 후 결제 기한 안내(누르면 장바구니) */
+.chat-bubble.ai-payment-notice-bubble {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.ai-payment-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #f0c27b;
+  border-radius: 14px;
+  background: #fff4e0;
+  color: #6b3a00;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ai-payment-notice:hover {
+  background: #ffeac7;
+  border-color: #e3a64f;
+}
+.ai-payment-notice:focus-visible {
+  outline: 3px solid #b85c00;
+  outline-offset: 2px;
+}
+.ai-payment-notice-icon {
+  flex: 0 0 auto;
+  color: #b85c00;
+}
+.ai-payment-notice-text {
+  flex: 1 1 auto;
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+.ai-payment-notice-go {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8a4b00;
+  white-space: nowrap;
+}
+
+/* 농농 창이 열려 있을 때 장바구니 서랍을 농농 창 위에 띄운다(가려지지 않게). 닫으면 농농 대화는 그대로다. */
+body.ai-open .cart-backdrop:not([hidden]) {
+  z-index: 1300;
+}

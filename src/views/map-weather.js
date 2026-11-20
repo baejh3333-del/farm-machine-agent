@@ -880,7 +880,7 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
   }
 }
 
-export const CLUSTER_SCALE_THRESHOLD_METERS = 25;
+export const CLUSTER_SCALE_THRESHOLD_METERS = 250;
 
 export const HEADER_CLUSTER_STEPS = [
   { maxLevel: 1, km: 0, label: "개별 매물" },
@@ -899,10 +899,30 @@ export const HEADER_CLUSTER_STEPS = [
 
 export function getScaleMetersForZoomLevel(zoomLevel) {
   const lv = Math.max(1, Number(zoomLevel) || 6);
-  return CLUSTER_SCALE_THRESHOLD_METERS * Math.pow(2, lv - 1);
+  const KAKAO_SCALE_BY_LEVEL = {
+    1: 20,
+    2: 30,
+    3: 50,
+    4: 100,
+    5: 250,
+    6: 500,
+    7: 1000,
+    8: 2000,
+    9: 4000,
+    10: 8000,
+    11: 16000,
+    12: 32000,
+    13: 64000,
+    14: 128000,
+  };
+  return KAKAO_SCALE_BY_LEVEL[lv] || Math.round(250 * Math.pow(2, lv - 5));
 }
 
-export function measureMapScaleMeters(map, containerEl, referencePx = 100) {
+export function measureMapScaleMeters(map, containerEl, referencePx = 70) {
+  const level = Number(map?.getLevel?.());
+  if (Number.isFinite(level) && level > 0) {
+    return getScaleMetersForZoomLevel(level);
+  }
   const bounds = map?.getBounds?.();
   const widthPx = Number(containerEl?.clientWidth || containerEl?.getBoundingClientRect?.().width || 0);
   if (bounds && widthPx > 0 && typeof bounds.getSouthWest === "function" && typeof bounds.getNorthEast === "function") {
@@ -917,7 +937,7 @@ export function measureMapScaleMeters(map, containerEl, referencePx = 100) {
       return Math.round(((widthKm * 1000) / widthPx) * referencePx);
     }
   }
-  return getScaleMetersForZoomLevel(map?.getLevel?.());
+  return getScaleMetersForZoomLevel(6);
 }
 
 export function shouldClusterAtScale(scaleMeters) {

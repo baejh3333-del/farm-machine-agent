@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
   <link rel="stylesheet" href="/src/styles.css?v=20261119-3" />
-  <link rel="stylesheet" href="/src/garage.css?v=20261119" />
-  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261119-2" />
+  <link rel="stylesheet" href="/src/garage.css?v=20261120-5" />
+  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261120-5" />
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/chat.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261119" />
@@ -19,8 +19,9 @@
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261119" />
     <link rel="stylesheet" href="/src/styles/catalog-split.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/cart-checkout.css?v=20261119" />
-  <link rel="stylesheet" href="/src/styles/design-views.css?v=20261120-2" />
-  <script type="module" src="/src/main.js?v=20261120-2"></script>
+  <link rel="stylesheet" href="/src/styles/design-views.css?v=20261120-5" />
+  <link rel="stylesheet" href="/src/styles/design-shell.css?v=20261120-5" />
+  <script type="module" src="/src/main.js?v=20261120-5"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -29,18 +30,15 @@
         <svg class="brand-wordmark" width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"/><circle cx="16" cy="35" r="8.7" stroke="#111" stroke-width="6" fill="none"/><circle cx="26.14" cy="37.72" r="2.5" fill="#111" stroke="none"/><circle cx="23.42" cy="42.42" r="2.5" fill="#111" stroke="none"/><circle cx="18.72" cy="45.14" r="2.5" fill="#111" stroke="none"/><circle cx="13.28" cy="45.14" r="2.5" fill="#111" stroke="none"/><circle cx="8.58" cy="42.42" r="2.5" fill="#111" stroke="none"/><circle cx="5.86" cy="37.72" r="2.5" fill="#111" stroke="none"/><circle cx="5.86" cy="32.28" r="2.5" fill="#111" stroke="none"/><circle cx="8.58" cy="27.58" r="2.5" fill="#111" stroke="none"/><circle cx="13.28" cy="24.86" r="2.5" fill="#111" stroke="none"/><circle cx="18.72" cy="24.86" r="2.5" fill="#111" stroke="none"/><circle cx="23.42" cy="27.58" r="2.5" fill="#111" stroke="none"/><circle cx="26.14" cy="32.28" r="2.5" fill="#111" stroke="none"/><circle cx="41" cy="39" r="5" fill="#111" stroke="none"/><circle cx="45.25" cy="40.76" r="1.5" fill="#111" stroke="none"/><circle cx="42.76" cy="43.25" r="1.5" fill="#111" stroke="none"/><circle cx="39.24" cy="43.25" r="1.5" fill="#111" stroke="none"/><circle cx="36.75" cy="40.76" r="1.5" fill="#111" stroke="none"/><circle cx="36.75" cy="37.24" r="1.5" fill="#111" stroke="none"/><circle cx="39.24" cy="34.75" r="1.5" fill="#111" stroke="none"/><circle cx="42.76" cy="34.75" r="1.5" fill="#111" stroke="none"/><circle cx="45.25" cy="37.24" r="1.5" fill="#111" stroke="none"/></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111"/><path d="M19 24v10M2 39h34" stroke="#111"/><circle cx="58" cy="21" r="12.5" stroke="#111"/><path d="M82 13v28M82 23h8" stroke="#111"/><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"/><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"/><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111"/><circle cx="116" cy="33.7" r="7.3" stroke="#111"/></svg>
       </button>
       <nav class="sidebar-nav" aria-label="주 메뉴">
-        <button type="button" class="nav-item" data-view="browse" aria-expanded="false" aria-controls="headerFeatures">매물찾기</button>
-        <button type="button" class="nav-item" data-view="map" aria-expanded="false" aria-controls="headerFeatures">지도</button>
+        <button type="button" class="nav-item" data-view="browse" aria-expanded="false" aria-controls="headerFeatures">매물 찾기</button>
         <button type="button" class="nav-item" data-view="garage" aria-expanded="false" aria-controls="headerFeatures">농기계 호환</button>
         <button type="button" class="nav-item" data-view="owner" aria-expanded="false" aria-controls="headerFeatures">기계 관리<span class="nav-badge nav-badge-alert" id="dealsNavBadge" hidden>0</span><span class="mypage-dot" id="dealsNavDot" hidden aria-label="안 읽은 메시지 있음"></span></button>
         <div class="nav-submenu" id="headerFeatures" hidden>
           <div class="nav-columns">
-            <section class="nav-column" data-column="browse" aria-label="매물찾기"><h2>매물찾기</h2>
+            <section class="nav-column" data-column="browse" aria-label="매물 찾기"><h2>매물 찾기</h2>
               <button type="button" class="nav-submenu-item" data-nav-dest="browse">매물 찾기</button>
-              <button type="button" class="nav-submenu-item" data-nav-dest="home-booking">빠른 예약 검색</button>
-            </section>
-            <section class="nav-column" data-column="map" aria-label="지도"><h2>지도</h2>
               <button type="button" class="nav-submenu-item" data-nav-dest="map">내 동네 매물 지도</button>
+              <button type="button" class="nav-submenu-item" data-nav-dest="home-booking">빠른 예약 검색</button>
             </section>
             <section class="nav-column" data-column="garage" aria-label="농기계 호환"><h2>농기계 호환</h2>
               <button type="button" class="nav-submenu-item" data-nav-dest="garage">내 농기계·호환 확인</button>
@@ -66,16 +64,17 @@
             aria-controls="regionPickerDialog"
             aria-label="내 동네 지역 선택"
           >
-            <span id="regionPickerLabel">강원특별자치도 홍천군 · 홍천 비발디파크</span>
+            <span id="regionPickerLabel">경기도 이천시</span>
             <span class="region-picker-caret" aria-hidden="true">▾</span>
           </button>
           <select id="regionSelect" aria-hidden="true" tabindex="-1" hidden>
-            <option value="홍천 비발디파크">홍천 비발디파크</option>
-            <option value="서면 팔봉리">서면 팔봉리</option>
+            <option value="경기도 이천시">경기도 이천시</option>
             <option value="영양읍">영양읍</option>
             <option value="청기면">청기면</option>
             <option value="입암면">입암면</option>
             <option value="수비면">수비면</option>
+            <option value="홍천 비발디파크">홍천 비발디파크</option>
+            <option value="서면 팔봉리">서면 팔봉리</option>
           </select>
           <button type="button" class="login-button" id="loginButton">로그인</button>
           <div class="header-icon-actions" role="group" aria-label="장바구니 및 마이페이지">
@@ -92,6 +91,7 @@
                 <circle cx="12" cy="8" r="4"></circle>
                 <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"></path>
               </svg>
+              <span class="header-auth-label">마이페이지</span>
               <span class="mypage-dot" id="myPageNotifDot" hidden aria-label="확인할 알림 있음"></span>
             </button>
           </div>
@@ -180,18 +180,52 @@
               </div>
             </div>
           </div>
+
+          <!-- 초보 농부를 위한 도움말 (모아농 2.3) -->
+          <div class="moa-tips" aria-label="처음 농사짓는 분을 위한 도움말">
+            <section class="moa-tip-card moa-tip-wide">
+              <span class="moa-tip-tag">처음이라면</span>
+              <h3>농사 말, 쉽게 풀어 드려요</h3>
+              <dl class="moa-words"><div><dt>로터리</dt><dd>트랙터 뒤에 달아 흙을 잘게 부수며 가는 작업기예요.</dd></div><div><dt>두둑</dt><dd>작물을 심으려고 흙을 길게 높이 쌓아 올린 줄이에요.</dd></div><div><dt>멀칭</dt><dd>두둑 위를 비닐로 덮어 풀을 막고 흙의 물기를 지켜요.</dd></div><div><dt>관리기</dt><dd>사람이 뒤에서 잡고 미는 작은 농기계예요. 작은 밭에 알맞아요.</dd></div><div><dt>굴취</dt><dd>땅속 작물(감자·고구마 등)을 흙에서 캐내는 일이에요.</dd></div><div><dt>북주기</dt><dd>자라는 작물 밑동에 흙을 모아 덮어 주는 일이에요.</dd></div></dl>
+            </section>
+            <section class="moa-tip-card">
+              <span class="moa-tip-tag moa-tip-tag-warm">빌리기 전에</span>
+              <h3>농기계 안전교육 이수증</h3>
+              <p>트랙터·관리기처럼 큰 기계는 안전교육을 받은 분께 빌려주는 소유주가 많아요. 이수증을 올려 두면 요청할 때 함께 보여요.</p>
+              <button type="button" class="button button-secondary" data-nav-go="owner">이수증 올리러 가기</button>
+            </section>
+            <section class="moa-tip-card">
+              <span class="moa-tip-tag">받는 날</span>
+              <h3>받을 때 꼭 확인해요</h3>
+              <div class="moa-checks"><label class="moa-check"><input type="checkbox" /><span>연료가 얼마나 차 있는지</span></label><label class="moa-check"><input type="checkbox" /><span>날·칼날이 닳거나 빠진 곳은 없는지</span></label><label class="moa-check"><input type="checkbox" /><span>시동 걸고 끄는 법을 직접 해 보기</span></label><label class="moa-check"><input type="checkbox" /><span>돌려줄 날짜와 시간 다시 확인</span></label></div>
+            </section>
+          </div>
         </section>
 
         <div id="garageView" hidden></div>
+        <!-- 농기계 호환: 초보 농부를 위한 도움말 (모아농 2.3) -->
+        <div class="moa-tips moa-tips-garage" aria-label="연결이 처음인 분을 위한 도움말">
+          <section class="moa-tip-card moa-tip-wide">
+            <span class="moa-tip-tag">처음이라면</span>
+            <h3>연결 용어, 쉽게 풀어 드려요</h3>
+            <div class="moa-terms"><details><summary>3점 링크</summary><p>트랙터 뒤에 작업기를 거는 세 개의 연결 고리예요. 대부분의 트랙터 작업기가 이 방식을 써요.</p></details><details><summary>1종 · 2종</summary><p>3점 링크의 크기예요. 작은 트랙터는 1종, 중간 크기는 2종이 많아요. 크기가 다르면 바로 달 수 없어요.</p></details><details><summary>히치핀</summary><p>관리기와 작업기를 잇는 핀이에요. 제조사마다 모양이 달라 같은 회사 것끼리 맞는 경우가 많아요.</p></details><details><summary>PTO</summary><p>기계의 힘을 작업기로 보내 돌리는 축이에요. 회전 속도가 맞아야 작업기가 제대로 움직여요.</p></details></div>
+          </section>
+          <section class="moa-tip-card">
+            <span class="moa-tip-tag moa-tip-tag-warm">받는 날</span>
+            <h3>작업기 받을 때 확인해요</h3>
+            <div class="moa-checks"><label class="moa-check"><input type="checkbox" /><span>링크 핀이나 히치핀 크기가 맞는지</span></label><label class="moa-check"><input type="checkbox" /><span>PTO 축과 연결 부품이 함께 오는지</span></label><label class="moa-check"><input type="checkbox" /><span>작업기 폭이 내 기계 힘에 맞는지</span></label><label class="moa-check"><input type="checkbox" /><span>날·볼트가 헐겁거나 빠진 곳은 없는지</span></label><label class="moa-check"><input type="checkbox" /><span>처음 다는 법을 소유주에게 직접 배우기</span></label></div>
+          </section>
+        </div>
+
 
         <div class="mypage-layout" id="myPageLayout" hidden>
-          <nav class="mypage-menu" id="myPageMenu" aria-label="마이페이지 메뉴">
-            <h2>마이페이지</h2>
+          <nav class="mypage-menu" id="myPageMenu" aria-label="기계 관리 메뉴">
+            <h2>기계 관리</h2>
             <button type="button" class="mypage-menu-item" data-view="favorites" data-action="favorites">
               찜 목록 <span id="favNavBadge" class="nav-badge" hidden>0</span>
             </button>
             <button type="button" class="mypage-menu-item" data-view="deals">거래 관리</button>
-            <button type="button" class="mypage-menu-item" data-view="requests">대여 요청</button>
+            <button type="button" class="mypage-menu-item" data-view="requests">내 대여 요청</button>
             <button type="button" class="mypage-menu-item" data-view="owner">
               내 기계 관리 <span id="ownerBadge" class="nav-badge" hidden>0</span>
             </button>
@@ -334,6 +368,11 @@
               <span class="login-logo-tagline" aria-hidden="true"><span>E</span><span>A</span><span>S</span><span>Y</span><span class="gap"></span><span>F</span><span>A</span><span>R</span><span>M</span><span class="gap"></span><span>R</span><span>E</span><span>N</span><span>T</span><span>A</span><span>L</span></span>
             </h1>
 
+            <p class="moa-auth-sub"><span data-auth-copy="login">아이디와 비밀번호로 들어와요.</span><span data-auth-copy="signup">1분이면 끝나요. 필요한 것만 받아요.</span></p>
+            <div class="moa-auth-tabs" role="tablist" aria-label="로그인 또는 회원가입">
+              <button type="button" role="tab" data-auth-tab="login">로그인</button>
+              <button type="button" role="tab" data-auth-tab="signup">회원가입</button>
+            </div>
             <form class="login-form" id="loginForm">
               <div id="signupNameField" hidden>
                 <label class="visually-hidden" for="signupName">이름</label>
@@ -385,6 +424,7 @@
         </div>
         <div>
           <strong id="aiTitle">농농이</strong>
+          <span class="moa-ai-sub">AI 농기계 도우미</span>
         </div>
       </div>
       <div class="ai-header-actions">

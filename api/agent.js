@@ -30,6 +30,7 @@ import {
   executeRentalRequest,
   requestChatTarget,
   requestDoneMessage,
+  withVoicePaymentNotice,
   runAgentTurn,
 } from "../server/nongnong-agent.js";
 import { executeMyPageAction, MY_PAGE_ACTION_TYPE, myPageRateKind } from "../server/my-page-agent.js";
@@ -119,7 +120,7 @@ const ACTION_LABEL = { rental_request: "대여 예약 요청", purchase_request:
  * 모델을 다시 부르지 않고 그 자리에서 실행한다. 매물 ID를 잃어버리거나 "잠시 후 진행"으로 끝나는 일을 막는다.
  * 실행 대상이 아니면 null.
  */
-export async function runConfirmedAction({ message, pending, user, requestId, run, beforeWrite, shownNo = null }) {
+export async function runConfirmedAction({ message, pending, user, requestId, run, beforeWrite, shownNo = null, inputMode = "text" }) {
   if (!user || !pending || typeof pending !== "object" || !CONFIRMABLE_ACTIONS.has(pending.type)) return null;
   if (!isAffirmative(message)) return null;
   const label = ACTION_LABEL[pending.type];
@@ -148,7 +149,7 @@ export async function runConfirmedAction({ message, pending, user, requestId, ru
           : `${title}${label}을 완료했어요.${number ? ` 신청 번호는 ${number}예요.` : ""}`;
       return {
         mode: "agent",
-        reply,
+        reply: executed.outcome === "completed" ? withVoicePaymentNotice(reply, { reservation: executed.reservation, inputMode }) : reply,
         listingIds: [],
         learnedSlots: {},
         executedAction: pending.type,
@@ -295,6 +296,7 @@ async function chatTurn(request, body, started, progress) {
         requestId: pendingRequestId,
         run: (u, pending, id) => EXECUTE_ACTIONS[pending.type].run(u, pending, id),
         shownNo: shownNoFromBody(body),
+        inputMode: body.inputMode === "voice" ? "voice" : "text",
         beforeWrite: async (type, pending) => {
           await assertWritesAllowed();
           await enforceRateLimit(request, rateKindOf(type, pending), { userId: user.id });

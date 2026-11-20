@@ -1,5 +1,6 @@
 // 디자인 화면 머리말의 세부 메뉴 (캔버스 2.3과 같은 모양)
 // 메뉴 이름에 마우스를 올리면 그 메뉴의 세부 항목만 오른쪽 위 그라데이션 판 위에 펼쳐져요.
+// 세부 항목 목록은 화면 템플릿(data-mega-group)에 그대로 적혀 있어요.
 // 지도는 '매물 찾기'의 두 번째 줄에 있어요.
 export const MENU = [
   ['find', '매물 찾기', ['매물 찾기', '내 동네 매물 지도', '빠른 예약 검색']],
@@ -7,44 +8,79 @@ export const MENU = [
   ['mine', '기계 관리', ['내 기계 관리', '거래 관리', '내 대여 요청', '찜 목록']],
 ];
 
+// 세부 메뉴는 상태(setState)를 바꾸지 않고 DOM에서 바로 열고 닫아요.
+// 그래서 메뉴에 마우스를 올려도 화면 전체가 다시 그려지지 않아요(새로고침처럼 보이지 않음).
+function navLinks(root) {
+  const host = root && root.getRootNode ? root.getRootNode() : document;
+  return host.querySelectorAll('nav[aria-label="주 메뉴"] a');
+}
+
+export function closeMenu(self) {
+  clearTimeout(self._menuT);
+  const root = self._mega;
+  if (!root || root.getAttribute('data-open') === '') return;
+  root.setAttribute('data-open', '');
+  navLinks(root).forEach(x => x.setAttribute('aria-expanded', 'false'));
+}
+
 export function openMenu(self, e, id, hover) {
   if (e && e.preventDefault && !hover) e.preventDefault();
   clearTimeout(self._menuT);
-  if (!hover && self.state.menu === id) { self.setState({ menu: null }); return; }
-  let top = 72, left = 0;
+  const root = self._mega;
+  if (!root) return;
+  // 마우스를 올리면(휴대폰 탭도 mouseenter가 먼저 옴) 이미 열려 있으므로, 그 직후의 클릭은 닫지 않고 열린 채로 둬요.
+  // 클릭으로 열린 메뉴를 다시 누를 때만 닫아요.
+  if (!hover && root.getAttribute('data-open') === id) {
+    if (!self._menuByHover) { closeMenu(self); return; }
+    self._menuByHover = false;
+    return;
+  }
+  self._menuByHover = !!hover;
   const a = e && e.currentTarget;
   const box = a && a.closest && a.closest('header');
-  if (box) top = Math.round(box.getBoundingClientRect().bottom);
-  if (a && a.getBoundingClientRect) left = Math.round(a.getBoundingClientRect().left) - 24;
+  const top = box ? Math.round(box.getBoundingClientRect().bottom) : 72;
+  const left = a && a.getBoundingClientRect ? Math.round(a.getBoundingClientRect().left) - 24 : 0;
+  const band = root.querySelector('[data-mega]'), col = root.querySelector('[data-mega-col]');
+  if (band) band.style.top = top + 'px';
+  if (col) { col.style.top = top + 'px'; col.style.left = left + 'px'; }
+  root.setAttribute('data-open', id);
+  const label = a ? a.textContent.trim() : '';
+  navLinks(root).forEach(x => x.setAttribute('aria-expanded', x.textContent.trim() === label ? 'true' : 'false'));
   if (!self._menuScroll) {
-    self._menuScroll = () => { if (self.state.menu) self.setState({ menu: null }); };
+    self._menuScroll = () => closeMenu(self);
     window.addEventListener('scroll', self._menuScroll, { passive: true });
   }
-  if (self.state.menu === id && self.state.menuLeft === left + 'px') return;
-  self.setState({ menu: id, menuTop: top + 'px', menuLeft: left + 'px', pop: null, hdrPop: false });
 }
 
 // active: 지금 화면이 속한 메뉴('find' 등), act: 세부 항목을 눌렀을 때 할 일(label)
 export function menuVals(self, active, act) {
-  const s = self.state;
-  const close = () => { clearTimeout(self._menuT); if (self.state.menu) self.setState({ menu: null }); };
-  const cur = MENU.find(m => m[0] === s.menu);
+  if (!self._menuFns) {
+    self._menuFns = {
+      megaRef: el => { if (el) self._mega = el; },
+      keepMenu: () => clearTimeout(self._menuT),
+      leaveMenu: () => { clearTimeout(self._menuT); self._menuT = setTimeout(() => closeMenu(self), 180); },
+      closeMenu: () => closeMenu(self),
+      menuPick: e => {
+        if (e && e.preventDefault) e.preventDefault();
+        const label = e && e.currentTarget ? e.currentTarget.textContent.trim() : '';
+        closeMenu(self);
+        if (self._menuAct) self._menuAct(label);
+      },
+    };
+  }
+  self._menuAct = act;
   return {
+    ...self._menuFns,
+    // 머리말 오른쪽 버튼: 로그인하면 '마이페이지'로 바뀌어요(눌렀을 때 동작은 app.js navAction).
+    authLabel: self.deps?.isLoggedIn?.() ? '마이페이지' : '로그인',
     navs: MENU.map(([id, label]) => {
-      const open = s.menu === id, on = active === id;
+      const on = active === id;
       return {
-        label, exp: open ? 'true' : 'false', weight: on ? 700 : 500,
-        line: open ? 'inset 0 -2px 0 #111111' : on ? 'inset 0 -2px 0 #1E9B4B' : 'inset 0 -2px 0 transparent',
+        label, exp: 'false', weight: on ? 700 : 500,
+        line: on ? 'inset 0 -2px 0 #1E9B4B' : 'inset 0 -2px 0 transparent',
         pick: e => openMenu(self, e, id), hover: e => openMenu(self, e, id, true),
       };
     }),
-    menuOpen: !!cur, menuTop: s.menuTop || '72px', menuLeft: s.menuLeft || '0px', closeMenu: close,
-    keepMenu: () => clearTimeout(self._menuT),
-    leaveMenu: () => { clearTimeout(self._menuT); self._menuT = setTimeout(close, 180); },
-    menuItems: cur ? cur[2].map((label, i) => ({
-      label, delay: (i * 0.05).toFixed(2) + 's',
-      pick: e => { if (e && e.preventDefault) e.preventDefault(); close(); if (act) act(label); },
-    })) : [],
   };
 }
 

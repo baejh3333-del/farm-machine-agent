@@ -937,6 +937,57 @@ export function createAiPanel({
     insuranceOffer = result.insuranceOffer && result.insuranceOffer.stage !== "done" ? result.insuranceOffer : null;
   }
 
+  // 대여 신청 후 결제 기한 안내. 같은 신청 번호로 두 번 보이지 않게 기억한다.
+  const RENTAL_PAYMENT_NOTICE = "결제는 신청 승낙 후 3일 이내에 해주세요!";
+  const paymentNoticeShown = new Set();
+  // "장바구니 열어 줘", "결제하러 갈래"처럼 장바구니를 열어 달라는 짧은 말(물음·부정은 제외)
+  const OPEN_CART_RE = /^(?:(?:네|응|그럼|좋아요?)[,\s]*)?(?:장바구니\s*(?:좀\s*)?(?:열어|보여|가|띄워|켜)|결제\s*(?:하러|하는\s*데로|화면으로|창으로)\s*(?:갈|가|이동|보내)|결제\s*화면\s*(?:열어|보여))/;
+  function wantsOpenCart(text) {
+    const value = String(text || "").trim();
+    return value.length <= 30 && !/[?？]$/.test(value) && !/(?:안|말고|싫|아니)/.test(value) && OPEN_CART_RE.test(value);
+  }
+  const OPEN_CART_REPLY = "장바구니를 열었어요. 결제는 신청 승낙 후 3일 이내에 해주세요!";
+
+  /** 장바구니 서랍을 연다(상단 장바구니 버튼과 같은 서랍). 농농 대화는 그대로 둔다. */
+  function openCartFromAi() {
+    window.dispatchEvent(new CustomEvent("moanong:cart-open", { detail: { tab: "cart" } }));
+  }
+
+  /**
+   * 대여 신청이 성공하면 신청 완료 박스(와 1:1 채팅 버튼) 다음, 보험 추천 칸 앞에 결제 기한 안내를 띄운다.
+   * 안내 전체가 버튼이라 누르면(또는 Enter·Space) 장바구니가 열린다. 대화 기록에는 넣지 않는다.
+   */
+  function appendRentalPaymentNotice(result) {
+    const done = result?.reservation;
+    if (!done || done.kind !== "rental") return;
+    if (result.outcome && result.outcome !== "completed") return;
+    const key = done.number || `${done.listingId || ""}:${done.start || ""}:${done.end || ""}`;
+    if (paymentNoticeShown.has(key)) return;
+    paymentNoticeShown.add(key);
+
+    const bubble = appendAiMessage("", "assistant");
+    bubble.classList.add("ai-payment-notice-bubble");
+    bubble.replaceChildren();
+    const notice = document.createElement("button");
+    notice.type = "button";
+    notice.className = "ai-payment-notice";
+    notice.setAttribute("aria-label", "결제는 신청 승낙 후 3일 이내에 해주세요. 누르면 장바구니로 이동합니다.");
+    notice.innerHTML = `
+      <svg class="ai-payment-notice-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path><path d="M12 14v3l2 1"></path>
+      </svg>`;
+    const text = document.createElement("strong");
+    text.className = "ai-payment-notice-text";
+    text.textContent = RENTAL_PAYMENT_NOTICE;
+    const go = document.createElement("span");
+    go.className = "ai-payment-notice-go";
+    go.setAttribute("aria-hidden", "true");
+    go.textContent = "장바구니 보기 ›";
+    notice.append(text, go);
+    notice.addEventListener("click", openCartFromAi);
+    bubble.append(notice);
+  }
+
   function appendInsuranceAsk(result) {
     if (!result?.insuranceAsk) return;
     trackInsurance(result);
@@ -1101,6 +1152,7 @@ export function createAiPanel({
         const bubble = appendAiMessage(`✅ ${result.message}`, "assistant");
         if (result.reservation) renderReservationBox(bubble, result.reservation);
         if (result.chatTarget) renderChatTargetCta(bubble, result.chatTarget);
+        appendRentalPaymentNotice(result);
         appendInsuranceAsk(result);
         if (result.createdListing) {
           savedDraft = null;
@@ -1181,7 +1233,7 @@ export function createAiPanel({
       defaultEnd = "",
       buttonLabel = "이 기간 적용",
       includeOperatorCheckbox = false,
-      operatorCheckboxLabel = "대행운영서비스도 함께 이용하기 (작업자 동반)",
+      operatorCheckboxLabel = "대행운용서비스도 함께 이용하기 (작업자 동반)",
       defaultOperatorWanted = false,
       onApply,
     },
@@ -1343,13 +1395,13 @@ export function createAiPanel({
       buttonLabel: "이 날짜로 바로 예약",
       includeOperatorCheckbox: Boolean(item.rentalOperator),
       operatorCheckboxLabel: item.rentalOperator
-        ? `대행운영서비스 함께 이용 (작업자 ${item.rentalOperator.name}, +${money(item.rentalOperator.dailyPrice)}/일)`
+        ? `대행운용서비스 함께 이용 (작업자 ${item.rentalOperator.name}, +${money(item.rentalOperator.dailyPrice)}/일)`
         : undefined,
       onApply: (pickedStart, pickedEnd, operatorWanted) => {
         const useOperator = Boolean(operatorWanted && item.rentalOperator);
         rememberAgentTurn({
           role: "user",
-          content: `'${item.title}' ${pickedStart}~${pickedEnd} 바로 예약${useOperator ? " (대행운영서비스 사용)" : ""}`,
+          content: `'${item.title}' ${pickedStart}~${pickedEnd} 바로 예약${useOperator ? " (대행운용서비스 사용)" : ""}`,
         });
         executeOneTapAction({
           pendingAction: {
@@ -1408,9 +1460,9 @@ export function createAiPanel({
     if (item.rentalOperator) {
       return {
         available: true,
-        badgeText: "대행운영",
-        badgeTitle: `대행운영서비스 제공중 · 작업자 +${money(item.rentalOperator.dailyPrice)}/일`,
-        metaSuffix: ` · 대행운영 +${money(item.rentalOperator.dailyPrice)}/일`,
+        badgeText: "대행운용",
+        badgeTitle: `대행운용서비스 제공중 · 작업자 +${money(item.rentalOperator.dailyPrice)}/일`,
+        metaSuffix: ` · 대행운용 +${money(item.rentalOperator.dailyPrice)}/일`,
         cardText: `대리 운용 가능 (+${money(item.rentalOperator.dailyPrice)}/일)`,
       };
     }
@@ -1640,7 +1692,7 @@ export function createAiPanel({
             ["매물", action.title],
             ["지역", action.region],
             ["기간", `${action.start} ~ ${action.end} (${action.days}일)`],
-            ["대행운영서비스", action.rentalOperator
+            ["대행운용서비스", action.rentalOperator
               ? `사용 · 작업자 ${action.rentalOperator.name} (+${money(action.rentalOperator.dailyPrice)}/일)`
               : "사용 안 함"],
             ["대여료", action.rentalOperator
@@ -1667,7 +1719,7 @@ export function createAiPanel({
         : "승인하면 게시자에게 대여 요청과 아래 희망 조건이 채팅으로 전송돼요. 예약은 게시자가 승인해야 확정돼요.";
     card.append(notice);
 
-    // 대여 요청: 희망 네고 가격(1일)을 받아, 대행운영서비스 사용 여부와 함께 게시자 채팅으로 보낸다.
+    // 대여 요청: 희망 네고 가격(1일)을 받아, 대행운용서비스 사용 여부와 함께 게시자 채팅으로 보낸다.
     const isRental = action.type === "rental_request";
     let rentalTerms = null;
     if (isRental) {
@@ -1702,7 +1754,7 @@ export function createAiPanel({
           if (raw !== "" && !(Number.isSafeInteger(price) && price > 0)) return { error: "희망 네고 가격은 0보다 큰 숫자로 입력해 주세요." };
           return {
             negotiatedDailyPrice: price,
-            // 대행운영서비스는 대화에서 정한 대로 요청에 담기고, 게시자 채팅에도 함께 알린다.
+            // 대행운용서비스는 대화에서 정한 대로 요청에 담기고, 게시자 채팅에도 함께 알린다.
             operatorWanted: Boolean(action.rentalOperator),
           };
         },
@@ -2049,7 +2101,7 @@ export function createAiPanel({
     const operatorRow = document.createElement("div");
     operatorRow.className = "ai-rec-row ai-draft-operator";
     operatorRow.textContent = draft.rentalOperator
-      ? `✅ 대행운영서비스 제공중 · 작업자 ${draft.rentalOperator.name} · +${money(draft.rentalOperator.dailyPrice)}/일`
+      ? `✅ 대행운용서비스 제공중 · 작업자 ${draft.rentalOperator.name} · +${money(draft.rentalOperator.dailyPrice)}/일`
       : "";
     card.append(name, price, ...(draft.rentalOperator ? [operatorRow] : []), desc, deliveryBox, notice, actions);
     syncMissing();
@@ -2271,8 +2323,8 @@ export function createAiPanel({
           defaultOperatorWanted: result.operatorService === true,
           onApply: (pickedStart, pickedEnd, operatorWanted) => {
             const operatorPhrase = operatorWanted
-              ? "대행운영서비스 사용할게요."
-              : "대행운영서비스 없이 할게요.";
+              ? "대행운용서비스 사용할게요."
+              : "대행운용서비스 없이 할게요.";
             $("aiInput").value = `${pickedStart}부터 ${pickedEnd}까지로 해주세요. ${operatorPhrase}`;
             $("aiForm").requestSubmit();
           },
@@ -2286,6 +2338,7 @@ export function createAiPanel({
     ) {
       appendConfirmation(bubble, result.pendingAction);
     }
+    appendRentalPaymentNotice(result);
     appendInsuranceAsk(result);
   }
 
@@ -2745,6 +2798,13 @@ export function createAiPanel({
     if (!userText) return { spokenSummary: "무슨 작업이나 농기계를 찾으시는지 다시 말씀해 주세요." };
     // 인식이 실패했거나 알아들을 수 없는 조각이면 대충 넘기지 않고 짧게 다시 묻는다(모델 호출도 아낀다).
     if (isUnclearUtterance(userText)) return { spokenSummary: "죄송해요, 잘 못 들었어요. 한 번만 다시 말씀해 주시겠어요?" };
+    // 음성으로 "장바구니 열어 줘", "결제하러 갈래"라고 하면 바로 장바구니를 연다.
+    if (wantsOpenCart(userText)) {
+      rememberAgentTurn({ role: "user", content: userText }, { role: "assistant", content: OPEN_CART_REPLY });
+      appendAiMessage(OPEN_CART_REPLY, "assistant");
+      openCartFromAi();
+      return { spokenSummary: "장바구니를 열었어요. 결제는 신청 승낙 후 3일 이내에 해 주세요.", effect: "read" };
+    }
     // 같은 위임이 다시 와도(재전송·중복 이벤트) 요청·카드·음성은 한 번만 낸다. 응답을 기다리는 동안에도 막는다.
     if (delegationId && claimedDelegationIds.has(delegationId)) return null;
     if (delegationId) claimedDelegationIds.add(delegationId);
@@ -3355,6 +3415,13 @@ export function createAiPanel({
     try {
       if (!sendingPhoto && AGENT_RESET_RE.test(message)) {
         performReset();
+        return;
+      }
+      // "장바구니 열어 줘", "결제하러 갈래"는 모델을 거치지 않고 바로 장바구니를 연다.
+      if (!sendingPhoto && wantsOpenCart(message)) {
+        rememberAgentTurn({ role: "user", content: message }, { role: "assistant", content: OPEN_CART_REPLY });
+        appendAiMessage(OPEN_CART_REPLY, "assistant");
+        openCartFromAi();
         return;
       }
       // 확인 카드가 떠 있을 때 채팅으로 "네/예약해줘"라고 하면, 카드에 담긴 매물·날짜 그대로 버튼과 똑같이 실행한다.

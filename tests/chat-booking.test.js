@@ -187,7 +187,7 @@ test("[긍정 판정] 부정·보류·질문이 섞이면 승인으로 보지 �
   for (const text of no) assert.equal(sharedAffirmative(text), false, text);
 });
 
-test("[날짜 + 대행운영] 날짜가 없어 멈출 때 대행운영서비스 안내와 선택 상태를 함께 돌려준다", async (t) => {
+test("[날짜 + 대행운용] 날짜가 없어 멈출 때 대행운용서비스 안내와 선택 상태를 함께 돌려준다", async (t) => {
   withKey(t, "test");
   const { call, calls } = scripted([
     { content: [{ type: "tool_use", id: "t1", name: "search_listings", input: { machineType: "tractor", transaction: "rent" } }] },
@@ -197,6 +197,6 @@ test("[날짜 + 대행운영] 날짜가 없어 멈출 때 대행운영서비스 
   const toolResult = JSON.parse(calls[1].messages.at(-1).content[0].content);
   assert.equal(result.askDate, true);
   assert.equal(result.operatorService, null);
-  assert.match(result.reply, /대행운영서비스/);
-  assert.match(toolResult.error, /대행운영서비스/);
+  assert.match(result.reply, /대행운용서비스/);
+  assert.match(toolResult.error, /대행운용서비스/);
 });

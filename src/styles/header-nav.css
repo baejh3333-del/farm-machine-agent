@@ -413,3 +413,6 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 마이페이지 버튼의 글자: 기본은 아이콘만 보이고, 홈 머리말과 맞춘 화면(design-shell.css)에서만 글자 버튼으로 보여요 */
+#myPageButton .header-auth-label { display: none; }

@@ -84,15 +84,8 @@ test("S1. vercel.json 크론이 있다면 모두 Hobby 한도(하루 1회, 분·
   }
 });
 
-test("S1b. 서버리스 함수는 Hobby 한도(배포당 12개) 이하이고, functions·rewrite 대상이 실제 함수로 이어진다", () => {
-  const apiDir = new URL("../api/", import.meta.url);
-  const walk = (dir) =>
-    readdirSync(dir).flatMap((name) => {
-      const full = new URL(name, dir);
-      return statSync(full).isDirectory() ? walk(new URL(`${name}/`, dir)) : name.endsWith(".js") ? [name] : [];
-    });
-  const functions = walk(apiDir);
-  assert.ok(functions.length <= 12, `api/ 함수 ${functions.length}개: ${functions.join(", ")}`);
+// 배포 프로젝트는 Vercel Pro 팀이라 Hobby의 배포당 함수 12개 제한은 검사하지 않는다.
+test("S1b. vercel.json의 functions·rewrite 대상이 실제 함수로 이어진다", () => {
   const config = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
   for (const key of Object.keys(config.functions || {})) {
     assert.ok(statSync(new URL(`../${key}`, import.meta.url)).isFile(), `functions 설정 대상 없음: ${key}`);

@@ -71,7 +71,7 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/호환성/찜/채팅 문의/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물, 보유 농기계)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
 2. **대여 추천은 날짜가 정해진 뒤에만 한다 (매우 중요)**:
    - 날짜 조건이 있는 경우: 이번 말이나 앞선 대화에서 대여 시작일이 정해졌거나("내일", "다음 주 화요일부터 이틀", "11월 24일~26일"), [현재 화면 조건]의 화면 선택 기간이나 [정해진 대여 기간]이 있는 경우. "다음 주쯤", "주말에"처럼 하루로 정할 수 없는 말은 날짜가 없는 것으로 본다.
-   - 대여(빌리기) 요청인데 날짜 조건이 없으면 search_listings를 호출하지 않고, 매물 이름·가격·개수도 말하지 않는다. 사용자가 말한 조건(작물·작업·기종·지역)을 기억했다고 짧게 확인하고 "언제부터 며칠 빌리실 건가요? 대행운영서비스(작업자 동반)도 필요하신지 함께 알려 주세요."처럼 대여 날짜와 대행운영서비스 사용 여부를 함께 묻는다([이미 받은 정보]에 대행운영서비스가 이미 있으면 날짜만 묻는다).
+   - 대여(빌리기) 요청인데 날짜 조건이 없으면 search_listings를 호출하지 않고, 매물 이름·가격·개수도 말하지 않는다. 사용자가 말한 조건(작물·작업·기종·지역)을 기억했다고 짧게 확인하고 "언제부터 며칠 빌리실 건가요? 대행운용서비스(작업자 동반)도 필요하신지 함께 알려 주세요."처럼 대여 날짜와 대행운용서비스 사용 여부를 함께 묻는다([이미 받은 정보]에 대행운용서비스가 이미 있으면 날짜만 묻는다).
    - 작물·작업·기종도 전혀 없으면 날짜보다 그것을 먼저 1개만 묻는다. 한 번에 두 개를 묻지 않는다.
    - 대여 요청에 날짜 조건이 있으면 상대 날짜는 오늘 날짜(한국 시간) 기준 YYYY-MM-DD로 바꾸고(기간을 말하지 않으면 1일), search_listings를 반드시 start·end를 넣어 호출한다. 답변 첫 줄에 "11월 24일(화)~25일(수), 2일 동안 빌릴 수 있는 매물이에요"처럼 적용한 기간을 말한다. 결과가 0개면 다른 날짜를 제안한다(suggest_work_dates 사용 가능).
    - 사용자가 "날짜는 상관없이 먼저 보여줘"처럼 날짜 없이 둘러보겠다고 분명히 말하면 날짜 없이 검색해도 된다.
@@ -139,6 +139,8 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 구매 신청을 하면 판매자에게 구매 희망 메시지가 이미 한 번 보내진다. 그래서 prefillMessage는 비우거나, 같은 말을 반복하지 않는 짧은 질문만 넣는다. 예: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요."
   답변: "n번 매물 구매 신청이 완료되었어요! 판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요. 아래 버튼을 눌러 판매자와 바로 이야기해 보세요."
 - "n번"은 [직전에 보여준 매물]의 번호다. 번호를 모르면 매물 이름으로 말한다.
+- 대여 답변 예시에는 결제 기한 문장을 넣지 않는다(화면의 결제 기한 안내 칸이 따로 보여 주므로 중복 금지). 음성 대화일 때만 서버가 신청 완료 답변 끝에 결제 기한 안내 한 문장을 붙인다.
+- 사용자가 "언제까지 결제해요?", "결제 기한이 있어요?"라고 물으면 "소유 농가가 신청을 승낙한 뒤 3일 이내에 결제해 주세요. 안내 칸을 누르면 장바구니로 바로 갈 수 있어요."라고 답한다.
 - 신청 전에 사용자가 "주인한테 먼저 물어볼래요", "판매자한테 연락할래요"라고 하면, 신청 없이 open_listing_chat만 호출해 채팅 버튼을 보여준다.
 
 ## 이미 보여준 매물로 예약 진행 (반복 추천 금지)
@@ -170,10 +172,10 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
   3) 수리 흐름에서도 보험 보장이 포함될 수 있으므로, 답변 마지막에 **"보험 추천해드릴까요?"**를 함께 제안한다.
 - 판매·대여 등록을 원하면 초안부터 만들지 않는다. 먼저 사진으로 본 기종을 "사진으로 보면 ○○ 같아요"처럼 알려 주고, 연식·사용시간·같이 드릴 작업기 중 사용자가 아직 말하지 않은 것을 한 번에 짧게 묻는다("모르시면 모른다고 하셔도 돼요"). 답을 받으면(모른다고 해도) estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 보여 준다. prepare_listing_draft가 needsDetails를 돌려주면 그 항목을 묻는다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
 - 초안 카드에는 제목·소개글·참고가가 이미 보인다. 답변에서 "제목은 ~, 설명은 ~"처럼 카드 내용을 다시 나열하지 않는다. 해요체 2~3문장으로 "말씀해 주신 내용으로 초안을 만들었어요", 참고가 한 번, "이대로 올릴까요?"만 말한다.
-- **대행운영서비스**(생산자가 기계와 함께 작업자를 보내 대신 작업해 주고 하루 추가 요금을 받는 서비스. 대여에만 있다):
-   - 소비자가 대여를 원하면, 필요한 조건(작물·면적·날짜 등)을 물을 때 대행운영서비스 사용 여부도 함께 한 번 묻는다. offer_choices 선택지는 ["대행운영 사용할게요", "대행운영 없이 할게요"]로 주고, 서비스가 무엇인지 한 문장으로 설명한다. [이미 받은 정보]에 있으면 다시 묻지 않는다.
+- **대행운용서비스**(생산자가 기계와 함께 작업자를 보내 대신 작업해 주고 하루 추가 요금을 받는 서비스. 대여에만 있다):
+   - 소비자가 대여를 원하면, 필요한 조건(작물·면적·날짜 등)을 물을 때 대행운용서비스 사용 여부도 함께 한 번 묻는다. offer_choices 선택지는 ["대행운용 사용할게요", "대행운용 없이 할게요"]로 주고, 서비스가 무엇인지 한 문장으로 설명한다. [이미 받은 정보]에 있으면 다시 묻지 않는다.
    - 사용한다면 search_listings·propose_rental_request·create_rental_request에 operatorService=true를, 안 쓴다면 false를 넘긴다. 사용하면 확인 카드와 금액은 "기계 + 작업자" 합계다.
-   - 생산자가 대여글을 올릴 때는 기계 정보(연식·사용시간·작업기)를 받은 뒤 "대행운영서비스를 제공하시겠어요?"라고 묻는다. 선택지는 ["대행운영 제공할게요", "대행운영 안 할게요"]. 제공한다면 작업자 이름, 이력, 하루 추가 요금을 한 번에 묻고, prepare_listing_draft·create_listing의 operatorService에 넣는다. 판매글에는 묻지 않는다.
+   - 생산자가 대여글을 올릴 때는 기계 정보(연식·사용시간·작업기)를 받은 뒤 "대행운용서비스를 제공하시겠어요?"라고 묻는다. 선택지는 ["대행운용 제공할게요", "대행운용 안 할게요"]. 제공한다면 작업자 이름, 이력, 하루 추가 요금을 한 번에 묻고, prepare_listing_draft·create_listing의 operatorService에 넣는다. 판매글에는 묻지 않는다.
 - **보험 안내**: 대여 추천·예약 흐름과 고장·수리 안내 흐름 모두에서 **"보험 추천해드릴까요?"**로 먼저 제안할 수 있으며, 사용자가 보험을 묻거나 추천을 원하면 get_insurance_info로 안내한다. 보험료를 확정해 말하지 않고, 보험 가입·결제를 대신하지 않으며, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
 - 웹 검색 도구가 있으면, 위 도구에 없는 사실을 확인할 때만 쓰고 "웹 검색 결과라 확인이 필요해요"라고 밝힌다.
 - 시니어도 읽기 쉽게: 한 문장은 짧게, 어려운 말은 쉬운 말로 풀어 쓴다.`;
@@ -194,7 +196,7 @@ const TOOLS = [
         maxPrice: { type: ["integer", "null"], description: "최대 가격(원). 대여는 하루 대여료" },
         start: { type: ["string", "null"], description: "대여 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "반납일 YYYY-MM-DD" },
-        operatorService: { type: ["boolean", "null"], description: "대여에서 대행운영서비스(작업자 동반) 사용 여부. 사용 true면 제공 매물만, false면 제공 안 하는 매물만. 정하지 않았으면 null" },
+        operatorService: { type: ["boolean", "null"], description: "대여에서 대행운용서비스(작업자 동반) 사용 여부. 사용 true면 제공 매물만, false면 제공 안 하는 매물만. 정하지 않았으면 null" },
         delivery: { type: ["string", "null"], enum: [null, "owner_delivery", "self_pickup"], description: "운송 방식 조건. 가져다주는(직접 운송) 매물만 owner_delivery, 직접 가지러 갈 매물만 self_pickup" },
       },
       required: ["transaction"],
@@ -285,7 +287,7 @@ const TOOLS = [
         start: { type: "string", description: "대여 시작일 YYYY-MM-DD" },
         end: { type: "string", description: "반납일 YYYY-MM-DD" },
         note: { type: "string", description: "게시자에게 남길 짧은 메모(선택)" },
-        operatorService: { type: ["boolean", "null"], description: "대행운영서비스(작업자 동반) 사용 여부" },
+        operatorService: { type: ["boolean", "null"], description: "대행운용서비스(작업자 동반) 사용 여부" },
       },
       required: ["listingId", "start", "end"],
     },
@@ -300,7 +302,7 @@ const TOOLS = [
         start: { type: "string", description: "대여 시작일 YYYY-MM-DD" },
         end: { type: "string", description: "반납일 YYYY-MM-DD" },
         note: { type: "string", description: "게시자에게 남길 짧은 메모(선택)" },
-        operatorService: { type: ["boolean", "null"], description: "대행운영서비스(작업자 동반) 사용 여부" },
+        operatorService: { type: ["boolean", "null"], description: "대행운용서비스(작업자 동반) 사용 여부" },
       },
       required: ["listingId", "start", "end"],
     },
@@ -381,7 +383,7 @@ const TOOLS = [
         deposit: { type: ["integer", "null"], description: "대여 보증금(원)" },
         operatorService: {
           type: ["object", "null"],
-          description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
+          description: "대여글에서 대행운용서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
           properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
         },
         delivery: {
@@ -417,7 +419,7 @@ const TOOLS = [
         deposit: { type: ["integer", "null"], description: "빌려주기일 때 보증금(원)" },
         operatorService: {
           type: ["object", "null"],
-          description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
+          description: "대여글에서 대행운용서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
           properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
         },
         delivery: {
@@ -813,7 +815,7 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   const deliveryWanted = ["owner_delivery", "self_pickup"].includes(input?.delivery) ? input.delivery : null;
   const deliveryScoped = deliveryWanted ? scoped.filter((item) => deliveryOf(item).methods.includes(deliveryWanted)) : scoped;
   const selection = selectMatchingListings("", context, deliveryScoped);
-  const what = `${operatorWanted === true ? "대행운영서비스를 제공하는 " : operatorWanted === false ? "대행운영서비스 없는 " : ""}${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
+  const what = `${operatorWanted === true ? "대행운용서비스를 제공하는 " : operatorWanted === false ? "대행운용서비스 없는 " : ""}${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
   let candidates = selection.candidates;
   let regionFallback = null;
   if (requestedRegion) {
@@ -890,7 +892,7 @@ export function proposeRentalTool(input, listings, today = kstToday()) {
   const note = typeof input?.note === "string" ? input.note.trim().slice(0, 200) : "";
   const rentalOperator = input?.operatorService === true ? cleanOperatorProfile(listing.rentalOperator) : null;
   if (input?.operatorService === true && !rentalOperator) {
-    return { ok: false, reason: "이 매물은 대행운영서비스를 제공하지 않는 매물입니다. 대행운영서비스를 제공하는 매물로 다시 찾아 주세요." };
+    return { ok: false, reason: "이 매물은 대행운용서비스를 제공하지 않는 매물입니다. 대행운용서비스를 제공하는 매물로 다시 찾아 주세요." };
   }
   const operatorDailyPrice = rentalOperator?.dailyPrice ?? 0;
   return {
@@ -1285,7 +1287,7 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
   const bodyText = grounded
     ? groundListingDescription(input?.description || "", { saidText, observations: photoSummary?.observations, year })
     : input?.description || "";
-  // 대행운영서비스는 대여글에만: 작업자 정보가 모두 있으면 소개글 맨 위에 "대행운영서비스 제공중"을 적는다.
+  // 대행운용서비스는 대여글에만: 작업자 정보가 모두 있으면 소개글 맨 위에 "대행운용서비스 제공중"을 적는다.
   const rentalOperator = type === "rent" ? cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator) : null;
   const description = withOperatorLine(composeListingDescription({ year, deposit, description: bodyText }), rentalOperator);
   const delivery = resolveDelivery(input?.delivery, { saidText: grounded ? saidText : null, latestText });
@@ -1448,7 +1450,7 @@ const CORE_TOOL_NAMES = new Set([
   "lookup_machine_spec",
 ]);
 
-const DATE_QUESTION = "언제부터 며칠 빌리실 건가요? 아래 달력에서 날짜와 대행운영서비스(작업자 동반) 이용 여부를 선택해 주시면 맞는 매물을 골라 드릴게요.";
+const DATE_QUESTION = "언제부터 며칠 빌리실 건가요? 아래 달력에서 날짜와 대행운용서비스(작업자 동반) 이용 여부를 선택해 주시면 맞는 매물을 골라 드릴게요.";
 const BOOKING_FLOW_TOOLS = new Set([
   "check_availability",
   "calculate_cost",
@@ -1499,7 +1501,7 @@ export function gateSearchInput(input, { text, today, rentalDates, rentalDatesRa
         needDate: true,
         error: past
           ? `말씀하신 날짜(${rentalDatesRaw.start})는 이미 지났다. 매물을 보여주지 말고 오늘(${today}) 이후 날짜를 한 가지만 다시 물어본다.`
-          : "대여 날짜가 아직 정해지지 않았다. 매물 이름·가격·개수를 말하지 말고, 사용자가 말한 조건을 짧게 확인한 뒤 언제부터 며칠 빌릴지와 대행운영서비스(작업자 동반) 이용 여부를 함께 물어본다.",
+          : "대여 날짜가 아직 정해지지 않았다. 매물 이름·가격·개수를 말하지 말고, 사용자가 말한 조건을 짧게 확인한 뒤 언제부터 며칠 빌릴지와 대행운용서비스(작업자 동반) 이용 여부를 함께 물어본다.",
       },
     };
   }
@@ -1694,7 +1696,7 @@ export function applyKnownFactsToSearch(input, { facts = {}, sell = false, spoke
     && facts.transaction === next.transaction) {
     next.maxPrice = facts.maxPrice;
   }
-  // 소비자가 말한 대행운영서비스 사용 여부는 모델이 빠뜨리거나 바꿔도 지킨다.
+  // 소비자가 말한 대행운용서비스 사용 여부는 모델이 빠뜨리거나 바꿔도 지킨다.
   if (!sell && next.transaction === "rent" && typeof facts.operatorService === "boolean") next.operatorService = facts.operatorService;
   return next;
 }
@@ -1767,6 +1769,17 @@ export function requestChatTarget(reservation) {
 }
 
 /** 신청 완료 답변. 직전에 보여준 목록의 번호를 알면 "n번 매물", 모르면 매물 이름으로 부른다. */
+// 음성 대화에서 대여 신청이 끝나면 보험 질문 전에 한 번 읽어 주는 결제 기한 안내(화면에는 안내 칸이 따로 뜬다)
+export const VOICE_RENTAL_PAYMENT_NOTICE = "결제는 신청 승낙 후 3일 이내에 해 주세요. 화면의 안내를 누르면 장바구니로 갈 수 있어요.";
+
+/** 음성 대화의 대여 신청 완료 답변 끝에 결제 기한 안내를 한 번 붙인다(이미 있으면 그대로). */
+export function withVoicePaymentNotice(reply, { reservation, inputMode }) {
+  if (inputMode !== "voice" || reservation?.kind !== "rental") return reply;
+  const text = String(reply || "").trim();
+  if (!text || /3일\s*이내/.test(text)) return text;
+  return `${text}\n${VOICE_RENTAL_PAYMENT_NOTICE}`;
+}
+
 export function requestDoneMessage(reservation, { shownNo = null } = {}) {
   const no = Number.isInteger(shownNo) && shownNo >= 1 && shownNo <= 9 ? shownNo : null;
   const label = no ? `${no}번 매물` : `'${String(reservation?.title || "매물").trim()}'`;
@@ -1895,8 +1908,8 @@ export function summarizeKnownFacts(input = {}, precomputed = null) {
   if (Number.isSafeInteger(facts.maxPrice) && facts.maxPrice > 0) lines.push(`- 예산 상한: ${won(facts.maxPrice)}`);
   if (typeof facts.operatorService === "boolean") {
     lines.push(sell
-      ? `- 대행운영서비스: ${facts.operatorService ? "제공" : "제공 안 함"}`
-      : `- 대행운영서비스: ${facts.operatorService ? "사용" : "사용 안 함"}`);
+      ? `- 대행운용서비스: ${facts.operatorService ? "제공" : "제공 안 함"}`
+      : `- 대행운용서비스: ${facts.operatorService ? "사용" : "사용 안 함"}`);
   }
   const lastAssistant = [...(Array.isArray(history) ? history : [])].reverse()
     .find((item) => item?.role === "assistant" && typeof item.content === "string")?.content || "";
@@ -2080,14 +2093,14 @@ async function runTurn(
       guide: `아직 초안을 만들지 않았다. ${photo?.machineType ? "사진으로 본 기종을 \"사진으로 보면 ○○ 같아요\"처럼 한 문장으로 말하고, " : ""}needsDetails(${needsDetails.join(", ")})를 한 번에 짧게 묻는다. 예: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." 참고가·제목·소개글은 아직 말하지 않는다. 사용자가 답하면 prepare_listing_draft를 다시 부른다.`,
     };
   };
-  // 대행운영서비스: 사용자가 말한 사용·제공 여부를 모델 입력보다 먼저 지킨다.
+  // 대행운용서비스: 사용자가 말한 사용·제공 여부를 모델 입력보다 먼저 지킨다.
   const operatorChoice = typeof known.facts.operatorService === "boolean" ? known.facts.operatorService : null;
   const withOperatorChoice = (input) => (operatorChoice === null ? input : { ...(input || {}), operatorService: operatorChoice });
   const listingInput = (input) => {
     if (input?.type !== "rent" || operatorChoice !== false) return input;
     return { ...input, operatorService: null, rentalOperator: null };
   };
-  // 대여글은 기계 정보를 받은 뒤 대행운영서비스 제공 여부를 묻고, 제공하면 작업자 정보를 받는다(판매글은 묻지 않는다).
+  // 대여글은 기계 정보를 받은 뒤 대행운용서비스 제공 여부를 묻고, 제공하면 작업자 정보를 받는다(판매글은 묻지 않는다).
   const askOperatorFirst = (input) => {
     if (input?.type !== "rent") return null;
     const profile = cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator);
@@ -2097,14 +2110,14 @@ async function runTurn(
         ok: false,
         draftCreated: false,
         needOperatorChoice: true,
-        guide: "아직 초안을 만들지 않았다. \"대행운영서비스를 제공하시겠어요?\"라고 묻고, 기계와 함께 작업자가 가서 대신 작업해 주고 하루 추가 요금을 받는 서비스라고 한 문장으로 설명한다. offer_choices 선택지는 [\"대행운영 제공할게요\", \"대행운영 안 할게요\"]. 답을 받으면 prepare_listing_draft를 다시 부른다.",
+        guide: "아직 초안을 만들지 않았다. \"대행운용서비스를 제공하시겠어요?\"라고 묻고, 기계와 함께 작업자가 가서 대신 작업해 주고 하루 추가 요금을 받는 서비스라고 한 문장으로 설명한다. offer_choices 선택지는 [\"대행운용 제공할게요\", \"대행운용 안 할게요\"]. 답을 받으면 prepare_listing_draft를 다시 부른다.",
       };
     }
     return {
       ok: false,
       draftCreated: false,
       needOperatorProfile: true,
-      guide: "대행운영서비스를 제공한다고 했다. 작업자 이름, 이력(예: 경력 몇 년, 다뤄 본 기계), 하루 추가 요금을 한 번에 짧게 묻는다. 답을 받으면 prepare_listing_draft의 operatorService에 넣어 다시 부른다.",
+      guide: "대행운용서비스를 제공한다고 했다. 작업자 이름, 이력(예: 경력 몇 년, 다뤄 본 기계), 하루 추가 요금을 한 번에 짧게 묻는다. 답을 받으면 prepare_listing_draft의 operatorService에 넣어 다시 부른다.",
     };
   };
   let writeDone = false;
@@ -2141,7 +2154,7 @@ async function runTurn(
       learnedSlots.end = rentalDatesValid.end;
     }
     out.learnedSlots = learnedSlots;
-    const result = { mode: "agent", reply: tidyReply(reply), listingIds: out.listingIds, learnedSlots, ...extra };
+    const result = { mode: "agent", reply: withVoicePaymentNotice(tidyReply(reply), { reservation: out.reservation, inputMode }), listingIds: out.listingIds, learnedSlots, ...extra };
     for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget"]) {
       if (out[key]) result[key] = out[key];
     }
@@ -2472,7 +2485,7 @@ async function runTurn(
           || (block.name === "create_listing" && !(user && spokenApproval && deps?.createListing && !writeDone)))
         && (output = askDetailsFirst() || askOperatorFirst(block.input))
       ) {
-        // 세부사항(연식·사용시간·포함 작업기), 대여글이면 대행운영서비스 제공 여부를 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
+        // 세부사항(연식·사용시간·포함 작업기), 대여글이면 대행운용서비스 제공 여부를 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
       } else if (block.name === "prepare_listing_draft") {
         const catalogRows = await loadCatalog();
         const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
@@ -2526,7 +2539,7 @@ async function runTurn(
           ...(photoNote ? { photoNote } : {}),
         };
       } else if (block.name === "create_listing" && (output = askOperatorFirst(listingInput(block.input)))) {
-        // 대여글을 바로 올리기 전에도 대행운영서비스 제공 여부·작업자 정보부터 받는다.
+        // 대여글을 바로 올리기 전에도 대행운용서비스 제공 여부·작업자 정보부터 받는다.
       } else if (block.name === "create_listing") {
         const catalogRows = await loadCatalog();
         const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
@@ -2794,7 +2807,7 @@ async function runTurn(
     }
   }
 
-  // 날짜가 없어 대여 검색을 막은 턴: 매물 대신 날짜와 대행운영서비스 질문을 하고, 화면이 날짜·대행운영 선택기를 띄우게 한다.
+  // 날짜가 없어 대여 검색을 막은 턴: 매물 대신 날짜와 대행운용서비스 질문을 하고, 화면이 날짜·대행운용 선택기를 띄우게 한다.
   if (out.needDate && !out.listingIds.length && !out.reservation) {
     return await finish(texts.at(-1) || DATE_QUESTION, {
       listingIds: [],
@@ -2857,7 +2870,7 @@ async function runTurn(
  * 사용자가 승인한 대여 요청을 실행하고, 실제 저장 상태를 다시 조회해 결과를 분류한다.
  * outcome: completed(요청 저장·확인됨) | partial(저장됐지만 상태 확인 실패) | failed(실행 안 됨)
  */
-/** 확인 카드에서 받은 희망 네고 가격(1일)·대행운영서비스 사용 여부를 정리한다. 둘 다 없으면 null. */
+/** 확인 카드에서 받은 희망 네고 가격(1일)·대행운용서비스 사용 여부를 정리한다. 둘 다 없으면 null. */
 export function rentalTermsOf(action) {
   const price = Number(action?.negotiatedDailyPrice);
   const negotiatedDailyPrice = action?.negotiatedDailyPrice != null && Number.isSafeInteger(price) && price > 0 ? price : null;
@@ -2872,7 +2885,7 @@ function rentalTermsLines(terms, listedDailyPrice) {
     terms.negotiatedDailyPrice !== null
       ? `희망 네고 가격: 1일 ${won(terms.negotiatedDailyPrice)}${listed ? ` (등록가 1일 ${won(listed)})` : ""}`
       : "희망 네고 가격: 없음 (등록가 그대로)",
-    `대행운영서비스: ${terms.operatorWanted ? "사용 (작업자 동반)" : "사용 안 함"}`,
+    `대행운용서비스: ${terms.operatorWanted ? "사용 (작업자 동반)" : "사용 안 함"}`,
   ];
 }
 
@@ -2916,7 +2929,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
     };
   }
 
-  // 희망 네고 가격·대행운영서비스 사용 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
+  // 희망 네고 가격·대행운용서비스 사용 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
   let conversation = null;
   if (terms) {
     try {
@@ -2932,7 +2945,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       return {
         outcome: "partial",
         request: verified,
-        message: "대여 요청은 보냈지만 희망 네고 가격·대행운영서비스 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
+        message: "대여 요청은 보냈지만 희망 네고 가격·대행운용서비스 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
       };
     }
   }
@@ -2954,7 +2967,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
     },
     message: [
       requestDoneMessage({ kind: "rental", title: verified.listingTitle }, { shownNo: Number(action?.shownNo) }),
-      ...(conversation ? ["희망 네고 가격·대행운영서비스 여부는 게시자 채팅으로 전달했어요."] : []),
+      ...(conversation ? ["희망 네고 가격·대행운용서비스 여부는 게시자 채팅으로 전달했어요."] : []),
       "(+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)",
     ].join("\n"),
   };

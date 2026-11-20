@@ -1203,7 +1203,7 @@ const seed = [
   {"id":"region-159-slot-5","type":"sale","modelId":"jukam-jopr48a","title":"죽암기계 JOPR-4/8A · 제주특별자치도 제주시","brand":"죽암기계","machineType":"transplanter","cropIds":["pepper","cabbage"],"operations":["transplant"],"areaMin":300,"areaMax":6250,"price":1600000,"region":"제주특별자치도 제주시","farmSpotLabel":"제주 제주시 조천읍 농가","condition":"good","inspectedAt":"2026-10-07","included":"독립 구동 본체","pickup":"제주 제주시 조천읍 농가 현장 확인 후 인수","description":"제주 제주시 조천읍 농가 보유 장비로 실제 JOPR-4/8A의 공개 사양을 참조한 가상 매물입니다. 가격·점검일·예약·작업 면적은 시연용입니다. 독립 구동 본체.","summary":"죽암기계 JOPR-4/8A. 승용 4조(왕복 8조) 4WD 양파·채소 정식기. 독립 구동 본체.","booked":[],"owner":false,"status":"open","operatorService":false},
 ];
 
-// 시연용 대행운영서비스(작업자 동반) 매물. 같은 기종에 제공·미제공 매물이 함께 있어 두 흐름을 모두 보여 줄 수 있다.
+// 시연용 대행운용서비스(작업자 동반) 매물. 같은 기종에 제공·미제공 매물이 함께 있어 두 흐름을 모두 보여 줄 수 있다.
 const DEMO_OPERATORS = {
   "mock-cultivator-rent-2": { name: "권영호", experience: "관리기·두둑 작업 12년, 고추밭 비닐 피복 경험 많음", dailyPrice: 70000 },
   "mock-tractor-rent-2": { name: "남궁태식", experience: "트랙터 로타리·평탄 작업 18년, 논밭 모두 가능", dailyPrice: 120000 },

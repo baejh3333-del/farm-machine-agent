@@ -5,7 +5,7 @@ import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey,
   openListings, available, shared, locationChoices,
   machineFilterLabel, matchesMachineFilter, buildTypeChoices,
-} from "./data.js";
+} from "./data.js?v=20261120-8";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();

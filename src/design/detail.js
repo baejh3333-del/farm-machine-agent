@@ -5,7 +5,7 @@ import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, isoToKey, keyToIso, photoOf, nameOf, placeOf, ratingOf,
   groupOf, openListings, available, shared, typeLabel,
-} from "./data.js";
+} from "./data.js?v=20261120-8";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();

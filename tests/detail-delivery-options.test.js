@@ -327,6 +327,7 @@ test("브라우저 E2E: 상세 화면에서 받는 방법·5개 옵션 선택 �
     assert.doesNotMatch(await r1LessonBtn.textContent(), /30분/);
 
     // 2) 예시 대여 매물(hc-vivaldi-1): 받는 방법 2종 + 옵션 5종, 초기 선택은 명시적(기본 직접 가지러 가기, 옵션 미선택)
+    await page.goto(baseUrl, { waitUntil: "networkidle" });
     await openFavoriteDetail(page, DEMO_ID);
     const selfBtn = host.locator("button[data-opt]", { hasText: "직접 가지러 가기" });
     const deliverBtn = host.locator("button[data-opt]", { hasText: "배달 받기" });

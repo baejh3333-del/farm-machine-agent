@@ -5,7 +5,7 @@ import { BrowseDesign, pushRecent } from "./browse.js?v=20261121-1";
 import { DetailDesign } from "./detail.js?v=20261121-1";
 import { InsuranceDesign } from "./insurance.js?v=20261121-1";
 import { AsDesign } from "./as.js?v=20261121-1";
-import { shared } from "./data.js";
+import { shared } from "./data.js?v=20261120-8";
 import { MENU_DEST } from "./menu.js?v=20261121-1";
 
 const V = "20261121-1";

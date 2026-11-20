@@ -30,8 +30,14 @@ export class AsDesign extends DCLogic {
     rows.sort((a, b) => a.c[1] - b.c[1]);
     const selI = rows.some(r => r.i === s.sel) ? s.sel : (rows[0] ? rows[0].i : -1);
     const chipOf = (on, label, pick) => ({ label, on: on ? 'true' : 'false', bd: on ? '#111111' : '#DDDDDD', bg: on ? '#111111' : '#FFFFFF', fg: on ? '#FFFFFF' : '#111111', pick });
-    const STAGES = [['접수', '요청을 보냈어요'], ['배정', '기사님이 정해졌어요'], ['이동 중', '밭으로 가는 중이에요'], ['수리 중', '고치고 있어요'], ['완료', '다 고쳤어요']];
-    const NOW = ['센터에서 요청을 확인하고 있어요. 보통 5분 안에 연락이 와요.', '박 기사님이 배정됐어요. 곧 전화가 와요.', '기사님이 오고 있어요. 약 25분 뒤에 도착해요.', '수리 중이에요. 끝나면 비용을 알려 드려요.', '수리가 끝났어요. 보험 청구는 모아농이 대신 접수해 둘게요.'];
+    const STAGES = [['접수', '요청 흐름 시작'], ['배정', '기사님 배정 안내'], ['이동 중', '도착 시간 안내'], ['수리 중', '현장 수리 진행'], ['완료', '수리·보험 안내']];
+    const NOW = [
+      '예시 진행 화면이에요(실제 출장 요청은 전송되지 않아요). 실제 접수 시 센터에서 확인 후 연락이 와요.',
+      '예시 단계: 기사님이 배정되면 연락처와 도착 예정 시간을 안내해요.',
+      '예시 단계: 기사님이 이동 중이면 예상 도착 시간을 보여 드려요.',
+      '예시 단계: 현장 수리가 진행되며 완료 후 비용을 안내해요.',
+      '예시 단계: 수리가 끝나면 보험 청구 안내로 이어져요.',
+    ];
     const r = s.req;
     return {
       ...menuVals(this, 'mine', label => this.deps.navigate?.(label)),
@@ -44,11 +50,11 @@ export class AsDesign extends DCLogic {
         name: c[0], dist: c[1] + 'km', addr: c[2], tags: c[6],
         open: c[3] ? '지금 열려 있어요' : '문 닫았어요', openBg: c[3] ? '#E3F3E8' : '#F2F2F2', openFg: c[3] ? '#13773A' : '#767676',
         bd: i === selI ? '#111111' : '#EEEEEE', sh: i === selI ? '0 12px 30px rgba(0,0,0,0.08)' : 'none',
-        reqText: r === i ? '요청 보냄' : c[4] ? '출장 수리 요청' : '방문 예약', reqBg: r === i ? '#13773A' : '#1E9B4B',
+        reqText: r === i ? '요청 체험 중' : c[4] ? '출장 수리 요청 (체험)' : '방문 예약 (체험)', reqBg: r === i ? '#13773A' : '#1E9B4B',
         pick: () => this.setState({ sel: i }), request: () => this.setState({ req: i, sel: i, stage: 0 }),
       })),
       hasReq: r !== null && r !== undefined,
-      reqCenter: r != null ? C[r][0] : '', reqSummary: MACH[s.mach][0] + ' · ' + PROB[s.prob][0] + (s.mach === 0 ? ' · 소유주에게도 알렸어요' : ''),
+      reqCenter: r != null ? C[r][0] : '', reqSummary: MACH[s.mach][0] + ' · ' + PROB[s.prob][0] + (s.mach === 0 ? ' · 실제 접수 시 소유주에게도 알려요' : ''),
       stages: STAGES.map((st, i) => ({ t: st[0], d: st[1], bar: i <= s.stage ? '#1E9B4B' : '#E6E6E6', fg: i <= s.stage ? '#111111' : '#9A9A9A' })),
       reqNow: NOW[s.stage],
       advance: () => this.setState({ stage: Math.min(4, s.stage + 1) }), cancel: () => this.setState({ req: null, stage: 0 }),

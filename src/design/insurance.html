@@ -49,6 +49,49 @@ header{animation:moaHead 0.9s cubic-bezier(0.22, 1, 0.36, 1) both}
 [data-mega-root]:not([data-open=""]) > [data-mega-col]{display:block}
 [data-open="find"] [data-mega-group="find"], [data-open="fit"] [data-mega-group="fit"], [data-open="mine"] [data-mega-group="mine"]{display:flex;flex-direction:column;gap:16px}
 nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #111111 !important}
+
+/* 모바일·태블릿 반응형 (데스크톱 모양 유지) */
+:host{overflow-x:clip}
+:host *, :host *::before, :host *::after{box-sizing:border-box}
+@media (max-width: 960px){
+  [data-hdr-inner]{padding:10px 16px !important;display:flex !important;flex-wrap:wrap !important;align-items:center !important;justify-content:space-between !important;gap:8px 12px !important}
+  [data-hdr-spacer]{display:none !important}
+  [data-hdr-logo] svg{height:26px !important;width:auto !important}
+  [data-hdr-right]{display:contents !important}
+  [data-auth-btn]{order:2 !important;margin-left:auto !important;height:34px !important;padding:0 14px !important;font-size:13px !important;white-space:nowrap !important}
+  nav[aria-label="주 메뉴"]{order:3 !important;width:100% !important;gap:18px !important;padding-top:6px !important;border-top:1px solid #F2F2F2 !important;font-size:14px !important;overflow-x:auto !important;scrollbar-width:none !important}
+  nav[aria-label="주 메뉴"]::-webkit-scrollbar{display:none}
+  [data-mega]{width:100vw !important;left:0 !important;right:0 !important;height:280px !important;-webkit-mask-image:linear-gradient(180deg, #000 72%, transparent 100%) !important;mask-image:linear-gradient(180deg, #000 72%, transparent 100%) !important}
+  [data-mega-col]{left:16px !important;right:16px !important;width:auto !important;min-width:0 !important;padding:16px 8px 20px !important}
+  [data-ins-hero]{grid-template-columns:1fr !important;gap:24px !important}
+  [data-ins-cov-grid]{grid-template-columns:repeat(2, minmax(0, 1fr)) !important}
+  [data-ins-calc]{grid-template-columns:1fr !important}
+  [data-ins-riders]{grid-template-columns:1fr !important}
+  [data-ins-steps-grid]{grid-template-columns:repeat(2, minmax(0, 1fr)) !important}
+  [data-ins-facts-grid]{grid-template-columns:1fr !important}
+  [data-ins-bottom]{grid-template-columns:1fr !important}
+}
+@media (max-width: 768px){
+  [data-ins-main]{padding:28px 16px 0 !important}
+  [data-ins-hero] h1{font-size:28px !important;line-height:1.3 !important;word-break:keep-all !important}
+  [data-ins-hero] p{font-size:15px !important}
+  [data-ins-hero-media]{height:260px !important;border-radius:20px !important}
+  [role="tablist"]{max-width:100% !important;flex-wrap:wrap !important}
+  [role="tablist"] button{height:40px !important;padding:0 16px !important;font-size:14px !important}
+  [data-ins-cov-head]{flex-direction:column !important;align-items:flex-start !important;gap:8px !important}
+  [data-ins-cov-head] h2, [data-ins-riders-sec] h2, [data-ins-steps-head] h2{font-size:22px !important}
+  [data-ins-cov-grid]{grid-template-columns:1fr !important}
+  [data-ins-calc-card]{padding:20px 16px !important;border-radius:20px !important}
+  [data-ins-line]{flex-wrap:wrap !important;gap:4px 12px !important}
+  [data-ins-total]{flex-wrap:wrap !important;gap:6px 12px !important}
+  [data-ins-total] b:last-child{font-size:24px !important}
+  [data-ins-rent-grid]{grid-template-columns:repeat(2, minmax(0, 1fr)) !important}
+  [data-ins-steps-box]{margin-top:48px !important;padding:24px 16px !important;border-radius:20px !important;gap:20px !important}
+  [data-ins-steps-head]{flex-direction:column !important;align-items:flex-start !important;gap:12px !important}
+  [data-ins-steps-grid]{grid-template-columns:1fr !important}
+  [data-footer]{margin-top:56px !important}
+  [data-footer-inner]{padding:24px 16px 32px !important;flex-direction:column !important;align-items:flex-start !important;gap:8px !important}
+}
 </style>
 </helmet>
 <div style="background: #FFFFFF; color: #111111; letter-spacing: -0.01em">
@@ -57,18 +100,18 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <div data-mega-col="" onMouseEnter="{{ keepMenu }}" onMouseLeave="{{ leaveMenu }}" style="position: fixed; z-index: 45; top: 72px; left: 0px; padding: 22px 24px 28px; min-width: 200px"><div data-mega-group="find"><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">매물 찾기</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 동네 매물 지도</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">빠른 예약 검색</a></div><div data-mega-group="fit"><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 농기계·호환 확인</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">작물별 작업 가이드</a></div><div data-mega-group="mine"><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 기계 관리</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">거래 관리</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 대여 요청</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">찜 목록</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">농기계 보험</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">AS 도움</a></div></div>
 </div>
 <header style="position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.96); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid #EBEBEB">
-<div style="padding: 16px 40px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px">
-<div style="display: flex; align-items: center"><a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a></div>
-<div></div>
-<div style="display: flex; align-items: center; justify-content: flex-end; gap: 22px">
+<div data-hdr-inner="" style="padding: 16px 40px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px">
+<div data-hdr-logo="" style="display: flex; align-items: center"><a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a></div>
+<div data-hdr-spacer=""></div>
+<div data-hdr-right="" style="display: flex; align-items: center; justify-content: flex-end; gap: 22px">
 <nav aria-label="주 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap"><sc-for list="{{ navs }}" as="nv" hint-placeholder-count="4"><a href="#" onClick="{{ nv.pick }}" onMouseEnter="{{ nv.hover }}" onMouseLeave="{{ leaveMenu }}" aria-expanded="{{ nv.exp }}" style="text-decoration: none; padding-bottom: 4px; font-weight: {{ nv.weight }}; box-shadow: {{ nv.line }}">{{ nv.label }}</a></sc-for></nav>
 <a href="#" data-auth-btn="" style="height: 38px; padding: 0 18px; border-radius: 999px; background: #111111; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 600; text-decoration: none">{{ authLabel }}</a>
 </div>
 </div>
 </header>
 
-<main style="max-width: 1240px; margin: 0 auto; padding: 56px 40px 0">
-<section data-rise="1" style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center">
+<main data-ins-main="" style="max-width: 1240px; margin: 0 auto; padding: 56px 40px 0">
+<section data-ins-hero="" data-rise="1" style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center">
 <div style="display: flex; flex-direction: column; gap: 16px">
 <span style="align-self: flex-start; height: 30px; padding: 0 12px; border-radius: 999px; background: #EDF6F0; color: #13773A; font-size: 13px; font-weight: 700; display: flex; align-items: center">농기계 보험</span>
 <h1 style="margin: 0; font-size: 44px; line-height: 1.25; font-weight: 800; letter-spacing: -0.035em">빌려 쓰는 날도,<br>빌려주는 날도 든든하게</h1>
@@ -77,7 +120,7 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <sc-for list="{{ roles }}" as="r" hint-placeholder-count="2"><button type="button" role="tab" onClick="{{ r.pick }}" aria-selected="{{ r.on }}" style="height: 46px; padding: 0 22px; border: none; border-radius: 999px; background: {{ r.bg }}; color: {{ r.fg }}; box-shadow: {{ r.sh }}; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">{{ r.label }}</button></sc-for>
 </div>
 </div>
-<div style="position: relative; height: 340px; border-radius: 28px; overflow: hidden; background: #F2F4F1">
+<div data-ins-hero-media="" style="position: relative; height: 340px; border-radius: 28px; overflow: hidden; background: #F2F4F1">
 <img src="/src/design/assets/tractor.jpg" alt="밭에 선 트랙터" style="width: 100%; height: 100%; object-fit: cover">
 <div style="position: absolute; left: 20px; bottom: 20px; right: 20px; padding: 16px 18px; border-radius: 18px; background: rgba(255,255,255,0.95); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); display: flex; flex-direction: column; gap: 6px">
 <span style="display: flex; align-items: center; gap: 8px"><span style="height: 24px; padding: 0 8px; border-radius: 6px; background: #111111; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center">{{ wayTag }}</span><b style="font-size: 16px">{{ wayTitle }}</b></span>
@@ -87,8 +130,8 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </section>
 
 <section data-rise="2" style="margin-top: 72px; display: flex; flex-direction: column; gap: 20px">
-<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px"><div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em">무엇을 지켜 주나요?</h2><span style="font-size: 16px; color: #555555">하나씩 눌러서 고르면, 아래 계산에 바로 반영돼요.</span></div><span style="font-size: 13px; color: #9A9A9A">자기신체사고와 자기신체사고Ⅱ는 하나만 들 수 있어요</span></div>
-<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<div data-ins-cov-head="" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px"><div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em">무엇을 지켜 주나요?</h2><span style="font-size: 16px; color: #555555">하나씩 눌러서 고르면, 아래 계산에 바로 반영돼요.</span></div><span style="font-size: 13px; color: #9A9A9A">자기신체사고와 자기신체사고Ⅱ는 하나만 들 수 있어요</span></div>
+<div data-ins-cov-grid="" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
 <sc-for list="{{ covs }}" as="c" hint-placeholder-count="4">
 <button type="button" data-cov="" onClick="{{ c.pick }}" aria-pressed="{{ c.on }}" style="padding: 22px; border-radius: 22px; border: 2px solid {{ c.bd }}; background: {{ c.bg }}; display: flex; flex-direction: column; gap: 10px; text-align: left; font-family: inherit; color: #111111; cursor: pointer">
 <span style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 12px; font-weight: 700; color: {{ c.tagFg }}">{{ c.who }}</span><span style="width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; background: {{ c.boxBg }}; border: {{ c.boxBd }}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">{{ c.mark }}</span></span>
@@ -100,8 +143,8 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </section>
 
-<section data-rise="3" style="margin-top: 48px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start">
-<div style="padding: 28px; border-radius: 24px; border: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 20px">
+<section data-ins-calc="" data-rise="3" style="margin-top: 48px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start">
+<div data-ins-calc-card="" style="padding: 28px; border-radius: 24px; border: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 20px">
 <h2 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em">내 보험료 어림 계산</h2>
 <div style="display: flex; flex-direction: column; gap: 10px"><b style="font-size: 15px">어떤 기계인가요?</b><div style="display: flex; flex-wrap: wrap; gap: 8px"><sc-for list="{{ kinds }}" as="k" hint-placeholder-count="6"><button type="button" data-chip="" onClick="{{ k.pick }}" aria-pressed="{{ k.on }}" style="height: 42px; padding: 0 16px; border-radius: 999px; border: 1.5px solid {{ k.bd }}; background: {{ k.bg }}; color: {{ k.fg }}; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">{{ k.label }}</button></sc-for></div></div>
 <div style="display: flex; flex-direction: column; gap: 10px"><b style="font-size: 15px">기계 값(보험가입금액)은요?</b><div style="display: flex; flex-wrap: wrap; gap: 8px"><sc-for list="{{ values }}" as="v" hint-placeholder-count="4"><button type="button" data-chip="" onClick="{{ v.pick }}" aria-pressed="{{ v.on }}" style="height: 42px; padding: 0 16px; border-radius: 999px; border: 1.5px solid {{ v.bd }}; background: {{ v.bg }}; color: {{ v.fg }}; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer">{{ v.label }}</button></sc-for></div></div>
@@ -112,9 +155,9 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div></div></sc-if>
 <button type="button" onClick="{{ toggleGov }}" aria-pressed="{{ govOn }}" style="padding: 14px 16px; border-radius: 14px; border: 1.5px solid {{ govBd }}; background: {{ govBg }}; display: flex; align-items: center; gap: 12px; text-align: left; font-family: inherit; color: #111111; cursor: pointer"><span style="flex: none; width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px; background: {{ govBox }}; border: {{ govBoxBd }}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">{{ govMark }}</span><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 15px">국고지원 받기 (보험료 50%)</b><span style="font-size: 13px; color: #555555">가입 대상 농기계의 농기계손해(1억원까지)·대인·대물·자기신체사고에 적용돼요</span></span></button>
 <div style="padding: 20px; border-radius: 18px; background: #F6F6F6; display: flex; flex-direction: column; gap: 10px">
-<sc-for list="{{ lines }}" as="l" hint-placeholder-count="3"><span style="display: flex; justify-content: space-between; font-size: 15px; color: {{ l.fg }}"><span>{{ l.k }}</span><span>{{ l.v }}</span></span></sc-for>
+<sc-for list="{{ lines }}" as="l" hint-placeholder-count="3"><span data-ins-line="" style="display: flex; justify-content: space-between; font-size: 15px; color: {{ l.fg }}"><span>{{ l.k }}</span><span>{{ l.v }}</span></span></sc-for>
 <span style="height: 1px; background: #E2E2E2"></span>
-<span style="display: flex; justify-content: space-between; align-items: baseline"><b style="font-size: 16px">{{ totalLabel }}</b><b style="font-size: 30px; letter-spacing: -0.02em">{{ total }}</b></span>
+<span data-ins-total="" style="display: flex; justify-content: space-between; align-items: baseline"><b style="font-size: 16px">{{ totalLabel }}</b><b style="font-size: 30px; letter-spacing: -0.02em">{{ total }}</b></span>
 <span style="font-size: 13px; line-height: 1.55; color: #767676">트랙터 기본요율(보험가입금액의 0.68%, 1년)로 어림한 참고값이에요. 실제 보험료는 기계·담보·할인할증에 따라 보험사가 정해요.</span>
 </div>
 <button type="button" data-cta="" onClick="{{ join }}" style="height: 56px; border: none; border-radius: 16px; background: #1E9B4B; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">{{ joinText }}</button>
@@ -126,14 +169,14 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </section>
 
-<section style="margin-top: 72px; display: flex; flex-direction: column; gap: 20px">
+<section data-ins-riders-sec="" style="margin-top: 72px; display: flex; flex-direction: column; gap: 20px">
 <div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em">함께 들면 좋은 특약</h2><span style="font-size: 16px; color: #555555">필요한 것만 골라 더할 수 있어요.</span></div>
-<div style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px">
+<div data-ins-riders="" style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px">
 <div style="padding: 24px; border-radius: 22px; border: 2px solid #1E9B4B; background: #FBFEFC; display: flex; flex-direction: column; gap: 12px">
 <span style="align-self: flex-start; height: 24px; padding: 0 8px; border-radius: 6px; background: #1E9B4B; color: #FFFFFF; font-size: 12px; font-weight: 800; display: flex; align-items: center">모아농과 딱 맞아요</span>
 <b style="font-size: 19px">농기계 단기임대비용 지원</b>
 <span style="font-size: 14px; line-height: 1.55; color: #555555">내 트랙터가 사고로 수리에 들어가면, 그동안 다른 트랙터를 빌려 쓰는 비용을 하루 금액 × 수리 기간(최대 5일)만큼 지원해요. 모아농에서 이웃 트랙터를 빌리면 돼요.</span>
-<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<div data-ins-rent-grid="" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
 <sc-for list="{{ rentTable }}" as="t" hint-placeholder-count="6"><span style="padding: 10px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E6EFE9; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #767676">{{ t.hp }}</span><b style="font-size: 14px">{{ t.won }}</b></span></sc-for>
 </div>
 <span style="font-size: 12px; color: #767676">트랙터 1일 인정금액 · 농기계손해에 든 경우만 · 국고지원 없음</span>
@@ -147,19 +190,19 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </section>
 
-<section style="margin-top: 72px; padding: 48px; border-radius: 28px; background: #F6F6F6; display: flex; flex-direction: column; gap: 28px">
-<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px"><div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em">사고가 나면 이렇게 해요</h2><span style="font-size: 16px; color: #555555">당황하지 않게, 순서대로 하나씩만 하면 돼요.</span></div>
-<a href="#" style="height: 48px; padding: 0 20px; border-radius: 14px; background: #111111; color: #FFFFFF; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; text-decoration: none">AS 도움 받기 →</a></div>
-<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<section data-ins-steps-box="" style="margin-top: 72px; padding: 48px; border-radius: 28px; background: #F6F6F6; display: flex; flex-direction: column; gap: 28px">
+<div data-ins-steps-head="" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px"><div style="display: flex; flex-direction: column; gap: 6px"><h2 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em">사고가 나면 이렇게 해요</h2><span style="font-size: 16px; color: #555555">당황하지 않게, 순서대로 하나씩만 하면 돼요.</span></div>
+<a href="#" style="height: 48px; padding: 0 20px; border-radius: 14px; background: #111111; color: #FFFFFF; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; text-decoration: none; white-space: nowrap">AS 도움 받기 →</a></div>
+<div data-ins-steps-grid="" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
 <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4"><div style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; flex-direction: column; gap: 10px"><span style="font-size: 13px; font-weight: 700; color: #1E9B4B">STEP {{ st.n }}</span><b style="font-size: 18px">{{ st.t }}</b><span style="font-size: 14px; line-height: 1.55; color: #555555">{{ st.d }}</span></div></sc-for>
 </div>
-<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div data-ins-facts-grid="" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
 <sc-for list="{{ facts }}" as="f" hint-placeholder-count="3"><div style="padding: 18px 20px; border-radius: 18px; background: #FFFFFF; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 15px">{{ f.t }}</b><span style="font-size: 14px; line-height: 1.55; color: #555555">{{ f.d }}</span></div></sc-for>
 </div>
 <div style="padding: 16px 18px; border-radius: 16px; background: #FFF1E9; color: #8A3B1E; font-size: 15px; font-weight: 600">다친 사람이 있거나 불이 났다면 119에 먼저 연락하세요. 사고 뒤 해야 할 조치를 하지 않으면 대인 300만원·대물 100만원의 사고부담금을 낼 수 있어요.</div>
 </section>
 
-<section style="margin-top: 56px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px">
+<section data-ins-bottom="" style="margin-top: 56px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px">
 <div style="padding: 26px; border-radius: 24px; border: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 14px"><b style="font-size: 18px">가입할 수 있는 농기계</b><div style="display: flex; flex-wrap: wrap; gap: 6px"><sc-for list="{{ machines }}" as="m" hint-placeholder-count="19"><span style="height: 30px; padding: 0 11px; border-radius: 999px; background: #F2F2F2; font-size: 13px; font-weight: 600; display: flex; align-items: center">{{ m }}</span></sc-for></div><span style="font-size: 13px; color: #767676">그 농기계에 다는 작업기(로터리 등)도 함께 가입할 수 있어요.</span></div>
 <div style="padding: 26px; border-radius: 24px; border: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 10px"><b style="font-size: 18px">알아 두면 좋아요</b>
 <sc-for list="{{ notes }}" as="n" hint-placeholder-count="4"><span style="display: flex; gap: 8px; font-size: 14px; line-height: 1.55; color: #555555"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1E9B4B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>{{ n }}</span></span></sc-for></div>
@@ -167,8 +210,8 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.6; color: #9A9A9A">출처: 농기계종합보험 사업방법서 · 상품요약서(2606). 이 화면은 상품의 주요 내용을 쉽게 풀어 쓴 요약이에요. 자세한 보장과 제외 내용은 보험 약관을 따라요.</p>
 </main>
 
-<footer style="margin-top: 96px; background: #F6F6F6">
-<div style="padding: 32px 40px 40px; display: flex; justify-content: space-between; align-items: center; gap: 24px; font-size: 13px; color: #767676"><span>info@moanong.co.kr · 1577-1106 · © 2026 모아농</span><span>화면 속 매물·가격·내용은 예시예요.</span></div>
+<footer data-footer="" style="margin-top: 96px; background: #F6F6F6">
+<div data-footer-inner="" style="padding: 32px 40px 40px; display: flex; justify-content: space-between; align-items: center; gap: 24px; font-size: 13px; color: #767676"><span>info@moanong.co.kr · 1577-1106 · © 2026 모아농</span><span>화면 속 매물·가격·내용은 예시예요.</span></div>
 </footer>
 </div>
 </x-dc>

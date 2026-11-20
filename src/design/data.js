@@ -1,5 +1,5 @@
 // 디자인 화면(홈·매물 찾기·매물 상세)이 함께 쓰는 실제 매물 데이터 변환
-import { MACHINE_BY_ID } from "../data/farm-machines.js";
+import { MACHINE_BY_ID, MACHINE_TYPES } from "../data/farm-machines.js";
 import { available } from "../data/recommendation.js";
 import { allListings, listingById, activeFavorites } from "../core/store.js";
 import { getListingPhotoSrc, machineImage, today } from "../core/utils.js";
@@ -93,11 +93,58 @@ export const openListings = (type) => allListings().filter((it) => it.status ===
 export const isFav = (id) => activeFavorites().includes(id);
 export { available, listingById };
 
+export const TYPES = [
+  ["all", "전체"],
+  ...MACHINE_TYPES.map((m) => [m.id, m.label]),
+];
+
+const GROUP_LABELS = { harvester: "수확기", sprayer: "방제기", carrier: "운반차" };
+
+export function machineFilterLabel(type, query = "") {
+  const q = String(query || "").trim();
+  if (q) return q;
+  if (!type || type === "all") return "";
+  return MACHINE_BY_ID[type]?.label || GROUP_LABELS[type] || "농기계";
+}
+
+export function matchesMachineFilter(item, type, query = "") {
+  if (type && type !== "all") {
+    return item.machineType === type || groupOf(item.machineType) === type;
+  }
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  const hay = [
+    typeLabel(item.machineType),
+    nameOf(item),
+    item.brand || item.specification?.brand || "",
+  ].join(" ").toLowerCase();
+  return hay.includes(q);
+}
+
+export function buildTypeChoices(type, query, onPick) {
+  const q = String(query || "").trim().toLowerCase();
+  const list = q
+    ? TYPES.filter(([id, label]) => id === "all" || label.toLowerCase().includes(q))
+    : TYPES;
+  return list.map(([id, label]) => {
+    const sel = type === id && !q;
+    return {
+      id,
+      label,
+      bg: sel ? "#111111" : "#FFFFFF",
+      color: sel ? "#FFFFFF" : "#111111",
+      border: sel ? "#111111" : "#E2E2E2",
+      pick: () => onPick(id, label),
+    };
+  });
+}
+
 // 화면끼리 넘겨주는 검색 조건 (홈 → 매물 찾기 → 상세)
 export const shared = {
   loc: null, // '경북 영양군' 같은 지역 앞부분
   start: null, end: null, // 날짜 키 (20261120)
   type: "all",
+  typeQuery: "",
   task: null,
   tab: "all",
 };

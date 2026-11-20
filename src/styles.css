@@ -2672,8 +2672,11 @@ img {
     grid-template-columns: 1fr;
   }
   .ai-launcher {
-    right: 14px;
-    bottom: 18px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: 52px;
+    height: 52px;
+    padding: 3px;
   }
   .ai-panel {
     right: 10px;

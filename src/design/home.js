@@ -1,6 +1,6 @@
 // 모아농 2.1 홈 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
-import { menuVals } from "./menu.js";
+import { menuVals } from "./menu.js?v=20261120-6";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey,
   openListings, available, doesTask, shared, locationChoices,

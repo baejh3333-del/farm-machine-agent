@@ -263,6 +263,32 @@ body:not(.design-page) .page-shell { background: #FFFFFF; }
   body:not(.design-page) .main-content { padding: 0 16px 72px; }
 }
 
+@media (max-width: 640px) {
+  body[data-view="map"] .sidebar {
+    padding: 6px 12px 2px;
+    gap: 3px 8px;
+  }
+  body[data-view="map"] .sidebar .brand-wordmark {
+    width: 96px;
+    height: 26px;
+  }
+  body[data-view="map"] .login-button,
+  body[data-view="map"] #myPageButton {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  body[data-view="map"] .sidebar > .sidebar-nav {
+    margin: 0;
+    padding-top: 2px;
+    gap: 4px;
+  }
+  body[data-view="map"] .nav-item {
+    min-height: 32px;
+    font-size: 13px;
+  }
+}
+
 /* 공통 버튼 */
 body:not(.design-page) .button-primary,
 body:not(.design-page) .login-submit:not([style]) {
@@ -414,7 +440,7 @@ body[data-view="map"] .main-content { padding: 0; }
   height: calc(100dvh - 76px - 40px);
 }
 #mapView .header-map-layout.is-list-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: 0px minmax(0, 1fr);
   gap: 0;
 }
 #mapView .header-map-list { border: 0; border-radius: 0; background: #FFFFFF; }

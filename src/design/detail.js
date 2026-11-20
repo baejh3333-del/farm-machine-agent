@@ -11,7 +11,7 @@ import {
 } from "../data/rental-options.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, isoToKey, keyToIso, photoOf, nameOf, placeOf, ratingOf,
-  groupOf, openListings, available, shared, typeLabel,
+  groupOf, openListings, available, shared, typeLabel, formatKoreanTime,
 } from "./data.js?v=20261120-9";
 
 let TODAY = todayKey();
@@ -58,11 +58,18 @@ function specChips(item) {
   return chips.slice(0, 6);
 }
 
+function buildTimeCycle(customLabel, defaultIdx) {
+  if (!customLabel) return { list: TIMES, idx: defaultIdx };
+  const found = TIMES.indexOf(customLabel);
+  if (found >= 0) return { list: TIMES, idx: found };
+  return { list: [customLabel, ...TIMES], idx: 0 };
+}
+
 export class DetailDesign extends DCLogic {
   constructor(props) {
     super(props);
     this.deps = props.deps || {};
-    this.state = { id: null, pop: null, start: null, end: null, st: 1, et: 4, pickup: 'self', opts: [], gallery: false, ym: todayYm() };
+    this.state = { id: null, pop: null, start: null, end: null, st: 1, et: 4, startTimes: TIMES, endTimes: TIMES, pickup: 'self', opts: [], gallery: false, ym: todayYm() };
   }
 
   show(id) {
@@ -72,7 +79,16 @@ export class DetailDesign extends DCLogic {
     const self = defaultMethod === 'owner_delivery' ? 'deliver' : 'self';
     const start = shared.start && shared.start >= TODAY ? shared.start : null;
     const end = start && shared.end && shared.end >= start ? shared.end : start;
-    this.setState({ id, pop: null, gallery: false, start, end, pickup: self, opts: [], ym: start ? (P(start)[0] * 12 + P(start)[1] - 1) : TODAY_YM });
+    const startLabel = shared.pickH != null ? formatKoreanTime(shared.pickH, shared.pickM || 0) : '';
+    const endLabel = shared.retH != null ? formatKoreanTime(shared.retH, shared.retM || 0) : '';
+    const sc = buildTimeCycle(startLabel, 1);
+    const ec = buildTimeCycle(endLabel, 4);
+    this.setState({
+      id, pop: null, gallery: false, start, end,
+      st: sc.idx, et: ec.idx, startTimes: sc.list, endTimes: ec.list,
+      pickup: self, opts: [],
+      ym: start ? (P(start)[0] * 12 + P(start)[1] - 1) : TODAY_YM,
+    });
   }
 
   item() { return this.state.id ? this.deps.listingById?.(this.state.id) : null; }
@@ -122,8 +138,10 @@ export class DetailDesign extends DCLogic {
     const deliveryFee = deliveryMethod === 'owner_delivery'
       ? (Number.isSafeInteger(deliveryInfo.fee) && deliveryInfo.fee >= 0 ? deliveryInfo.fee : null)
       : 0;
+    const startTime = (s.startTimes || TIMES)[s.st] || TIMES[1];
+    const endTime = (s.endTimes || TIMES)[s.et] || TIMES[4];
     const notes = [];
-    if (s.start) notes.push('받는 시간 ' + TIMES[s.st] + ', 돌려주는 시간 ' + TIMES[s.et]);
+    if (s.start) notes.push('받는 시간 ' + startTime + ', 돌려주는 시간 ' + endTime);
     notes.push('받는 방법: ' + (deliveryMethod === 'owner_delivery' ? '배달 받기' : '직접 가지러 가기'));
     chosen.filter(o => o.kind === 'free').forEach(o => notes.push('부탁: ' + o.t));
     const rentalOptions = chosen.filter(o => o.kind === 'addon' && o.option).map(o => ({ ...o.option }));
@@ -227,7 +245,8 @@ export class DetailDesign extends DCLogic {
 
     return {
       ...menuVals(this, 'find', label => this.menuAct(label)),
-      title, typeLabel: label, maker: brandModel || label, crumbLoc: placeOf(it),
+      title, typeLabel: label, maker: brandModel || label,
+      crumbLoc: shared.loc && shared.loc !== '현재 위치' ? shared.loc : placeOf(it),
       photo, shotCount: shots.length, placeLine: placeOf(it),
       hasReviews: !!r, noReviews: !r, rating: r ? r.avg.toFixed(1) : '', rentCount: r ? '후기 ' + r.count + '개' : '', reviewCount: r ? r.count : 0, newBadge: '새 매물',
       dealTitle, dealText,
@@ -275,8 +294,9 @@ export class DetailDesign extends DCLogic {
       ],
       days, totalText: isRent ? won(total) : bigWon(total), lines,
       startText: s.start ? MDW(s.start) : '날짜', endText: s.end ? MDW(s.end) : '날짜',
-      startT: TIMES[s.st], endT: TIMES[s.et],
-      cycleStartT: () => this.setState({ st: (s.st + 1) % TIMES.length }), cycleEndT: () => this.setState({ et: (s.et + 1) % TIMES.length }),
+      startT: (s.startTimes || TIMES)[s.st] || TIMES[1], endT: (s.endTimes || TIMES)[s.et] || TIMES[4],
+      cycleStartT: () => { const list = s.startTimes || TIMES; this.setState({ st: (s.st + 1) % list.length }); },
+      cycleEndT: () => { const list = s.endTimes || TIMES; this.setState({ et: (s.et + 1) % list.length }); },
       openDate: () => this.setState({ pop: s.pop === 'date' ? null : 'date' }), dateOpen: s.pop === 'date',
       m1: this.month(s.ym), m2: this.month(s.ym + 1), rangeHint,
       prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
@@ -284,7 +304,7 @@ export class DetailDesign extends DCLogic {
       pickups: pickOpts.map(p => { const on = activePickup === p.id; return { ...p, on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', ring: on ? '6px solid #1E9B4B' : '2px solid #CCCCCC', priceColor: p.price === '무료' ? '#13773A' : '#111111', pick: () => this.setState({ pickup: p.id }) }; }),
       mapPill: activePickup === 'deliver' ? '배달 받을 곳' : '받는 곳 · ' + placeOf(it),
       placeLabel: activePickup === 'deliver' ? '배달 받을 곳' : (isDemoMockup ? '받는 곳 (소유주 창고)' : '받는 곳 (소유주)'),
-      placeText: activePickup === 'deliver' ? '내 밭 · 요청할 때 적어 주세요' : pickPlace,
+      placeText: activePickup === 'deliver' ? (shared.loc && shared.loc !== '현재 위치' ? shared.loc : '내 밭 · 요청할 때 적어 주세요') : pickPlace,
       options: OPTS.map(o => { const on = has(o.id); return { t: o.t, d: o.d, price: o.unit ? '+' + won(o.unit) + (o.per === 'day' ? ' / 1일' : '') : '무료', on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', boxBg: on ? '#1E9B4B' : '#FFFFFF', boxBorder: on ? 'none' : '2px solid #CCCCCC', check: on ? '✓' : '', pick: flip(o.id) }; }),
       similar: similar.map(x => {
         const rr = ratingOf(x);

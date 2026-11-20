@@ -108,12 +108,41 @@ export function hideDialog(backdrop, onBeforeHide) {
 }
 
 const LISTING_PHOTO = /^data:image\/(?:png|jpeg|webp);base64,/i;
+const MACHINE_SAMPLE_PHOTO = /^(\.\/|\/)?src\/images\/machines\/.+\.(?:jpg|jpeg|png|webp)$/i;
+export const SEEDER_MACHINE_TYPES = new Set(["seeder", "potatoPlanter", "garlicOnionPlanter"]);
+export const SEEDER_IMAGES = [
+  "./src/images/machines/seeder-1.jpg",
+  "./src/images/machines/seeder-2.jpg",
+  "./src/images/machines/seeder-3.jpg",
+  "./src/images/machines/seeder-4.jpg",
+  "./src/images/machines/seeder-5.jpg",
+];
+function pickSeederImage(seedKey) {
+  if (seedKey == null || seedKey === "") {
+    return SEEDER_IMAGES[Math.floor(Math.random() * SEEDER_IMAGES.length)];
+  }
+  const text = String(seedKey);
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return SEEDER_IMAGES[(hash >>> 0) % SEEDER_IMAGES.length];
+}
+export const hasListingPhoto = (item) => (
+  (typeof item?.photoUrl === "string" && item.photoUrl.startsWith("/api/photos"))
+  || (typeof item?.photo === "string" && LISTING_PHOTO.test(item.photo))
+);
 export const getListingPhotoSrc = (item) => {
-  if (typeof item?.photoUrl === "string" && item.photoUrl.startsWith("/api/photos")) return item.photoUrl;
+  if (typeof item?.photoUrl === "string" && (item.photoUrl.startsWith("/api/photos") || MACHINE_SAMPLE_PHOTO.test(item.photoUrl))) {
+    return item.photoUrl;
+  }
   if (typeof item?.photo === "string" && LISTING_PHOTO.test(item.photo)) return item.photo;
+  if (SEEDER_MACHINE_TYPES.has(item?.machineType)) {
+    return pickSeederImage(item.id || item.modelId || item.title);
+  }
   return "";
 };
-export const hasListingPhoto = (item) => Boolean(getListingPhotoSrc(item));
 const MACHINE_IMAGE_FALLBACK = {
   tiller: "cultivator",
   ridingCultivator: "cultivator",
@@ -137,8 +166,12 @@ const MACHINE_IMAGE_FALLBACK = {
   sorter: "combine",
   forageHarvester: "combine",
 };
-export const machineImage = (type) => {
-  const id = typeof type === "string" ? type : type?.id;
+export const machineImage = (type, seedKey) => {
+  const id = typeof type === "string" ? type : (type?.machineType || type?.id);
+  const key = seedKey ?? (typeof type === "object" && type !== null && type.id !== id ? type.id : undefined);
+  if (SEEDER_MACHINE_TYPES.has(id)) {
+    return pickSeederImage(key);
+  }
   const resolved = MACHINE_IMAGE_FALLBACK[id] || id || "tractor";
   return `./src/images/machines/${resolved}.jpg`;
 };

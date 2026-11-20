@@ -2,6 +2,7 @@ import { inferDeliveryMethods } from "../src/data/delivery.js";
 import { MACHINE_BY_ID } from "../src/data/farm-machines.js";
 import { applyModelSpecification } from "../src/data/machine-specifications.js";
 import { DEFAULT_DEMO_RENTAL_OPTIONS } from "../src/data/rental-options.js";
+import { SEEDER_IMAGES, SEEDER_MACHINE_TYPES } from "../src/core/utils.js";
 
 // 사전 조합 완료된 정적 시드 데이터 (총 1312건: 기존 1198건 + 홍천군 31개 전 기종 대여·구매 각 3건 맞춤 114건)
 const seed = [
@@ -1382,15 +1383,22 @@ const DEMO_RENTAL_OPTIONS = {
 };
 
 export function buildMockListings() {
+  let seederIndex = 0;
   return seed.map((item, index) => {
     const listing = applyModelSpecification({ ...item, status: item.status || "open" }, index);
     const demoDelivery = DEMO_DELIVERY[listing.id];
     const demoOptions = listing.type === "rent" && DEMO_RENTAL_OPTIONS[listing.id]
       ? DEMO_RENTAL_OPTIONS[listing.id].map((opt) => ({ ...opt }))
       : [];
+    const photoUrl = listing.photoUrl || (
+      SEEDER_MACHINE_TYPES.has(listing.machineType)
+        ? SEEDER_IMAGES[(seederIndex++) % SEEDER_IMAGES.length]
+        : undefined
+    );
     // 데모 매물의 운송 방식은 명시 시연 설정이 없으면 기존 인수·전달 방법 글로 정한다.
     return {
       ...listing,
+      ...(photoUrl ? { photoUrl } : {}),
       delivery: listing.delivery || (demoDelivery
         ? { ...demoDelivery, methods: [...demoDelivery.methods] }
         : { methods: inferDeliveryMethods(listing.pickup), fee: null, area: "", pickupPlace: listing.pickup || "" }),

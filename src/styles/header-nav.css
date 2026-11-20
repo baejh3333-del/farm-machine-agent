@@ -11,6 +11,11 @@
     box-shadow var(--dur-normal, 280ms) var(--ease-out-expo, ease);
 }
 
+.region-picker-trigger,
+#regionPickerBtn {
+  display: none !important;
+}
+
 .sidebar-nav {
   display: flex;
   align-items: center;

@@ -49,12 +49,17 @@ export function openMenu(self, e, id, hover) {
     band.style.top = top + 'px';
     if (mobile) {
       band.style.left = '0px';
+      band.style.right = '';
       band.style.width = '0px';
       band.style.height = '0px';
     } else {
-      band.style.left = '';
-      band.style.width = '';
-      band.style.height = '';
+      band.style.left = '0px';
+      band.style.right = '0px';
+      band.style.width = '100%';
+      band.style.height = '320px';
+      band.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(255,255,255,0.95) 45%, rgba(255,255,255,0.75) 72%, rgba(255,255,255,0) 100%)';
+      band.style.webkitMaskImage = 'linear-gradient(180deg, #000 62%, transparent 100%)';
+      band.style.maskImage = 'linear-gradient(180deg, #000 62%, transparent 100%)';
     }
   }
   if (col) {

@@ -12,9 +12,24 @@ export function listListings() {
   return buildMockListings();
 }
 
+let seedOperatorServiceMap = null;
+
+function getSeedOperatorService(id) {
+  if (!seedOperatorServiceMap) {
+    seedOperatorServiceMap = new Map(
+      buildMockListings().map((item) => [item.id, item.operatorService === true]),
+    );
+  }
+  return seedOperatorServiceMap.get(id);
+}
+
 export function toListingDto(row, booked = [], viewerId = null) {
   const spec = row.model_id && Object.hasOwn(SPEC_BY_ID, row.model_id) ? SPEC_BY_ID[row.model_id] : null;
   const photoUrl = row.photo_key ? photoPublicUrl(row.photo_key) ?? null : null;
+  const seedOperatorService = getSeedOperatorService(row.id);
+  const operatorService = row.type === "rent"
+    ? Boolean(row.rental_operator || seedOperatorService === true)
+    : false;
   return {
     id: row.id,
     ownerId: row.owner_id,
@@ -33,6 +48,7 @@ export function toListingDto(row, booked = [], viewerId = null) {
     areaMax: Number(row.area_max),
     price: Number(row.price),
     rentalOperator: row.rental_operator ?? null,
+    operatorService,
     region: row.region,
     condition: row.condition,
     inspectedAt: typeof row.inspected_at === "string"

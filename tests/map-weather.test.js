@@ -284,7 +284,7 @@ test("초기 기본 지역은 수도권(경기도 이천시)이고 가짜 기본
 
 test("지도 매물 목록을 접으면(.is-list-collapsed) design-shell.css에서도 왼쪽 빈칸 없이 지도가 전체 너비로 커진다", () => {
   const css = fs.readFileSync(new URL("../src/styles/design-shell.css", import.meta.url), "utf8");
-  assert.match(css, /#mapView\s+\.header-map-layout\.is-list-collapsed\s*\{[^}]*grid-template-columns:\s*0\s+minmax\(0,\s*1fr\)/s);
+  assert.match(css, /#mapView\s+\.header-map-layout\.is-list-collapsed\s*\{[^}]*grid-template-columns:\s*0px\s+minmax\(0,\s*1fr\)/s);
   assert.match(css, /#mapView\s+\.header-map-layout\.is-list-collapsed\s+\.header-map-list\s*\{[^}]*position:\s*absolute/s);
 });
 

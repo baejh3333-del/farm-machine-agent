@@ -1174,7 +1174,18 @@ export function createAiPanel({
     }
   }
 
-  function appendDateQuickPicker(bubble, { defaultStart = "", defaultEnd = "", buttonLabel = "이 기간 적용", onApply }) {
+  function appendDateQuickPicker(
+    bubble,
+    {
+      defaultStart = "",
+      defaultEnd = "",
+      buttonLabel = "이 기간 적용",
+      includeOperatorCheckbox = false,
+      operatorCheckboxLabel = "대행운영서비스도 함께 이용하기 (작업자 동반)",
+      defaultOperatorWanted = false,
+      onApply,
+    },
+  ) {
     const baseToday = today();
     const startVal = defaultStart && defaultStart >= baseToday ? defaultStart : addDays(baseToday, 1);
     const endVal = defaultEnd && defaultEnd >= startVal ? defaultEnd : startVal;
@@ -1182,6 +1193,25 @@ export function createAiPanel({
 
     const wrap = document.createElement("div");
     wrap.className = "ai-date-picker";
+
+    let operatorCheckbox = null;
+    let operatorRow = null;
+    if (includeOperatorCheckbox) {
+      operatorRow = document.createElement("label");
+      operatorRow.className = "ai-date-operator";
+      operatorCheckbox = document.createElement("input");
+      operatorCheckbox.type = "checkbox";
+      operatorCheckbox.checked = Boolean(defaultOperatorWanted);
+      const operatorText = document.createElement("span");
+      operatorText.textContent = operatorCheckboxLabel;
+      operatorRow.append(operatorCheckbox, operatorText);
+    }
+
+    const submitRange = (s, e) => {
+      const operatorWanted = Boolean(operatorCheckbox?.checked);
+      wrap.remove();
+      onApply(s, e, operatorWanted);
+    };
 
     const presets = document.createElement("div");
     presets.className = "ai-date-presets";
@@ -1194,10 +1224,7 @@ export function createAiPanel({
       btn.type = "button";
       btn.className = "ai-date-preset-btn";
       btn.textContent = label;
-      btn.addEventListener("click", () => {
-        wrap.remove();
-        onApply(s, e);
-      });
+      btn.addEventListener("click", () => submitRange(s, e));
       presets.append(btn);
     }
 
@@ -1248,8 +1275,7 @@ export function createAiPanel({
       }
 
       if (!badDays.length) {
-        wrap.remove();
-        onApply(s, e);
+        submitRange(s, e);
         return;
       }
 
@@ -1269,10 +1295,7 @@ export function createAiPanel({
       proceedBtn.type = "button";
       proceedBtn.className = "ai-weather-proceed-btn";
       proceedBtn.textContent = "그냥 이 날짜로 진행";
-      proceedBtn.addEventListener("click", () => {
-        wrap.remove();
-        onApply(s, e);
-      });
+      proceedBtn.addEventListener("click", () => submitRange(s, e));
       cautionActions.append(proceedBtn);
 
       const goodDays = forecastDays.filter((d) => d.suitability === "good" && d.date >= baseToday).slice(0, 3);
@@ -1281,10 +1304,7 @@ export function createAiPanel({
         altBtn.type = "button";
         altBtn.className = "ai-weather-alt-btn";
         altBtn.textContent = `☀️ ${formatShortDate(gd.date)} 선택`;
-        altBtn.addEventListener("click", () => {
-          wrap.remove();
-          onApply(gd.date, gd.date);
-        });
+        altBtn.addEventListener("click", () => submitRange(gd.date, gd.date));
         cautionActions.append(altBtn);
       }
 
@@ -1294,7 +1314,7 @@ export function createAiPanel({
     });
 
     row.append(startInput, sep, endInput, applyBtn);
-    wrap.append(presets, row);
+    wrap.append(presets, row, ...(operatorRow ? [operatorRow] : []));
     bubble.append(wrap);
     scrollAiToEnd();
   }
@@ -1321,10 +1341,27 @@ export function createAiPanel({
     const promptBubble = targetBubble || appendAiMessage(`'${item.title}'을(를) 언제 빌리실까요? 날짜를 고르시면 바로 예약해 드려요.`, "assistant");
     appendDateQuickPicker(promptBubble, {
       buttonLabel: "이 날짜로 바로 예약",
-      onApply: (pickedStart, pickedEnd) => {
-        rememberAgentTurn({ role: "user", content: `'${item.title}' ${pickedStart}~${pickedEnd} 바로 예약` });
+      includeOperatorCheckbox: Boolean(item.rentalOperator),
+      operatorCheckboxLabel: item.rentalOperator
+        ? `대행운영서비스 함께 이용 (작업자 ${item.rentalOperator.name}, +${money(item.rentalOperator.dailyPrice)}/일)`
+        : undefined,
+      onApply: (pickedStart, pickedEnd, operatorWanted) => {
+        const useOperator = Boolean(operatorWanted && item.rentalOperator);
+        rememberAgentTurn({
+          role: "user",
+          content: `'${item.title}' ${pickedStart}~${pickedEnd} 바로 예약${useOperator ? " (대행운영서비스 사용)" : ""}`,
+        });
         executeOneTapAction({
-          pendingAction: { type: "rental_request", listingId: item.id, title: item.title, region: item.region, start: pickedStart, end: pickedEnd, note: "농농 채팅 원탭 예약" },
+          pendingAction: {
+            type: "rental_request",
+            listingId: item.id,
+            title: item.title,
+            region: item.region,
+            start: pickedStart,
+            end: pickedEnd,
+            ...(useOperator ? { rentalOperator: item.rentalOperator } : {}),
+            note: "농농 채팅 원탭 예약",
+          },
         });
       },
     });
@@ -2194,8 +2231,13 @@ export function createAiPanel({
         appendDateQuickPicker(bubble, {
           defaultStart: state.filters?.date || "",
           defaultEnd: state.filters?.dateEnd || "",
-          onApply: (pickedStart, pickedEnd) => {
-            $("aiInput").value = `${pickedStart}부터 ${pickedEnd}까지로 해주세요.`;
+          includeOperatorCheckbox: true,
+          defaultOperatorWanted: result.operatorService === true,
+          onApply: (pickedStart, pickedEnd, operatorWanted) => {
+            const operatorPhrase = operatorWanted
+              ? "대행운영서비스 사용할게요."
+              : "대행운영서비스 없이 할게요.";
+            $("aiInput").value = `${pickedStart}부터 ${pickedEnd}까지로 해주세요. ${operatorPhrase}`;
             $("aiForm").requestSubmit();
           },
         });

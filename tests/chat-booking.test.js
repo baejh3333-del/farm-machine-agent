@@ -186,3 +186,17 @@ test("[긍정 판정] 부정·보류·질문이 섞이면 승인으로 보지 �
     "좋아 근데 다른 날로", "네 근데 3일로 바꿔줘", "그대로 두고 날짜만 바꿔줘", "보내기 전에 날짜 확인해줘", "확인", "2번"];
   for (const text of no) assert.equal(sharedAffirmative(text), false, text);
 });
+
+test("[날짜 + 대행운영] 날짜가 없어 멈출 때 대행운영서비스 안내와 선택 상태를 함께 돌려준다", async (t) => {
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "t1", name: "search_listings", input: { machineType: "tractor", transaction: "rent" } }] },
+    { content: [] },
+  ]);
+  const result = await runAgentTurn("트랙터 빌리고 싶어", {}, { listings: LISTINGS, call, today: TODAY });
+  const toolResult = JSON.parse(calls[1].messages.at(-1).content[0].content);
+  assert.equal(result.askDate, true);
+  assert.equal(result.operatorService, null);
+  assert.match(result.reply, /대행운영서비스/);
+  assert.match(toolResult.error, /대행운영서비스/);
+});

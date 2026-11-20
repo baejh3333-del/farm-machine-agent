@@ -4567,6 +4567,24 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   padding: 0 12px;
   font-size: 0.8125rem;
 }
+.ai-date-operator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed #cce5d6;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1f4d32;
+  cursor: pointer;
+  user-select: none;
+}
+.ai-date-operator input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #1e9b4b;
+  cursor: pointer;
+}
 
 /* 초기 화면 원탭 조건 선택 빌더 */
 .ai-quick-builder {

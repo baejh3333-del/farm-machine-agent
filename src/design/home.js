@@ -3,8 +3,9 @@ import { DCLogic } from "./dc-runtime.js";
 import { menuVals } from "./menu.js?v=20261120-6";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey,
-  openListings, available, doesTask, shared, locationChoices,
-} from "./data.js";
+  openListings, available, shared, locationChoices,
+  machineFilterLabel, matchesMachineFilter, buildTypeChoices,
+} from "./data.js?v=20261120-8";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();
@@ -15,7 +16,7 @@ const LOCS = () => [
 
 
 const FAQ = [
-  { cat: 'rent', tag: '대여', q: '농기계는 어떻게 빌리나요?', a: '위치·날짜·작업을 고르고 대여 요청을 보내면 돼요. 소유주가 승인하면 예약이 확정돼요.' },
+  { cat: 'rent', tag: '대여', q: '농기계는 어떻게 빌리나요?', a: '위치·날짜·기종을 고르고 대여 요청을 보내면 돼요. 소유주가 승인하면 예약이 확정돼요.' },
   { cat: 'reg', tag: '기계 등록', q: '쉬는 농기계는 어떻게 올리나요?', a: '‘농기계 등록하기’를 누르고 사진과 대여료를 적으면 돼요. 농농이에게 말로 부탁해도 올려 드려요.' },
   { cat: 'pay', tag: '결제', q: '대여료는 언제 내나요?', a: '소유주가 승인한 뒤에 결제해요. 승인 전에는 돈이 나가지 않아요.' },
   { cat: 'pay', tag: '반납', q: '반납이 늦어지거나 기계가 고장 나면요?', a: '바로 소유주에게 알려 주세요. 반납일 변경이나 수리 상담은 농농이가 도와드려요.' }
@@ -24,20 +25,12 @@ const MD = k => { const [, m, d] = P(k); return m + '월 ' + d + '일'; };
 const SL = k => { const [, m, d] = P(k); return m + '/' + d; };
 const FULL = k => { const [y, m, d] = P(k); return m + '월 ' + d + '일 (' + WD[new Date(y, m - 1, d).getDay()] + ')'; };
 const DAYS = (a, b) => { const [y1, m1, d1] = P(a), [y2, m2, d2] = P(b); return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 86400000) + 1; };
-const TASKS = [
-  { name: '밭 갈기', detail: '밭 갈기 (경운·로터리)' },
-  { name: '두둑 만들기', detail: '두둑 만들기 (두둑 성형)' },
-  { name: '파종·정식', detail: '파종·정식 (씨 뿌리기·모 심기)' },
-  { name: '방제', detail: '방제 (약 뿌리기)' },
-  { name: '수확', detail: '수확 (거두기)' },
-  { name: '운반', detail: '운반 (짐 옮기기)' }
-];
 export class HomeDesign extends DCLogic {
   constructor(props) {
     super(props);
     this.deps = props.deps || {};
     this._pick = null;
-    this.state = { open: 0, pop: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, task: null, ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent' };
+    this.state = { open: 0, pop: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, type: 'all', typeQuery: '', typeSet: false, ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent' };
   }
 
   pickDay(k) {
@@ -84,7 +77,8 @@ export class HomeDesign extends DCLogic {
     const endIso = s.tab === 'rent' && s.end ? keyToIso(s.end) : startIso;
     return openListings(s.tab === 'rent' ? 'rent' : 'sale').filter(it =>
       (!s.locSet || s.loc === '현재 위치' || areaKey(it, s.loc.split(' ').length) === s.loc) &&
-      (!startIso || available(it, startIso, endIso || startIso)) && doesTask(it, s.task));
+      (!startIso || available(it, startIso, endIso || startIso)) &&
+      matchesMachineFilter(it, s.type, s.typeQuery));
   }
 
   seeAll(e) {
@@ -93,12 +87,37 @@ export class HomeDesign extends DCLogic {
     Object.assign(shared, {
       loc: s.locSet && s.loc !== '현재 위치' ? s.loc : null,
       start: s.tab === 'rent' ? s.start : null, end: s.tab === 'rent' ? (s.end || s.start) : null,
-      task: s.task, tab: s.tab === 'rent' ? 'all' : 'buy', type: 'all',
+      task: null, tab: s.tab === 'rent' ? 'all' : 'buy',
+      type: s.type || 'all', typeQuery: s.typeQuery || '',
     });
     this.deps.goBrowse?.();
   }
 
-  jump(w) {
+  hdrBounds(w, triggerEl) {
+    const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+    const widths = { loc: 420, date: 740, time: 500, type: 420 };
+    const popW = Math.min(widths[w] || 420, vw - 32);
+    const pill = triggerEl?.closest?.('[role="search"]')
+      || this.$root?.querySelector?.(this.state.compact ? '[data-sticky-hdr] [role="search"]' : 'header [role="search"]');
+    const pillRect = pill?.getBoundingClientRect?.();
+    const btnRect = triggerEl?.getBoundingClientRect?.();
+    const top = Math.max(76, Math.round((pillRect?.bottom || 74) + 12));
+    let left;
+    if (w === 'date' || w === 'time' || !btnRect) {
+      const center = pillRect ? pillRect.left + pillRect.width / 2 : vw / 2;
+      left = Math.round(center - popW / 2);
+    } else if (w === 'type') {
+      left = Math.round(btnRect.right - popW);
+    } else {
+      left = Math.round(btnRect.left);
+    }
+    const clampedLeft = Math.max(16, Math.min(vw - popW - 16, left));
+    const anchorCenter = btnRect ? btnRect.left + btnRect.width / 2 : clampedLeft + popW / 2;
+    const arrowLeft = Math.max(24, Math.min(popW - 38, Math.round(anchorCenter - clampedLeft - 7)));
+    return { hdrTop: top + 'px', hdrLeft: clampedLeft + 'px', hdrArrowLeft: arrowLeft + 'px' };
+  }
+
+  jump(w, e) {
     if (!w) {
       const el = this.$root.getElementById('search');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -106,7 +125,12 @@ export class HomeDesign extends DCLogic {
       return;
     }
     const same = this.state.pop === w && this.state.hdrPop;
-    this.setState({ pop: same ? null : w, hdrPop: !same });
+    if (same) {
+      this.setState({ pop: null, hdrPop: false });
+      return;
+    }
+    const bounds = this.hdrBounds(w, e?.currentTarget);
+    this.setState({ pop: w, hdrPop: true, ...bounds });
   }
 
   // 세부 메뉴 항목 → 앱 화면. 홈에서 '빠른 예약 검색'은 예약창으로 바로 내려가요.
@@ -119,7 +143,7 @@ export class HomeDesign extends DCLogic {
   replay() {
     window.scrollTo({ top: 0, behavior: 'auto' });
     this._pick = null;
-    this.setState({ open: 0, pop: null, hdrPop: false, menu: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, task: null, ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent', locSet: false, dateSet: false, timeSet: false, taskSet: false, faqCat: 'all', risen: false, compact: false });
+    this.setState({ open: 0, pop: null, hdrPop: false, menu: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, type: 'all', typeQuery: '', ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent', locSet: false, dateSet: false, timeSet: false, typeSet: false, faqCat: 'all', risen: false, compact: false });
     try {
       const host = this.$root && this.$root.getAnimations ? this.$root : document;
       host.getAnimations().forEach(a => { if (a.animationName) { a.cancel(); a.play(); } });
@@ -191,10 +215,11 @@ export class HomeDesign extends DCLogic {
       };
     };
 
-    const task = TASKS.find(t => t.name === s.task);
+    const pickedLabel = machineFilterLabel(s.type, s.typeQuery);
+    const showType = pickedLabel || (s.typeSet && s.type === 'all' ? '전체' : '');
     const bits = [s.locSet && s.loc !== '현재 위치' ? s.loc : '전체 지역'];
     if (ranged && s.tab === 'rent') bits.push(s.start === s.end ? SL(s.start) : SL(s.start) + '–' + SL(s.end));
-    if (s.task) bits.push(s.task);
+    if (showType) bits.push(showType);
     TODAY = todayKey(); TODAY_YM = todayYm();
     const found = s.searched ? this.matches() : [];
     const count = found.length;
@@ -219,38 +244,54 @@ export class HomeDesign extends DCLogic {
       headFont: serif ? "'Noto Serif KR', serif" : "'Noto Sans KR', sans-serif",
       sum: s.searched ? bits.join(' · ') : '추천하는 매물', countText: s.searched ? (count ? (s.tab === 'rent' ? '농기계 ' : '중고 매물 ') + count + '대' : '조건에 맞는 매물이 아직 없어요') : '우리 동네에서 많이 찾는 농기계예요',
       seeAll: e => this.seeAll(e),
-      wrapZ: s.pop ? 35 : 3,
+      wrapZ: s.pop && !s.hdrPop ? 35 : 3,
       locText: s.locSet ? (s.loc === '현재 위치' ? '전체 지역' : s.loc) + ' · ' + s.radius + 'km 이내' : '이용할 위치', locTextColor: s.locSet ? '#111111' : '#9A9A9A',
       dateText, dateTextColor: s.start ? '#111111' : '#9A9A9A',
       timeShow: s.timeSet ? timeText : '시간', timeTextColor: s.timeSet ? '#111111' : '#9A9A9A',
-      taskText: task ? task.detail : '하려는 작업', taskTextColor: task ? '#111111' : '#9A9A9A',
+      typeText: showType || '기종 선택/입력', typeTextColor: showType ? '#111111' : '#9A9A9A',
       doSearch: e => { if (e && e.preventDefault) e.preventDefault(); this.setState({ searched: true, pop: null, hdrPop: false }); },
-      openLoc: toggle('loc'), openDate: toggle('date'), openTask: toggle('task'),
-      locRing: ring('loc'), dateRing: ring('date'), taskRing: ring('task'),
-      locOpen: s.pop === 'loc', dateOpen: s.pop === 'date', taskOpen: s.pop === 'task', anyOpen: !!s.pop,
+      openLoc: toggle('loc'), openDate: toggle('date'), openType: toggle('type'),
+      locRing: ring('loc'), dateRing: ring('date'), typeRing: ring('type'),
+      locOpen: s.pop === 'loc' && !s.hdrPop, dateOpen: s.pop === 'date' && !s.hdrPop, typeOpen: s.pop === 'type' && !s.hdrPop,
+      hdrLocOpen: s.pop === 'loc' && !!s.hdrPop, dateOpenHdr: s.pop === 'date' && !!s.hdrPop, timeOpenHdr: s.pop === 'time' && !!s.hdrPop, hdrTypeOpen: s.pop === 'type' && !!s.hdrPop,
+      hdrTop: s.hdrTop || '86px', hdrLeft: s.hdrLeft || '16px', hdrArrowLeft: s.hdrArrowLeft || '32px',
+      anyOpen: !!s.pop,
       closePop: () => this.setState({ pop: null, hdrPop: false }),
       locs: LOCS().map(l => ({
         name: l.name, sub: l.type === 'pin' ? '' : l.sub, isNav: l.type === 'nav', isRecent: l.type === 'recent', isPin: l.type === 'pin',
         color: l.type === 'nav' ? '#1E9B4B' : '#111111', bg: s.loc === l.value ? '#F4F4F4' : 'transparent',
-        pick: () => this.setState({ loc: l.value, locSet: true, pop: s.tab === 'rent' ? 'date' : 'task' })
+        pick: () => {
+          const next = s.tab === 'rent' ? 'date' : 'type';
+          this.setState({ loc: l.value, locSet: true, pop: next, ...(s.hdrPop ? this.hdrBounds(next) : {}) });
+        }
       })),
       radii: [5, 10, 20, 30].map(r => ({ label: r + 'km', bg: s.radius === r ? '#111111' : '#FFFFFF', color: s.radius === r ? '#FFFFFF' : '#111111', border: s.radius === r ? '#111111' : '#E2E2E2', pick: () => this.setState({ radius: r }) })),
       m1: this.month(s.ym), m2: this.month(s.ym + 1),
       prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
       prevColor: s.ym <= TODAY_YM ? '#C8C8C8' : '#111111',
       rangeHint, timeText, timeBad,
-      openTime: toggle('time'), timeRing: ring('time'), timeOpen: s.pop === 'time',
+      openTime: toggle('time'), timeRing: ring('time'), timeOpen: s.pop === 'time' && !s.hdrPop,
       pickHCol: col('pickH', 24, s.pickH, 'pickDraft'), pickMCol: col('pickM', 2, s.pickM, 'pickDraft', 30),
       retHCol: col('retH', 24, s.retH, 'retDraft'), retMCol: col('retM', 2, s.retM, 'retDraft', 30),
       pickIn: input('pick'), retIn: input('ret'), pickCol: tcol('pick'), retCol: tcol('ret'),
       pickDay: s.start ? FULL(s.start) : '빌리는 날', retDay: s.end ? FULL(s.end) : '반납하는 날',
-      applyTime: () => this.setState({ pop: 'task', pickDraft: null, retDraft: null, timeSet: true }),
+      applyTime: () => this.setState({ pop: 'type', pickDraft: null, retDraft: null, timeSet: true, ...(s.hdrPop ? this.hdrBounds('type') : {}) }),
       resetDate: () => this.setState({ start: null, end: null }),
-      applyDate: () => this.setState({ pop: 'time', dateSet: true }),
-      tasks: TASKS.map(t => {
-        const sel = s.task === t.name;
-        return { name: t.name, bg: sel ? '#111111' : '#FFFFFF', color: sel ? '#FFFFFF' : '#111111', border: sel ? '#111111' : '#E2E2E2', pick: () => this.setState({ task: t.name, taskSet: true, pop: null, hdrPop: false }) };
+      applyDate: () => this.setState({ pop: 'time', dateSet: true, ...(s.hdrPop ? this.hdrBounds('time') : {}) }),
+      typeQuery: s.typeQuery || '',
+      onTypeInput: e => {
+        const v = e.target.value;
+        this.setState({ typeQuery: v, type: 'all', typeSet: !!v.trim() });
+      },
+      resetType: () => this.setState({ type: 'all', typeQuery: '', typeSet: false }),
+      applyType: () => this.setState({
+        typeSet: s.type !== 'all' || !!(s.typeQuery || '').trim(),
+        pop: null,
+        hdrPop: false,
       }),
+      typeChoices: buildTypeChoices(s.type, s.typeQuery, id =>
+        this.setState({ type: id, typeQuery: '', typeSet: true, pop: null, hdrPop: false })
+      ),
       recs,
       compact: !!s.compact, noPill: false,
       tractorRef: el => {
@@ -295,11 +336,11 @@ export class HomeDesign extends DCLogic {
       },
       pillLoc: s.locSet ? (s.loc === '현재 위치' ? '전체 지역' : s.loc) + ' · ' + s.radius + 'km' : '동네 검색', pillLocColor: s.locSet ? '#111111' : '#9A9A9A',
       pillDate: s.dateSet && ranged ? dateText : '날짜 추가', pillDateColor: s.dateSet && ranged ? '#111111' : '#9A9A9A',
-      pillTask: s.taskSet && task ? task.name : '작업 추가', pillTaskColor: s.taskSet && task ? '#111111' : '#9A9A9A',
-      popAt: s.hdrPop ? 'position: fixed; z-index: 40; top: 96px; left: 50%; transform: translateX(-50%);' : 'position: absolute; z-index: 32; top: calc(100% + 14px); left: 0;',
-      arrowDisp: s.hdrPop ? 'none' : 'block',
-      cardFx: s.hdrPop ? '' : '-webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);',
-      jumpLoc: () => this.jump('loc'), jumpDate: () => this.jump('date'), jumpTask: () => this.jump('task'), jumpGo: () => this.jump(null),
+      pillType: showType || '기종 선택/입력', pillTypeColor: showType ? '#111111' : '#9A9A9A',
+      popAt: 'position: absolute; z-index: 32; top: calc(100% + 14px); left: 0;',
+      arrowDisp: 'block',
+      cardFx: '-webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);',
+      jumpLoc: e => this.jump('loc', e), jumpDate: e => this.jump('date', e), jumpType: e => this.jump('type', e), jumpGo: () => this.jump(null),
       isRent: s.tab === 'rent', rentSel: s.tab === 'rent' ? 'true' : 'false', buySel: s.tab === 'rent' ? 'false' : 'true',
       knobLeft: s.tab === 'rent' ? '4px' : '50%',
       rentColor: s.tab === 'rent' ? '#111111' : '#767676', buyColor: s.tab === 'rent' ? '#767676' : '#111111',

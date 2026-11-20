@@ -1,6 +1,6 @@
 // 모아농 2.2 매물 상세 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
-import { menuVals } from "./menu.js?v=20261121-1";
+import { menuVals } from "./menu.js?v=20261121-3";
 import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
 import { deliveryOf } from "../data/delivery.js";
 import {
@@ -12,7 +12,7 @@ import {
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, isoToKey, keyToIso, photoOf, nameOf, placeOf, ratingOf,
   groupOf, openListings, available, shared, typeLabel, formatKoreanTime,
-} from "./data.js?v=20261120-9";
+} from "./data.js?v=20261121-3";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();

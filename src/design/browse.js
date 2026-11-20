@@ -1,5 +1,6 @@
 // 모아농 2.2 매물 찾기 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
+import { menuVals } from "./menu.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey, ratingOf,
   TYPE_GROUPS, groupOf, openListings, available, isFav, shared, locationChoices, typeLabel,
@@ -113,6 +114,8 @@ export class BrowseDesign extends DCLogic {
     if (el) el.scrollBy({ left: dir * el.clientWidth * 0.75, behavior: 'smooth' });
   }
 
+  menuAct(label) { this.deps.navigate?.(label); }
+
   renderVals() {
     const s = this.state;
     const toggle = w => () => this.setState({ pop: s.pop === w ? null : w });
@@ -177,6 +180,7 @@ export class BrowseDesign extends DCLogic {
     if (s.start && s.end) rangeHint = days + '일 동안 빌려요';
 
     return {
+      ...menuVals(this, 'find', label => this.menuAct(label)),
       anyOpen: !!s.pop, closePop: () => this.setState({ pop: null }),
       openLoc: toggle('loc'), openStart: toggle('date'), openEnd: toggle('date'), openType: toggle('type'),
       locOpen: s.pop === 'loc', dateOpen: s.pop === 'date', startOpen: s.pop === 'date', endOpen: s.pop === 'date', typeOpen: s.pop === 'type',

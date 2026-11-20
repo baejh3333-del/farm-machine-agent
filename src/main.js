@@ -22,7 +22,7 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createDesignApp } from "./design/app.js?v=20261120-1";
+import { createDesignApp } from "./design/app.js?v=20261120-2";
 import { createHeaderNav } from "./views/header-nav.js";
 import { createCartCheckout } from "./views/cart-checkout.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
@@ -89,6 +89,7 @@ const designApp = createDesignApp({
   browseType: (type) => { designApp.browseType(type); setView("browse"); },
   goBrowse: () => setView("browse"),
   scrollHome: (section) => designApp.scrollHome(section),
+  runDestination: (dest) => headerNav.runDestination(dest),
 });
 
 function openListingPage(id) {

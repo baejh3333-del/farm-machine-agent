@@ -1,12 +1,14 @@
-// 디자인 화면 세 개(홈·매물 찾기·매물 상세)를 앱에 붙이고, 머리말·꼬리말 링크를 앱 기능에 연결한다
+// 디자인 화면(홈·매물 찾기·매물 상세·농기계 보험·AS 도움)을 앱에 붙이고, 머리말·꼬리말 링크를 앱 기능에 연결한다
 import { mountDesign } from "./dc-runtime.js";
-import { HomeDesign } from "./home.js?v=20261120-7";
-import { BrowseDesign, pushRecent } from "./browse.js?v=20261120-6";
-import { DetailDesign } from "./detail.js?v=20261120-6";
+import { HomeDesign } from "./home.js?v=20261121-1";
+import { BrowseDesign, pushRecent } from "./browse.js?v=20261121-1";
+import { DetailDesign } from "./detail.js?v=20261121-1";
+import { InsuranceDesign } from "./insurance.js?v=20261121-1";
+import { AsDesign } from "./as.js?v=20261121-1";
 import { shared } from "./data.js";
-import { MENU_DEST } from "./menu.js?v=20261120-6";
+import { MENU_DEST } from "./menu.js?v=20261121-1";
 
-const V = "20261120-7";
+const V = "20261121-1";
 
 // 링크 글자 → 할 일. 화면 모양은 그대로 두고 눌렀을 때 동작만 붙인다.
 function navAction(text, deps, screen) {
@@ -15,6 +17,7 @@ function navAction(text, deps, screen) {
     case "지도": return () => deps.setView("map");
     case "마이페이지": return () => deps.openMyPage();
     case "로그인": return () => deps.openLogin();
+    case "AS 도움 받기 →": return () => deps.runDestination?.("as");
     case "농기계 등록하기":
     case "농기계 등록하기 →": return () => deps.openNewListing();
     case "개인정보처리방침": return () => deps.setView("guide");
@@ -77,6 +80,8 @@ export function createDesignApp(deps) {
     mount("home", "homeDesignHost", HomeDesign),
     mount("browse", "browseDesignHost", BrowseDesign),
     mount("detail", "detailDesignHost", DetailDesign),
+    mount("insurance", "insuranceDesignHost", InsuranceDesign),
+    mount("as", "asDesignHost", AsDesign),
   ]).catch((error) => {
     console.error("[design] 화면을 붙이지 못했어요", error);
   });

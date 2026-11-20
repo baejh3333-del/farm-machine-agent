@@ -35,6 +35,12 @@ export function createHeaderNav(deps) {
       case "map":
         deps.setView("map");
         return;
+      case "insurance":
+        deps.setView("insurance");
+        return;
+      case "as":
+        deps.setView("as");
+        return;
       case "guide":
         deps.setView("guide");
         return;

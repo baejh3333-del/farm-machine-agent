@@ -1,0 +1,134 @@
+<!-- 모아농 디자인 캔버스에서 옮긴 화면 템플릿. 화면 모양은 캔버스와 같게 유지해요. -->
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+body{margin:0}
+body, body *{font-family:'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif !important}
+a{color:#111111}a:hover{color:#1E9B4B}
+[data-rail]{scrollbar-width:none}
+[data-rail]::-webkit-scrollbar{display:none}
+[data-card] img, [data-card] [data-ph]{transition:transform 0.3s ease}
+[data-card]:hover img, [data-card]:hover [data-ph]{transform:scale(1.03)}
+[data-chip]:hover{background:#F2F2F2 !important}
+[data-field]:hover{background:#F6F6F6 !important}
+[data-arrow]:hover{border-color:#111111 !important}
+[data-cta]:hover{background:#178A40 !important}
+
+/* 상단바 세부 메뉴 */
+@keyframes moaDrop{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+@keyframes moaFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+[data-mega]{animation:moaDrop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both}
+[data-mega-col]{animation:moaFade 0.5s cubic-bezier(0.22, 1, 0.36, 1) both}
+[data-mega-item]{transition:color 0.2s ease}
+[data-mega-item]:hover{color:#1E9B4B !important}
+nav[aria-label] a{transition:box-shadow 0.25s ease, color 0.2s ease}
+
+@keyframes moaIn{from{opacity:0;transform:translateY(24px);filter:blur(10px)}to{opacity:1;transform:none;filter:blur(0)}}
+@keyframes moaHead{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+
+header{animation:moaHead 0.9s cubic-bezier(0.22, 1, 0.36, 1) both}
+
+[data-mega-item]{animation:moaFade 0.45s cubic-bezier(0.22, 1, 0.36, 1) both}
+
+[data-chip]{transition:border-color 0.2s ease, background 0.2s ease, color 0.2s ease}
+[data-chip]:hover{border-color:#111111 !important}
+[data-ghost]:hover{background:#F6F6F6 !important}
+@keyframes moaRise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+[data-rise]{animation:moaRise 1s cubic-bezier(0.22, 1, 0.36, 1) both}
+[data-rise="2"]{animation-delay:0.15s}
+[data-rise="3"]{animation-delay:0.3s}
+
+[data-center]{transition:border-color 0.2s ease, box-shadow 0.2s ease}
+[data-cta]:hover{filter:brightness(0.95)}
+@keyframes moaPulse{0%{box-shadow:0 0 0 0 rgba(30,155,75,0.45)}100%{box-shadow:0 0 0 18px rgba(30,155,75,0)}}
+[data-live]{animation:moaPulse 1.6s ease-out infinite}
+
+/* 세부 메뉴: 화면을 다시 그리지 않고 열고 닫아요 (마우스를 올려도 새로고침처럼 보이지 않게) */
+[data-mega-root] > [data-mega], [data-mega-root] > [data-mega-col], [data-mega-group]{display:none}
+[data-mega-root]:not([data-open=""]) > [data-mega]{display:block}
+[data-mega-root]:not([data-open=""]) > [data-mega-col]{display:block}
+[data-open="find"] [data-mega-group="find"], [data-open="fit"] [data-mega-group="fit"], [data-open="mine"] [data-mega-group="mine"]{display:flex;flex-direction:column;gap:16px}
+nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #111111 !important}
+</style>
+</helmet>
+<div style="background: #FFFFFF; color: #111111; letter-spacing: -0.01em">
+<div ref="{{ megaRef }}" data-mega-root="" data-open="" style="display: contents">
+<div data-mega="" aria-hidden="true" style="position: fixed; right: 0; top: 72px; z-index: 44; width: min(720px, 54vw); height: 400px; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.94) 45%, rgba(255,255,255,0.6) 75%, rgba(255,255,255,0) 100%); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); -webkit-mask-image: linear-gradient(180deg, #000 50%, transparent 100%), linear-gradient(90deg, transparent 0%, #000 38%); -webkit-mask-composite: source-in; mask-image: linear-gradient(180deg, #000 50%, transparent 100%), linear-gradient(90deg, transparent 0%, #000 38%); mask-composite: intersect"></div>
+<div data-mega-col="" onMouseEnter="{{ keepMenu }}" onMouseLeave="{{ leaveMenu }}" style="position: fixed; z-index: 45; top: 72px; left: 0px; padding: 22px 24px 28px; min-width: 200px"><div data-mega-group="find"><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">매물 찾기</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 동네 매물 지도</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">빠른 예약 검색</a></div><div data-mega-group="fit"><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 농기계·호환 확인</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">작물별 작업 가이드</a></div><div data-mega-group="mine"><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 기계 관리</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">거래 관리</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">내 대여 요청</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">찜 목록</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">농기계 보험</a><a href="#" data-mega-item="" onClick="{{ menuPick }}" style="font-size: 17px; font-weight: 600; color: #111111; text-decoration: none; white-space: nowrap">AS 도움</a></div></div>
+</div>
+<header style="position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,0.96); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-bottom: 1px solid #EBEBEB">
+<div style="padding: 16px 40px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px">
+<div style="display: flex; align-items: center"><a href="#" aria-label="모아농 홈" style="display: flex; text-decoration: none"><svg width="121.2" height="32" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a></div>
+<div></div>
+<div style="display: flex; align-items: center; justify-content: flex-end; gap: 22px">
+<nav aria-label="주 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap"><sc-for list="{{ navs }}" as="nv" hint-placeholder-count="4"><a href="#" onClick="{{ nv.pick }}" onMouseEnter="{{ nv.hover }}" onMouseLeave="{{ leaveMenu }}" aria-expanded="{{ nv.exp }}" style="text-decoration: none; padding-bottom: 4px; font-weight: {{ nv.weight }}; box-shadow: {{ nv.line }}">{{ nv.label }}</a></sc-for></nav>
+<a href="#" data-auth-btn="" style="height: 38px; padding: 0 18px; border-radius: 999px; background: #111111; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 600; text-decoration: none">{{ authLabel }}</a>
+</div>
+</div>
+</header>
+
+<main style="max-width: 1240px; margin: 0 auto; padding: 56px 40px 0">
+<section data-rise="1" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<span style="align-self: flex-start; height: 30px; padding: 0 12px; border-radius: 999px; background: #EDF6F0; color: #13773A; font-size: 13px; font-weight: 700; display: flex; align-items: center">AS 도움</span>
+<h1 style="margin: 0; font-size: 44px; line-height: 1.25; font-weight: 800; letter-spacing: -0.035em">기계가 멈췄나요?<br>가까운 AS센터를 바로 이어 드려요</h1>
+<p style="margin: 0; font-size: 18px; color: #555555">무슨 일인지 고르면, 고칠 수 있는 곳부터 보여 드려요.</p>
+</div>
+<a href="tel:119" style="flex: none; height: 52px; padding: 0 20px; border-radius: 16px; background: #FFF1E9; color: #8A3B1E; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; text-decoration: none">다쳤거나 불이 났다면 119</a>
+</section>
+
+<section data-rise="2" style="margin-top: 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 24px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div style="padding: 26px; border-radius: 24px; border: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 14px">
+<span style="display: flex; align-items: center; gap: 10px"><span style="height: 28px; padding: 0 10px; border-radius: 999px; background: #111111; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center">1</span><b style="font-size: 19px">어떤 기계인가요?</b></span>
+<sc-for list="{{ machines }}" as="m" hint-placeholder-count="2"><button type="button" onClick="{{ m.pick }}" aria-pressed="{{ m.on }}" style="padding: 12px; border-radius: 16px; border: 1.5px solid {{ m.bd }}; background: {{ m.bg }}; display: flex; align-items: center; gap: 14px; text-align: left; font-family: inherit; color: #111111; cursor: pointer"><img src="{{ m.img }}" alt="" style="width: 72px; height: 56px; border-radius: 10px; object-fit: cover"><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><b style="font-size: 16px">{{ m.name }}</b><span style="font-size: 13px; color: #767676">{{ m.meta }}</span></span><span style="height: 26px; padding: 0 9px; border-radius: 6px; background: {{ m.tagBg }}; color: {{ m.tagFg }}; font-size: 12px; font-weight: 700; display: flex; align-items: center">{{ m.tag }}</span></button></sc-for>
+</div>
+<div style="padding: 26px; border-radius: 24px; border: 1px solid #EEEEEE; display: flex; flex-direction: column; gap: 14px">
+<span style="display: flex; align-items: center; gap: 10px"><span style="height: 28px; padding: 0 10px; border-radius: 999px; background: #111111; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center">2</span><b style="font-size: 19px">무슨 일인가요?</b></span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px"><sc-for list="{{ problems }}" as="p" hint-placeholder-count="6"><button type="button" data-chip="" onClick="{{ p.pick }}" aria-pressed="{{ p.on }}" style="height: 46px; padding: 0 16px; border-radius: 999px; border: 1.5px solid {{ p.bd }}; background: {{ p.bg }}; color: {{ p.fg }}; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">{{ p.label }}</button></sc-for></div>
+<div style="padding: 14px 16px; border-radius: 14px; background: #EDF6F0; display: flex; gap: 12px; align-items: flex-start"><img src="/src/design/assets/nongnong.png" alt="" style="flex: none; width: 30px; height: 30px; border-radius: 50%"><span style="font-size: 14px; line-height: 1.6; color: #2E5A3C"><b style="color: #13773A">농농이 먼저 확인</b><br>{{ tip }}</span></div>
+<button type="button" style="height: 48px; border-radius: 14px; border: 1.5px dashed #CCCCCC; background: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600; color: #555555; cursor: pointer">+ 고장 난 곳 사진 올리기 (선택)</button>
+</div>
+<div style="padding: 20px 22px; border-radius: 20px; background: #F6F6F6; display: flex; flex-direction: column; gap: 8px"><b style="font-size: 15px">빌린 기계라면</b><span style="font-size: 14px; line-height: 1.6; color: #555555">요청을 보내면 소유주에게도 바로 알려요. 보험에 들었다면 출장비·수리비는 보험으로 처리돼요.</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div style="position: relative; height: 340px; border-radius: 24px; overflow: hidden; border: 1px solid #E6E6E6"><svg width="100%" height="100%" viewBox="0 0 600 460" preserveAspectRatio="xMidYMid slice" aria-hidden="true" style="position: absolute; inset: 0"><rect width="600" height="460" fill="#EEF1EA"></rect><path d="M0 120 C120 90 220 150 330 120 S520 60 600 100 L600 0 L0 0Z" fill="#E2EDDD"></path><path d="M-20 300 C90 270 180 330 300 300 S470 230 620 270" fill="none" stroke="#BFDDEB" stroke-width="26" stroke-linecap="round"></path><path d="M0 210 C150 210 300 180 600 220" fill="none" stroke="#FFFFFF" stroke-width="10"></path><path d="M330 0 C315 140 340 230 305 320 S290 420 330 460" fill="none" stroke="#FFFFFF" stroke-width="10"></path><path d="M330 0 C315 140 340 230 305 320 S290 420 330 460" fill="none" stroke="#F3DE9F" stroke-width="4"></path><text x="352" y="250" font-size="17" font-weight="700" fill="#5F6E64" font-family="sans-serif">춘천시</text><text x="350" y="80" font-size="14" fill="#7C8A80" font-family="sans-serif">신북읍</text><text x="470" y="300" font-size="14" fill="#7C8A80" font-family="sans-serif">동면</text><text x="90" y="390" font-size="14" fill="#7C8A80" font-family="sans-serif">사북면</text></svg>
+<span data-live="" style="position: absolute; left: 50%; top: 52%; width: 18px; height: 18px; margin: -9px; box-sizing: border-box; border-radius: 50%; background: #2F7BF6; border: 3px solid #FFFFFF"></span>
+<span style="position: absolute; left: 50%; top: 52%; transform: translate(-50%, 16px); height: 24px; padding: 0 8px; border-radius: 6px; background: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.15)">내 위치</span>
+<sc-for list="{{ centers }}" as="c" hint-placeholder-count="4"><button type="button" onClick="{{ c.pick }}" style="position: absolute; left: {{ c.x }}; top: {{ c.y }}; transform: translate(-50%, -50%); height: 32px; padding: 0 12px; border-radius: 999px; border: none; background: {{ c.pinBg }}; color: {{ c.pinFg }}; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 6px; font-family: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"></path></svg>{{ c.dist }}</button></sc-for>
+<div style="position: absolute; top: 14px; left: 14px; display: flex; gap: 6px"><sc-for list="{{ sorts }}" as="so" hint-placeholder-count="3"><button type="button" onClick="{{ so.pick }}" style="height: 36px; padding: 0 14px; border-radius: 999px; border: none; background: {{ so.bg }}; color: {{ so.fg }}; box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">{{ so.label }}</button></sc-for></div>
+</div>
+<span style="font-size: 15px; color: #555555"><b style="color: #111111">{{ problemName }}</b>을(를) 고칠 수 있는 곳 {{ count }}곳</span>
+<sc-for list="{{ list }}" as="c" hint-placeholder-count="3">
+<div data-center="" style="padding: 20px; border-radius: 20px; border: 2px solid {{ c.bd }}; background: #FFFFFF; box-shadow: {{ c.sh }}; display: flex; flex-direction: column; gap: 12px">
+<button type="button" onClick="{{ c.pick }}" style="padding: 0; border: none; background: transparent; display: flex; justify-content: space-between; gap: 12px; text-align: left; font-family: inherit; color: #111111; cursor: pointer"><span style="display: flex; flex-direction: column; gap: 4px"><b style="font-size: 17px">{{ c.name }}</b><span style="font-size: 14px; color: #555555">{{ c.dist }} · {{ c.addr }}</span></span><span style="flex: none; height: 26px; padding: 0 9px; border-radius: 6px; background: {{ c.openBg }}; color: {{ c.openFg }}; font-size: 12px; font-weight: 700; display: flex; align-items: center">{{ c.open }}</span></button>
+<span style="display: flex; flex-wrap: wrap; gap: 6px"><sc-for list="{{ c.tags }}" as="t" hint-placeholder-count="3"><span style="height: 26px; padding: 0 9px; border-radius: 6px; background: #F2F2F2; font-size: 12px; font-weight: 600; display: flex; align-items: center">{{ t }}</span></sc-for></span>
+<span style="display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px">
+<a href="#" style="height: 44px; border-radius: 12px; border: 1.5px solid #DDDDDD; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #111111; text-decoration: none">전화하기</a>
+<a href="#" style="height: 44px; border-radius: 12px; border: 1.5px solid #DDDDDD; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #111111; text-decoration: none">길찾기</a>
+<button type="button" data-cta="" onClick="{{ c.request }}" style="height: 44px; border: none; border-radius: 12px; background: {{ c.reqBg }}; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer">{{ c.reqText }}</button>
+</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<sc-if value="{{ hasReq }}" hint-placeholder-val="{{ false }}">
+<section style="margin-top: 32px; padding: 32px; border-radius: 28px; border: 2px solid #1E9B4B; background: #FBFEFC; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px"><div style="display: flex; flex-direction: column; gap: 6px"><span style="align-self: flex-start; height: 26px; padding: 0 10px; border-radius: 6px; background: #E3F3E8; color: #13773A; font-size: 12px; font-weight: 800; display: flex; align-items: center">출장 수리 요청</span><b style="font-size: 24px; letter-spacing: -0.02em">{{ reqCenter }}</b><span style="font-size: 15px; color: #555555">{{ reqSummary }}</span></div>
+<span style="display: flex; gap: 8px"><button type="button" onClick="{{ advance }}" style="height: 44px; padding: 0 16px; border-radius: 12px; border: 1.5px solid #DDDDDD; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer">다음 상태 보기</button><button type="button" onClick="{{ cancel }}" style="height: 44px; padding: 0 16px; border-radius: 12px; border: none; background: #F2F2F2; font-family: inherit; font-size: 14px; font-weight: 700; color: #555555; cursor: pointer">요청 취소</button></span></div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{ stages }}" as="sg" hint-placeholder-count="5"><div style="display: flex; flex-direction: column; gap: 10px"><span style="height: 6px; border-radius: 3px; background: {{ sg.bar }}"></span><b style="font-size: 15px; color: {{ sg.fg }}">{{ sg.t }}</b><span style="font-size: 13px; color: #767676">{{ sg.d }}</span></div></sc-for>
+</div>
+<div style="padding: 14px 16px; border-radius: 14px; background: #FFFFFF; border: 1px solid #EEEEEE; font-size: 15px">{{ reqNow }}</div>
+</section>
+</sc-if>
+</main>
+
+<footer style="margin-top: 96px; background: #F6F6F6">
+<div style="padding: 32px 40px 40px; display: flex; justify-content: space-between; align-items: center; gap: 24px; font-size: 13px; color: #767676"><span>info@moanong.co.kr · 1577-1106 · © 2026 모아농</span><span>화면 속 매물·가격·내용은 예시예요.</span></div>
+</footer>
+</div>
+</x-dc>

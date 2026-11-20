@@ -9,19 +9,19 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
-  <link rel="stylesheet" href="/src/styles.css?v=20261120-6" />
-  <link rel="stylesheet" href="/src/garage.css?v=20261120-5" />
-  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261120-6" />
+  <link rel="stylesheet" href="/src/styles.css?v=20261121-1" />
+  <link rel="stylesheet" href="/src/garage.css?v=20261121-1" />
+  <link rel="stylesheet" href="/src/styles/header-nav.css?v=20261121-1" />
   <link rel="stylesheet" href="/src/styles/ai-panel.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/chat.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/region-picker.css?v=20261119" />
-  <link rel="stylesheet" href="/src/styles/map-layout.css?v=20261120-6" />
+  <link rel="stylesheet" href="/src/styles/map-layout.css?v=20261121-1" />
   <link rel="stylesheet" href="/src/styles/deals.css?v=20261119" />
     <link rel="stylesheet" href="/src/styles/catalog-split.css?v=20261119" />
   <link rel="stylesheet" href="/src/styles/cart-checkout.css?v=20261119" />
-  <link rel="stylesheet" href="/src/styles/design-views.css?v=20261120-5" />
-  <link rel="stylesheet" href="/src/styles/design-shell.css?v=20261120-6" />
-  <script type="module" src="/src/main.js?v=20261120-7"></script>
+  <link rel="stylesheet" href="/src/styles/design-views.css?v=20261121-1" />
+  <link rel="stylesheet" href="/src/styles/design-shell.css?v=20261121-1" />
+  <script type="module" src="/src/main.js?v=20261121-1"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -49,6 +49,8 @@
               <button type="button" class="nav-submenu-item" data-nav-dest="deals">거래 관리</button>
               <button type="button" class="nav-submenu-item" data-nav-dest="requests">내 대여 요청</button>
               <button type="button" class="nav-submenu-item" data-nav-dest="favorites">찜 목록</button>
+              <button type="button" class="nav-submenu-item" data-nav-dest="insurance">농기계 보험</button>
+              <button type="button" class="nav-submenu-item" data-nav-dest="as">AS 도움</button>
             </section>
           </div>
         </div>
@@ -109,6 +111,8 @@
         <section id="browseView" class="design-view" hidden aria-label="매물 찾기"><div id="browseDesignHost"></div></section>
         <!-- 매물 상세: 모아농 2.2 디자인 (src/design/detail.html) -->
         <section id="detailView" class="design-view" hidden aria-label="매물 상세"><div id="detailDesignHost"></div></section>
+        <section id="insuranceView" class="design-view" hidden aria-label="농기계 보험"><div id="insuranceDesignHost"></div></section>
+        <section id="asView" class="design-view" hidden aria-label="AS 도움"><div id="asDesignHost"></div></section>
         <!-- 예전 매물 찾기 화면의 검색 조건 칸. 화면에는 안 보이고, 농농이·지도·찜 기능이 같은 조건을 쓰도록 남겨 둔 연결 칸이에요. -->
         <div id="legacyCatalogBridge" hidden aria-hidden="true">
           <button type="button" id="rentTab" aria-pressed="true"></button><button type="button" id="saleTab" aria-pressed="false"></button>

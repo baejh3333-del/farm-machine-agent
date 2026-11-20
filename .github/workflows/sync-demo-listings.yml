@@ -1,0 +1,62 @@
+name: Sync Demo Listings to DB
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target DB environment (production or preview)"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+      run_migrate:
+        description: "Run pending DB migrations before seeding"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  sync-listings:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ inputs.environment == 'preview' && secrets.PREVIEW_DATABASE_URL || secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate DATABASE_URL secret
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::GitHub Repository Secret 'DATABASE_URL' (or 'PREVIEW_DATABASE_URL' for preview) is not configured."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run pending migrations (optional)
+        if: ${{ inputs.run_migrate }}
+        env:
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
+        run: npm run db:migrate -- --env ${{ inputs.environment }}
+
+      - name: Check DB migration readiness
+        run: npm run db:check
+
+      - name: Seed demo listings (including Hongcheon-gun)
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            npm run db:seed -- --env production --allow-production
+          else
+            npm run db:seed -- --env "${{ inputs.environment }}"
+          fi

@@ -4,8 +4,8 @@ import { menuVals } from "./menu.js?v=20261121-1";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey, ratingOf,
   TYPE_GROUPS, groupOf, openListings, available, isFav, shared, locationChoices, typeLabel,
-  machineFilterLabel, matchesMachineFilter, buildTypeChoices,
-} from "./data.js?v=20261120-8";
+  machineFilterLabel, matchesMachineFilter, buildTypeChoices, pickCurrentLocationGps,
+} from "./data.js?v=20261120-9";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();
@@ -62,7 +62,7 @@ export class BrowseDesign extends DCLogic {
     super(props);
     TODAY = todayKey(); TODAY_YM = todayYm();
     this.deps = props.deps || {};
-    this.state = { pop: null, loc: shared.loc, start: shared.start, end: shared.end, time: null, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || null, mini: false, ym: TODAY_YM };
+    this.state = { pop: null, loc: shared.loc, start: shared.start, end: shared.end, time: null, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || null, mini: false, ym: TODAY_YM, locError: '', gpsPending: false };
     this.rails = {};
   }
 
@@ -101,12 +101,12 @@ export class BrowseDesign extends DCLogic {
 
   syncShared() {
     TODAY = todayKey(); TODAY_YM = todayYm();
-    this.setState({ loc: shared.loc, start: shared.start, end: shared.end, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || this.state.tab, pop: null });
+    this.setState({ loc: shared.loc, start: shared.start, end: shared.end, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || this.state.tab, pop: null, locError: '' });
   }
 
   openFromTop(w) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(() => this.setState({ pop: w }), w ? 420 : 0);
+    setTimeout(() => this.setState({ pop: w, locError: '' }), w ? 420 : 0);
   }
 
   scroll(key, dir) {
@@ -118,7 +118,7 @@ export class BrowseDesign extends DCLogic {
 
   renderVals() {
     const s = this.state;
-    const toggle = w => () => this.setState({ pop: s.pop === w ? null : w });
+    const toggle = w => () => this.setState({ pop: s.pop === w ? null : w, locError: '' });
     const fieldBg = on => on ? '#F2F2F2' : 'transparent';
     const days = (s.tab === 'month') ? 30 : (s.tab === 'today') ? 1 : (s.start && s.end ? DAYS(s.start, s.end) : 3);
     const tm = s.time != null ? ' ' + String(s.time).padStart(2, '0') + ':00' : '';
@@ -182,7 +182,7 @@ export class BrowseDesign extends DCLogic {
 
     return {
       ...menuVals(this, 'find', label => this.menuAct(label)),
-      anyOpen: !!s.pop, closePop: () => this.setState({ pop: null }),
+      anyOpen: !!s.pop, locError: s.locError || '', closePop: () => this.setState({ pop: null, locError: '' }),
       openLoc: toggle('loc'), openStart: toggle('date'), openEnd: toggle('date'), openType: toggle('type'),
       locOpen: s.pop === 'loc', dateOpen: s.pop === 'date', startOpen: s.pop === 'date', endOpen: s.pop === 'date', typeOpen: s.pop === 'type',
       locBg: fieldBg(s.pop === 'loc'), startBg: fieldBg(s.pop === 'date'), endBg: fieldBg(s.pop === 'date'), typeBg: fieldBg(s.pop === 'type'),
@@ -194,7 +194,16 @@ export class BrowseDesign extends DCLogic {
       onTypeInput: e => this.setState({ typeQuery: e.target.value, type: 'all' }),
       resetType: () => this.setState({ type: 'all', typeQuery: '' }),
       applyType: () => this.setState({ pop: null }),
-      locs: [{ name: '현재 위치', sub: '전체 지역에서 보여드려요', value: '현재 위치', nav: true }, ...locationChoices(4).map(c => ({ name: c.key, sub: '매물 ' + c.n + '대', value: c.key }))].map(l => ({ name: l.name, sub: l.sub, color: l.nav ? '#1E9B4B' : '#111111', bg: s.loc === l.value ? '#F4F4F4' : 'transparent', pick: () => this.setState({ loc: l.value, pop: 'date' }) })),
+      locs: [{ name: '현재 위치', sub: s.gpsPending ? '현재 위치를 확인하고 있어요...' : 'GPS로 내 위치 찾기', value: '현재 위치', nav: true }, ...locationChoices(4).map(c => ({ name: c.key, sub: '매물 ' + c.n + '대', value: c.key }))].map(l => ({
+        name: l.name, sub: l.sub, color: l.nav ? '#1E9B4B' : '#111111', bg: s.loc === l.value ? '#F4F4F4' : 'transparent',
+        pick: () => {
+          if (l.value === '현재 위치') {
+            pickCurrentLocationGps(this, { nextPop: 'date' });
+            return;
+          }
+          this.setState({ loc: l.value, locError: '', pop: 'date' });
+        }
+      })),
       m1: this.month(s.ym), m2: this.month(s.ym + 1), rangeHint,
       prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
       prevColor: s.ym <= TODAY_YM ? '#C8C8C8' : '#111111',

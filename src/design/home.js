@@ -4,13 +4,13 @@ import { menuVals } from "./menu.js?v=20261121-1";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey,
   openListings, available, shared, locationChoices,
-  machineFilterLabel, matchesMachineFilter, buildTypeChoices,
-} from "./data.js?v=20261120-8";
+  machineFilterLabel, matchesMachineFilter, buildTypeChoices, pickCurrentLocationGps,
+} from "./data.js?v=20261120-9";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();
-const LOCS = () => [
-  { name: '현재 위치', sub: '전체 지역에서 찾아 드려요', value: '현재 위치', type: 'nav' },
+const LOCS = (gpsPending) => [
+  { name: '현재 위치', sub: gpsPending ? '현재 위치를 확인하고 있어요...' : 'GPS로 내 위치 찾기', value: '현재 위치', type: 'nav' },
   ...locationChoices(5).map((c, i) => ({ name: c.key, sub: i ? '' : '매물이 가장 많은 곳', value: c.key, type: i ? 'pin' : 'recent' }))
 ];
 
@@ -30,7 +30,7 @@ export class HomeDesign extends DCLogic {
     super(props);
     this.deps = props.deps || {};
     this._pick = null;
-    this.state = { open: 0, pop: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, type: 'all', typeQuery: '', typeSet: false, ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent' };
+    this.state = { open: 0, pop: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, type: 'all', typeQuery: '', typeSet: false, ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent', locError: '', gpsPending: false };
   }
 
   pickDay(k) {
@@ -126,11 +126,11 @@ export class HomeDesign extends DCLogic {
     }
     const same = this.state.pop === w && this.state.hdrPop;
     if (same) {
-      this.setState({ pop: null, hdrPop: false });
+      this.setState({ pop: null, hdrPop: false, locError: '' });
       return;
     }
     const bounds = this.hdrBounds(w, e?.currentTarget);
-    this.setState({ pop: w, hdrPop: true, ...bounds });
+    this.setState({ pop: w, hdrPop: true, locError: '', ...bounds });
   }
 
   // 세부 메뉴 항목 → 앱 화면. 홈에서 '빠른 예약 검색'은 예약창으로 바로 내려가요.
@@ -143,7 +143,7 @@ export class HomeDesign extends DCLogic {
   replay() {
     window.scrollTo({ top: 0, behavior: 'auto' });
     this._pick = null;
-    this.setState({ open: 0, pop: null, hdrPop: false, menu: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, type: 'all', typeQuery: '', ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent', locSet: false, dateSet: false, timeSet: false, typeSet: false, faqCat: 'all', risen: false, compact: false });
+    this.setState({ open: 0, pop: null, hdrPop: false, menu: null, searched: false, loc: '현재 위치', radius: 10, start: null, end: null, type: 'all', typeQuery: '', ym: TODAY_YM, pickH: 9, pickM: 0, retH: 18, retM: 0, pickDraft: null, retDraft: null, tab: 'rent', locSet: false, dateSet: false, timeSet: false, typeSet: false, locError: '', gpsPending: false, faqCat: 'all', risen: false, compact: false });
     try {
       const host = this.$root && this.$root.getAnimations ? this.$root : document;
       host.getAnimations().forEach(a => { if (a.animationName) { a.cancel(); a.play(); } });
@@ -156,7 +156,7 @@ export class HomeDesign extends DCLogic {
     const s = this.state;
     const serif = (this.props.headingFont ?? '고딕') === '명조';
     const qs = ['[질문 1을 입력해 주세요]', '[질문 2를 입력해 주세요]', '[질문 3을 입력해 주세요]', '[질문 4를 입력해 주세요]'];
-    const toggle = w => () => this.setState({ pop: s.pop === w ? null : w, hdrPop: false });
+    const toggle = w => () => this.setState({ pop: s.pop === w ? null : w, hdrPop: false, locError: '' });
     const ring = w => s.pop === w ? 'inset 0 0 0 2px #111111' : 'none';
     const ranged = s.start && s.end;
 
@@ -256,13 +256,21 @@ export class HomeDesign extends DCLogic {
       hdrLocOpen: s.pop === 'loc' && !!s.hdrPop, dateOpenHdr: s.pop === 'date' && !!s.hdrPop, timeOpenHdr: s.pop === 'time' && !!s.hdrPop, hdrTypeOpen: s.pop === 'type' && !!s.hdrPop,
       hdrTop: s.hdrTop || '86px', hdrLeft: s.hdrLeft || '16px', hdrArrowLeft: s.hdrArrowLeft || '32px',
       anyOpen: !!s.pop,
-      closePop: () => this.setState({ pop: null, hdrPop: false }),
-      locs: LOCS().map(l => ({
+      locError: s.locError || '',
+      closePop: () => this.setState({ pop: null, hdrPop: false, locError: '' }),
+      locs: LOCS(s.gpsPending).map(l => ({
         name: l.name, sub: l.type === 'pin' ? '' : l.sub, isNav: l.type === 'nav', isRecent: l.type === 'recent', isPin: l.type === 'pin',
         color: l.type === 'nav' ? '#1E9B4B' : '#111111', bg: s.loc === l.value ? '#F4F4F4' : 'transparent',
         pick: () => {
           const next = s.tab === 'rent' ? 'date' : 'type';
-          this.setState({ loc: l.value, locSet: true, pop: next, ...(s.hdrPop ? this.hdrBounds(next) : {}) });
+          if (l.value === '현재 위치') {
+            pickCurrentLocationGps(this, {
+              nextPop: next,
+              onHdrBounds: () => (this.state.hdrPop ? this.hdrBounds(next) : {}),
+            });
+            return;
+          }
+          this.setState({ loc: l.value, locSet: true, locError: '', pop: next, ...(s.hdrPop ? this.hdrBounds(next) : {}) });
         }
       })),
       radii: [5, 10, 20, 30].map(r => ({ label: r + 'km', bg: s.radius === r ? '#111111' : '#FFFFFF', color: s.radius === r ? '#FFFFFF' : '#111111', border: s.radius === r ? '#111111' : '#E2E2E2', pick: () => this.setState({ radius: r }) })),

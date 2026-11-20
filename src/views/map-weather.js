@@ -861,7 +861,7 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
         onGpsUpdated?.();
       },
       () => {
-        toast("위치 권한이 거부되어 선택한 동네 기준으로 표시합니다.");
+        toast("위치 정보를 불러오지 못했습니다. 위치를 선택해주세요.");
       },
       { enableHighAccuracy: false, timeout: 6000 }
     );

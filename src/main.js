@@ -23,10 +23,10 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createDesignApp } from "./design/app.js?v=20261121-1";
+import { createDesignApp } from "./design/app.js?v=20261121-2";
 import { createHeaderNav } from "./views/header-nav.js?v=20261121-1";
 import { createCartCheckout } from "./views/cart-checkout.js";
-import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js?v=20261121-1";
+import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js?v=20261121-2";
 
 initFontScale();
 
@@ -92,7 +92,10 @@ const designApp = createDesignApp({
   goBrowse: () => setView("browse"),
   scrollHome: (section) => designApp.scrollHome(section),
   runDestination: (dest) => headerNav.runDestination(dest),
+  requestGps: () => requestGpsHandler?.({ silentOnError: false }) ?? Promise.resolve({ ok: false, message: "위치 정보를 불러오지 못했습니다. 위치를 선택해주세요." }),
 });
+
+let requestGpsHandler = null;
 
 function openListingPage(id) {
   if (!listingById(id)) return;
@@ -810,11 +813,26 @@ function bindEvents() {
     if (event.target === regionDialog) closeRegionPicker();
   });
 
+  const GPS_FAIL_MESSAGE = "위치 정보를 불러오지 못했습니다. 위치를 선택해주세요.";
+
+  const toDesignAreaKey = (nearest) => {
+    if (!nearest) return "";
+    const prov = KOREA_REGIONS.find((p) => p.name === nearest.province);
+    const shortProv = prov?.shortName || "";
+    if (nearest.city === "세종시") {
+      const candidate = nearest.subRegion ? `${shortProv} ${nearest.subRegion}`.trim() : shortProv;
+      const hasListings = allListings().some((it) => it.status === "open" && String(it.pickup || "").startsWith(candidate));
+      return hasListings ? candidate : shortProv || nearest.name || "";
+    }
+    if (shortProv && nearest.city) return `${shortProv} ${nearest.city}`;
+    return nearest.name || "";
+  };
+
   const requestGpsAndApply = ({ silentOnError = false } = {}) =>
     new Promise((resolve) => {
       if (!navigator.geolocation) {
-        if (!silentOnError) toast("이 브라우저에서는 위치(GPS) 기능을 지원하지 않습니다.");
-        resolve(false);
+        if (!silentOnError) toast(GPS_FAIL_MESSAGE);
+        resolve({ ok: false, message: GPS_FAIL_MESSAGE });
         return;
       }
       navigator.geolocation.getCurrentPosition(
@@ -827,6 +845,7 @@ function bindEvents() {
           };
           const nearest = findNearestRegion(coords.lat, coords.lng);
           const regionName = nearest?.name || state.region || DEFAULT_FALLBACK_REGION;
+          const areaName = toDesignAreaKey(nearest) || regionName;
           try {
             sessionStorage.setItem(INITIAL_GPS_SESSION_KEY, "granted");
           } catch {}
@@ -835,7 +854,7 @@ function bindEvents() {
             source: "gps",
             notice: `현재 GPS 위치(${regionName}) 기준으로 설정되었습니다.`,
           });
-          resolve(true);
+          resolve({ ok: true, regionName, areaName, coords });
         },
         (err) => {
           try {
@@ -850,26 +869,24 @@ function bindEvents() {
               renderAll();
               refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
             }
-          } else if (err?.code === 1) {
-            toast("위치 접근 권한이 거부되었습니다. 시/도를 직접 선택해 주세요.");
-          } else if (err?.code === 3) {
-            toast("위치 확인 시간이 초과되었습니다. 시/도를 직접 선택해 주세요.");
           } else {
-            toast("현재 위치를 가져오지 못했습니다. 시/도를 직접 선택해 주세요.");
+            toast(GPS_FAIL_MESSAGE);
           }
-          resolve(false);
+          resolve({ ok: false, message: GPS_FAIL_MESSAGE, code: err?.code });
         },
         { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
       );
     });
 
+  requestGpsHandler = requestGpsAndApply;
+
   gpsBtn?.addEventListener("click", async () => {
     gpsBtn.disabled = true;
     gpsBtn.textContent = "📍 현재 위치 확인 중...";
-    const ok = await requestGpsAndApply({ silentOnError: false });
+    const res = await requestGpsAndApply({ silentOnError: false });
     gpsBtn.disabled = false;
     gpsBtn.textContent = "📍 내 위치로 자동 설정 (GPS)";
-    if (ok) closeRegionPicker();
+    if (res?.ok) closeRegionPicker();
   });
 
   updateRegionPickerTrigger();

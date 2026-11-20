@@ -1,12 +1,12 @@
 // 디자인 화면 세 개(홈·매물 찾기·매물 상세)를 앱에 붙이고, 머리말·꼬리말 링크를 앱 기능에 연결한다
 import { mountDesign } from "./dc-runtime.js";
-import { HomeDesign } from "./home.js?v=20261120-6";
+import { HomeDesign } from "./home.js?v=20261120-7";
 import { BrowseDesign, pushRecent } from "./browse.js?v=20261120-6";
 import { DetailDesign } from "./detail.js?v=20261120-6";
 import { shared } from "./data.js";
 import { MENU_DEST } from "./menu.js?v=20261120-6";
 
-const V = "20261120-6";
+const V = "20261120-7";
 
 // 링크 글자 → 할 일. 화면 모양은 그대로 두고 눌렀을 때 동작만 붙인다.
 function navAction(text, deps, screen) {

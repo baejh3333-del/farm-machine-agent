@@ -23,10 +23,10 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createDesignApp } from "./design/app.js?v=20261120-8";
-import { createHeaderNav } from "./views/header-nav.js?v=20261120-6";
+import { createDesignApp } from "./design/app.js?v=20261121-1";
+import { createHeaderNav } from "./views/header-nav.js?v=20261121-1";
 import { createCartCheckout } from "./views/cart-checkout.js";
-import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js?v=20261120-6";
+import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js?v=20261121-1";
 
 initFontScale();
 
@@ -360,6 +360,8 @@ const viewIds = {
   owner: "ownerView",
   ownerLoginRequired: "ownerLoginRequiredView",
   login: "loginView",
+  insurance: "insuranceView",
+  as: "asView",
 };
 const MY_PAGE_VIEWS = new Set([
   "favorites",
@@ -373,12 +375,12 @@ const MY_PAGE_VIEWS = new Set([
 
 // 모아농 2.0: 홈은 예약창·소개만 보여주고, 매물 목록은 '매물 찾기'에서 따로 본다
 const MAIN_PAGE_VIEWS = [];
-const DESIGN_VIEWS = new Set(["home", "browse", "detail"]);
+const DESIGN_VIEWS = new Set(["home", "browse", "detail", "insurance", "as"]);
 let scrollSpyPausedUntil = 0;
 
 function markNav(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
-    const NAV_GROUP = { map: "browse", guide: "garage", favorites: "owner", deals: "owner", requests: "owner" };
+    const NAV_GROUP = { map: "browse", guide: "garage", favorites: "owner", deals: "owner", requests: "owner", insurance: "owner", as: "owner" };
     const active = button.dataset.view === view
       || (button.classList.contains("nav-item") && NAV_GROUP[view] === button.dataset.view)
       || (view === "ownerLoginRequired" && button.dataset.view === "owner")

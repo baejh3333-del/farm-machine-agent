@@ -71,7 +71,7 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 1. 화면 컨텍스트([현재 화면 조건])와 사용자의 말에서 의도(빌리기·사기·팔기/빌려주기·고장/수리·제원/호환성/찜/채팅 문의/보험)와 조건(작물, 작업, 기종, 지역, 날짜, 면적, 예산, 매물, 보유 농기계)을 파악한다. 이미 화면에 선택된 값이나 앞서 말한 조건은 다시 묻지 않는다.
 2. **대여 추천은 날짜가 정해진 뒤에만 한다 (매우 중요)**:
    - 날짜 조건이 있는 경우: 이번 말이나 앞선 대화에서 대여 시작일이 정해졌거나("내일", "다음 주 화요일부터 이틀", "11월 24일~26일"), [현재 화면 조건]의 화면 선택 기간이나 [정해진 대여 기간]이 있는 경우. "다음 주쯤", "주말에"처럼 하루로 정할 수 없는 말은 날짜가 없는 것으로 본다.
-   - 대여(빌리기) 요청인데 날짜 조건이 없으면 search_listings를 호출하지 않고, 매물 이름·가격·개수도 말하지 않는다. 사용자가 말한 조건(작물·작업·기종·지역)을 기억했다고 짧게 확인하고 "언제부터 며칠 빌리실 건가요?"처럼 날짜만 1개 질문으로 묻는다. (예: "고추 두둑 작업할 관리기를 찾아 드릴게요. 언제부터 며칠 빌리실 건가요?")
+   - 대여(빌리기) 요청인데 날짜 조건이 없으면 search_listings를 호출하지 않고, 매물 이름·가격·개수도 말하지 않는다. 사용자가 말한 조건(작물·작업·기종·지역)을 기억했다고 짧게 확인하고 "언제부터 며칠 빌리실 건가요? 대행운용서비스(작업자 동반)도 필요하신지 함께 알려 주세요."처럼 대여 날짜와 대행운용서비스 사용 여부를 함께 묻는다([이미 받은 정보]에 대행운용서비스가 이미 있으면 날짜만 묻는다).
    - 작물·작업·기종도 전혀 없으면 날짜보다 그것을 먼저 1개만 묻는다. 한 번에 두 개를 묻지 않는다.
    - 대여 요청에 날짜 조건이 있으면 상대 날짜는 오늘 날짜(한국 시간) 기준 YYYY-MM-DD로 바꾸고(기간을 말하지 않으면 1일), search_listings를 반드시 start·end를 넣어 호출한다. 답변 첫 줄에 "11월 24일(화)~25일(수), 2일 동안 빌릴 수 있는 매물이에요"처럼 적용한 기간을 말한다. 결과가 0개면 다른 날짜를 제안한다(suggest_work_dates 사용 가능).
    - 사용자가 "날짜는 상관없이 먼저 보여줘"처럼 날짜 없이 둘러보겠다고 분명히 말하면 날짜 없이 검색해도 된다.
@@ -139,6 +139,8 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 구매 신청을 하면 판매자에게 구매 희망 메시지가 이미 한 번 보내진다. 그래서 prefillMessage는 비우거나, 같은 말을 반복하지 않는 짧은 질문만 넣는다. 예: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요."
   답변: "n번 매물 구매 신청이 완료되었어요! 판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요. 아래 버튼을 눌러 판매자와 바로 이야기해 보세요."
 - "n번"은 [직전에 보여준 매물]의 번호다. 번호를 모르면 매물 이름으로 말한다.
+- 대여 답변 예시에는 결제 기한 문장을 넣지 않는다(화면의 결제 기한 안내 칸이 따로 보여 주므로 중복 금지). 음성 대화일 때만 서버가 신청 완료 답변 끝에 결제 기한 안내 한 문장을 붙인다.
+- 사용자가 "언제까지 결제해요?", "결제 기한이 있어요?"라고 물으면 "소유 농가가 신청을 승낙한 뒤 3일 이내에 결제해 주세요. 안내 칸을 누르면 장바구니로 바로 갈 수 있어요."라고 답한다.
 - 신청 전에 사용자가 "주인한테 먼저 물어볼래요", "판매자한테 연락할래요"라고 하면, 신청 없이 open_listing_chat만 호출해 채팅 버튼을 보여준다.
 
 ## 이미 보여준 매물로 예약 진행 (반복 추천 금지)
@@ -1448,7 +1450,7 @@ const CORE_TOOL_NAMES = new Set([
   "lookup_machine_spec",
 ]);
 
-const DATE_QUESTION = "언제부터 며칠 빌리실 건가요? 날짜를 알려 주시면 그 기간에 빌릴 수 있는 매물만 골라 드릴게요.";
+const DATE_QUESTION = "언제부터 며칠 빌리실 건가요? 아래 달력에서 날짜와 대행운용서비스(작업자 동반) 이용 여부를 선택해 주시면 맞는 매물을 골라 드릴게요.";
 const BOOKING_FLOW_TOOLS = new Set([
   "check_availability",
   "calculate_cost",
@@ -1499,7 +1501,7 @@ export function gateSearchInput(input, { text, today, rentalDates, rentalDatesRa
         needDate: true,
         error: past
           ? `말씀하신 날짜(${rentalDatesRaw.start})는 이미 지났다. 매물을 보여주지 말고 오늘(${today}) 이후 날짜를 한 가지만 다시 물어본다.`
-          : "대여 날짜가 아직 정해지지 않았다. 매물 이름·가격·개수를 말하지 말고, 사용자가 말한 조건을 짧게 확인한 뒤 언제부터 며칠 빌릴지 한 가지만 물어본다.",
+          : "대여 날짜가 아직 정해지지 않았다. 매물 이름·가격·개수를 말하지 말고, 사용자가 말한 조건을 짧게 확인한 뒤 언제부터 며칠 빌릴지와 대행운용서비스(작업자 동반) 이용 여부를 함께 물어본다.",
       },
     };
   }
@@ -1767,6 +1769,17 @@ export function requestChatTarget(reservation) {
 }
 
 /** 신청 완료 답변. 직전에 보여준 목록의 번호를 알면 "n번 매물", 모르면 매물 이름으로 부른다. */
+// 음성 대화에서 대여 신청이 끝나면 보험 질문 전에 한 번 읽어 주는 결제 기한 안내(화면에는 안내 칸이 따로 뜬다)
+export const VOICE_RENTAL_PAYMENT_NOTICE = "결제는 신청 승낙 후 3일 이내에 해 주세요. 화면의 안내를 누르면 장바구니로 갈 수 있어요.";
+
+/** 음성 대화의 대여 신청 완료 답변 끝에 결제 기한 안내를 한 번 붙인다(이미 있으면 그대로). */
+export function withVoicePaymentNotice(reply, { reservation, inputMode }) {
+  if (inputMode !== "voice" || reservation?.kind !== "rental") return reply;
+  const text = String(reply || "").trim();
+  if (!text || /3일\s*이내/.test(text)) return text;
+  return `${text}\n${VOICE_RENTAL_PAYMENT_NOTICE}`;
+}
+
 export function requestDoneMessage(reservation, { shownNo = null } = {}) {
   const no = Number.isInteger(shownNo) && shownNo >= 1 && shownNo <= 9 ? shownNo : null;
   const label = no ? `${no}번 매물` : `'${String(reservation?.title || "매물").trim()}'`;
@@ -2141,7 +2154,7 @@ async function runTurn(
       learnedSlots.end = rentalDatesValid.end;
     }
     out.learnedSlots = learnedSlots;
-    const result = { mode: "agent", reply: tidyReply(reply), listingIds: out.listingIds, learnedSlots, ...extra };
+    const result = { mode: "agent", reply: withVoicePaymentNotice(tidyReply(reply), { reservation: out.reservation, inputMode }), listingIds: out.listingIds, learnedSlots, ...extra };
     for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget"]) {
       if (out[key]) result[key] = out[key];
     }
@@ -2794,9 +2807,13 @@ async function runTurn(
     }
   }
 
-  // 날짜가 없어 대여 검색을 막은 턴: 매물 대신 날짜 질문을 하고, 화면이 날짜 선택기(빠른 선택 + 달력)를 띄우게 한다.
+  // 날짜가 없어 대여 검색을 막은 턴: 매물 대신 날짜와 대행운용서비스 질문을 하고, 화면이 날짜·대행운용 선택기를 띄우게 한다.
   if (out.needDate && !out.listingIds.length && !out.reservation) {
-    return await finish(texts.at(-1) || DATE_QUESTION, { listingIds: [], askDate: true });
+    return await finish(texts.at(-1) || DATE_QUESTION, {
+      listingIds: [],
+      askDate: true,
+      operatorService: typeof known.facts.operatorService === "boolean" ? known.facts.operatorService : null,
+    });
   }
 
   // 예약을 진행하는 중(직전 매물을 고르는 중, 확인 카드가 떠 있음, 예약·확인 도구를 씀)이면 자동 추천을 붙이지 않는다.

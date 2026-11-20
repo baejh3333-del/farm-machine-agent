@@ -67,7 +67,11 @@ export function createHeaderNav(deps) {
       clearTimeout(timer);
       panel.hidden = false;
       activeTrigger = trigger;
-      triggers.forEach(button => button.setAttribute("aria-expanded", "true"));
+      // 올린 메뉴의 세부 항목만 그 메뉴 바로 아래에 보여 준다(모아농 2.3 디자인)
+      panel.dataset.column = trigger.dataset.view || "";
+      const r = trigger.getBoundingClientRect();
+      panel.style.setProperty("--nav-col-left", Math.max(16, Math.round(r.left) - 24) + "px");
+      triggers.forEach(button => button.setAttribute("aria-expanded", button === trigger ? "true" : "false"));
     }
     closePanel = () => {
       clearTimeout(timer);

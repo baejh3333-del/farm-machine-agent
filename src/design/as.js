@@ -1,6 +1,6 @@
 // 모아농 2.4 AS 도움 — 고장 종류를 고르면 가까운 AS센터를 보여 주고 출장 수리를 요청하는 화면. 센터 목록은 아직 예시 데이터예요.
 import { DCLogic } from "./dc-runtime.js";
-import { menuVals } from "./menu.js?v=20261121-1";
+import { menuVals } from "./menu.js?v=20261121-3";
 
 export class AsDesign extends DCLogic {
   constructor(props) {

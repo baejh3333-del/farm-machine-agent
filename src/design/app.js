@@ -1,14 +1,14 @@
 // 디자인 화면(홈·매물 찾기·매물 상세·농기계 보험·AS 도움)을 앱에 붙이고, 머리말·꼬리말 링크를 앱 기능에 연결한다
 import { mountDesign } from "./dc-runtime.js";
-import { HomeDesign } from "./home.js?v=20261121-2";
-import { BrowseDesign, pushRecent } from "./browse.js?v=20261121-2";
-import { DetailDesign } from "./detail.js?v=20261121-2";
-import { InsuranceDesign } from "./insurance.js?v=20261121-1";
-import { AsDesign } from "./as.js?v=20261121-1";
-import { shared } from "./data.js?v=20261120-9";
-import { MENU_DEST } from "./menu.js?v=20261121-1";
+import { HomeDesign } from "./home.js?v=20261121-3";
+import { BrowseDesign, pushRecent } from "./browse.js?v=20261121-3";
+import { DetailDesign } from "./detail.js?v=20261121-3";
+import { InsuranceDesign } from "./insurance.js?v=20261121-3";
+import { AsDesign } from "./as.js?v=20261121-3";
+import { shared } from "./data.js?v=20261121-3";
+import { MENU_DEST } from "./menu.js?v=20261121-3";
 
-const V = "20261121-2";
+const V = "20261121-3";
 
 // 링크 글자 → 할 일. 화면 모양은 그대로 두고 눌렀을 때 동작만 붙인다.
 function navAction(text, deps, screen) {

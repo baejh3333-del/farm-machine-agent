@@ -1,11 +1,11 @@
 // 모아농 2.1 홈 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
-import { menuVals } from "./menu.js?v=20261121-1";
+import { menuVals } from "./menu.js?v=20261121-3";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey,
   openListings, available, shared, locationChoices,
   machineFilterLabel, matchesMachineFilter, buildTypeChoices, pickCurrentLocationGps,
-} from "./data.js?v=20261120-9";
+} from "./data.js?v=20261121-3";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();
@@ -79,6 +79,11 @@ export class HomeDesign extends DCLogic {
       (!s.locSet || s.loc === '현재 위치' || areaKey(it, s.loc.split(' ').length) === s.loc) &&
       (!startIso || available(it, startIso, endIso || startIso)) &&
       matchesMachineFilter(it, s.type, s.typeQuery));
+  }
+
+  setState(patch) {
+    super.setState(patch);
+    this.syncShared();
   }
 
   syncShared() {

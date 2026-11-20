@@ -1,6 +1,6 @@
 // 모아농 2.4 농기계 보험 — 농기계종합보험(사업방법서·상품요약서 2606)을 쉽게 풀어 보여 주는 화면. 보험료는 어림 참고값이에요.
 import { DCLogic } from "./dc-runtime.js";
-import { menuVals } from "./menu.js?v=20261121-1";
+import { menuVals } from "./menu.js?v=20261121-3";
 
 export class InsuranceDesign extends DCLogic {
   constructor(props) {

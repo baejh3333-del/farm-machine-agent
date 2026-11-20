@@ -1,17 +1,18 @@
 // 모아농 2.2 매물 찾기 · Desktop — 캔버스 디자인 로직을 실제 매물 데이터에 연결
 import { DCLogic } from "./dc-runtime.js";
-import { menuVals } from "./menu.js?v=20261121-1";
+import { menuVals } from "./menu.js?v=20261121-3";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, keyToIso, photoOf, nameOf, placeOf, areaKey, ratingOf,
   TYPE_GROUPS, groupOf, openListings, available, isFav, shared, locationChoices, typeLabel,
   machineFilterLabel, matchesMachineFilter, buildTypeChoices, pickCurrentLocationGps,
-} from "./data.js?v=20261120-9";
+} from "./data.js?v=20261121-3";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();
 const EASY = ["cultivator", "tiller", "carrier", "sprayer", "ridger"];
 const OPS = {
   field: ["till", "ridge", "ridgeBuild", "deepTill", "hill", "mulch"],
+  seed: ["seed", "directSeed", "transplant", "ricePlant", "garlicOnionPlant"],
   harvest: ["potatoHarvest", "rootHarvest", "riceHarvest", "thresh", "forageBale"],
   spray: ["spray", "droneSpray", "orchardSpray"],
 };
@@ -148,8 +149,8 @@ export class BrowseDesign extends DCLogic {
     const locOk = it => !s.loc || s.loc === '현재 위치' || areaKey(it, s.loc.split(' ').length) === s.loc;
     const rentAll = openListings('rent').filter(it => locOk(it) && (!startIso || available(it, startIso, endIso || startIso)));
     const saleAll = openListings('sale').filter(locOk);
-    const M = rentAll.map(toCard).sort((a, b) => a.price - b.price);
-    const SALE = saleAll.map(toCard).sort((a, b) => a.price - b.price);
+    const M = rentAll.map(toCard).filter(typeOk).sort((a, b) => a.price - b.price);
+    const SALE = saleAll.map(toCard).filter(typeOk).sort((a, b) => a.price - b.price);
     // 같은 모델이 줄줄이 나오지 않게 모델마다 하나씩 먼저 보여 준다
     const take = list => {
       const seen = new Set(), first = [], rest = [];
@@ -157,6 +158,17 @@ export class BrowseDesign extends DCLogic {
       return [...first, ...rest].slice(0, 12);
     };
     const favList = this.deps.favorites ? this.deps.favorites() : [];
+    const openCard = (id) => {
+      const effStart = tab === 'today' ? (s.start || TODAY) : s.start;
+      const effEnd = tab === 'today' ? (s.end || effStart) : (s.end || s.start);
+      Object.assign(shared, {
+        loc: s.loc && s.loc !== '현재 위치' ? s.loc : null,
+        start: effStart,
+        end: effEnd,
+        ...(s.time != null ? { pickH: s.time, pickM: 0 } : {}),
+      });
+      this.deps.openDetail?.(id);
+    };
 
     const card = mc => {
       const fav = favList.includes(mc.id);
@@ -164,7 +176,7 @@ export class BrowseDesign extends DCLogic {
       return {
         name: mc.name, year: mc.brand, rating: mc.rating != null ? mc.rating.toFixed(1) : '새 매물', reviews: mc.rating != null ? '후기 ' + mc.reviews : '점검 ' + (mc.inspected ? mc.inspected.slice(5).replace('-', '/') : '전'), place: mc.place,
         img: mc.img, hasImg: !!mc.img, noImg: !mc.img, icon: ICON[ICON_OF(mc.raw)], pos: mc.pos || 'center',
-        open: () => this.deps.openDetail?.(mc.id),
+        open: () => openCard(mc.id),
         price: sale ? bigWon(mc.sale) : '1일 ' + won(mc.price), total: sale ? '판매가' : '총 ' + won(mc.price * days),
         favFill: fav ? '#1E9B4B' : 'rgba(17,17,17,0.25)', favStroke: fav ? '#1E9B4B' : '#FFFFFF', favSel: fav ? 'true' : 'false',
         fav: e => { e?.stopPropagation?.(); e?.preventDefault?.(); Promise.resolve(this.deps.toggleFavorite?.(mc.id)).finally(() => this.setState({})); }
@@ -180,6 +192,7 @@ export class BrowseDesign extends DCLogic {
     const RENT_ROWS = [
       rail('cheap', where + '에서 저렴한 농기계', avg, take(M)),
       rail('field', '밭 갈기 딱 좋은 트랙터·관리기', '지금 가장 많이 찾는 작업이에요', take(M.filter(m => hasOp(m.raw, 'field')))),
+      rail('seed', '파종·모내기철 필수 파종기·이앙기', '줄 맞춰 빠르고 고르게 심어요', take(M.filter(m => hasOp(m.raw, 'seed')))),
       rail('harvest', '감자·고구마 캐는 수확기', '수확철엔 일찍 예약해 주세요', take(M.filter(m => hasOp(m.raw, 'harvest')))),
       rail('spray', '방제 시즌, 약 뿌리는 기계', '혼자 쓰기 쉬운 것부터 보여드려요', take(M.filter(m => hasOp(m.raw, 'spray')))),
       rail('easy', '처음이라면, 다루기 쉬운 기계', '혼자서도 다루기 쉬운 작은 기계예요', take(M.filter(m => EASY.includes(m.raw.machineType))))
@@ -192,7 +205,7 @@ export class BrowseDesign extends DCLogic {
     const SERVICE_ROWS = [
       rail('service', '기계와 함께 작업까지 해 드려요', '소유주가 직접 와서 농작업을 대신해 줘요', take(M.filter(m => m.raw.rentalOperator)))
     ];
-    const rows = (tab === 'buy' ? SALE_ROWS : tab === 'service' ? SERVICE_ROWS : tab === 'all' ? [...RENT_ROWS, SALE_ROWS[0]] : RENT_ROWS).filter(r => r.items.length);
+    const rows = (tab === 'buy' ? SALE_ROWS : tab === 'service' ? SERVICE_ROWS : RENT_ROWS).filter(r => r.items.length);
 
     let rangeHint = '빌리는 날을 눌러 주세요';
     if (s.start && !s.end) rangeHint = '돌려주는 날을 눌러 주세요';
@@ -234,15 +247,21 @@ export class BrowseDesign extends DCLogic {
         return { label, icon, sel: on ? 'true' : 'false', bg: on ? '#111111' : '#F6F6F6', color: on ? '#FFFFFF' : '#111111', pick: () => this.setState({ tab: id }) };
       }),
       recent: (() => {
-        const seen = readRecent().map(id => this.deps.listingById?.(id)).filter(Boolean).map(toCard);
-        return [...seen, ...M.filter(m => !seen.some(x => x.id === m.id))].slice(0, 6);
+        const wantSale = tab === 'buy';
+        const pool = wantSale ? SALE : M;
+        const seen = readRecent()
+          .map(id => this.deps.listingById?.(id))
+          .filter(it => it && (wantSale ? it.type === 'sale' : it.type === 'rent') && locOk(it))
+          .map(toCard)
+          .filter(typeOk);
+        return [...seen, ...pool.filter(m => !seen.some(x => x.id === m.id))].slice(0, 6);
       })().map(mc => ({
         name: mc.name, meta: (mc.brand ? mc.brand + ' · ' : '') + (mc.sale != null ? bigWon(mc.sale) : '1일 ' + won(mc.price)),
         img: mc.img, hasImg: !!mc.img, noImg: !mc.img, icon: ICON[ICON_OF(mc.raw)],
-        open: e => { e?.preventDefault?.(); this.deps.openDetail?.(mc.id); }
+        open: e => { e?.preventDefault?.(); openCard(mc.id); }
       })),
       keepTitle: (pickedLabel || '농기계') + '를 계속 찾아보세요',
-      keepSub: (s.loc && s.loc !== '현재 위치' ? s.loc : '전체 지역') + ' · ' + (M.length + SALE.length) + '대 있어요',
+      keepSub: (s.loc && s.loc !== '현재 위치' ? s.loc : '전체 지역') + ' · ' + (tab === 'buy' ? SALE.length : M.length) + '대 있어요',
       rows,
       searchRef: el => {
         if (!el || this._io || typeof IntersectionObserver === 'undefined') return;

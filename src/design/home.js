@@ -207,6 +207,13 @@ export class HomeDesign extends DCLogic {
       .map(it => ({ img: photoOf(it), hasImg: true, noImg: false, name: nameOf(it), place: placeOf(it), price: it.type === 'rent' ? '1일 ' + won(it.price) : bigWon(it.price), badge: it.type === 'rent' ? '대여 가능' : '중고 매물', open: () => this.deps.openDetail?.(it.id) }));
 
     return {
+      // 사용 방법 탭: 빌리는 분 / 빌려주는 분 (누르면 STEP 01~04가 바뀌어요)
+      howBorrow: (s.howRole || 'borrow') === 'borrow', howLend: s.howRole === 'lend',
+      howBorrowPick: () => { if ((this.state.howRole || 'borrow') !== 'borrow') this.setState({ howRole: 'borrow' }); },
+      howLendPick: () => { if (this.state.howRole !== 'lend') this.setState({ howRole: 'lend' }); },
+      howBorrowSel: (s.howRole || 'borrow') === 'borrow' ? 'true' : 'false', howLendSel: s.howRole === 'lend' ? 'true' : 'false',
+      howBorrowBg: s.howRole === 'lend' ? 'transparent' : '#111111', howBorrowColor: s.howRole === 'lend' ? '#555555' : '#FFFFFF', howBorrowWeight: s.howRole === 'lend' ? 500 : 700,
+      howLendBg: s.howRole === 'lend' ? '#111111' : 'transparent', howLendColor: s.howRole === 'lend' ? '#FFFFFF' : '#555555', howLendWeight: s.howRole === 'lend' ? 700 : 500,
       ...menuVals(this, null, label => this.menuAct(label)),
       goHome: e => { if (e && e.preventDefault) e.preventDefault(); this.replay(); },
       headFont: serif ? "'Noto Serif KR', serif" : "'Noto Sans KR', sans-serif",
@@ -252,14 +259,16 @@ export class HomeDesign extends DCLogic {
         const svg = el.querySelector('svg');
         if (!svg) return;
         svg.style.zIndex = '1'; svg.style.transition = 'transform 0.18s ease-out';
-        // 섹션이 화면에 들어오기 직전부터 출발해서, 조금만 내려도 반대편 끝까지 연결선 가운데를 달려요
+        // 왼쪽 '쉬는 농기계가 있다면' 테두리에서 출발해, 오른쪽 '농사가 처음이라면'까지 달려요.
+        // 연결선이 화면 아래쪽(85%)에 보이면 출발하고, 화면 가운데쯤(40%)에 오면 도착해요.
         const upd = () => {
           const vh = Math.min(window.innerHeight || 800, 1000);
-          const sec = el.closest('section') || el;
-          const st = sec.getBoundingClientRect().top;
-          const p = Math.max(0, Math.min(1, (vh + 40 - st) / (vh * 0.6)));
-          const room = Math.max(0, el.offsetWidth - svg.getBoundingClientRect().width);
-          svg.style.transform = 'translate(' + Math.round(p * room) + 'px, -50%)';
+          const r = el.getBoundingClientRect();
+          const p = Math.max(0, Math.min(1, (vh * 0.85 - r.top) / (vh * 0.45)));
+          const tw = svg.getBoundingClientRect().width;
+          const edge = 28;
+          const room = Math.max(0, el.offsetWidth - tw + edge * 2);
+          svg.style.transform = 'translate(' + Math.round(-edge + p * room) + 'px, -50%)';
         };
         window.addEventListener('scroll', upd, { passive: true });
         window.addEventListener('resize', upd, { passive: true });

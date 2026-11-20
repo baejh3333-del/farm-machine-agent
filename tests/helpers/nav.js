@@ -41,8 +41,11 @@ export async function goToMenu(page, label) {
   await settle(page);
   if (await designHeaderVisible(page)) {
     const host = page.locator(VISIBLE_DESIGN_HOST);
-    await host.locator('nav[aria-label="주 메뉴"] a', { hasText: group }).first().click();
-    await host.locator("[data-mega-item]", { hasText: new RegExp(`^\\s*${label}\\s*$`) }).first().click();
+    const trigger = host.locator('nav[aria-label="주 메뉴"] a', { hasText: group }).first();
+    await trigger.click();
+    const item = host.locator("[data-mega-item]", { hasText: new RegExp(`^\\s*${label}\\s*$`) }).first();
+    await item.waitFor({ state: "visible" });
+    await item.evaluate((el) => el.click());
   } else {
     // 기존 헤더: 상위 메뉴를 누르면 그 화면으로 바로 가므로, 마우스를 올려 세부 메뉴를 연다.
     const [view, dest] = LEGACY[label];

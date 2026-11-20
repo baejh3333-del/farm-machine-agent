@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { startStaticServer } from "./helpers/live-voice-page.js";
+import { goToMenu } from "./helpers/nav.js";
 
 const SAMPLE_LISTINGS = [
   {
@@ -139,7 +140,9 @@ function installKakaoMapStub() {
         getBounds() {
           const widthPx = this._container.clientWidth || 1000;
           const heightPx = this._container.clientHeight || 600;
-          const metersPerPx = 0.25 * Math.pow(2, Math.max(1, this._level) - 1);
+          const KAKAO_SCALE = { 1: 20, 2: 30, 3: 50, 4: 100, 5: 250, 6: 500, 7: 1000, 8: 2000, 9: 4000, 10: 8000, 11: 16000, 12: 32000 };
+          const scaleMeters = KAKAO_SCALE[this._level] || Math.round(250 * Math.pow(2, this._level - 5));
+          const metersPerPx = scaleMeters / 70;
           const halfWidthM = (metersPerPx * widthPx) / 2;
           const halfHeightM = (metersPerPx * heightPx) / 2;
           const lat = this._center.getLat();
@@ -233,7 +236,7 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
     await page.goto(`http://127.0.0.1:${server.address().port}`);
 
     // 1. 지도 뷰 진입
-    await page.locator('[data-view="map"]').first().click();
+    await goToMenu(page, "내 동네 매물 지도");
     await page.locator("#headerMapZoomBadge").waitFor({ state: "visible" });
 
     // 2. 공공 임대소 마커 문구 확인 ('임대소')
@@ -247,13 +250,14 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
     assert.ok(officeTexts.length > 0, "공공 임대소 마커가 지도에 표시되어야 함");
     assert.ok(officeTexts.every((t) => t.trim() === "임대소"), `모든 공공 임대소 마커는 '임대소'여야 함: ${officeTexts}`);
 
-    // 3. 25m 축척 경계 검증: Lv.1(25m)까지 확대 -> 개별 매물, Lv.2(50m)로 축소 -> 그룹화 + '통합' 문구 없음
+    // 3. 250m 축척 경계 검증: Lv.5(250m)까지 확대 -> 개별 매물, Lv.6(500m)로 축소 -> 그룹화 + '통합' 문구 없음
     for (let i = 0; i < 12; i += 1) {
-      const lv = await page.locator("#headerMapCanvas").getAttribute("data-map-level");
-      if (lv === "1") break;
-      await page.locator("#headerMapZoomInBtn").click();
+      const lv = Number(await page.locator("#headerMapCanvas").getAttribute("data-map-level"));
+      if (lv === 5) break;
+      if (lv > 5) await page.locator("#headerMapZoomInBtn").click();
+      else await page.locator("#headerMapZoomOutBtn").click();
     }
-    const at25m = await page.evaluate(() => {
+    const at250m = await page.evaluate(() => {
       const canvas = document.getElementById("headerMapCanvas");
       return {
         level: canvas.dataset.mapLevel,
@@ -263,15 +267,15 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
         badge: document.getElementById("headerMapZoomBadge")?.textContent || "",
       };
     });
-    assert.equal(at25m.level, "1");
-    assert.equal(at25m.scale, "25");
-    assert.equal(at25m.clusters, 0, "25m 축척에서는 클러스터가 생기지 않아야 함");
-    assert.ok(at25m.pins.includes("hc-near-1") && at25m.pins.includes("hc-near-2"), "25m 축척에서는 가까운 매물이 개별 핀으로 표시되어야 함");
-    assert.doesNotMatch(at25m.badge, /통합/);
+    assert.equal(at250m.level, "5");
+    assert.equal(at250m.scale, "250");
+    assert.equal(at250m.clusters, 0, "250m 축척에서는 클러스터가 생기지 않아야 함");
+    assert.ok(at250m.pins.includes("hc-near-1") && at250m.pins.includes("hc-near-2"), "250m 축척에서는 가까운 매물이 개별 핀으로 표시되어야 함");
+    assert.doesNotMatch(at250m.badge, /통합/);
 
-    // 한 단계 축소 (Lv.2 / 50m > 25m) -> 가까운 두 매물 그룹화
+    // 한 단계 축소 (Lv.6 / 500m > 250m) -> 가까운 두 매물 그룹화
     await page.locator("#headerMapZoomOutBtn").click();
-    const at50m = await page.evaluate(() => {
+    const at500m = await page.evaluate(() => {
       const canvas = document.getElementById("headerMapCanvas");
       const dot = canvas.querySelector(".header-map-cluster-dot");
       return {
@@ -283,12 +287,12 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
         badge: document.getElementById("headerMapZoomBadge")?.textContent || "",
       };
     });
-    assert.equal(at50m.level, "2");
-    assert.equal(at50m.scale, "50");
-    assert.equal(at50m.countText, "2", "클러스터 숫자가 읽기 쉽게 표시되어야 함");
-    assert.equal(at50m.subText, "대", "'대 통합' 대신 '대'로 표시되어야 함");
-    assert.doesNotMatch(at50m.aria, /통합/);
-    assert.doesNotMatch(at50m.badge, /통합/);
+    assert.equal(at500m.level, "6");
+    assert.equal(at500m.scale, "500");
+    assert.equal(at500m.countText, "2", "클러스터 숫자가 읽기 쉽게 표시되어야 함");
+    assert.equal(at500m.subText, "대", "'대 통합' 대신 '대'로 표시되어야 함");
+    assert.doesNotMatch(at500m.aria, /통합/);
+    assert.doesNotMatch(at500m.badge, /통합/);
 
     // 클러스터 시트 열어도 '통합' 문구가 전혀 없어야 함
     await page.locator(".header-map-cluster-dot").first().click();
@@ -339,7 +343,7 @@ test("카카오 지도: 25m 축척 경계, 통합 문구 제거, 임대소 마�
     assert.equal(await page.locator("#aiPanel").isHidden(), true, "Escape 키로 명시적 닫기가 동작해야 함");
 
     // 5. 지도가 비활성(홈)일 때 에이전트가 매물을 찾으면 자동으로 지도로 전환·센터링하며 패널과 대화를 유지
-    await page.locator('[data-view="home"]').first().click();
+    await page.locator("#brandHome").click();
     assert.equal(await page.locator("#mapView").isHidden(), true, "홈에서는 지도가 비활성 상태여야 함");
 
     await page.locator("#aiLauncher").click();
@@ -447,28 +451,29 @@ test("폴백 지도: 25m 축척 경계 일관성, 통합 문구 제거, 에이�
     });
 
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.locator('[data-view="map"]').first().click();
+    await goToMenu(page, "내 동네 매물 지도");
     await page.locator("#fallbackZoomIn").waitFor({ state: "visible" });
 
-    // 폴백 지도에서도 Lv.1(25m)까지 확대 시 개별 매물, Lv.2(50m)에서 그룹화
+    // 폴백 지도에서도 Lv.5(250m)까지 확대 시 개별 매물, Lv.6(500m)에서 그룹화
     for (let i = 0; i < 8; i += 1) {
-      const lv = await page.locator("#headerMapCanvas").getAttribute("data-map-level");
-      if (lv === "1") break;
-      await page.locator("#fallbackZoomIn").click();
+      const lv = Number(await page.locator("#headerMapCanvas").getAttribute("data-map-level"));
+      if (lv === 5) break;
+      if (lv > 5) await page.locator("#fallbackZoomIn").click();
+      else await page.locator("#fallbackZoomOut").click();
     }
-    const fb25m = await page.evaluate(() => ({
+    const fb250m = await page.evaluate(() => ({
       level: document.getElementById("headerMapCanvas").dataset.mapLevel,
       scale: document.getElementById("headerMapCanvas").dataset.mapScaleMeters,
       clusters: document.querySelectorAll("#headerMapCanvas .header-map-cluster-dot").length,
       pins: document.querySelectorAll("#headerMapCanvas .header-map-price-pin").length,
     }));
-    assert.equal(fb25m.level, "1");
-    assert.equal(fb25m.scale, "25");
-    assert.equal(fb25m.clusters, 0);
-    assert.equal(fb25m.pins, 3);
+    assert.equal(fb250m.level, "5");
+    assert.equal(fb250m.scale, "250");
+    assert.equal(fb250m.clusters, 0);
+    assert.equal(fb250m.pins, 3);
 
     await page.locator("#fallbackZoomOut").click();
-    const fb50m = await page.evaluate(() => {
+    const fb500m = await page.evaluate(() => {
       const root = document.getElementById("mapView");
       const dot = root.querySelector(".header-map-cluster-dot");
       const arias = [...root.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" ");
@@ -480,14 +485,14 @@ test("폴백 지도: 25m 축척 경계 일관성, 통합 문구 제거, 에이�
         allTextAndAria: `${root.textContent} ${arias}`,
       };
     });
-    assert.equal(fb50m.level, "2");
-    assert.equal(fb50m.scale, "50");
-    assert.equal(fb50m.count, "2");
-    assert.equal(fb50m.sub, "대");
-    assert.doesNotMatch(fb50m.allTextAndAria, /통합/);
+    assert.equal(fb500m.level, "6");
+    assert.equal(fb500m.scale, "500");
+    assert.equal(fb500m.count, "2");
+    assert.equal(fb500m.sub, "대");
+    assert.doesNotMatch(fb500m.allTextAndAria, /통합/);
 
     // 홈으로 이동 후 에이전트 검색 -> 폴백 지도 자동 활성화 + 센터링 + 패널/대화 유지
-    await page.locator('[data-view="home"]').first().click();
+    await page.locator("#brandHome").click();
     await page.locator("#aiLauncher").click();
     await page.locator("#aiPanel").waitFor({ state: "visible" });
     await page.locator("#aiInput").fill("영양 관리기 찾아줘");

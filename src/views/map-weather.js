@@ -1,5 +1,6 @@
 import { MACHINE_BY_ID, listingCoords, distanceKm, haversineKm } from "../data/farm-machines.js";
 import { applyModelSpecification } from "../data/machine-specifications.js";
+import { DEFAULT_DEMO_RENTAL_OPTIONS } from "../data/rental-options.js";
 import { getRegionCoords } from "../data/korea-regions.js";
 import { $, escapeHtml, money, today, addDays, toast, getListingPhotoSrc, machineImage } from "../core/utils.js";
 import { state, runtime, apiFetch, persist, statusLabel, statusClass } from "../core/store.js";
@@ -246,7 +247,19 @@ export function ensureHongcheonRandomListing({ randomize = false } = {}) {
     condition: "good",
     inspectedAt: "2026-11-10",
     included: preset.included,
-    pickup: "홍천 비발디파크 인근 농가 직접 인수 · 운반 협의",
+    pickup: "강원 홍천군 서면 팔봉리 해바라기 농가 창고",
+    delivery: {
+      methods: ["owner_delivery", "self_pickup"],
+      fee: 20000,
+      area: "서면·남면·홍천읍까지, 15km 안",
+      pickupPlace: "강원 홍천군 서면 팔봉리 해바라기 농가 창고",
+    },
+    rentalOperator: {
+      name: "최민성",
+      experience: "트랙터 경운 작업 10년, 홍천 지역 밭 작업 다수",
+      dailyPrice: 110000,
+    },
+    rentalOptions: DEFAULT_DEMO_RENTAL_OPTIONS.map((opt) => ({ ...opt })),
     description: preset.description,
     summary: preset.summary,
     booked: [],

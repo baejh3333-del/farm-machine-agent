@@ -7,6 +7,13 @@ import { openCameraCapture, shrinkPhoto } from "../ai/panel.js";
 import { renderBookingWeatherPanel } from "./map-weather.js";
 import { deliveryOf, pickupLabel } from "../data/delivery.js";
 import {
+  calculateRentalQuote,
+  cleanRentalOptions,
+  defaultRentalDeliveryMethod,
+  optionCost,
+  sameRentalOption,
+} from "../data/rental-options.js";
+import {
   senderState, SENDER_LABEL, roleOf, readSeqFor,
 } from "../data/deals-model.js";
 import { formatOrderChatMessage, parseOrderChatMessage } from "./cart-checkout.js";
@@ -52,6 +59,22 @@ function renderRentalOperator(req) {
   </details>`;
 }
 
+function renderRentalExtras(req) {
+  const parts = [];
+  if (req.deliveryMethod === "owner_delivery") {
+    parts.push(`배달 받기${req.deliveryFee > 0 ? ` (+${money(req.deliveryFee)})` : ""}`);
+  } else if (req.deliveryMethod === "self_pickup") {
+    parts.push("직접 가지러 가기 (무료)");
+  }
+  const opts = cleanRentalOptions(req.rentalOptions);
+  for (const opt of opts) {
+    const cost = optionCost(opt, req.days);
+    parts.push(`${opt.label}${cost > 0 ? ` (+${money(cost)})` : ""}`);
+  }
+  if (!parts.length) return "";
+  return `<small class="rental-request-extras">선택 조건: ${escapeHtml(parts.join(" · "))}</small>`;
+}
+
 function rentalForm(id, draftValues = null) {
   const item = listingById(id);
   if (!item) return;
@@ -74,6 +97,34 @@ function rentalForm(id, draftValues = null) {
     operator.experience === savedOperator.experience &&
     operator.dailyPrice === savedOperator.dailyPrice);
   const getRequestedOperator = () => $("rentWithOperator")?.checked ? operator : null;
+
+  const deliveryInfo = deliveryOf(item);
+  const allowedDelivery = deliveryInfo.methods;
+  const hasExplicitDeliveryFee = Number.isSafeInteger(deliveryInfo.fee) && deliveryInfo.fee >= 0;
+  const initialDelivery = draftValues?.deliveryMethod && allowedDelivery.includes(draftValues.deliveryMethod)
+    ? draftValues.deliveryMethod
+    : defaultRentalDeliveryMethod(item);
+  const getRequestedDeliveryMethod = () => {
+    const checked = document.querySelector('#rentalForm input[name="rentDeliveryMethod"]:checked')?.value;
+    if (checked && allowedDelivery.includes(checked)) return checked;
+    return initialDelivery;
+  };
+  const getQuotedDeliveryFee = (method) => (
+    method === "owner_delivery"
+      ? (hasExplicitDeliveryFee ? deliveryInfo.fee : null)
+      : 0
+  );
+
+  const offeredOptions = cleanRentalOptions(item.rentalOptions);
+  const savedOptions = Array.isArray(draftValues?.rentalOptions) ? draftValues.rentalOptions : [];
+  const restoredOptionIds = new Set(
+    savedOptions
+      .filter((saved) => offeredOptions.some((offered) => sameRentalOption(offered, saved)))
+      .map((saved) => saved.id)
+  );
+  const savedOptionMismatch = savedOptions.length > restoredOptionIds.size;
+  const getRequestedOptions = () => offeredOptions.filter((opt) => $(`rentOpt_${opt.id}`)?.checked);
+
   let draftRequestId = draftValues?.requestId || crypto.randomUUID();
 
   openForm(`
@@ -86,6 +137,17 @@ function rentalForm(id, draftValues = null) {
         <label>반납 예정일<input type="date" id="rentEnd" min="${escapeHtml(initialStart)}" value="${escapeHtml(initialEnd)}" required></label>
       </div>
       <div id="rentalBookingWeather" class="rental-booking-weather" hidden aria-live="polite"></div>
+      <div class="rental-operator rental-delivery-option" role="radiogroup" aria-label="받는 방법">
+        <strong>받는 방법</strong>
+        ${allowedDelivery.includes("self_pickup") ? `<label class="rental-operator-toggle">
+          <input type="radio" name="rentDeliveryMethod" value="self_pickup" ${initialDelivery === "self_pickup" ? "checked" : ""}>
+          <span>직접 가지러 가기 <strong>무료</strong></span>
+        </label>` : ""}
+        ${allowedDelivery.includes("owner_delivery") ? `<label class="rental-operator-toggle">
+          <input type="radio" name="rentDeliveryMethod" value="owner_delivery" ${initialDelivery === "owner_delivery" ? "checked" : ""}>
+          <span>배달 받기 <strong>${hasExplicitDeliveryFee ? (deliveryInfo.fee > 0 ? `+${money(deliveryInfo.fee)}` : "무료") : "요금 협의"}</strong></span>
+        </label>` : ""}
+      </div>
       ${operator ? `<div class="rental-operator rental-operator-option">
         <label class="rental-operator-toggle">
           <input type="checkbox" id="rentWithOperator" ${restoreOperator ? "checked" : ""}>
@@ -96,6 +158,13 @@ function rentalForm(id, draftValues = null) {
           <p class="rental-operator-experience">${escapeHtml(operator.experience)}</p>
         </details>
         <small>소유 농가가 대여를 승인하면 작업자 배치도 확정돼요.</small>
+      </div>` : ""}
+      ${offeredOptions.length ? `<div class="rental-operator rental-addons-option">
+        <strong>추가 옵션</strong>
+        ${offeredOptions.map((opt) => `<label class="rental-operator-toggle">
+          <input type="checkbox" id="rentOpt_${escapeHtml(opt.id)}" data-rental-opt="${escapeHtml(opt.id)}" ${restoredOptionIds.has(opt.id) ? "checked" : ""}>
+          <span>${escapeHtml(opt.label)} <strong>+${money(opt.unitPrice)}${opt.pricing === "per_day" ? "/일" : ""}</strong></span>
+        </label>`).join("")}
       </div>` : ""}
       <p id="rentalEstimate" aria-live="polite"></p>
       <label>작업 내용 · 방문 메모 (선택)
@@ -110,6 +179,12 @@ function rentalForm(id, draftValues = null) {
   let lastPayloadFingerprint = null;
   let lastBookingWeatherKey = "";
   let busy = false;
+
+  const currentFingerprint = () => {
+    const method = getRequestedDeliveryMethod();
+    const optKey = getRequestedOptions().map((o) => o.id).join(",");
+    return `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}|${Boolean(getRequestedOperator())}|${method}|${optKey}`;
+  };
 
   const updateBookingWeather = (start, end, valid) => {
     const weatherHost = $("rentalBookingWeather");
@@ -134,14 +209,26 @@ function rentalForm(id, draftValues = null) {
     const valid = Number.isInteger(days) && days > 0 && start >= minToday;
     const button = $("rentalSubmitButton");
     if (valid) {
-      const machineTotal = item.price * days;
-      const operatorTotal = (getRequestedOperator()?.dailyPrice ?? 0) * days;
-      const totalPrice = machineTotal + operatorTotal;
-      const extras = "운송비와 보증금은 소유 농가에 확인해 주세요.";
-      $("rentalEstimate").textContent = operatorTotal
-        ? `농기계 ${money(machineTotal)} + 작업자 ${money(operatorTotal)} = ${money(totalPrice)}. ${extras}`
-        : extras;
-      button.textContent = `${days}일 · ${money(totalPrice)} 대여 신청하기`;
+      const deliveryMethod = getRequestedDeliveryMethod();
+      const selectedOptions = getRequestedOptions();
+      const quote = calculateRentalQuote({
+        dailyPrice: item.price,
+        days,
+        operatorDailyPrice: getRequestedOperator()?.dailyPrice ?? 0,
+        delivery: deliveryInfo,
+        deliveryMethod,
+        selectedOptions,
+      });
+      const breakdown = [`농기계 ${money(quote.machineTotal)}`];
+      if (quote.operatorTotal) breakdown.push(`작업자 ${money(quote.operatorTotal)}`);
+      if (quote.deliveryFee) breakdown.push(`배달 ${money(quote.deliveryFee)}`);
+      else if (deliveryMethod === "owner_delivery" && !hasExplicitDeliveryFee) breakdown.push("배달비 협의");
+      if (quote.optionsTotal) breakdown.push(`옵션 ${money(quote.optionsTotal)}`);
+      const extras = "보증금과 세부 인수 조건은 소유 농가에 확인해 주세요.";
+      $("rentalEstimate").textContent = breakdown.length > 1
+        ? `${breakdown.join(" + ")} = ${money(quote.totalPrice)}. ${extras}`
+        : "운송비와 보증금은 소유 농가에 확인해 주세요.";
+      button.textContent = `${days}일 · ${money(quote.totalPrice)} 대여 신청하기`;
       if (!busy) button.disabled = false;
     } else {
       $("rentalEstimate").textContent = "시작일과 반납일을 확인해 주세요.";
@@ -150,18 +237,23 @@ function rentalForm(id, draftValues = null) {
     }
     updateBookingWeather(start, end, valid);
   };
-  $("rentalForm").addEventListener("input", () => {
-    const fp = `${$("rentStart").value}|${$("rentEnd").value}|${$("rentNote").value.trim()}|${Boolean(getRequestedOperator())}`;
+  const onFormChange = () => {
+    const fp = currentFingerprint();
     if (lastPayloadFingerprint && fp !== lastPayloadFingerprint) {
       draftRequestId = crypto.randomUUID();
       lastPayloadFingerprint = null;
     }
     updateEstimate();
-  });
+  };
+  $("rentalForm").addEventListener("input", onFormChange);
+  $("rentalForm").addEventListener("change", onFormChange);
   updateEstimate();
   if (savedOperator && !restoreOperator) {
     draftRequestId = crypto.randomUUID();
     toast("대행운용서비스 내용이 바뀌었어요. 새 요금과 작업자 이력을 확인해 주세요.");
+  } else if (savedOptionMismatch) {
+    draftRequestId = crypto.randomUUID();
+    toast("선택한 옵션 내용이 바뀌었어요. 최신 옵션을 확인해 주세요.");
   }
 
   $("rentalForm").addEventListener("submit", async (event) => {
@@ -174,14 +266,28 @@ function rentalForm(id, draftValues = null) {
     if (!available(listingById(id), start, end)) return toast("해당 기간에는 이미 확정된 예약이 있어 대여할 수 없습니다.");
 
     const rentalOperator = getRequestedOperator();
-    lastPayloadFingerprint = `${start}|${end}|${note}|${Boolean(rentalOperator)}`;
+    const deliveryMethod = getRequestedDeliveryMethod();
+    const deliveryFee = getQuotedDeliveryFee(deliveryMethod);
+    const rentalOptions = getRequestedOptions();
+    lastPayloadFingerprint = currentFingerprint();
     busy = true;
     const button = $("rentalSubmitButton");
     button.disabled = true;
     try {
       await apiFetch("/api/requests", {
         method: "POST",
-        json: { action: "create", id: draftRequestId, listingId: id, start, end, note, rentalOperator },
+        json: {
+          action: "create",
+          id: draftRequestId,
+          listingId: id,
+          start,
+          end,
+          note,
+          rentalOperator,
+          deliveryMethod,
+          deliveryFee,
+          rentalOptions,
+        },
       });
       hideDialog($("formBackdrop"));
       await Promise.all([deps.loadCatalog({ quiet: true }), deps.refreshAuthenticatedData()]);
@@ -190,14 +296,21 @@ function rentalForm(id, draftValues = null) {
       if (error?.name === "AbortError" || error?.code === "AUTH_CHANGED") return;
       if (error?.status === 401) {
         deps.savePendingIntentAndRedirectLogin(
-          { type: "rental", listingId: id, draftValues: { start, end, note, rentalOperator, requestId: draftRequestId } },
+          {
+            type: "rental",
+            listingId: id,
+            draftValues: { start, end, note, rentalOperator, deliveryMethod, deliveryFee, rentalOptions, requestId: draftRequestId },
+          },
           "세션이 만료되었습니다. 로그인 후 이어서 신청할 수 있어요."
         );
         return;
       }
-      if (error?.code === "OPERATOR_OPTION_CHANGED") {
+      if (error?.code === "OPERATOR_OPTION_CHANGED" || error?.code === "DELIVERY_OPTION_CHANGED" || error?.code === "RENTAL_OPTION_CHANGED") {
         await deps.loadCatalog({ quiet: true });
-        if ($("rentalSubmitButton") === button) rentalForm(id, { start, end, note, rentalOperator });
+        if ($("rentalSubmitButton") === button) {
+          rentalForm(id, { start, end, note, rentalOperator, deliveryMethod, deliveryFee, rentalOptions });
+        }
+        toast(error?.message || "매물 조건이 바뀌었어요. 최신 조건을 확인해 주세요.");
         return;
       }
       toast(error?.message || "대여 요청을 보내지 못했습니다.");
@@ -699,6 +812,7 @@ function renderBuyerRequests() {
           </div>
           <strong>${escapeHtml(req.listingTitle || "농기계 매물")}</strong>
           <small>대여 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)} · 소유자 ${escapeHtml(req.listingOwnerName || "-")}${req.note ? `<br>내 메모: ${escapeHtml(req.note)}` : ""}</small>
+          ${renderRentalExtras(req)}
           ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">
@@ -820,6 +934,7 @@ function renderOwner() {
           </div>
           <strong>${escapeHtml(req.listingTitle || "농기계")}</strong>
           <small>요청자: ${escapeHtml(req.requesterName)} · 희망 기간: ${escapeHtml(req.start)} ~ ${escapeHtml(req.end)}${req.note ? `<br>메모: ${escapeHtml(req.note)}` : ""}</small>
+          ${renderRentalExtras(req)}
           ${renderRentalOperator(req)}
         </div>
         <div class="owner-row-actions">

@@ -319,7 +319,7 @@ export async function createOrder(userId, payload, { pool = getPool() } = {}) {
         requestedItems.map((entry) => normalizeText(entry?.listingId, { min: 1, max: 80, field: "매물 ID" }))
       )];
       const listingsRes = await client.query(
-        `SELECT id, type, title, brand, region, machine_type, price, photo_key, status
+        `SELECT id, type, title, brand, region, machine_type, price, photo_key, status, delivery_methods, delivery_fee
          FROM listings
          WHERE id = ANY($1::text[]) AND status <> 'removed'`,
         [listingIds]
@@ -337,7 +337,12 @@ export async function createOrder(userId, payload, { pool = getPool() } = {}) {
         }
         const terms = resolveRentalTerms(listing.type, entry);
         const unitPrice = Number(listing.price);
-        const subtotal = computeSubtotal(listing.type, unitPrice, terms.days, terms.quantity);
+        const baseSubtotal = computeSubtotal(listing.type, unitPrice, terms.days, terms.quantity);
+        const supportsDelivery = Array.isArray(listing.delivery_methods) && listing.delivery_methods.includes("owner_delivery");
+        const deliveryFee = deliveryMethod === "delivery" && supportsDelivery && Number.isSafeInteger(listing.delivery_fee) && listing.delivery_fee > 0
+          ? Number(listing.delivery_fee)
+          : 0;
+        const subtotal = baseSubtotal + deliveryFee;
         totalAmount += subtotal;
         orderItems.push({
           listingId: listing.id,
@@ -352,6 +357,7 @@ export async function createOrder(userId, payload, { pool = getPool() } = {}) {
           startDate: terms.startDate,
           endDate: terms.endDate,
           days: terms.days,
+          deliveryFee,
           subtotal,
         });
       }

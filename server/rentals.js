@@ -1,4 +1,11 @@
 import { rentalDays } from "../src/data/compatibility.js";
+import { cleanDeliveryMethods, inferDeliveryMethods } from "../src/data/delivery.js";
+import {
+  calculateRentalQuote,
+  cleanRentalOptions,
+  sameRentalOption,
+  sameRentalOptionList,
+} from "../src/data/rental-options.js";
 import { getPool, kstToday, withTransaction } from "./db.js";
 import { fail, HttpError } from "./http.js";
 import { formatIsoDate, normalizeText, requireUuid } from "./validate.js";
@@ -42,6 +49,10 @@ function deriveRequestFields(row, approvedRanges, viewerId, today) {
     note: row.note ?? "",
     dailyPrice: Number(row.daily_price),
     rentalOperator: row.rental_operator ?? null,
+    deliveryMethod: row.delivery_method ?? null,
+    deliveryFee: Number(row.delivery_fee ?? 0),
+    rentalOptions: cleanRentalOptions(row.rental_options),
+    optionsTotal: Number(row.options_total ?? 0),
     days: Number(row.days),
     totalPrice: Number(row.total_price),
     status: row.status,
@@ -155,15 +166,65 @@ function sameOperator(left, right) {
     && left?.dailyPrice === right?.dailyPrice;
 }
 
-function matchesRentalIdempotency(existing, userId, listingId, start, end, note, operator) {
+function matchesRentalIdempotency(existing, userId, listingId, start, end, note, operator, deliveryMethod, rentalOptions) {
   return (
     existing.requester_id === userId &&
     existing.listing_id === listingId &&
     formatIsoDate(existing.start_date) === start &&
     formatIsoDate(existing.end_date) === end &&
     (existing.note ?? "") === note &&
-    sameOperator(existing.rental_operator, operator)
+    sameOperator(existing.rental_operator, operator) &&
+    (existing.delivery_method ?? null) === (deliveryMethod ?? null) &&
+    sameRentalOptionList(existing.rental_options, rentalOptions)
   );
+}
+
+const VALID_REQUEST_DELIVERY_METHODS = new Set(["self_pickup", "owner_delivery"]);
+
+function parseRequestedDeliveryMethod(raw) {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string" || !VALID_REQUEST_DELIVERY_METHODS.has(raw.trim())) {
+    fail(400, "INVALID_DELIVERY_METHOD", "받는 방법을 다시 확인해 주세요.");
+  }
+  return raw.trim();
+}
+
+function parseRequestedRentalOptions(raw) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    fail(400, "INVALID_RENTAL_OPTION", "선택한 옵션 형식이 올바르지 않습니다.");
+  }
+  const parsed = [];
+  const seen = new Set();
+  for (const entry of raw) {
+    if (typeof entry === "string") {
+      const id = entry.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      parsed.push({ id, quoteChecked: false });
+      continue;
+    }
+    if (!entry || typeof entry !== "object" || typeof entry.id !== "string" || !entry.id.trim()) {
+      fail(400, "INVALID_RENTAL_OPTION", "선택한 옵션 정보를 다시 확인해 주세요.");
+    }
+    const id = entry.id.trim();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const hasQuote = entry.unitPrice !== undefined || entry.pricing !== undefined;
+    if (hasQuote) {
+      const unitPrice = Number(entry.unitPrice);
+      if (!Number.isSafeInteger(unitPrice) || unitPrice < 0) {
+        fail(400, "INVALID_RENTAL_OPTION", "선택한 옵션 요금을 다시 확인해 주세요.");
+      }
+      if (entry.pricing !== "per_day" && entry.pricing !== "once") {
+        fail(400, "INVALID_RENTAL_OPTION", "선택한 옵션 과금 기준을 다시 확인해 주세요.");
+      }
+      parsed.push({ id, unitPrice, pricing: entry.pricing, quoteChecked: true });
+    } else {
+      parsed.push({ id, quoteChecked: false });
+    }
+  }
+  return parsed;
 }
 
 export async function createRentalRequest(user, payload, { today = kstToday(), pool = getPool() } = {}) {
@@ -189,12 +250,25 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
     fail(400, "INVALID_OPERATOR_QUOTE", "작업자 정보와 요금을 다시 확인해 주세요.");
   }
 
+  const deliveryMethod = parseRequestedDeliveryMethod(payload?.deliveryMethod);
+  const hasQuotedDeliveryFee = payload?.deliveryFee !== undefined;
+  const quotedDeliveryFee = hasQuotedDeliveryFee && payload.deliveryFee !== null ? Number(payload.deliveryFee) : null;
+  if (quotedDeliveryFee !== null && (!Number.isSafeInteger(quotedDeliveryFee) || quotedDeliveryFee < 0)) {
+    fail(400, "INVALID_DELIVERY_FEE", "배달 요금을 다시 확인해 주세요.");
+  }
+  const requestedOptions = parseRequestedRentalOptions(payload?.rentalOptions);
+
   try {
     return await withTransaction(async (client) => {
       const existingRes = await client.query(`SELECT * FROM rental_requests WHERE id = $1 FOR UPDATE`, [id]);
       if (existingRes.rows.length) {
         const existing = existingRes.rows[0];
-        if (!matchesRentalIdempotency(existing, user.id, listingId, start, end, note, operator)) {
+        const existingComparable = requestedOptions.map((o) => ({
+          id: o.id,
+          unitPrice: o.unitPrice ?? (cleanRentalOptions(existing.rental_options).find((x) => x.id === o.id)?.unitPrice ?? 0),
+          pricing: o.pricing ?? (cleanRentalOptions(existing.rental_options).find((x) => x.id === o.id)?.pricing ?? "once"),
+        }));
+        if (!matchesRentalIdempotency(existing, user.id, listingId, start, end, note, operator, deliveryMethod, existingComparable)) {
           fail(409, "IDEMPOTENCY_CONFLICT", "이미 처리된 요청 식별자와 충돌합니다.");
         }
         const requestDto = await buildSingleRequestDto(client, id, user.id, today);
@@ -234,14 +308,59 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
       }
       const acceptedOperator = operator ? listing.rental_operator : null;
       const operatorDailyPrice = acceptedOperator?.dailyPrice ?? 0;
-      const totalPrice = (dailyPrice + operatorDailyPrice) * days;
+
+      const allowedMethods = cleanDeliveryMethods(listing.delivery_methods).length
+        ? cleanDeliveryMethods(listing.delivery_methods)
+        : inferDeliveryMethods(listing.pickup);
+      if (deliveryMethod && !allowedMethods.includes(deliveryMethod)) {
+        fail(409, "DELIVERY_OPTION_CHANGED", "선택한 받는 방법은 이 매물에서 지원하지 않아요. 최신 조건을 확인해 주세요.");
+      }
+      const listingDeliveryFee = listing.delivery_fee === null || listing.delivery_fee === undefined
+        ? null
+        : Number(listing.delivery_fee);
+      if (deliveryMethod === "owner_delivery" && hasQuotedDeliveryFee) {
+        const expectedQuotedFee = Number.isSafeInteger(listingDeliveryFee) && listingDeliveryFee >= 0 ? listingDeliveryFee : null;
+        if (quotedDeliveryFee !== expectedQuotedFee) {
+          fail(409, "DELIVERY_OPTION_CHANGED", "배달 요금이 바뀌었어요. 새 요금을 확인해 주세요.");
+        }
+      }
+
+      const offeredOptions = cleanRentalOptions(listing.rental_options);
+      const offeredById = new Map(offeredOptions.map((o) => [o.id, o]));
+      const acceptedOptions = [];
+      for (const reqOpt of requestedOptions) {
+        const offered = offeredById.get(reqOpt.id);
+        if (!offered) {
+          fail(409, "RENTAL_OPTION_CHANGED", "선택한 옵션이 이 매물에서 제공되지 않아요. 최신 옵션을 확인해 주세요.");
+        }
+        if (reqOpt.quoteChecked && !sameRentalOption(offered, reqOpt)) {
+          fail(409, "RENTAL_OPTION_CHANGED", "선택한 옵션 요금이 바뀌었어요. 새 요금을 확인해 주세요.");
+        }
+        acceptedOptions.push(offered);
+      }
+
+      const quote = calculateRentalQuote({
+        dailyPrice,
+        days,
+        operatorDailyPrice,
+        delivery: { fee: listingDeliveryFee },
+        deliveryMethod,
+        selectedOptions: acceptedOptions,
+      });
 
       await client.query(
         `INSERT INTO rental_requests (
           id, listing_id, requester_id, start_date, end_date,
-          note, daily_price, days, total_price, status, rental_operator, operator_owner_id, operator_daily_price
-        ) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', $10, $11, $12)`,
-        [id, listingId, user.id, start, end, note, dailyPrice, days, totalPrice, acceptedOperator, acceptedOperator ? listing.owner_id : null, operatorDailyPrice]
+          note, daily_price, days, total_price, status,
+          rental_operator, operator_owner_id, operator_daily_price,
+          delivery_method, delivery_fee, rental_options, options_total
+        ) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $14, $15::jsonb, $16)`,
+        [
+          id, listingId, user.id, start, end,
+          note, dailyPrice, days, quote.totalPrice,
+          acceptedOperator, acceptedOperator ? listing.owner_id : null, operatorDailyPrice,
+          quote.deliveryMethod, quote.deliveryFee, JSON.stringify(acceptedOptions), quote.optionsTotal,
+        ]
       );
 
       const requestDto = await buildSingleRequestDto(client, id, user.id, today);
@@ -255,7 +374,14 @@ export async function createRentalRequest(user, payload, { today = kstToday(), p
     if (error?.code === "23505") {
       const existingRes = await pool.query(`SELECT * FROM rental_requests WHERE id = $1 LIMIT 1`, [id]);
       const existing = existingRes.rows[0];
-      if (existing && matchesRentalIdempotency(existing, user.id, listingId, start, end, note, operator)) {
+      const existingComparable = existing
+        ? requestedOptions.map((o) => ({
+            id: o.id,
+            unitPrice: o.unitPrice ?? (cleanRentalOptions(existing.rental_options).find((x) => x.id === o.id)?.unitPrice ?? 0),
+            pricing: o.pricing ?? (cleanRentalOptions(existing.rental_options).find((x) => x.id === o.id)?.pricing ?? "once"),
+          }))
+        : [];
+      if (existing && matchesRentalIdempotency(existing, user.id, listingId, start, end, note, operator, deliveryMethod, existingComparable)) {
         const requestDto = await buildSingleRequestDto(pool, id, user.id, today);
         return { status: 200, idempotent: true, request: requestDto };
       }

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
+import { openFavoriteDetail, seedGuestFavorites, signupOnLoginView } from "./helpers/nav.js";
 
 import { resetAuthCache } from "../server/account-auth.js";
 import { closePool, getPool, kstToday, setPool } from "../server/db.js";
@@ -71,6 +72,8 @@ test("QA2: 로그인한 사용자가 홍천 트랙터를 폼으로 신청하면 
     page.setDefaultTimeout(20000);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
+    // 상세 화면은 찜 목록의 '상세 보기'로 연다(손님 찜에 미리 넣어 둠)
+    await seedGuestFavorites(page, [LISTING_ID]);
     await page.goto(baseUrl, { waitUntil: "networkidle" });
 
     // 서버가 주는 기준 매물
@@ -78,28 +81,20 @@ test("QA2: 로그인한 사용자가 홍천 트랙터를 폼으로 신청하면 
     assert.ok(apiListing, "로컬 DB에 hc-vivaldi-1이 있어야 함");
     assert.equal(apiListing.price, 130000);
 
-    // 화면: 목록 → 상세
-    await page.locator('header [data-view="browse"]').click();
-    const card = page.locator(`.button-card-cta[data-detail="${LISTING_ID}"]`);
-    await card.scrollIntoViewIfNeeded();
-    await card.click();
-    await page.locator("#detailBackdrop:not([hidden]) .detail-dialog").waitFor();
-    const shownTitle = (await page.locator("#detailTitle").textContent()).trim();
-    const shownPrice = digits(await page.locator(".detail-price").evaluate((el) => el.firstChild.textContent));
-    assert.equal(shownTitle, apiListing.title);
-    assert.equal(shownPrice, apiListing.price);
-    assert.equal(await page.locator("[data-detail-action]").getAttribute("data-detail-action"), LISTING_ID);
+    // 화면: 찜 목록 → 상세(2.x 디자인 화면). 제목은 '기종 모델'로, 가격은 '1일 N만원'으로 보인다.
+    await openFavoriteDetail(page, LISTING_ID);
+    const host = page.locator("#detailDesignHost");
+    const model = apiListing.model || apiListing.specification?.model;
+    const heading = (await host.locator("h1").textContent()).trim();
+    assert.ok(heading.includes(model), `상세 제목 '${heading}'에 모델 '${model}'이 있어야 함`);
+    const dayPrice = (await host.locator("text=/^1일 [0-9,]+만원$/").first().textContent()).trim();
+    const shownPrice = digits(dayPrice.replace(/^1일/, "")) * 10000;
+    assert.equal(shownPrice, apiListing.price, dayPrice);
+    const shownTitle = apiListing.title; // 대여 신청·저장 요청은 매물 원래 제목을 쓴다
 
     // 손님이면 로그인 화면으로 갔다가, 가입하면 같은 매물 대여 폼이 다시 열린다.
-    await page.locator("[data-detail-action]").click();
-    await page.locator("#loginView").waitFor({ state: "visible" });
-    const switchBtn = page.locator("#switchAccount");
-    if ((await switchBtn.textContent())?.trim() === "회원가입") await switchBtn.click();
-    await page.locator("#signupName").fill("홍천테스터");
-    await page.locator("#loginId").fill("qa2_hc_renter");
-    await page.locator("#loginPassword").fill("Password123!");
-    await page.locator("#signupConfirm").fill("Password123!");
-    await page.locator("#loginSubmit").click();
+    await host.locator("a[data-cta]", { hasText: "대여 요청 보내기" }).click();
+    await signupOnLoginView(page, { username: "qa2_hc_renter", name: "홍천테스터" });
 
     await page.locator("#rentalForm").waitFor({ state: "visible" });
     await page.locator("#rentStart").fill(startDate);

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
+import { signupOnLoginView } from "./helpers/nav.js";
 
 import { resetAuthCache } from "../server/account-auth.js";
 import { closePool, setPool } from "../server/db.js";
@@ -57,19 +58,6 @@ after(async () => {
     else process.env[k] = v;
   }
 });
-
-async function signupOnLoginView(page, { username, name, password = "Password123!" }) {
-  const switchBtn = page.locator("#switchAccount");
-  if ((await switchBtn.textContent())?.trim() === "회원가입") {
-    await switchBtn.click();
-  }
-  await page.locator("#signupName").fill(name);
-  await page.locator("#loginId").fill(username);
-  await page.locator("#loginPassword").fill(password);
-  await page.locator("#signupConfirm").fill(password);
-  await page.locator("#loginSubmit").click();
-  await page.locator("#myPageButton").waitFor({ state: "visible", timeout: 10000 });
-}
 
 test("favorites in-page view works for guests and signed-in users without opening modal", async () => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });

@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 import { listListings } from "../server/listings-db.js";
+import { goToMenu } from "./helpers/nav.js";
 
 async function startStatic() {
   const server = createServer(async (req, res) => {
@@ -175,7 +176,7 @@ test("매물 상세 1:1 채팅은 직접 대화와 입력창만 보이고 거래
     });
 
     // 매물 찾기(2.2 디자인) 카드·상세 모두 거래전담 버튼은 없고, 상세의 '소유주에게 묻기'로 1:1 대화를 연다
-    await page.locator('#homeDesignHost header[style*="position: relative"] a:has-text("매물 찾기")').click();
+    await goToMenu(page, "매물 찾기");
     const firstCard = page.locator("#browseDesignHost article[data-card]").first();
     await firstCard.waitFor({ state: "visible" });
     assert.equal(await page.locator("#browseDesignHost [data-delegated-trade], #browseDesignHost .btn-delegated-trade").count(), 0, "매물 카드에 거래전담 버튼이 없어야 함");

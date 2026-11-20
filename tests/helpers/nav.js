@@ -75,6 +75,22 @@ export async function clickAuthButton(page) {
   else await page.locator("#myPageButton").click();
 }
 
+/** page.goto 전에 부르면 손님 찜 목록에 매물을 넣어 둔다(찜 목록에서 특정 매물 상세를 열 때). */
+export async function seedGuestFavorites(page, ids) {
+  await page.addInitScript((list) => {
+    try { localStorage.setItem("moa-guest-favorites-v1", JSON.stringify(list)); } catch {}
+  }, ids);
+}
+
+/** 찜 목록에서 매물의 '상세 보기'를 눌러 디자인 상세 화면을 연다(seedGuestFavorites 먼저). */
+export async function openFavoriteDetail(page, id) {
+  await goToMenu(page, "찜 목록");
+  const button = page.locator(`#favoritesView [data-favorite-detail="${id}"].button`).first();
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  await page.locator("#detailView:not([hidden]) #detailDesignHost h1").waitFor({ state: "attached" });
+}
+
 /** 디자인 매물 찾기 화면에서 제목이 들어간 카드를 눌러 디자인 상세 화면을 연다. */
 export async function openDesignDetailByText(page, text) {
   if (!(await page.locator("#browseView:not([hidden])").count())) await goToMenu(page, "매물 찾기");
@@ -82,4 +98,17 @@ export async function openDesignDetailByText(page, text) {
   await card.scrollIntoViewIfNeeded();
   await card.click();
   await page.locator("#detailView:not([hidden]) #detailDesignHost h1").waitFor({ state: "visible" });
+}
+
+/** 로그인 화면(#loginView)에서 '회원가입' 탭을 골라 가입한다(2.3 디자인: 로그인/회원가입 탭). */
+export async function signupOnLoginView(page, { username, name, password = "Password123!" }) {
+  await page.locator("#loginView").waitFor({ state: "visible" });
+  const tab = page.locator('#loginView [data-auth-tab="signup"]');
+  if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
+  await page.locator("#signupName").waitFor({ state: "visible" });
+  await page.locator("#signupName").fill(name);
+  await page.locator("#loginId").fill(username);
+  await page.locator("#loginPassword").fill(password);
+  await page.locator("#signupConfirm").fill(password);
+  await page.locator("#loginSubmit").click();
 }

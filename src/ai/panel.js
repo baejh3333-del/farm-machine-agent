@@ -1403,6 +1403,35 @@ export function createAiPanel({
     scrollAiToEnd();
   }
 
+  function resolveOperatorDisplay(item) {
+    if (!item || item.type !== "rent") return null;
+    if (item.rentalOperator) {
+      return {
+        available: true,
+        badgeText: "대행운영",
+        badgeTitle: `대행운영서비스 제공중 · 작업자 +${money(item.rentalOperator.dailyPrice)}/일`,
+        metaSuffix: ` · 대행운영 +${money(item.rentalOperator.dailyPrice)}/일`,
+        cardText: `대리 운용 가능 (+${money(item.rentalOperator.dailyPrice)}/일)`,
+      };
+    }
+    if (item.operatorService === true) {
+      return {
+        available: true,
+        badgeText: "대리 운용",
+        badgeTitle: "대리 운용 가능 매물",
+        metaSuffix: "",
+        cardText: "대리 운용 가능",
+      };
+    }
+    return {
+      available: false,
+      badgeText: "",
+      badgeTitle: "",
+      metaSuffix: "",
+      cardText: "대리 운용 불가",
+    };
+  }
+
   function appendAiMessage(text, role, listingIds = [], photo = null, { searchDates = null } = {}) {
     const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${role}`;
@@ -1463,17 +1492,18 @@ export function createAiPanel({
           img.dataset.fallbackApplied = "1";
           img.src = "./src/nongnong-icon.png";
         });
+        const opInfo = resolveOperatorDisplay(item);
         const badges = document.createElement("div");
         badges.className = "ai-rec-card-badges";
         const txBadge = document.createElement("span");
         txBadge.className = `ai-rec-badge-tx is-${item.type === "sale" ? "sale" : "rent"}`;
         txBadge.textContent = item.type === "sale" ? "판매" : "대여";
         badges.append(txBadge);
-        if (item.type === "rent" && item.rentalOperator) {
+        if (opInfo?.available) {
           const operatorBadge = document.createElement("span");
           operatorBadge.className = "ai-rec-badge-operator";
-          operatorBadge.textContent = "대행운영";
-          operatorBadge.title = `대행운영서비스 제공중 · 작업자 +${money(item.rentalOperator.dailyPrice)}/일`;
+          operatorBadge.textContent = opInfo.badgeText;
+          operatorBadge.title = opInfo.badgeTitle;
           badges.append(operatorBadge);
         }
         if (item.region) {
@@ -1489,7 +1519,7 @@ export function createAiPanel({
         const infoTitle = document.createElement("strong");
         infoTitle.textContent = item.title || "";
         const infoMeta = document.createElement("small");
-        infoMeta.textContent = `${item.region || ""} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}${item.type === "rent" && item.rentalOperator ? ` · 대행운영 +${money(item.rentalOperator.dailyPrice)}/일` : ""}`;
+        infoMeta.textContent = `${item.region || ""} · ${money(item.price)}${item.type === "rent" ? "/일" : ""}${opInfo?.metaSuffix || ""}`;
         const infoSub = document.createElement("small");
         infoSub.textContent = `${areaLabel(item.areaMin, item.areaMax)} · ${shortDeliveryText(item)}`;
         info.append(infoTitle, infoMeta, infoSub);
@@ -1499,6 +1529,12 @@ export function createAiPanel({
           infoCompat.className = "ai-rec-compat";
           infoCompat.textContent = compatSummary;
           info.append(infoCompat);
+        }
+        if (opInfo) {
+          const infoOperator = document.createElement("small");
+          infoOperator.className = `ai-rec-operator ${opInfo.available ? "is-available" : "is-unavailable"}`;
+          infoOperator.textContent = opInfo.cardText;
+          info.append(infoOperator);
         }
 
         const actions = document.createElement("div");

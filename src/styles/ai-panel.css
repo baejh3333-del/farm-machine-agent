@@ -1209,6 +1209,7 @@ body.ai-fullscreen .ai-launcher {
 }
 
 .ai-rec-badge-tx,
+.ai-rec-badge-operator,
 .ai-rec-badge-region {
   display: inline-flex;
   align-items: center;
@@ -1227,6 +1228,11 @@ body.ai-fullscreen .ai-launcher {
 
 .ai-rec-badge-tx.is-sale {
   background: rgba(34, 165, 90, 0.94);
+  color: var(--bg-surface, #ffffff);
+}
+
+.ai-rec-badge-operator {
+  background: rgba(30, 155, 75, 0.92);
   color: var(--bg-surface, #ffffff);
 }
 
@@ -1262,6 +1268,23 @@ body.ai-fullscreen .ai-launcher {
   background: #f2f2f2;
   color: var(--forest, #111111);
   font-weight: 600;
+}
+
+.ai-rec-info .ai-rec-operator {
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-weight: 600;
+}
+
+.ai-rec-info .ai-rec-operator.is-available {
+  background: #edf6f0;
+  color: #1e7a3f;
+}
+
+.ai-rec-info .ai-rec-operator.is-unavailable {
+  background: #f4f4f4;
+  color: #6b6b6b;
 }
 
 .ai-rec-card-actions {

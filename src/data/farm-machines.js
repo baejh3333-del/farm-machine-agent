@@ -2552,7 +2552,17 @@ export function listingCoords(itemOrRegion, itemId = "") {
       ? (Number(slotMatch[1]) - 1) % spots.length
       : stableHash(id || region) % spots.length;
     const chosen = spots[spotIdx];
-    return { lat: chosen.lat, lng: chosen.lng };
+    if (!id || slotMatch) {
+      return { lat: chosen.lat, lng: chosen.lng };
+    }
+    const hAngle = stableHash(`${id}:spot-angle`);
+    const hRad = stableHash(`${id}:spot-rad`);
+    const angle = ((hAngle % 3600) / 3600) * Math.PI * 2;
+    const radius = 0.0012 + ((hRad % 1000) / 1000) * 0.0055;
+    return {
+      lat: Number((chosen.lat + Math.sin(angle) * radius * 0.82).toFixed(6)),
+      lng: Number((chosen.lng + Math.cos(angle) * radius).toFixed(6)),
+    };
   }
   const base = REGION_COORDS[region] || getRegionCoords(region) || REGION_COORDS["영양읍"];
   if (!id || region === "서면 팔봉리") {

@@ -7,6 +7,7 @@ import { listListings } from "../server/listings-db.js";
 import { runtime } from "../src/core/store.js";
 import { ensureHongcheonRandomListing } from "../src/views/map-weather.js";
 import { startStaticServer } from "./helpers/live-voice-page.js";
+import { openFavoriteDetail, seedGuestFavorites } from "./helpers/nav.js";
 
 const seed = () => listListings().find((item) => item.id === "hc-vivaldi-1");
 
@@ -50,17 +51,21 @@ test("QA2: 상세 화면 가격과 대여 신청 합계가 서버 가격(13만�
         const path = new URL(route.request().url()).pathname;
         return route.fulfill({ json: path === "/api/listings" ? { listings } : path === "/api/me" ? { user: null } : {} });
       });
+      // 매물 상세(2.x 디자인 화면)는 찜 목록의 '상세 보기'로 연다
+      await seedGuestFavorites(page, ["hc-vivaldi-1"]);
       await page.goto(`http://127.0.0.1:${server.address().port}`);
-      await page.locator('header [data-view="browse"]').click();
-      const card = page.locator('.button-card-cta[data-detail="hc-vivaldi-1"]');
-      await card.scrollIntoViewIfNeeded();
-      await card.click();
-      await page.locator("#detailBackdrop:not([hidden]) .detail-dialog").waitFor();
-      assert.equal((await page.locator("#detailTitle").textContent()).trim(), authoritative.title);
-      const priceText = await page.locator(".detail-price").textContent();
-      assert.match(priceText.replace(/\s/g, ""), /130,000/);
-      const detailIds = await page.locator("[data-detail-action]").getAttribute("data-detail-action");
-      assert.equal(detailIds, "hc-vivaldi-1");
+      await openFavoriteDetail(page, "hc-vivaldi-1");
+      const host = page.locator("#detailDesignHost");
+      const model = authoritative.model || authoritative.specification?.model;
+      const heading = (await host.locator("h1").textContent()).trim();
+      assert.ok(heading.includes(model), `상세 제목 '${heading}'에 서버 매물 모델 '${model}'이 있어야 함`);
+      // 하루 가격과 요금 계산 줄(1일 가격 × 일수)이 서버 가격 13만원으로 나온다
+      await host.locator("text=/^1일 13만원$/").first().waitFor({ state: "attached" });
+      const breakdown = (await host.locator("text=/대여료 \\(1일 [\\d,]+만?원 × \\d+일\\)/").first().textContent()).trim();
+      const [, unit, days] = breakdown.match(/1일 ([\d,]+만?원) × (\d+)일/);
+      assert.equal(unit, "13만원", `대여료 계산 단가: ${breakdown}`);
+      const total = (await host.locator("text=/^총 [\\d,]+만?원$/").first().textContent()).trim();
+      assert.equal(total, `총 ${13 * Number(days)}만원`, `합계는 13만원 × ${days}일이어야 함`);
       // 대여 신청 폼의 합계는 이 목록 항목의 price × 일수로 계산된다(transactions.js updateEstimate).
       // 로그인이 필요해 폼은 열지 않고, 계산에 쓰이는 화면 목록 항목이 서버 값과 같은지 확인한다.
       const shown = await page.evaluate(async () => {

@@ -33,12 +33,13 @@ const PUBLIC_RENTAL_SITES = [
   ["제주특별자치도", "https://jeju.amlend.kr/aml/lend/list/lendSearch"],
 ];
 
-function renderPublicOfficeCard(card, [name, phone, address, agency, lat, lng]) {
+function renderPublicOfficeCard(card, [name, phone, address, agency, lat, lng], { onClose } = {}) {
   const site = PUBLIC_RENTAL_SITES.find(([region]) => address.split(" ").slice(0, 2).includes(region))?.[1];
   const query = encodeURIComponent(`${address} ${agency} 농기계 임대 예약`);
   const siteUrl = site || `https://search.naver.com/search.naver?query=${query}`;
   const phoneNumber = phone.replace(/[^\d+]/g, "");
   card.innerHTML = `
+    <button type="button" class="header-map-card-close" id="headerMapCardCloseBtn" aria-label="공공 임대사업소 창 닫기">×</button>
     <div class="header-map-card-body">
       <div class="header-map-card-tags"><span class="header-map-farm-pill">공공 임대사업소</span></div>
       <h3 class="header-map-card-title">${escapeHtml(name)}</h3>
@@ -50,6 +51,7 @@ function renderPublicOfficeCard(card, [name, phone, address, agency, lat, lng]) 
         <a href="${PUBLIC_RENTAL_SOURCE}" target="_blank" rel="noopener">공공데이터 출처</a>
       </div>
     </div>`;
+  card.querySelector("#headerMapCardCloseBtn")?.addEventListener("click", () => onClose?.());
 }
 
 export const DEFAULT_KAKAO_JS_KEY = "1535434b57df672bac4c1ff9a9170589";
@@ -880,7 +882,7 @@ export function renderListingMap(items, { onOpenDetail, onGpsUpdated } = {}) {
   }
 }
 
-export const CLUSTER_SCALE_THRESHOLD_METERS = 25;
+export const CLUSTER_SCALE_THRESHOLD_METERS = 250;
 
 export const HEADER_CLUSTER_STEPS = [
   { maxLevel: 1, km: 0, label: "개별 매물" },
@@ -899,10 +901,30 @@ export const HEADER_CLUSTER_STEPS = [
 
 export function getScaleMetersForZoomLevel(zoomLevel) {
   const lv = Math.max(1, Number(zoomLevel) || 6);
-  return CLUSTER_SCALE_THRESHOLD_METERS * Math.pow(2, lv - 1);
+  const KAKAO_SCALE_BY_LEVEL = {
+    1: 20,
+    2: 30,
+    3: 50,
+    4: 100,
+    5: 250,
+    6: 500,
+    7: 1000,
+    8: 2000,
+    9: 4000,
+    10: 8000,
+    11: 16000,
+    12: 32000,
+    13: 64000,
+    14: 128000,
+  };
+  return KAKAO_SCALE_BY_LEVEL[lv] || Math.round(250 * Math.pow(2, lv - 5));
 }
 
-export function measureMapScaleMeters(map, containerEl, referencePx = 100) {
+export function measureMapScaleMeters(map, containerEl, referencePx = 70) {
+  const level = Number(map?.getLevel?.());
+  if (Number.isFinite(level) && level > 0) {
+    return getScaleMetersForZoomLevel(level);
+  }
   const bounds = map?.getBounds?.();
   const widthPx = Number(containerEl?.clientWidth || containerEl?.getBoundingClientRect?.().width || 0);
   if (bounds && widthPx > 0 && typeof bounds.getSouthWest === "function" && typeof bounds.getNorthEast === "function") {
@@ -917,7 +939,7 @@ export function measureMapScaleMeters(map, containerEl, referencePx = 100) {
       return Math.round(((widthKm * 1000) / widthPx) * referencePx);
     }
   }
-  return getScaleMetersForZoomLevel(map?.getLevel?.());
+  return getScaleMetersForZoomLevel(6);
 }
 
 export function shouldClusterAtScale(scaleMeters) {
@@ -1410,7 +1432,8 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     }
     const body = $("headerMapListBody");
     const row = body?.querySelector(`[data-list-id="${CSS.escape(id)}"]`);
-    if (row && !body.hidden) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const isStackedLayout = Boolean(window.matchMedia?.("(max-width: 1023px)").matches);
+    if (row && !body.hidden && !isStackedLayout) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
   };
   renderListBody();
   $("headerMapListBody")?.addEventListener("click", (e) => {
@@ -1426,6 +1449,9 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     closeClusterSheet();
     focusListing(item);
     syncListActive();
+    if (window.matchMedia?.("(max-width: 1023px)").matches) {
+      $("headerMapStage")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
   });
   $("headerMapListToggle")?.addEventListener("click", () => {
     const collapsed = !runtime.headerMapListCollapsed;
@@ -1445,7 +1471,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
     $("headerMapStage").classList.add("has-floating-card");
     const card = $("headerMapFloatingCard");
     card.hidden = false;
-    renderPublicOfficeCard(card, office);
+    renderPublicOfficeCard(card, office, { onClose: hideFloatingCard });
   };
 
   const hideFloatingCard = () => {
@@ -1537,7 +1563,7 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
         <div class="header-map-cluster-sheet-title-wrap">
           <div class="header-map-cluster-sheet-badges">
             <span class="header-map-cluster-sheet-count">${cluster.count.toLocaleString()}대</span>
-            <strong>${escapeHtml(cluster.label)} 전체 매물</strong>
+            <strong>${escapeHtml(cluster.label.endsWith("전체") ? `${cluster.label} 매물` : `${cluster.label} 전체 매물`)}</strong>
           </div>
           <span>선택한 구역에 포함된 모든 매물(거리순)입니다.</span>
         </div>
@@ -2107,6 +2133,13 @@ export async function renderHeaderMapView({ onOpenDetail, onRent, focusListingId
         onOpenClusterSheet: openClusterSheet,
         onRecenterReset: () => toast(`${originLabel} 중심으로 이동했습니다.`),
       });
+      focusListing = (item) => {
+        if (!item) return;
+        selectedItem = item;
+        runtime.selectedMapListingId = item.id;
+        fallbackController?.focusListing(item);
+        renderFloatingCard(item);
+      };
       applyFocusListing = (id) => {
         const item = resolveFocusItem(id);
         if (!item) return false;

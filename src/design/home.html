@@ -108,13 +108,120 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 /* 예약창: "위치와 날짜만 고르면 돼요."와 같은 때에, 없던 자리에서 살짝 떠오르며 생겨요 */
 @keyframes moaCard{from{opacity:0;transform:translateY(36px)}to{opacity:1;transform:none}}
 [data-booking-wrap]{animation:moaCard 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.8s both}
-
 /* 사용 방법: 빌리는 분 ↔ 빌려주는 분을 누르면 STEP 01~04가 차례로 바뀌어요 */
 @keyframes moaStep{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 [data-how] > div > div{animation:moaStep 0.55s cubic-bezier(0.22, 1, 0.36, 1) both}
 [data-how] > div > div:nth-child(2){animation-delay:0.08s}
 [data-how] > div > div:nth-child(3){animation-delay:0.16s}
 [data-how] > div > div:nth-child(4){animation-delay:0.24s}
+[data-sticky-header][aria-hidden="true"]{pointer-events:none}
+
+/* 모바일·태블릿 반응형 (데스크톱 > 900px 모양 유지) */
+@media (max-width: 900px){
+  :host{overflow-x:clip}
+  section[style*="max-width: 1200px"], section [style*="max-width: 1200px"]:not([data-booking-wrap]), section[style*="padding: 96px 24px 48px"]{zoom:1 !important}
+  [data-booking-wrap] > div{height:auto !important}
+  [data-booking-wrap] > div > div:first-child{flex-direction:column !important;flex-wrap:nowrap !important}
+  [data-booking-wrap] div[style*="flex: 0 1 320px"]{flex:none !important;width:100% !important;min-width:0 !important}
+  [data-booking-wrap] div[style*="flex: 1 1 560px"]{flex:none !important;width:100% !important;min-width:0 !important}
+  #about{height:auto !important}
+  #about [style^="width: 100%; display: flex; align-items: center; justify-content: center"]{flex-direction:column !important;gap:16px !important}
+  #about div[style*="width: 460px"]{width:100% !important;max-width:460px !important;height:auto !important;border-radius:24px !important;padding:24px 20px !important}
+  [data-feat-dim] > section > div{grid-template-columns:1fr !important;gap:32px !important;padding-bottom:64px !important}
+  [data-feat-dim] > section > div:last-child{padding-bottom:80px !important}
+  [data-steps-sec]{height:auto !important}
+}
+
+@media (max-width: 768px){
+  header{position:sticky !important;top:0;z-index:42 !important;border-bottom:1px solid #F0F0F0}
+  [data-home-header-inner]{padding:10px 16px 6px !important;gap:8px 12px !important;justify-content:space-between !important}
+  [data-home-header-inner] > a[aria-label="모아농 홈"]{order:1}
+  [data-home-header-inner] > a[aria-label="모아농 홈"] svg{width:112px !important;height:30px !important}
+  [data-home-nav-wrap]{display:contents !important}
+  [data-home-auth]{order:2;height:34px !important;padding:0 14px !important;font-size:13px !important}
+  header nav[aria-label="주 메뉴"]{order:3;flex:1 0 100%;width:100%;justify-content:space-between;gap:8px !important;border-top:1px solid #F2F2F2;padding-top:6px;margin-top:2px;font-size:14px !important}
+  header nav[aria-label="주 메뉴"] a{flex:1 1 0;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px !important}
+
+  [data-mega-group]{gap:2px !important}
+  [data-mega-item]{min-height:44px;display:flex;align-items:center;padding:0 8px;border-radius:10px;font-size:16px !important}
+
+  [data-sticky-header] > div{padding:8px 12px !important;gap:8px !important}
+  [data-sticky-header] nav[aria-label="상단 메뉴"],
+  [data-sticky-header] [data-sticky-auth]{display:none !important}
+  [data-sticky-header] [role="search"]{margin:0 !important;height:44px !important;padding:0 4px !important;max-width:100% !important}
+  [data-sticky-header] [role="search"] button:not([aria-label="농기계 찾기"]){height:36px !important;padding:0 10px !important}
+  [data-sticky-header] [role="search"] button > span{font-size:13px !important}
+  [data-sticky-header] [role="search"] button[aria-label="농기계 찾기"]{width:36px !important;height:36px !important}
+  [data-sticky-header] a[aria-label="모아농 홈"] svg{width:96px !important;height:26px !important}
+
+  section[data-hero-sec]{padding:16px 16px 12px !important;gap:6px !important}
+  section[data-hero-sec] h1{font-size:clamp(28px, 8.2vw, 38px) !important;line-height:1.22 !important;word-break:keep-all}
+  section[data-hero-sec] p{font-size:14px !important;line-height:1.45 !important}
+
+  [data-field-bg]{height:210px !important;margin-top:-76px !important}
+  [data-field-bg] img{height:100% !important}
+  [data-field-bg] > div{height:80px !important}
+
+  [data-booking-wrap]{margin:-126px auto 28px !important;padding:0 12px !important;max-width:100% !important;box-sizing:border-box}
+  [data-booking-wrap] > div{padding:14px !important;border-radius:20px !important;gap:18px !important}
+  [data-booking-wrap] > div > div:first-child{gap:22px !important}
+  [data-booking-wrap] div[style*="flex: 0 1 320px"]{padding:14px !important;border-radius:16px !important;gap:10px !important}
+  [data-booking-wrap] button[role="tab"]{height:40px !important;font-size:15px !important}
+  [data-booking-wrap] button[style*="height: 50px"]{height:46px !important;padding:0 12px !important;font-size:14px !important}
+  [data-booking-wrap] a[data-cta]{height:48px !important;font-size:15px !important;margin-top:4px !important}
+  [data-booking-wrap] div[style*="flex: 1 1 560px"] b[style*="font-size: 24px"]{font-size:19px !important}
+  [data-booking-wrap] div[style*="flex: 1 1 560px"] > div[style*="flex-wrap: wrap; gap: 20px"]{display:grid !important;grid-template-columns:1fr !important;gap:16px !important}
+  [data-booking-wrap] img[style*="aspect-ratio"], [data-booking-wrap] span[style*="aspect-ratio"]{aspect-ratio:16 / 10 !important;flex:none !important;min-height:0 !important}
+
+  [data-pop-backdrop]{background:rgba(0,0,0,0.36);z-index:55 !important}
+  [data-booking-wrap]:has([data-pop]){z-index:60 !important;animation:none !important;transform:none !important}
+  [data-booking-wrap]:has([data-pop]) > div{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}
+  [data-pop]{position:fixed !important;z-index:61 !important;left:12px !important;right:12px !important;top:50% !important;transform:translateY(-50%) !important;width:auto !important;max-width:calc(100vw - 24px) !important;max-height:82dvh !important;overflow-y:auto !important;padding:18px 14px !important;border-radius:20px !important;box-sizing:border-box !important}
+  [data-pop] > span[aria-hidden="true"]{display:none !important}
+  [data-pop="loc"] > div:last-child{flex-wrap:wrap !important;gap:8px !important}
+  [data-pop="date"] [data-cal-m2]{display:none !important}
+  [data-pop="date"] [data-cal-months]{position:relative;gap:0 !important}
+  [data-pop="date"] [data-cal-months] > button{position:absolute;top:0;margin:0 !important;width:32px !important;height:32px !important;z-index:2}
+  [data-pop="date"] [data-cal-months] > button:first-child{left:0}
+  [data-pop="date"] [data-cal-months] > button:last-child{right:0}
+  [data-pop="date"] [data-cal-m1] button{height:38px !important;width:100% !important;min-width:0 !important;padding:0 !important;font-size:14px !important}
+  [data-pop="time"] > div:first-of-type{gap:12px !important}
+  [data-pop="time"] input{height:42px !important;font-size:16px !important;padding:0 8px !important}
+  [data-pop="time"] div[style*="height: 220px"]{height:176px !important}
+
+  #search + section{padding:36px 16px 48px !important;gap:16px !important}
+  #search + section > div[aria-hidden="true"]{display:none !important}
+  #search + section > div:not([aria-hidden="true"]){flex:1 0 100% !important;padding:8px 12px !important}
+
+  #about > div{padding:48px 16px !important;gap:24px !important;max-width:100% !important}
+  #about h2{font-size:clamp(24px, 7vw, 32px) !important}
+  #about div[aria-label="모아농"]{width:100% !important;max-width:260px !important;height:48px !important}
+  #about div[aria-label="모아농"] > svg{height:56px !important;width:auto !important}
+
+  [data-feat-dim] > section{padding:56px 16px 0 !important}
+  [data-feat-dim] h2{font-size:clamp(26px, 7.5vw, 34px) !important}
+  [data-feat-dim] div[style*="max-width: 480px"]{padding:20px !important;max-width:100% !important}
+
+  [data-steps-sec] > div{padding:48px 16px !important;gap:28px !important}
+  [data-steps-sec] h2{font-size:clamp(26px, 7.5vw, 34px) !important}
+  [data-steps-sec] div[style*="grid-template-columns: repeat(4"]{grid-template-columns:repeat(2, minmax(0, 1fr)) !important;gap:24px 12px !important}
+  [data-steps-sec] span[style*="width: 104px"]{width:72px !important;height:72px !important}
+  [data-steps-sec] span[style*="height: 1.5px"]{display:none !important}
+
+  [data-faq-sec]{padding:48px 16px !important;gap:28px !important}
+  [data-faq-sec] h2{font-size:clamp(26px, 7.5vw, 34px) !important}
+  [data-faq-sec] > div{flex:1 0 100% !important;min-width:0 !important}
+
+  section[data-brand-end] > div{padding:48px 16px 28px !important}
+  section[data-brand-end] > div > div:first-child{flex-direction:column !important;gap:28px !important;padding-bottom:40px !important}
+  section[data-brand-end] > div > div:first-child > div:not([aria-hidden="true"]){flex:none !important;width:100% !important;padding:0 !important}
+  section[data-brand-end] > div > div:first-child > div[aria-hidden="true"]{width:100% !important;height:1px !important}
+  section[data-brand-end] h2{font-size:clamp(26px, 7.5vw, 32px) !important}
+}
+
+@media (max-width: 480px){
+  [data-sticky-header] a[aria-label="모아농 홈"]{display:none !important}
+}
 </style>
 </helmet>
 <div style="background: #FFFFFF; color: #111111; font-family: 'Noto Sans KR', sans-serif; letter-spacing: -0.01em">
@@ -125,7 +232,7 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 
 
 <header style="position: relative; z-index: 10; background: #FFFFFF">
-<div style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div data-home-header-inner="" style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
 <a href="#" aria-label="모아농 홈" onClick="{{ goHome }}" style="display: flex; text-decoration: none"><span style="display: flex; align-items: center"><svg width="136.4" height="36" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></span></a>
 <sc-if value="{{ noPill }}" hint-placeholder-val="{{ false }}"><div role="search" aria-label="빠른 검색" style="flex: 1 1 auto; max-width: 640px; height: 56px; margin: 0 24px; padding: 0 6px 0 6px; box-sizing: border-box; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; box-shadow: 0 6px 20px rgba(0,0,0,0.06); display: flex; align-items: center">
 <button type="button" onClick="{{ jumpLoc }}" style="flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: none; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; font-family: inherit; text-align: left; cursor: pointer"><b style="font-size: 12px; color: #111111">위치</b><span style="max-width: 100%; font-size: 14px; color: {{ pillLocColor }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ pillLoc }}</span></button>
@@ -134,15 +241,15 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <button type="button" onClick="{{ jumpTask }}" style="flex: 1 1 0; min-width: 0; height: 44px; padding: 0 20px; border: none; border-radius: 999px; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; font-family: inherit; text-align: left; cursor: pointer"><b style="font-size: 12px; color: #111111">작업</b><span style="max-width: 100%; font-size: 14px; color: {{ pillTaskColor }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ pillTask }}</span></button>
 <button type="button" onClick="{{ jumpGo }}" aria-label="농기계 찾기" style="flex: none; width: 44px; height: 44px; border: none; border-radius: 50%; background: #1E9B4B; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="#FFFFFF" stroke-width="2.2"></circle><path d="M16 16l4.5 4.5" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"></path></svg></button>
 </div></sc-if>
-<div style="display: flex; align-items: center; gap: 32px">
+<div data-home-nav-wrap="" style="display: flex; align-items: center; gap: 32px">
 <nav aria-label="주 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap">
 <sc-for list="{{ navs }}" as="nv" hint-placeholder-count="4"><a href="#" onClick="{{ nv.pick }}" onMouseEnter="{{ nv.hover }}" onMouseLeave="{{ leaveMenu }}" aria-expanded="{{ nv.exp }}" style="text-decoration: none; padding-bottom: 4px; font-weight: {{ nv.weight }}; box-shadow: {{ nv.line }}">{{ nv.label }}</a></sc-for>
 </nav>
-<a href="#" style="flex: none; height: 38px; padding: 0 18px; border-radius: 999px; border: 1px solid #DDDDDD; display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">로그인</a>
+<a href="#" data-home-auth="" style="flex: none; height: 38px; padding: 0 18px; border-radius: 999px; border: 1px solid #DDDDDD; display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">{{ authLabel }}</a>
 </div>
 </div>
 </header>
-<div aria-hidden="{{ hdrHidden }}" style="position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: rgba(255,255,255,0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(17,17,17,0.06); transform: {{ hdrShift }}; transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)">
+<div data-sticky-header="" aria-hidden="{{ hdrHidden }}" style="position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: rgba(255,255,255,0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(17,17,17,0.06); transform: {{ hdrShift }}; transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)">
 <div style="max-width: 1200px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px">
 <a href="#" aria-label="모아농 홈" onClick="{{ goHome }}" style="display: flex; text-decoration: none"><svg width="136.4" height="36" viewBox="-57 -4 197 52" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="모아농"><g transform="translate(-57 0.12) scale(0.9038)"><path d="M10 3h11a5 5 0 0 1 5 5v5h18a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z" fill="#1E9B4B" stroke="none"></path><circle cx="16" cy="35" r="8.7" stroke="#111111" stroke-width="6" fill="none"></circle><circle cx="26.14" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="45.14" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="42.42" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="37.72" r="2.5" fill="#111111" stroke="none"></circle><circle cx="5.86" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="8.58" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="13.28" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="18.72" cy="24.86" r="2.5" fill="#111111" stroke="none"></circle><circle cx="23.42" cy="27.58" r="2.5" fill="#111111" stroke="none"></circle><circle cx="26.14" cy="32.28" r="2.5" fill="#111111" stroke="none"></circle><circle cx="41" cy="39" r="5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="43.25" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="40.76" r="1.5" fill="#111111" stroke="none"></circle><circle cx="36.75" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle><circle cx="39.24" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="42.76" cy="34.75" r="1.5" fill="#111111" stroke="none"></circle><circle cx="45.25" cy="37.24" r="1.5" fill="#111111" stroke="none"></circle></g><rect x="6" y="3" width="26" height="21" rx="5" stroke="#111111"></rect><path d="M19 24v10M2 39h34" stroke="#111111"></path><circle cx="58" cy="21" r="12.5" stroke="#111111"></circle><path d="M82 13v28M82 23h8" stroke="#111111"></path><path d="M82 13c-6.5 0-10-3.8-10-9.8 6.5 0 10 3.8 10 9.8z" fill="#1E9B4B" stroke="none"></path><path d="M82 11c0-6 3.6-9.6 9.6-9.6 0 6-3.6 9.6-9.6 9.6z" fill="#1E9B4B" stroke="none"></path><path d="M101 3v8h30M116 13v5M98 20.5h36" stroke="#111111"></path><circle cx="116" cy="33.7" r="7.3" stroke="#111111"></circle></svg></a>
 <div role="search" aria-label="빠른 검색" style="flex: 1 1 auto; max-width: 640px; height: 56px; margin: 0 24px; padding: 0 6px; box-sizing: border-box; border: 1px solid #E6E6E6; border-radius: 999px; background: #FFFFFF; box-shadow: 0 8px 28px rgba(0,0,0,0.10); display: flex; align-items: center">
@@ -156,20 +263,19 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <nav aria-label="상단 메뉴" style="display: flex; gap: 24px; font-size: 15px; font-weight: 500; white-space: nowrap">
 <sc-for list="{{ navs }}" as="nv" hint-placeholder-count="4"><a href="#" onClick="{{ nv.pick }}" onMouseEnter="{{ nv.hover }}" onMouseLeave="{{ leaveMenu }}" aria-expanded="{{ nv.exp }}" style="text-decoration: none; padding-bottom: 4px; font-weight: {{ nv.weight }}; box-shadow: {{ nv.line }}">{{ nv.label }}</a></sc-for>
 </nav>
-<a href="#" style="flex: none; height: 38px; padding: 0 18px; border-radius: 999px; border: 1px solid #DDDDDD; background: rgba(255,255,255,0.8); display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">로그인</a>
+<a href="#" data-sticky-auth="" style="flex: none; height: 38px; padding: 0 18px; border-radius: 999px; border: 1px solid #DDDDDD; background: rgba(255,255,255,0.8); display: flex; align-items: center; font-size: 14px; font-weight: 500; text-decoration: none">{{ authLabel }}</a>
 </div>
 </div>
 </div>
 
-<section style="padding: 96px 24px 48px; display: flex; flex-direction: column; align-items: center; gap: 22px; text-align: center">
+<section data-hero-sec="" style="padding: 96px 24px 48px; display: flex; flex-direction: column; align-items: center; gap: 22px; text-align: center">
 
 <h1 style="margin: 0; font-family: {{headFont}}; font-size: 72px; line-height: 1.3; font-weight: 600; letter-spacing: -0.04em"><span style="font-weight: 800">농기계</span>,<br>클릭 한 번으로</h1><p style="margin: 0; font-size: 18px; line-height: 1.6; color: #555555">위치와 날짜만 고르면 돼요.</p>
 </section>
 
 <section id="search" style="position: relative">
-<sc-if value="{{ anyOpen }}" hint-placeholder-val="{{ false }}"><div onClick="{{ closePop }}" style="position: fixed; inset: 0; z-index: 30"></div></sc-if>
 
-<div style="position: relative; height: 1000px; margin-top: -312px">
+<div data-field-bg="" style="position: relative; height: 1000px; margin-top: -312px">
 <img src="/src/design/assets/field.jpg" alt="산 아래 넓게 펼쳐진 배추밭" style="display: block; width: 100%; height: 1000px; object-fit: cover; object-position: center 45%">
 <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 220px; background: linear-gradient(#FFFFFF 0%, rgba(255,255,255,0.6) 40%, rgba(255,255,255,0) 100%)"></div>
 <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: -2px; height: 260px; background: linear-gradient(rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 55%, #FFFFFF 92%)"></div>
@@ -183,8 +289,9 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <button type="button" role="tab" aria-selected="{{ buySel }}" onClick="{{ setBuy }}" style="position: relative; flex: 1 1 0; height: 44px; border: none; border-radius: 999px; background: transparent; font-family: inherit; font-size: 16px; font-weight: 700; color: {{ buyColor }}; cursor: pointer; transition: color 0.2s">중고 구매</button>
 </div>
 <div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">위치</span>
+<button type="button" onClick="{{ openLoc }}" aria-expanded="{{ locOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ locRing }}"><span style="color: {{ locTextColor }}">{{ locText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="#555555" stroke-width="1.6"></path><circle cx="12" cy="10.6" r="2.3" stroke="#555555" stroke-width="1.6"></circle></svg></button>
 <sc-if value="{{ locOpen }}" hint-placeholder-val="{{ false }}">
-<div style="{{ popAt }} width: 420px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 16px">
+<div data-pop="loc" style="{{ popAt }} width: 420px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 16px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 32px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
 <div style="height: 48px; border-radius: 12px; background: #F4F4F4; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; color: #9A9A9A"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#767676" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>동네나 주소 검색</div>
 <div style="margin-top: 8px; display: flex; flex-direction: column">
@@ -193,11 +300,15 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <div style="margin-top: 8px; padding: 14px 10px 4px; border-top: 1px solid #EEEEEE; display: flex; align-items: center; justify-content: space-between; gap: 12px"><span style="font-size: 14px; font-weight: 700">찾는 범위</span><span style="display: flex; gap: 6px"><sc-for list="{{ radii }}" as="r" hint-placeholder-count="4"><button type="button" onClick="{{ r.pick }}" style="padding: 7px 12px; border-radius: 999px; border: 1px solid {{ r.border }}; background: {{ r.bg }}; color: {{ r.color }}; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer">{{ r.label }}</button></sc-for></span></div>
 </div>
 </sc-if>
-<button type="button" onClick="{{ openLoc }}" aria-expanded="{{ locOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ locRing }}"><span style="color: {{ locTextColor }}">{{ locText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="#555555" stroke-width="1.6"></path><circle cx="12" cy="10.6" r="2.3" stroke="#555555" stroke-width="1.6"></circle></svg></button></div>
+</div>
 <sc-if value="{{ isRent }}" hint-placeholder-val="{{ true }}">
 <div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">날짜 · 시간</span>
+<div style="display: flex; gap: 8px">
+<button type="button" onClick="{{ openDate }}" aria-expanded="{{ dateOpen }}" style="flex: 1.35 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; box-shadow: {{ dateRing }}"><span style="color: {{ dateTextColor }}">{{ dateText }}</span></button>
+<button type="button" onClick="{{ openTime }}" aria-expanded="{{ timeOpen }}" style="flex: 1 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; box-shadow: {{ timeRing }}"><span style="color: {{ timeTextColor }}">{{ timeShow }}</span></button>
+</div>
 <sc-if value="{{ timeOpen }}" hint-placeholder-val="{{ false }}">
-<div style="{{ popAt }} width: 620px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 24px 28px">
+<div data-pop="time" style="{{ popAt }} width: 620px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 24px 28px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 210px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
 <div style="display: flex; gap: 28px">
 <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px">
@@ -223,33 +334,30 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </sc-if>
 <sc-if value="{{ dateOpen }}" hint-placeholder-val="{{ false }}">
-<div style="{{ popAt }} width: 1060px; box-sizing: border-box; background: #FFFFFF; border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.18); padding: 32px 40px">
+<div data-pop="date" style="{{ popAt }} width: 1060px; box-sizing: border-box; background: #FFFFFF; border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.18); padding: 32px 40px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 32px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
-<div style="display: flex; align-items: flex-start; gap: 72px">
+<div data-cal-months="" style="display: flex; align-items: flex-start; gap: 72px">
 <button type="button" onClick="{{ prevMonth }}" aria-label="이전 달" style="flex: none; width: 40px; height: 40px; border: 1px solid #E2E2E2; border-radius: 10px; background: #FFFFFF; font-size: 20px; cursor: pointer; color: {{ prevColor }}; margin-right: -24px">‹</button>
-<div style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 20px; line-height: 40px; margin-bottom: 14px">{{ m1.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 14px; font-weight: 500; color: #767676; margin-bottom: 10px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m1.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
-<div style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 20px; line-height: 40px; margin-bottom: 14px">{{ m2.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 14px; font-weight: 500; color: #767676; margin-bottom: 10px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m2.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
+<div data-cal-m1="" style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 20px; line-height: 40px; margin-bottom: 14px">{{ m1.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 14px; font-weight: 500; color: #767676; margin-bottom: 10px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m1.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
+<div data-cal-m2="" style="flex: 1 1 0; min-width: 0"><b style="display: block; text-align: center; font-size: 20px; line-height: 40px; margin-bottom: 14px">{{ m2.title }}</b><div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 14px; font-weight: 500; color: #767676; margin-bottom: 10px"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px"><sc-for list="{{ m2.days }}" as="c" hint-placeholder-count="35"><button type="button" onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for></div></div>
 <button type="button" onClick="{{ nextMonth }}" aria-label="다음 달" style="flex: none; width: 40px; height: 40px; border: 1px solid #E2E2E2; border-radius: 10px; background: #FFFFFF; font-size: 20px; cursor: pointer; color: #111111; margin-left: -24px">›</button>
 </div>
 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid #EEEEEE"><span></span><span style="display: flex; gap: 8px"><button type="button" onClick="{{ resetDate }}" style="padding: 7px 18px; border: none; border-radius: 12px; background: transparent; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">초기화</button><button type="button" onClick="{{ applyDate }}" style="padding: 7px 22px; border: none; border-radius: 12px; background: #111111; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">적용</button></span></div>
 </div>
 </sc-if>
-<div style="display: flex; gap: 8px">
-<button type="button" onClick="{{ openDate }}" aria-expanded="{{ dateOpen }}" style="flex: 1.35 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; box-shadow: {{ dateRing }}"><span style="color: {{ dateTextColor }}">{{ dateText }}</span></button>
-<button type="button" onClick="{{ openTime }}" aria-expanded="{{ timeOpen }}" style="flex: 1 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; box-shadow: {{ timeRing }}"><span style="color: {{ timeTextColor }}">{{ timeShow }}</span></button>
-</div>
 </div>
 </sc-if>
 <div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">작업</span>
+<button type="button" onClick="{{ openTask }}" aria-expanded="{{ taskOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ taskRing }}"><span style="color: {{ taskTextColor }}">{{ taskText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#555555" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
 <sc-if value="{{ taskOpen }}" hint-placeholder-val="{{ false }}">
-<div style="{{ popAt }} width: 400px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 22px">
+<div data-pop="task" style="{{ popAt }} width: 400px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 22px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 32px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
 <b style="display: block; font-size: 16px; margin-bottom: 14px">어떤 작업을 하나요?</b>
 <div style="display: flex; flex-wrap: wrap; gap: 8px"><sc-for list="{{ tasks }}" as="t" hint-placeholder-count="6"><button type="button" onClick="{{ t.pick }}" style="padding: 11px 16px; border-radius: 999px; border: 1px solid {{ t.border }}; background: {{ t.bg }}; color: {{ t.color }}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer">{{ t.name }}</button></sc-for></div>
 <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #EEEEEE; font-size: 14px; color: #555555">모르면 <b style="color: #111111; text-decoration: underline">농농이에게 물어보기</b></div>
 </div>
 </sc-if>
-<button type="button" onClick="{{ openTask }}" aria-expanded="{{ taskOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ taskRing }}"><span style="color: {{ taskTextColor }}">{{ taskText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#555555" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div>
+</div>
 <a href="#search" data-cta="" onClick="{{ doSearch }}" style="height: 52px; border-radius: 12px; background: #1E9B4B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 700; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="#FFFFFF" stroke-width="2"></circle><path d="M16 16l4.5 4.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg>농기계 찾기</a>
 </div>
 <div style="flex: 1 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
@@ -274,6 +382,8 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </div>
 </div>
+<!-- 런타임은 형제 순서(번호)로 바뀐 곳을 맞춰요. 열고 닫히는 팝업을 버튼 앞에 두면 뒤 요소가 통째로 다시 만들어져 화면이 새로고침처럼 깜빡여요. 그래서 팝업은 늘 맨 뒤에 둬요. -->
+<sc-if value="{{ anyOpen }}" hint-placeholder-val="{{ false }}"><div data-pop-backdrop="" onClick="{{ closePop }}" style="position: fixed; inset: 0; z-index: 30"></div></sc-if>
 </section>
 
 <section style="max-width: 1200px; margin: 0 auto; padding: 96px 24px 120px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; padding-top: 1px; padding-bottom: 192px">
@@ -387,7 +497,7 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </section>
 </div>
 
-<section style="background: #F6F6F6; height: 595px">
+<section data-steps-sec="" style="background: #F6F6F6; height: 595px">
 <div style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-direction: column; align-items: center; gap: 56px">
 <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center">
 <span style="font-size: 15px; font-weight: 500; color: #13773A">사용 방법</span>
@@ -436,7 +546,7 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </section>
 
-<section style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-wrap: wrap; gap: 64px">
+<section data-faq-sec="" style="max-width: 1200px; margin: 0 auto; padding: 120px 24px; display: flex; flex-wrap: wrap; gap: 64px">
 <div style="flex: 0 1 340px; min-width: 260px; display: flex; flex-direction: column; gap: 16px">
 <span style="font-family: Inter, sans-serif; font-size: 14px; font-weight: 600; color: #13773A">FAQ</span>
 <h2 style="margin: 0; font-family: {{headFont}}; font-size: 44px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em">자주 묻는 질문</h2>

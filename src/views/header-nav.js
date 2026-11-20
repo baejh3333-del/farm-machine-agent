@@ -1,6 +1,7 @@
 import { $ } from "../core/utils.js";
 
-const CLOSE_DELAY_MS = 140;
+// 홈 디자인 머리말(src/design/menu.js leaveMenu)과 같은 닫힘 지연
+const CLOSE_DELAY_MS = 180;
 
 export function createHeaderNav(deps) {
   let closePanel = () => {};
@@ -59,6 +60,7 @@ export function createHeaderNav(deps) {
     const panel = $("headerFeatures");
     if (!nav || !panel) return;
     const triggers = [...nav.querySelectorAll(".nav-item")];
+    const header = nav.closest("header");
     let activeTrigger;
     let touch = false;
     let restoringFocus = false;
@@ -70,7 +72,10 @@ export function createHeaderNav(deps) {
       // 올린 메뉴의 세부 항목만 그 메뉴 바로 아래에 보여 준다(모아농 2.3 디자인)
       panel.dataset.column = trigger.dataset.view || "";
       const r = trigger.getBoundingClientRect();
-      panel.style.setProperty("--nav-col-left", Math.max(16, Math.round(r.left) - 24) + "px");
+      const maxLeft = Math.max(16, window.innerWidth - 220);
+      panel.style.setProperty("--nav-col-left", Math.min(maxLeft, Math.max(16, Math.round(r.left) - 24)) + "px");
+      // 세부 메뉴는 머리말 바로 아래에서 펼친다(홈 menu.js openMenu와 같은 계산)
+      if (header) panel.style.setProperty("--nav-top", Math.max(0, Math.round(header.getBoundingClientRect().bottom)) + "px");
       triggers.forEach(button => button.setAttribute("aria-expanded", button === trigger ? "true" : "false"));
     }
     closePanel = () => {
@@ -105,7 +110,8 @@ export function createHeaderNav(deps) {
         if (event.key !== "ArrowDown") return;
         event.preventDefault();
         show(trigger);
-        panel.querySelector('[data-column="' + trigger.dataset.view + '"] button').focus();
+        // 판(panel) 자체에도 data-column이 붙으므로 칸(.nav-column)으로 좁혀야 숨은 다른 칸의 버튼을 잡지 않는다
+        panel.querySelector('.nav-column[data-column="' + trigger.dataset.view + '"] button')?.focus();
       });
     }
     panel.addEventListener("click", event => {
@@ -121,6 +127,19 @@ export function createHeaderNav(deps) {
       event.preventDefault();
       items[(items.indexOf(event.target) + step + items.length) % items.length].focus();
     });
+    // 내려 읽으면 머리말 바탕을 홈의 스크롤 머리말처럼 반투명으로 바꾸고, 열린 세부 메뉴는 닫는다
+    let scrolled = false;
+    window.addEventListener("scroll", () => {
+      const next = window.scrollY > 0;
+      if (next !== scrolled) {
+        scrolled = next;
+        header?.classList.toggle("is-scrolled", next);
+      }
+      if (!panel.hidden) closeAll();
+    }, { passive: true });
+    window.addEventListener("resize", () => {
+      if (!panel.hidden) closeAll();
+    }, { passive: true });
     document.addEventListener("pointerdown", event => {
       if (!nav.contains(event.target)) closeAll();
     });

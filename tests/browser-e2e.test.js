@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
+import { signupOnLoginView } from "./helpers/nav.js";
 import sharp from "sharp";
 
 import { resetAuthCache } from "../server/account-auth.js";
@@ -81,18 +82,6 @@ async function openMyPageAndClick(page, selector) {
   }
   await menu.locator(selector).click();
   await menu.waitFor({ state: "visible" });
-}
-
-async function signupOnLoginView(page, { username, name, password = "Password123!" }) {
-  const switchBtn = page.locator("#switchAccount");
-  if ((await switchBtn.textContent())?.trim() === "회원가입") {
-    await switchBtn.click();
-  }
-  await page.locator("#signupName").fill(name);
-  await page.locator("#loginId").fill(username);
-  await page.locator("#loginPassword").fill(password);
-  await page.locator("#signupConfirm").fill(password);
-  await page.locator("#loginSubmit").click();
 }
 
 test("이중 브라우저 컨텍스트 E2E: 회원가입·사진 등록·검색/AI추천·찜/차고 가져오기·대여 승인/채팅/취소·동결 오류 및 계정 전환 격리", async () => {

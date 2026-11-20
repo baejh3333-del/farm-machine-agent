@@ -139,6 +139,8 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
 - 구매 신청을 하면 판매자에게 구매 희망 메시지가 이미 한 번 보내진다. 그래서 prefillMessage는 비우거나, 같은 말을 반복하지 않는 짧은 질문만 넣는다. 예: "직접 보러 가도 되는지, 거래 장소는 어디가 편하신지 여쭤보고 싶어요."
   답변: "n번 매물 구매 신청이 완료되었어요! 판매자가 확인하면 거래가 진행돼요. 결제는 거래할 때 직접 해 주세요. 아래 버튼을 눌러 판매자와 바로 이야기해 보세요."
 - "n번"은 [직전에 보여준 매물]의 번호다. 번호를 모르면 매물 이름으로 말한다.
+- 대여 답변 예시에는 결제 기한 문장을 넣지 않는다(화면의 결제 기한 안내 칸이 따로 보여 주므로 중복 금지). 음성 대화일 때만 서버가 신청 완료 답변 끝에 결제 기한 안내 한 문장을 붙인다.
+- 사용자가 "언제까지 결제해요?", "결제 기한이 있어요?"라고 물으면 "소유 농가가 신청을 승낙한 뒤 3일 이내에 결제해 주세요. 안내 칸을 누르면 장바구니로 바로 갈 수 있어요."라고 답한다.
 - 신청 전에 사용자가 "주인한테 먼저 물어볼래요", "판매자한테 연락할래요"라고 하면, 신청 없이 open_listing_chat만 호출해 채팅 버튼을 보여준다.
 
 ## 이미 보여준 매물로 예약 진행 (반복 추천 금지)
@@ -1767,6 +1769,17 @@ export function requestChatTarget(reservation) {
 }
 
 /** 신청 완료 답변. 직전에 보여준 목록의 번호를 알면 "n번 매물", 모르면 매물 이름으로 부른다. */
+// 음성 대화에서 대여 신청이 끝나면 보험 질문 전에 한 번 읽어 주는 결제 기한 안내(화면에는 안내 칸이 따로 뜬다)
+export const VOICE_RENTAL_PAYMENT_NOTICE = "결제는 신청 승낙 후 3일 이내에 해 주세요. 화면의 안내를 누르면 장바구니로 갈 수 있어요.";
+
+/** 음성 대화의 대여 신청 완료 답변 끝에 결제 기한 안내를 한 번 붙인다(이미 있으면 그대로). */
+export function withVoicePaymentNotice(reply, { reservation, inputMode }) {
+  if (inputMode !== "voice" || reservation?.kind !== "rental") return reply;
+  const text = String(reply || "").trim();
+  if (!text || /3일\s*이내/.test(text)) return text;
+  return `${text}\n${VOICE_RENTAL_PAYMENT_NOTICE}`;
+}
+
 export function requestDoneMessage(reservation, { shownNo = null } = {}) {
   const no = Number.isInteger(shownNo) && shownNo >= 1 && shownNo <= 9 ? shownNo : null;
   const label = no ? `${no}번 매물` : `'${String(reservation?.title || "매물").trim()}'`;
@@ -2141,7 +2154,7 @@ async function runTurn(
       learnedSlots.end = rentalDatesValid.end;
     }
     out.learnedSlots = learnedSlots;
-    const result = { mode: "agent", reply: tidyReply(reply), listingIds: out.listingIds, learnedSlots, ...extra };
+    const result = { mode: "agent", reply: withVoicePaymentNotice(tidyReply(reply), { reservation: out.reservation, inputMode }), listingIds: out.listingIds, learnedSlots, ...extra };
     for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget"]) {
       if (out[key]) result[key] = out[key];
     }

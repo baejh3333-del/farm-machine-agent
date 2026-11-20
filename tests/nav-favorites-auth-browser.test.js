@@ -228,3 +228,77 @@ test("top menu submenus: design header keeps hover-opened menu on click; legacy 
     await context.close();
   }
 });
+
+test("mobile home first screen, popups, and design/legacy menus fit without overflow at 320px and 390px", async () => {
+  for (const vp of [{ width: 320, height: 568 }, { width: 390, height: 844 }]) {
+    const context = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true });
+    const page = await context.newPage();
+    try {
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await page.locator("#homeDesignHost header").waitFor({ state: "visible" });
+
+      // 1. 첫 화면: 가로 넘침 없음 + 기본 검색/예약 CTA가 첫 화면 안에 보임
+      const metrics = await page.evaluate(() => {
+        const h = document.querySelector("#homeDesignHost").shadowRoot;
+        const cta = h.querySelector("[data-booking-wrap] a[data-cta]").getBoundingClientRect();
+        return {
+          vw: window.innerWidth,
+          vh: window.innerHeight,
+          sw: document.documentElement.scrollWidth,
+          ctaBottom: Math.round(cta.bottom),
+        };
+      });
+      assert.ok(metrics.sw <= metrics.vw, `home horizontal overflow at ${vp.width}px: scrollWidth=${metrics.sw} > vw=${metrics.vw}`);
+      assert.ok(metrics.ctaBottom <= metrics.vh, `booking CTA below fold at ${vp.width}x${vp.height}: bottom=${metrics.ctaBottom}`);
+
+      // 2. 디자인 머리말 세부 메뉴: 화면 폭 안에 깔끔하게 열리고 바깥 탭으로 닫힘
+      const home = page.locator("#homeDesignHost");
+      await home.locator('header nav[aria-label="주 메뉴"] a', { hasText: "기계 관리" }).click();
+      const megaRect = await page.evaluate(() => {
+        const h = document.querySelector("#homeDesignHost").shadowRoot;
+        const col = h.querySelector("[data-mega-col]").getBoundingClientRect();
+        return {
+          open: h.querySelector("[data-mega-root]").getAttribute("data-open"),
+          left: Math.round(col.left),
+          right: Math.round(col.right),
+        };
+      });
+      assert.equal(megaRect.open, "mine");
+      assert.ok(megaRect.left >= 0 && megaRect.right <= vp.width, `design mega menu clipped at ${vp.width}px: ${JSON.stringify(megaRect)}`);
+      await page.evaluate(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true })));
+      assert.equal(await home.locator("[data-mega-root]").getAttribute("data-open"), "", "outside tap must dismiss design mega menu");
+
+      // 3. 날짜 팝업: 화면 안에 중앙 정렬로 열리고 넘치지 않음
+      await home.locator('[data-booking-wrap] button', { hasText: /^날짜$/ }).click();
+      await home.locator('[data-pop="date"]').waitFor({ state: "visible" });
+      const popRect = await page.evaluate(() => {
+        const h = document.querySelector("#homeDesignHost").shadowRoot;
+        const r = h.querySelector('[data-pop="date"]').getBoundingClientRect();
+        return { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom), sw: document.documentElement.scrollWidth };
+      });
+      assert.ok(popRect.l >= 0 && popRect.r <= vp.width, `date popup horizontally clipped at ${vp.width}px: ${JSON.stringify(popRect)}`);
+      assert.ok(popRect.t >= 0 && popRect.b <= vp.height, `date popup vertically clipped at ${vp.width}px: ${JSON.stringify(popRect)}`);
+      assert.ok(popRect.sw <= vp.width, `date popup caused horizontal overflow at ${vp.width}px`);
+      await home.locator("[data-pop-backdrop]").click({ position: { x: 4, y: 4 } });
+
+      // 4. 기존 헤더 화면(작물별 작업 가이드): 터치로 세부 메뉴가 폭 안에 열리고 바깥 탭으로 닫힘
+      await goToMenu(page, "작물별 작업 가이드");
+      await page.locator("#guideView").waitFor({ state: "visible" });
+      const ownerBtn = page.locator('.sidebar-nav [data-view="owner"]');
+      await ownerBtn.evaluate((el) => {
+        el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+        el.click();
+      });
+      const panel = page.locator("#headerFeatures");
+      await panel.waitFor({ state: "visible" });
+      const legacyMetrics = await page.evaluate(() => {
+        const p = document.querySelector("#headerFeatures").getBoundingClientRect();
+        return { l: Math.round(p.left), r: Math.round(p.right), sw: document.documentElement.scrollWidth };
+      });
+      assert.ok(legacyMetrics.l >= 0 && legacyMetrics.r <= vp.width, `legacy submenu clipped at ${vp.width}px: ${JSON.stringify(legacyMetrics)}`);
+      assert.ok(legacyMetrics.sw <= vp.width, `legacy header view overflowed at ${vp.width}px: sw=${legacyMetrics.sw}`);
+    } finally {
+      await context.close();
+    }
+  }
+});

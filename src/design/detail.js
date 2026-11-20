@@ -12,7 +12,7 @@ import {
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, isoToKey, keyToIso, photoOf, nameOf, placeOf, ratingOf,
   groupOf, openListings, available, shared, typeLabel,
-} from "./data.js?v=20261120-8";
+} from "./data.js?v=20261120-9";
 
 let TODAY = todayKey();
 let TODAY_YM = todayYm();

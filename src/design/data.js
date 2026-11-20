@@ -158,3 +158,35 @@ export function locationChoices(limit = 5) {
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([key, n]) => ({ key, n }));
 }
+
+export async function pickCurrentLocationGps(screen, { nextPop, onHdrBounds } = {}) {
+  if (typeof screen?.deps?.requestGps !== "function") {
+    screen.setState({
+      loc: "현재 위치",
+      locSet: true,
+      locError: "",
+      pop: nextPop,
+      ...(onHdrBounds ? onHdrBounds() : {}),
+    });
+    return;
+  }
+  screen.setState({ gpsPending: true, locError: "" });
+  const res = await screen.deps.requestGps();
+  if (res?.ok) {
+    const loc = res.areaName || res.regionName || "현재 위치";
+    screen.setState({
+      loc,
+      locSet: true,
+      gpsPending: false,
+      locError: "",
+      pop: nextPop,
+      ...(onHdrBounds ? onHdrBounds() : {}),
+    });
+    return;
+  }
+  screen.setState({
+    gpsPending: false,
+    locError: res?.message || "위치 정보를 불러오지 못했습니다. 위치를 선택해주세요.",
+    pop: "loc",
+  });
+}

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src/nongnong.png" width="80" alt="농기계 상담 도우미 농농이" />
+<img src="src/nongnong-icon.png" width="80" alt="농기계 상담 도우미 농농이" />
 
 # 모아농
 

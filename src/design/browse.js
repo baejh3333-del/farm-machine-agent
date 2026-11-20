@@ -62,7 +62,7 @@ export class BrowseDesign extends DCLogic {
     super(props);
     TODAY = todayKey(); TODAY_YM = todayYm();
     this.deps = props.deps || {};
-    this.state = { pop: null, loc: shared.loc, start: shared.start, end: shared.end, time: null, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || null, mini: false, ym: TODAY_YM, locError: '', gpsPending: false };
+    this.state = { pop: null, loc: shared.loc, start: shared.start, end: shared.end, time: shared.pickH != null ? shared.pickH : null, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || null, mini: false, ym: TODAY_YM, locError: '', gpsPending: false };
     this.rails = {};
   }
 
@@ -96,12 +96,31 @@ export class BrowseDesign extends DCLogic {
   setState(patch) {
     super.setState(patch);
     const s = this.state;
-    Object.assign(shared, { loc: s.loc, start: s.start, end: s.end, type: s.type, typeQuery: s.typeQuery, tab: s.tab });
+    const timeChanged = patch && ('time' in patch);
+    Object.assign(shared, {
+      loc: s.loc,
+      start: s.start,
+      end: s.end,
+      type: s.type,
+      typeQuery: s.typeQuery,
+      tab: s.tab,
+      ...(timeChanged ? { pickH: s.time, pickM: 0 } : {}),
+    });
   }
 
   syncShared() {
     TODAY = todayKey(); TODAY_YM = todayYm();
-    this.setState({ loc: shared.loc, start: shared.start, end: shared.end, type: shared.type || 'all', typeQuery: shared.typeQuery || '', tab: shared.tab || this.state.tab, pop: null, locError: '' });
+    super.setState({
+      loc: shared.loc,
+      start: shared.start,
+      end: shared.end,
+      time: shared.pickH != null ? shared.pickH : null,
+      type: shared.type || 'all',
+      typeQuery: shared.typeQuery || '',
+      tab: shared.tab || this.state.tab,
+      pop: null,
+      locError: '',
+    });
   }
 
   openFromTop(w) {

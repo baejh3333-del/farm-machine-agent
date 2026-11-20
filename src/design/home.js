@@ -81,15 +81,29 @@ export class HomeDesign extends DCLogic {
       matchesMachineFilter(it, s.type, s.typeQuery));
   }
 
-  seeAll(e) {
-    if (e && e.preventDefault) e.preventDefault();
+  syncShared() {
     const s = this.state;
+    const isRent = s.tab === 'rent';
+    const hasTime = isRent && (s.timeSet || s.pickH !== 9 || s.pickM !== 0 || s.retH !== 18 || s.retM !== 0 || s.searched || !!s.start);
     Object.assign(shared, {
       loc: s.locSet && s.loc !== '현재 위치' ? s.loc : null,
-      start: s.tab === 'rent' ? s.start : null, end: s.tab === 'rent' ? (s.end || s.start) : null,
-      task: null, tab: s.tab === 'rent' ? 'all' : 'buy',
-      type: s.type || 'all', typeQuery: s.typeQuery || '',
+      radius: s.radius || 10,
+      start: isRent ? s.start : null,
+      end: isRent ? (s.end || s.start) : null,
+      pickH: hasTime ? s.pickH : null,
+      pickM: hasTime ? s.pickM : 0,
+      retH: hasTime ? s.retH : null,
+      retM: hasTime ? s.retM : 0,
+      task: null,
+      tab: isRent ? 'all' : 'buy',
+      type: s.type || 'all',
+      typeQuery: s.typeQuery || '',
     });
+  }
+
+  seeAll(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    this.syncShared();
     this.deps.goBrowse?.();
   }
 
@@ -229,7 +243,7 @@ export class HomeDesign extends DCLogic {
     }
     const pickList = this._pick.list.map(id => this.deps.listingById?.(id)).filter(Boolean);
     const recs = (s.searched ? [...found].sort((x, y) => x.price - y.price).slice(0, 3) : pickList)
-      .map(it => ({ img: photoOf(it), hasImg: true, noImg: false, name: nameOf(it), place: placeOf(it), price: it.type === 'rent' ? '1일 ' + won(it.price) : bigWon(it.price), badge: it.type === 'rent' ? '대여 가능' : '중고 매물', open: () => this.deps.openDetail?.(it.id) }));
+      .map(it => ({ img: photoOf(it), hasImg: true, noImg: false, name: nameOf(it), place: placeOf(it), price: it.type === 'rent' ? '1일 ' + won(it.price) : bigWon(it.price), badge: it.type === 'rent' ? '대여 가능' : '중고 매물', open: () => { this.syncShared(); this.deps.openDetail?.(it.id); } }));
 
     return {
       // 사용 방법 탭: 빌리는 분 / 빌려주는 분 (누르면 STEP 01~04가 바뀌어요)
@@ -249,7 +263,7 @@ export class HomeDesign extends DCLogic {
       dateText, dateTextColor: s.start ? '#111111' : '#9A9A9A',
       timeShow: s.timeSet ? timeText : '시간', timeTextColor: s.timeSet ? '#111111' : '#9A9A9A',
       typeText: showType || '기종 선택/입력', typeTextColor: showType ? '#111111' : '#9A9A9A',
-      doSearch: e => { if (e && e.preventDefault) e.preventDefault(); this.setState({ searched: true, pop: null, hdrPop: false }); },
+      doSearch: e => { if (e && e.preventDefault) e.preventDefault(); this.setState({ searched: true, pop: null, hdrPop: false }); this.syncShared(); },
       openLoc: toggle('loc'), openDate: toggle('date'), openType: toggle('type'),
       locRing: ring('loc'), dateRing: ring('date'), typeRing: ring('type'),
       locOpen: s.pop === 'loc' && !s.hdrPop, dateOpen: s.pop === 'date' && !s.hdrPop, typeOpen: s.pop === 'type' && !s.hdrPop,

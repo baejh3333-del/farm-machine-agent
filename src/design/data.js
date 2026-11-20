@@ -36,7 +36,9 @@ const DESIGN_PHOTO = {
   tiller: "/src/design/assets/tiller.jpg",
 };
 export function photoOf(item) {
-  return getListingPhotoSrc(item) || DESIGN_PHOTO[item?.machineType] || machineImage(item?.machineType).replace(/^\.\//, "/");
+  const src = getListingPhotoSrc(item);
+  if (src) return src.replace(/^\.\//, "/");
+  return DESIGN_PHOTO[item?.machineType] || machineImage(item?.machineType, item?.id).replace(/^\.\//, "/");
 }
 
 // 매물 찾기의 '농기계 종류' 묶음
@@ -142,12 +144,29 @@ export function buildTypeChoices(type, query, onPick) {
 // 화면끼리 넘겨주는 검색 조건 (홈 → 매물 찾기 → 상세)
 export const shared = {
   loc: null, // '경북 영양군' 같은 지역 앞부분
+  radius: 10,
   start: null, end: null, // 날짜 키 (20261120)
+  pickH: null, pickM: 0,
+  retH: null, retM: 0,
   type: "all",
   typeQuery: "",
   task: null,
   tab: "all",
 };
+
+export function formatKoreanTime(h, m = 0) {
+  if (h == null || Number.isNaN(Number(h))) return "";
+  const hour = ((Number(h) % 24) + 24) % 24;
+  const min = Number(m) || 0;
+  const base = hour === 0
+    ? "오전 12시"
+    : hour < 12
+      ? `오전 ${hour}시`
+      : hour === 12
+        ? "오후 12시"
+        : `오후 ${hour - 12}시`;
+  return min ? `${base} ${min}분` : base;
+}
 
 // 위치 고르기 목록: 매물이 많은 지역부터
 export function locationChoices(limit = 5) {

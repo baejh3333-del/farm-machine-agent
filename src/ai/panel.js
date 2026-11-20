@@ -49,9 +49,6 @@ const MACHINE_FALLBACK_IMAGE = {
   sprayer: "./src/images/machines/sprayer.jpg",
   speedSprayer: "./src/images/machines/sprayer.jpg",
   agriDrone: "./src/images/machines/sprayer.jpg",
-  potatoPlanter: "./src/images/machines/potatoPlanter.jpg",
-  garlicOnionPlanter: "./src/images/machines/potatoPlanter.jpg",
-  seeder: "./src/images/machines/potatoPlanter.jpg",
   combine: "./src/images/machines/combine.jpg",
   thresher: "./src/images/machines/combine.jpg",
   dryer: "./src/images/machines/combine.jpg",
@@ -70,7 +67,7 @@ function resolveListingImage(item) {
     || item?.image
     || getListingPhotoSrc(item)
     || MACHINE_FALLBACK_IMAGE[item?.machineType]
-    || (item?.machineType ? machineImage(item.machineType) : "")
+    || (item?.machineType ? machineImage(item.machineType, item.id) : "")
     || "./src/nongnong-icon.png"
   );
 }

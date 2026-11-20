@@ -72,9 +72,10 @@ export function createHeaderNav(deps) {
       // 올린 메뉴의 세부 항목만 그 메뉴 바로 아래에 보여 준다(모아농 2.3 디자인)
       panel.dataset.column = trigger.dataset.view || "";
       const r = trigger.getBoundingClientRect();
-      panel.style.setProperty("--nav-col-left", Math.max(16, Math.round(r.left) - 24) + "px");
+      const maxLeft = Math.max(16, window.innerWidth - 220);
+      panel.style.setProperty("--nav-col-left", Math.min(maxLeft, Math.max(16, Math.round(r.left) - 24)) + "px");
       // 세부 메뉴는 머리말 바로 아래에서 펼친다(홈 menu.js openMenu와 같은 계산)
-      if (header) panel.style.setProperty("--nav-top", Math.round(header.getBoundingClientRect().bottom) + "px");
+      if (header) panel.style.setProperty("--nav-top", Math.max(0, Math.round(header.getBoundingClientRect().bottom)) + "px");
       triggers.forEach(button => button.setAttribute("aria-expanded", button === trigger ? "true" : "false"));
     }
     closePanel = () => {
@@ -134,6 +135,9 @@ export function createHeaderNav(deps) {
         scrolled = next;
         header?.classList.toggle("is-scrolled", next);
       }
+      if (!panel.hidden) closeAll();
+    }, { passive: true });
+    window.addEventListener("resize", () => {
       if (!panel.hidden) closeAll();
     }, { passive: true });
     document.addEventListener("pointerdown", event => {

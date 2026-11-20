@@ -353,16 +353,6 @@
   .sidebar > .topbar-left { justify-self: end; min-width: 0; }
 }
 
-@media (min-width: 1241px) {
-  .sidebar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    column-gap: 16px;
-  }
-  .sidebar > .brand { justify-self: start; }
-  .sidebar > .topbar-left { justify-self: end; min-width: 0; }
-}
-
 @media (max-width: 1240px) {
   .sidebar-nav {
     overflow: visible;

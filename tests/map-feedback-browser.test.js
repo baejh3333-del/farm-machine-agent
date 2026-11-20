@@ -518,3 +518,118 @@ test("폴백 지도: 25m 축척 경계 일관성, 통합 문구 제거, 에이�
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("모바일(320/390px) 및 데스크톱(1280px) 지도 레이아웃: 겹침·가로 넘침 없이 핀/카드/시트/목록 접기 동작", async () => {
+  const server = await startStaticServer();
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    page.setDefaultTimeout(15000);
+    await page.addInitScript(installKakaoMapStub);
+
+    await page.route("**/api/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/api/listings") return route.fulfill({ json: { listings: SAMPLE_LISTINGS } });
+      if (url.pathname === "/api/me") return route.fulfill({ json: { user: null } });
+      if (url.pathname === "/api/weather") {
+        return route.fulfill({
+          json: {
+            region: "홍천 비발디파크",
+            mapConfig: { provider: "kakao", kakaoAppKey: "test-key" },
+            weather: { suitability: "good", advice: "작업하기 좋아요", slots: [], workTips: [] },
+            forecastDays: [],
+          },
+        });
+      }
+      return route.fulfill({ json: {} });
+    });
+
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await goToMenu(page, "내 동네 매물 지도");
+    await page.locator("#headerMapZoomBadge").waitFor({ state: "visible" });
+
+    const measure = () => page.evaluate(() => {
+      const r = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const b = el.getBoundingClientRect();
+        return { x: b.x, y: b.y, w: b.width, h: b.height, right: b.right, bottom: b.bottom };
+      };
+      const ov = (a, b) => Boolean(a && b && a.w > 0 && b.w > 0 && a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y);
+      const stage = r("#headerMapStage");
+      const list = r("#headerMapList");
+      const fTop = r(".header-map-floating-top");
+      const zoom = r(".header-map-zoom-controls");
+      const card = r("#headerMapFloatingCard");
+      return {
+        overflowX: document.documentElement.scrollWidth > window.innerWidth,
+        stage,
+        list,
+        overlaps: {
+          listVsStage: ov(list, stage),
+          zoomVsTop: ov(zoom, fTop),
+          cardVsTop: ov(card, fTop),
+          cardVsZoom: ov(card, zoom),
+        },
+      };
+    });
+
+    // 390px: 지도가 목록 위에 배치되고 겹침·가로 넘침이 없음
+    const m390 = await measure();
+    assert.equal(m390.overflowX, false, "390px에서 가로 넘침이 없어야 함");
+    assert.equal(m390.overlaps.listVsStage, false, "390px에서 목록이 지도를 덮으면 안 됨");
+    assert.equal(m390.overlaps.zoomVsTop, false, "390px에서 줌 컨트롤과 상단 버튼이 겹치면 안 됨");
+    assert.ok(m390.stage.y < m390.list.y, "390px에서 지도가 목록보다 먼저 보여야 함");
+
+    // 250m 확대 -> 개별 핀 클릭 시 플로팅 카드와 컨트롤이 겹치지 않음
+    await page.locator("#headerMapZoomInBtn").click();
+    await page.locator(".header-map-price-pin[data-listing-id]").first().click();
+    await page.locator("#headerMapFloatingCard").waitFor({ state: "visible" });
+    const m390Card = await measure();
+    assert.equal(m390Card.overlaps.cardVsTop, false, "390px에서 카드와 상단 버튼이 겹치면 안 됨");
+    assert.equal(m390Card.overlaps.cardVsZoom, false, "390px에서 카드와 줌 컨트롤이 겹치면 안 됨");
+
+    // 모바일 목록 접기 시 지도 높이가 커짐
+    const stageHeightBefore = m390Card.stage.h;
+    await page.locator("#headerMapListToggle").click();
+    const stageHeightAfter = await page.locator("#headerMapStage").evaluate((el) => el.getBoundingClientRect().height);
+    assert.ok(stageHeightAfter > stageHeightBefore, `목록 접기 후 지도 높이가 커져야 함 (${stageHeightBefore} -> ${stageHeightAfter})`);
+    await page.locator("#headerMapListToggle").click();
+
+    // 320px: 카드·전체 시트 가로 넘침 및 겹침 없음
+    await page.setViewportSize({ width: 320, height: 568 });
+    const m320Card = await measure();
+    assert.equal(m320Card.overflowX, false, "320px에서 가로 넘침이 없어야 함");
+    assert.equal(m320Card.overlaps.cardVsTop, false, "320px에서 카드와 상단 버튼이 겹치면 안 됨");
+    assert.equal(m320Card.overlaps.cardVsZoom, false, "320px에서 카드와 줌 컨트롤이 겹치면 안 됨");
+
+    await page.locator("#headerMapShowAllBtn").click();
+    await page.locator("#headerMapClusterSheet").waitFor({ state: "visible" });
+    const sheetCheck = await page.evaluate(() => {
+      const sheet = document.getElementById("headerMapClusterSheet");
+      const item = sheet.querySelector(".header-map-cluster-item");
+      return {
+        title: sheet.querySelector(".header-map-cluster-sheet-badges strong")?.textContent?.trim() || "",
+        itemFits: item ? item.getBoundingClientRect().right <= sheet.getBoundingClientRect().right + 1 : true,
+        overflowX: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
+    assert.equal(sheetCheck.title, "전국 전체 매물");
+    assert.equal(sheetCheck.itemFits, true, "320px에서 시트 카드가 시트 너비를 넘치면 안 됨");
+    assert.equal(sheetCheck.overflowX, false);
+    await page.locator("#headerMapClusterSheetCloseBtn").click();
+
+    // 데스크톱(1280px): 목록 접기 시 지도 너비가 실제로 확장됨
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const deskBefore = await page.locator("#headerMapStage").evaluate((el) => el.getBoundingClientRect().width);
+    await page.locator("#headerMapListToggle").click();
+    await page.waitForTimeout(450);
+    const deskAfter = await page.locator("#headerMapStage").evaluate((el) => el.getBoundingClientRect().width);
+    assert.ok(deskAfter > deskBefore + 200, `데스크톱 목록 접기 후 지도 너비가 커져야 함 (${deskBefore} -> ${deskAfter})`);
+
+    await page.close();
+  } finally {
+    await browser.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

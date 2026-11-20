@@ -16,6 +16,7 @@ import {
   searchListingsTool,
 } from "../server/nongnong-agent.js";
 import { buildMockListings } from "../server/listing-seed.js";
+import { findRegionEntry, regionsMatchForSearch } from "../src/data/korea-regions.js";
 import { askLLMJson, callLLM, fromOpenAiResponse, llmProvider, toOpenAiMessages } from "../server/llm.js";
 
 const LISTINGS = buildMockListings();
@@ -1344,4 +1345,37 @@ test("대행운용(생산자): 초안을 등록할 때 작업자 정보도 함�
   assert.equal(result.outcome, "completed");
   assert.deepEqual(sent.rentalOperator, OP);
   assert.match(sent.description, /^✅ 대행운용서비스 제공중/);
+});
+
+test("홍천군 검색: 홍천 비발디파크 지역 제거 후 홍천군·서면 팔봉리에서 관리기 및 대리운용 매물을 누락 없이 찾는다", () => {
+  assert.equal(findRegionEntry("홍천 비발디파크"), null);
+  assert.equal(regionsMatchForSearch("강원특별자치도 홍천군", "서면 팔봉리"), true);
+  assert.equal(regionsMatchForSearch("서면 팔봉리", "강원특별자치도 홍천군"), true);
+  assert.equal(regionsMatchForSearch("청기면", "입암면"), false);
+
+  const spoken = collectKnownFacts({ history: [], text: "홍천에서 관리기 찾아줘" });
+  assert.equal(spoken.spokenRegion, "강원특별자치도 홍천군");
+
+  for (const region of ["강원특별자치도 홍천군", "서면 팔봉리"]) {
+    const rentRes = searchListingsTool(
+      { machineType: "cultivator", transaction: "rent", region },
+      LISTINGS,
+      { region }
+    );
+    assert.equal(rentRes.regionFallback, undefined);
+    assert.equal(rentRes.results.length, 3);
+    assert.ok(rentRes.results.every((r) => r.region === "강원특별자치도 홍천군"));
+
+    const opRes = searchListingsTool(
+      { machineType: "cultivator", transaction: "rent", operatorService: true, region },
+      LISTINGS,
+      { region }
+    );
+    assert.equal(opRes.regionFallback, undefined);
+    assert.deepEqual(
+      opRes.results.map((r) => r.id).sort(),
+      ["region-45-slot-7", "region-45-slot-82"]
+    );
+    assert.ok(opRes.results.every((r) => r.operatorService && r.operatorService.dailyPricePerDay > 0));
+  }
 });

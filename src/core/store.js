@@ -1,4 +1,5 @@
 import { toast, today } from "./utils.js";
+import { findRegionEntry } from "../data/korea-regions.js";
 
 export const UI_PREFS_KEY = "moa-farm-v1";
 export const GUEST_FAV_KEY = "moa-guest-favorites-v1";
@@ -55,12 +56,14 @@ export let state;
 try {
   const saved = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
   const savedCoords = sanitizeUserCoords(saved.userCoords);
+  const savedRegionValid = typeof saved.region === "string" && saved.region && Boolean(findRegionEntry(saved.region));
   const savedSource =
-    saved.regionSource === "gps" || saved.regionSource === "manual" || saved.regionSource === "default"
+    (saved.regionSource === "gps" || saved.regionSource === "manual" || saved.regionSource === "default") &&
+    (saved.regionSource === "default" || savedRegionValid)
       ? saved.regionSource
       : savedCoords
         ? "gps"
-        : typeof saved.region === "string" && saved.region && saved.region !== "홍천 비발디파크"
+        : savedRegionValid
           ? "manual"
           : "default";
 
@@ -69,11 +72,9 @@ try {
     viewMode: saved.viewMode === "map" ? "map" : defaults.viewMode,
     transaction: saved.transaction === "sale" ? "sale" : defaults.transaction,
     region:
-      savedSource === "default"
+      savedSource === "default" || !savedRegionValid
         ? DEFAULT_FALLBACK_REGION
-        : typeof saved.region === "string"
-          ? saved.region
-          : DEFAULT_FALLBACK_REGION,
+        : saved.region,
     regionSource: savedSource,
     userCoords: savedCoords,
     sort: typeof saved.sort === "string" ? saved.sort : defaults.sort,

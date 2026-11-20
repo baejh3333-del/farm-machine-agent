@@ -61,7 +61,7 @@ export const DEFAULT_KAKAO_REST_KEY = "6df1354c0ce056eef6569a59e1ed90c8";
 export const VIVALDI_PARK_ORIGIN = {
   lat: 37.6456,
   lng: 127.6844,
-  name: "홍천 비발디파크",
+  name: "강원특별자치도 홍천군",
   address: "강원특별자치도 홍천군 서면 한치골길 262",
 };
 
@@ -85,7 +85,7 @@ const HONGCHEON_RANDOM_PRESETS = [
     areaMax: 18000,
     price: 130000,
     included: "로터리 작업기",
-    description: "홍천 비발디파크 인근 팔봉산 해바라기 농가에서 바로 빌릴 수 있는 중형 트랙터입니다.",
+    description: "홍천군 서면 팔봉산 해바라기 농가에서 바로 빌릴 수 있는 중형 트랙터입니다.",
     summary: "벼·고추·배추·감자 밭갈이에 적합한 45마력 트랙터입니다.",
   },
   {

@@ -23,7 +23,7 @@ import { parseDealsHash, dealsHash } from "./data/deals-model.js";
 import { initEducationCertificate, renderEducationCertificate, setEducationCertificateStatus } from "./views/education-cert.js";
 import { SETUP_CHANGED_EVENT, initAccountInitialSetup } from "./views/initial-setup.js";
 import { createAiPanel } from "./ai/panel.js";
-import { createDesignApp } from "./design/app.js?v=20261120-3";
+import { createDesignApp } from "./design/app.js?v=20261120-4";
 import { createHeaderNav } from "./views/header-nav.js";
 import { createCartCheckout } from "./views/cart-checkout.js";
 import { refreshWeatherAndMapConfig, renderHeaderMapView, focusHeaderMapListing, ensureHongcheonRandomListing } from "./views/map-weather.js";
@@ -78,6 +78,7 @@ const designApp = createDesignApp({
   openDetail: (id) => openListingPage(id),
   listingById,
   favorites: () => activeFavorites(),
+  isLoggedIn: () => isLoggedIn(),
   isFavorite: (id) => activeFavorites().includes(id),
   toggleFavorite: (id) => toggleFavorite(id),
   rentalForm: (...args) => txViews.rentalForm(...args),
@@ -377,7 +378,9 @@ let scrollSpyPausedUntil = 0;
 
 function markNav(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
+    const NAV_GROUP = { map: "browse", guide: "garage", favorites: "owner", deals: "owner", requests: "owner" };
     const active = button.dataset.view === view
+      || (button.classList.contains("nav-item") && NAV_GROUP[view] === button.dataset.view)
       || (view === "ownerLoginRequired" && button.dataset.view === "owner")
       || (view === "dealsLoginRequired" && button.dataset.view === "deals")
       || (view === "requestsLoginRequired" && button.dataset.view === "requests");
@@ -451,6 +454,7 @@ function setView(view, options = {}) {
   scrollSpyPausedUntil = Date.now() + 1000;
   designApp.closePop();
   document.body.classList.toggle("design-page", DESIGN_VIEWS.has(view));
+  document.body.dataset.view = view;
   if (view === "browse") designApp.showBrowse();
   if (view === "detail") designApp.showDetail(options.id || state.detailId);
   if (view === "detail" && options.id) state.detailId = options.id;
@@ -1370,6 +1374,13 @@ function initLoginForm() {
   const submit = $("loginSubmit");
   const eye = $("loginEye");
   const switchButton = $("switchAccount");
+  // 로그인 · 회원가입 탭(모아농 2.3): 지금 모드와 다른 탭을 누르면 전환 버튼을 대신 누른다
+  document.querySelectorAll("[data-auth-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const signupNow = !$("signupNameField")?.hidden;
+      if ((tab.dataset.authTab === "signup") !== signupNow) switchButton?.click();
+    });
+  });
   const headerButton = $("loginButton");
   const logout = $("accountLogoutButton");
   let signup = false;
@@ -1405,6 +1416,7 @@ function initLoginForm() {
     const loggedIn = isLoggedIn();
     headerButton.hidden = loggedIn;
     logout.hidden = !loggedIn;
+    designApp.refresh();
     updateBadges();
   }
 
@@ -1688,6 +1700,12 @@ function initLoginForm() {
     .catch(() => {})
     .finally(() => { submit.disabled = false; });
 }
+
+// 도움말 카드 속 바로가기 버튼(data-nav-go) → 머리말 메뉴와 같은 곳으로
+document.addEventListener("click", (event) => {
+  const go = event.target.closest?.("[data-nav-go]");
+  if (go) headerNav.runDestination(go.dataset.navGo);
+});
 
 runtime.garage = createGarage({
   root: $("garageView"), getListings: allListings, getCatalogState: () => runtime.catalogState,

@@ -64,6 +64,8 @@ export function menuVals(self, active, act) {
   self._menuAct = act;
   return {
     ...self._menuFns,
+    // 머리말 오른쪽 버튼: 로그인하면 '마이페이지'로 바뀌어요(눌렀을 때 동작은 app.js navAction).
+    authLabel: self.deps?.isLoggedIn?.() ? '마이페이지' : '로그인',
     navs: MENU.map(([id, label]) => {
       const on = active === id;
       return {

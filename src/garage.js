@@ -52,7 +52,7 @@ export function createGarage({
   }
 
   root.innerHTML = `
-    <section class="garage-hero"><div><span class="garage-eyebrow">MY FARM GARAGE</span><h1>내 기계에 딱 맞는<br>작업기를 찾아보세요.</h1><p>보유한 농기계를 등록해 연결 규격을 비교하고,<br>기계가 없다면 호환되는 세트로 찾아보세요.</p></div><div class="garage-hero-mark" aria-hidden="true">🚜<span> + </span>🌱</div></section>
+    <section class="garage-hero"><div><span class="garage-eyebrow">농기계 호환</span><h1>내 기계에 딱 맞는<br>작업기를 찾아보세요.</h1><p>보유한 농기계를 등록해 연결 규격을 비교하고,<br>기계가 없다면 호환되는 세트로 찾아보세요.</p></div><div class="garage-hero-mark" aria-hidden="true">🚜<span> + </span>🌱</div></section>
     <div class="garage-layout">
       <section class="garage-panel" aria-labelledby="ownedTitle"><div class="garage-section-title"><h2 id="ownedTitle">내 농기계</h2><span id="ownedCount"></span></div><p id="garageStorageNote" class="garage-note"></p><div id="ownedMachines"></div>
         <details class="garage-register" open><summary>+ 보유 농기계 등록</summary><form id="ownedMachineForm">

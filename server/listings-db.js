@@ -3,6 +3,7 @@ import { getPool } from "./db.js";
 import { buildMockListings } from "./listing-seed.js";
 import { photoPublicUrl } from "./storage.js";
 import { cleanDeliveryMethods, inferDeliveryMethods } from "../src/data/delivery.js";
+import { cleanRentalOptions } from "../src/data/rental-options.js";
 
 /**
  * Legacy synchronous seed accessor retained strictly for pure unit test fixtures.
@@ -49,6 +50,7 @@ export function toListingDto(row, booked = [], viewerId = null) {
     price: Number(row.price),
     rentalOperator: row.rental_operator ?? null,
     operatorService,
+    rentalOptions: row.type === "rent" ? cleanRentalOptions(row.rental_options) : [],
     region: row.region,
     condition: row.condition,
     inspectedAt: typeof row.inspected_at === "string"

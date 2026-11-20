@@ -1,5 +1,6 @@
 import { inferDeliveryMethods } from "../src/data/delivery.js";
 import { applyModelSpecification } from "../src/data/machine-specifications.js";
+import { DEFAULT_DEMO_RENTAL_OPTIONS } from "../src/data/rental-options.js";
 
 // 사전 조합 완료된 정적 시드 데이터 (총 1312건: 기존 1198건 + 홍천군 31개 전 기종 대여·구매 각 3건 맞춤 114건)
 const seed = [
@@ -1325,14 +1326,36 @@ const DEMO_OPERATORS = {
   "r5": { name: "정해룡", experience: "승용 이앙기 15년, 모내기철 대행 작업 다수", dailyPrice: 130000 },
 };
 
+// 시연용 예시 대여 매물(hc-vivaldi-1): 직접 가지러 가기 + 배달 받기(+2만원)와 선택 옵션 3종을 함께 제공한다.
+// 다른 매물과 실제 사용자 등록 매물은 기본값(각 매물의 운송 방식, 선택 옵션 없음)을 유지한다.
+const DEMO_DELIVERY = {
+  "hc-vivaldi-1": {
+    methods: ["owner_delivery", "self_pickup"],
+    fee: 20000,
+    area: "서면·남면·홍천읍까지, 15km 안",
+    pickupPlace: "강원 홍천군 서면 팔봉리 해바라기 농가 창고",
+  },
+};
+
+const DEMO_RENTAL_OPTIONS = {
+  "hc-vivaldi-1": DEFAULT_DEMO_RENTAL_OPTIONS,
+};
+
 export function buildMockListings() {
   return seed.map((item, index) => {
     const listing = applyModelSpecification({ ...item, status: item.status || "open" }, index);
-    // 데모 매물의 운송 방식은 기존 인수·전달 방법 글로 정한다(운반 협의 → 직접 운송, 직접 인수 → 직접 픽업).
+    const demoDelivery = DEMO_DELIVERY[listing.id];
+    const demoOptions = listing.type === "rent" && DEMO_RENTAL_OPTIONS[listing.id]
+      ? DEMO_RENTAL_OPTIONS[listing.id].map((opt) => ({ ...opt }))
+      : [];
+    // 데모 매물의 운송 방식은 명시 시연 설정이 없으면 기존 인수·전달 방법 글로 정한다.
     return {
       ...listing,
-      delivery: listing.delivery || { methods: inferDeliveryMethods(listing.pickup), fee: null, area: "", pickupPlace: listing.pickup || "" },
+      delivery: listing.delivery || (demoDelivery
+        ? { ...demoDelivery, methods: [...demoDelivery.methods] }
+        : { methods: inferDeliveryMethods(listing.pickup), fee: null, area: "", pickupPlace: listing.pickup || "" }),
       rentalOperator: listing.type === "rent" && DEMO_OPERATORS[listing.id] ? { ...DEMO_OPERATORS[listing.id] } : null,
+      rentalOptions: demoOptions,
     };
   });
 }

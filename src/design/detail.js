@@ -2,6 +2,13 @@
 import { DCLogic } from "./dc-runtime.js";
 import { menuVals } from "./menu.js?v=20261121-1";
 import { CROP_BY_ID, OPERATION_BY_ID } from "../data/farm-machines.js";
+import { deliveryOf } from "../data/delivery.js";
+import {
+  buildDetailRentalOptions,
+  defaultRentalDeliveryMethod,
+  formatDeliveryDescription,
+  isDemoMockupListing,
+} from "../data/rental-options.js";
 import {
   WD, K, P, won, bigWon, todayKey, todayYm, isoToKey, keyToIso, photoOf, nameOf, placeOf, ratingOf,
   groupOf, openListings, available, shared, typeLabel,
@@ -61,7 +68,8 @@ export class DetailDesign extends DCLogic {
   show(id) {
     TODAY = todayKey(); TODAY_YM = todayYm();
     const item = this.deps.listingById?.(id);
-    const self = item?.delivery?.methods?.includes('owner_delivery') && !item.delivery.methods.includes('self_pickup') ? 'deliver' : 'self';
+    const defaultMethod = defaultRentalDeliveryMethod(item);
+    const self = defaultMethod === 'owner_delivery' ? 'deliver' : 'self';
     const start = shared.start && shared.start >= TODAY ? shared.start : null;
     const end = start && shared.end && shared.end >= start ? shared.end : start;
     this.setState({ id, pop: null, gallery: false, start, end, pickup: self, opts: [], ym: start ? (P(start)[0] * 12 + P(start)[1] - 1) : TODAY_YM });
@@ -107,13 +115,26 @@ export class DetailDesign extends DCLogic {
     if (!it) return;
     if (it.type !== 'rent') { this.deps.chatForm?.({ listingId: it.id }); return; }
     const s = this.state;
+    const deliveryInfo = deliveryOf(it);
+    const deliveryMethod = s.pickup === 'deliver' && deliveryInfo.methods.includes('owner_delivery')
+      ? 'owner_delivery'
+      : (deliveryInfo.methods.includes('self_pickup') ? 'self_pickup' : deliveryInfo.methods[0]);
+    const deliveryFee = deliveryMethod === 'owner_delivery'
+      ? (Number.isSafeInteger(deliveryInfo.fee) && deliveryInfo.fee >= 0 ? deliveryInfo.fee : null)
+      : 0;
     const notes = [];
     if (s.start) notes.push('받는 시간 ' + TIMES[s.st] + ', 돌려주는 시간 ' + TIMES[s.et]);
-    notes.push('받는 방법: ' + (s.pickup === 'deliver' ? '배달 받기' : '직접 가지러 가기'));
-    chosen.filter(o => o.id !== 'work').forEach(o => notes.push('부탁: ' + o.t));
+    notes.push('받는 방법: ' + (deliveryMethod === 'owner_delivery' ? '배달 받기' : '직접 가지러 가기'));
+    chosen.filter(o => o.kind === 'free').forEach(o => notes.push('부탁: ' + o.t));
+    const rentalOptions = chosen.filter(o => o.kind === 'addon' && o.option).map(o => ({ ...o.option }));
     this.deps.rentalForm?.(it.id, {
-      start: keyToIso(s.start), end: keyToIso(s.end || s.start), note: notes.join('\n'),
+      start: keyToIso(s.start),
+      end: keyToIso(s.end || s.start),
+      note: notes.join('\n'),
+      deliveryMethod,
+      deliveryFee,
       rentalOperator: chosen.some(o => o.id === 'work') ? it.rentalOperator : null,
+      rentalOptions,
     });
   }
 
@@ -129,20 +150,28 @@ export class DetailDesign extends DCLogic {
     const has = id => s.opts.includes(id);
     const flip = id => () => this.setState({ opts: has(id) ? s.opts.filter(x => x !== id) : [...s.opts, id] });
     const op = it.rentalOperator;
-    const OPTS = isRent ? [
-      op ? { id: 'work', t: '농작업 대행', d: '소유주 ' + op.name + '님이 기계를 몰고 와서 직접 작업해 드려요. ' + (op.experience || ''), unit: op.dailyPrice || 0, per: 'day' } : null,
-      { id: 'lesson', t: '처음 쓰는 법 알려 주기', d: '받을 때 시동부터 작업까지 알려 달라고 소유주에게 부탁해요.', unit: 0, per: 'once' }
-    ].filter(Boolean) : [];
+    const OPTS = buildDetailRentalOptions(it);
     const optCost = o => o.per === 'day' ? o.unit * days : o.unit;
-    const methods = it.delivery?.methods || ['self_pickup'];
-    const fee = Number(it.delivery?.fee) || 0;
-    const deliveryFee = s.pickup === 'deliver' ? fee : 0;
+    const deliveryInfo = deliveryOf(it);
+    const methods = deliveryInfo.methods;
+    const activePickup = s.pickup === 'deliver' && methods.includes('owner_delivery')
+      ? 'deliver'
+      : (methods.includes('self_pickup') ? 'self' : 'deliver');
+    const rawFee = deliveryInfo.fee;
+    const hasExplicitFee = Number.isSafeInteger(rawFee) && rawFee >= 0;
+    const fee = hasExplicitFee ? rawFee : 0;
+    const deliveryFee = activePickup === 'deliver' ? fee : 0;
     const base = isRent ? DAY * days : DAY;
     const chosen = OPTS.filter(o => has(o.id));
     const total = base + deliveryFee + chosen.reduce((a, o) => a + optCost(o), 0);
     const lines = isRent ? [{ k: '대여료 (1일 ' + won(DAY) + ' × ' + days + '일)', v: won(base), color: '#333333' }] : [{ k: '판매가', v: bigWon(base), color: '#333333' }];
-    if (deliveryFee) lines.push({ k: '배달·회수', v: won(deliveryFee), color: '#333333' });
-    else if (s.pickup === 'deliver') lines.push({ k: '배달·회수', v: '소유주와 협의', color: '#333333' });
+    if (activePickup === 'deliver') {
+      lines.push({
+        k: '배달 받기',
+        v: hasExplicitFee ? (fee > 0 ? won(fee) : '무료') : '요금 협의',
+        color: '#333333',
+      });
+    }
     chosen.forEach(o => lines.push({ k: o.t, v: optCost(o) ? won(optCost(o)) : '무료', color: '#333333' }));
 
     let rangeHint = '빌리는 날을 눌러 주세요';
@@ -179,10 +208,16 @@ export class DetailDesign extends DCLogic {
     const r = ratingOf(it);
     const reviewList = Array.isArray(it.reviews) ? it.reviews.slice(0, 3) : [];
     const ownerName = it.ownerName || '소유주';
-    const pickPlace = it.delivery?.pickupPlace || it.pickup || placeOf(it);
+    const pickPlace = deliveryInfo.pickupPlace || it.pickup || placeOf(it);
+    const isDemoMockup = isDemoMockupListing(it);
+    const deliveryPriceText = hasExplicitFee ? (fee > 0 ? '+' + won(fee) : '무료') : '요금 협의';
     const pickOpts = [
-      methods.includes('self_pickup') ? { id: 'self', t: '직접 가지러 가기', d: pickPlace + '에서 받아요.', price: '무료' } : null,
-      methods.includes('owner_delivery') ? { id: 'deliver', t: '배달 받기', d: (it.delivery?.area ? it.delivery.area + '까지 ' : '') + '소유주가 내 밭까지 가져다 드려요.', price: fee ? '+' + won(fee) : '요금 협의' } : null
+      methods.includes('self_pickup')
+        ? { id: 'self', t: '직접 가지러 가기', d: pickPlace + (isDemoMockup ? '에서 받아요. 트럭이나 운반차가 필요해요.' : '에서 받아요.'), price: '무료' }
+        : null,
+      methods.includes('owner_delivery')
+        ? { id: 'deliver', t: '배달 받기', d: formatDeliveryDescription(deliveryInfo), price: deliveryPriceText }
+        : null,
     ].filter(Boolean);
     const similar = openListings(it.type)
       .filter(x => x.id !== it.id && groupOf(x.machineType) === groupOf(it.machineType) && (groupOf(it.machineType) || x.machineType === it.machineType))
@@ -246,10 +281,10 @@ export class DetailDesign extends DCLogic {
       m1: this.month(s.ym), m2: this.month(s.ym + 1), rangeHint,
       prevMonth: () => this.setState({ ym: Math.max(TODAY_YM, s.ym - 1) }), nextMonth: () => this.setState({ ym: s.ym + 1 }),
       prevColor: s.ym <= TODAY_YM ? '#C8C8C8' : '#111111',
-      pickups: pickOpts.map(p => { const on = s.pickup === p.id; return { ...p, on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', ring: on ? '6px solid #1E9B4B' : '2px solid #CCCCCC', priceColor: p.price === '무료' ? '#13773A' : '#111111', pick: () => this.setState({ pickup: p.id }) }; }),
-      mapPill: s.pickup === 'deliver' ? '배달 받을 곳' : '받는 곳 · ' + placeOf(it),
-      placeLabel: s.pickup === 'deliver' ? '배달 받을 곳' : '받는 곳 (소유주)',
-      placeText: s.pickup === 'deliver' ? '내 밭 · 요청할 때 적어 주세요' : pickPlace,
+      pickups: pickOpts.map(p => { const on = activePickup === p.id; return { ...p, on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', ring: on ? '6px solid #1E9B4B' : '2px solid #CCCCCC', priceColor: p.price === '무료' ? '#13773A' : '#111111', pick: () => this.setState({ pickup: p.id }) }; }),
+      mapPill: activePickup === 'deliver' ? '배달 받을 곳' : '받는 곳 · ' + placeOf(it),
+      placeLabel: activePickup === 'deliver' ? '배달 받을 곳' : (isDemoMockup ? '받는 곳 (소유주 창고)' : '받는 곳 (소유주)'),
+      placeText: activePickup === 'deliver' ? '내 밭 · 요청할 때 적어 주세요' : pickPlace,
       options: OPTS.map(o => { const on = has(o.id); return { t: o.t, d: o.d, price: o.unit ? '+' + won(o.unit) + (o.per === 'day' ? ' / 1일' : '') : '무료', on: on ? 'true' : 'false', border: on ? '#111111' : '#E6E6E6', bg: on ? '#FAFAFA' : '#FFFFFF', boxBg: on ? '#1E9B4B' : '#FFFFFF', boxBorder: on ? 'none' : '2px solid #CCCCCC', check: on ? '✓' : '', pick: flip(o.id) }; }),
       similar: similar.map(x => {
         const rr = ratingOf(x);

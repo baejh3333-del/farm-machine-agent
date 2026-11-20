@@ -800,7 +800,7 @@ export function createCartCheckout(deps = {}) {
     const body = $("checkoutBody");
     if (!body || !checkoutContext) return;
     const { items } = checkoutContext;
-    const totalAmount = items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+    const baseTotalAmount = items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
     const defaultName = runtime.accountUser?.name || "";
     const defaultPhone = runtime.accountUser?.phone || "";
     const defaultAddress = state.region || "";
@@ -810,6 +810,25 @@ export function createCartCheckout(deps = {}) {
     const wantedDefault = items.some((item) => item.deliveryMethod === "delivery") ? "delivery" : "pickup";
     const defaultDelivery = checkoutOptions.includes(wantedDefault) ? wantedDefault : checkoutOptions[0];
     const mixedDelivery = !allowedAll.length;
+    const deliveryFeeTotal = computeDeliveryFeeTotal(items);
+    const hasUnpricedDelivery = items.some((item) => {
+      const listing = listingById(item.listingId);
+      const info = listing ? deliveryOf(listing) : null;
+      return info?.methods.includes("owner_delivery") && !(Number.isSafeInteger(info.fee) && info.fee >= 0);
+    });
+    const deliveryHintText = deliveryFeeTotal > 0
+      ? (hasUnpricedDelivery ? `+${money(deliveryFeeTotal)} + 일부 협의` : `+${money(deliveryFeeTotal)}`)
+      : "농가·밭 협의";
+    const deliverySummaryFor = (isDelivery) => {
+      if (!isDelivery) return "직접 방문 수령 (무료)";
+      if (deliveryFeeTotal > 0) {
+        return hasUnpricedDelivery
+          ? `배달 요청 (+${money(deliveryFeeTotal)} · 일부 운송비 협의)`
+          : `배달 요청 (+${money(deliveryFeeTotal)})`;
+      }
+      return "배달 요청 (운송비 농가 협의)";
+    };
+    const initialFinalTotal = baseTotalAmount + (defaultDelivery === "delivery" ? deliveryFeeTotal : 0);
 
     body.innerHTML = `
       <form id="checkoutForm" class="checkout-form" novalidate>
@@ -867,7 +886,7 @@ export function createCartCheckout(deps = {}) {
               </label>
               <label class="checkout-radio-pill">
                 <input type="radio" name="deliveryMethod" value="delivery" ${defaultDelivery === "delivery" ? "checked" : ""} ${checkoutOptions.includes("delivery") ? "" : "disabled"} />
-                <span>🚚 배달 요청 <small>${checkoutOptions.includes("delivery") ? "농가·밭 협의" : "직접 운송 없는 매물"}</small></span>
+                <span>🚚 배달 요청 <small>${checkoutOptions.includes("delivery") ? escapeHtml(deliveryHintText) : "직접 운송 없는 매물"}</small></span>
               </label>
             </div>
             ${mixedDelivery ? `<p class="checkout-delivery-note">매물마다 운송 방식이 달라요. 수령 방법은 각 판매자·소유자와 채팅에서 정해 주세요.</p>` : ""}
@@ -929,7 +948,7 @@ export function createCartCheckout(deps = {}) {
           <div class="checkout-summary-box">
             <div class="checkout-summary-line">
               <span>상품·대여 금액 (${items.length}건)</span>
-              <span>${money(totalAmount)}</span>
+              <span>${money(baseTotalAmount)}</span>
             </div>
             <div class="checkout-summary-line">
               <span>안전결제(에스크로) 보호 수수료</span>
@@ -937,11 +956,11 @@ export function createCartCheckout(deps = {}) {
             </div>
             <div class="checkout-summary-line">
               <span>수령·배송 안내</span>
-              <span id="checkoutDeliverySummary">${defaultDelivery === "delivery" ? "배달 요청 (운송비 농가 협의)" : "직접 방문 수령 (무료)"}</span>
+              <span id="checkoutDeliverySummary">${escapeHtml(deliverySummaryFor(defaultDelivery === "delivery"))}</span>
             </div>
             <div class="checkout-summary-total">
               <strong>최종 결제 금액</strong>
-              <strong>${money(totalAmount)}</strong>
+              <strong id="checkoutFinalTotal">${money(initialFinalTotal)}</strong>
             </div>
           </div>
 
@@ -962,7 +981,7 @@ export function createCartCheckout(deps = {}) {
         <div class="checkout-actions">
           <button type="button" class="button button-secondary" id="checkoutCancelBtn">취소</button>
           <button type="submit" class="button button-primary button-large" id="checkoutSubmitBtn">
-            🛡️ ${money(totalAmount)} 안전결제 하기
+            🛡️ ${money(initialFinalTotal)} 안전결제 하기
           </button>
         </div>
       </form>
@@ -971,13 +990,18 @@ export function createCartCheckout(deps = {}) {
     const form = $("checkoutForm");
     const addressField = $("checkoutAddressField");
     const deliverySummary = $("checkoutDeliverySummary");
+    const finalTotalEl = $("checkoutFinalTotal");
+    const submitBtn = $("checkoutSubmitBtn");
     form?.querySelectorAll('input[name="deliveryMethod"]').forEach((radio) => {
       radio.addEventListener("change", () => {
         const isDelivery = form.querySelector('input[name="deliveryMethod"]:checked')?.value === "delivery";
+        const nextTotal = baseTotalAmount + (isDelivery ? deliveryFeeTotal : 0);
         if (addressField) addressField.hidden = !isDelivery;
         if (deliverySummary) {
-          deliverySummary.textContent = isDelivery ? "배달 요청 (운송비 농가 협의)" : "직접 방문 수령 (무료)";
+          deliverySummary.textContent = deliverySummaryFor(isDelivery);
         }
+        if (finalTotalEl) finalTotalEl.textContent = money(nextTotal);
+        if (submitBtn && !isSubmittingOrder) submitBtn.textContent = `🛡️ ${money(nextTotal)} 안전결제 하기`;
       });
     });
 
@@ -1086,7 +1110,8 @@ export function createCartCheckout(deps = {}) {
           showErr(error.message || "주문 정보를 확인해 주세요.");
           isSubmittingOrder = false;
           if (submitBtn) {
-            const total = items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0);
+            const total = items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0)
+              + (deliveryMethod === "delivery" ? computeDeliveryFeeTotal(items) : 0);
             submitBtn.disabled = false;
             submitBtn.textContent = `🛡️ ${money(total)} 안전결제 하기`;
           }
@@ -1125,8 +1150,19 @@ export function createCartCheckout(deps = {}) {
     saveLocalCart();
   }
 
+  function computeDeliveryFeeTotal(list) {
+    return list.reduce((sum, item) => {
+      const listing = listingById(item.listingId);
+      const info = listing ? deliveryOf(listing) : null;
+      const fee = info?.methods.includes("owner_delivery") && Number.isSafeInteger(info.fee) && info.fee > 0 ? info.fee : 0;
+      return sum + fee;
+    }, 0);
+  }
+
   function createLocalOrder(items, payload) {
-    const totalAmount = items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+    const baseTotal = items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
+    const deliveryFeeTotal = payload.deliveryMethod === "delivery" ? computeDeliveryFeeTotal(items) : 0;
+    const totalAmount = baseTotal + deliveryFeeTotal;
     const nowIso = new Date().toISOString();
     const order = {
       id: `local-ord-${Date.now()}`,

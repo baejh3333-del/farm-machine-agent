@@ -463,12 +463,16 @@ export async function seedDemoListings({
           id, owner_id, type, model_id, title, brand, machine_type,
           crop_ids, operations, area_min, area_max, price, region,
           condition, inspected_at, included, pickup, description, summary,
-          photo_key, status, is_demo, sort_order, delivery_methods, rental_operator
+          photo_key, status, is_demo, sort_order,
+          delivery_methods, delivery_fee, delivery_area,
+          rental_operator, rental_options
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12, $13,
           $14, $15, $16, $17, $18, $19,
-          NULL, $20, true, $21, $22, $23
+          NULL, $20, true, $21,
+          $22, $23, $24,
+          $25, $26::jsonb
         )
         ON CONFLICT (id) DO UPDATE SET
           model_id = EXCLUDED.model_id,
@@ -486,10 +490,13 @@ export async function seedDemoListings({
           included = EXCLUDED.included,
           pickup = EXCLUDED.pickup,
           delivery_methods = EXCLUDED.delivery_methods,
+          delivery_fee = EXCLUDED.delivery_fee,
+          delivery_area = EXCLUDED.delivery_area,
           description = EXCLUDED.description,
           summary = EXCLUDED.summary,
           sort_order = EXCLUDED.sort_order,
           rental_operator = EXCLUDED.rental_operator,
+          rental_options = EXCLUDED.rental_options,
           updated_at = now()
         WHERE listings.is_demo = true
           AND (
@@ -508,10 +515,13 @@ export async function seedDemoListings({
             OR listings.included IS DISTINCT FROM EXCLUDED.included
             OR listings.pickup IS DISTINCT FROM EXCLUDED.pickup
             OR listings.delivery_methods IS DISTINCT FROM EXCLUDED.delivery_methods
+            OR listings.delivery_fee IS DISTINCT FROM EXCLUDED.delivery_fee
+            OR listings.delivery_area IS DISTINCT FROM EXCLUDED.delivery_area
             OR listings.description IS DISTINCT FROM EXCLUDED.description
             OR listings.summary IS DISTINCT FROM EXCLUDED.summary
             OR listings.sort_order IS DISTINCT FROM EXCLUDED.sort_order
             OR listings.rental_operator IS DISTINCT FROM EXCLUDED.rental_operator
+            OR listings.rental_options IS DISTINCT FROM EXCLUDED.rental_options
           )`,
         [
           item.id,
@@ -530,13 +540,16 @@ export async function seedDemoListings({
           item.condition,
           item.inspectedAt,
           item.included,
-          item.pickup,
+          item.delivery?.pickupPlace || item.pickup,
           item.description,
           item.summary,
           item.status || "open",
           index,
           item.delivery?.methods?.length ? item.delivery.methods : inferDeliveryMethods(item.pickup),
+          item.delivery?.fee ?? null,
+          item.delivery?.area ?? "",
           item.rentalOperator ?? null,
+          JSON.stringify(Array.isArray(item.rentalOptions) ? item.rentalOptions : []),
         ]
       );
       inserted += res.rowCount ?? 0;

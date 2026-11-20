@@ -1132,6 +1132,7 @@ function card(item) {
       <div class="card-body">
         <div class="card-spec-tags">
           <span class="spec-tag primary">${escapeHtml(machineLabel)}</span>
+          ${item.type === "rent" && item.rentalOperator ? `<span class="spec-tag operator-tag">대행운영서비스 제공중</span>` : ""}
           ${cropsText ? `<span class="spec-tag">${escapeHtml(cropsText)}</span>` : ""}
           ${opsText ? `<span class="spec-tag">${escapeHtml(opsText)}</span>` : ""}
           <span class="spec-tag">${areaLabel(item.areaMin, item.areaMax)}</span>
@@ -1172,7 +1173,6 @@ function card(item) {
             </div>
             <div class="trade-action-pair card-trade-pair">
               <button type="button" class="button button-secondary button-sm btn-direct-chat" data-direct-chat="${escapeHtml(item.id)}">1:1 대화</button>
-              <button type="button" class="button button-sm btn-delegated-trade" data-delegated-trade="${escapeHtml(item.id)}">거래전담</button>
             </div>
           `}
         </div>
@@ -1263,6 +1263,8 @@ function renderListings() {
 }
 
 function openDetail(id) {
+  // 매물 상세는 모아농 2.2 상세 화면(디자인)으로 연다
+  if (deps.openListingPage) return deps.openListingPage(id);
   const item = listingById(id);
   if (!item) return;
   const date = state.filters.date;
@@ -1345,7 +1347,7 @@ function openDetail(id) {
         </div>
 
         ${item.type === "rent" && item.rentalOperator ? `<details class="detail-box rental-operator">
-          <summary><strong>작업자 동반 가능</strong> · +${money(item.rentalOperator.dailyPrice)}/일</summary>
+          <summary><strong>대행운영서비스 제공중</strong> · 작업자 +${money(item.rentalOperator.dailyPrice)}/일</summary>
           <p class="rental-operator-experience"><strong>${escapeHtml(item.rentalOperator.name)}</strong><br>${escapeHtml(item.rentalOperator.experience)}</p>
         </details>` : ""}
 
@@ -1360,7 +1362,6 @@ function openDetail(id) {
             <button type="button" class="button button-outline detail-cart-btn" data-detail-cart="${escapeHtml(item.id)}" ${unavailable ? "disabled" : ""}>장바구니</button>
             <div class="trade-action-pair detail-trade-pair">
               <button type="button" class="button button-secondary btn-direct-chat" data-detail-chat="${escapeHtml(item.id)}">1:1 대화</button>
-              <button type="button" class="button btn-delegated-trade" data-delegated-trade="${escapeHtml(item.id)}">거래전담</button>
             </div>
             <button type="button" class="button button-primary button-large" data-detail-action="${escapeHtml(item.id)}" ${unavailable || booked ? "disabled" : ""}>
               ${unavailable ? "현재 거래 불가" : booked ? "선택 기간 대여 불가" : item.type === "rent" ? "이 농기계 대여 신청하기" : "판매자에게 구매 문의하기"}

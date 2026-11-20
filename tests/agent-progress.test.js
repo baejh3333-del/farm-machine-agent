@@ -43,7 +43,7 @@ test("진행 문구: 실제 조회 도구만 과업 기준 문구를 만들고, 
   assert.equal(progressLabelForTool("check_availability", { start: "2026-11-20", end: "2026-11-22" }, { listing: { machineType: "tractor" } }), "트랙터 11월 20일~11월 22일 예약 가능 여부를 확인하고 있어요");
   assert.equal(progressLabelForTool("get_weather", { start: "2026-11-20" }, { region: "영양읍" }), "영양읍 11월 20일 날씨를 확인하고 있어요");
   assert.equal(progressLabelForTool("check_farm_compatibility", {}, { listing: { machineType: "tractor" } }), "트랙터가 농장 조건과 맞는지 확인하고 있어요");
-  for (const name of ["create_rental_request", "create_purchase_request", "propose_rental_request", "delegate_transaction", "offer_choices", "note_photo", "prepare_listing_draft", "create_listing", "update_listing", "toggle_favorite", "open_listing_chat", "web_search", "unknown"]) {
+  for (const name of ["create_rental_request", "create_purchase_request", "propose_rental_request", "offer_choices", "note_photo", "prepare_listing_draft", "create_listing", "update_listing", "toggle_favorite", "open_listing_chat", "web_search", "unknown"]) {
     assert.equal(progressLabelForTool(name, { listingId: "x" }), null, name);
   }
 });

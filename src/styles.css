@@ -5767,3 +5767,8 @@ button.brand-moanong:focus-visible { outline: 3px solid #2D7F4E; outline-offset:
   font-size: 0.85rem;
   font-weight: 600;
 }
+
+/* 대행운영서비스(작업자 동반) 표시 */
+.ai-rec-badge-operator { background: #1f6f43; color: #fff; font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.ai-draft-operator { font-weight: 700; color: #1f6f43; }
+.spec-tag.operator-tag { background: #e6f3ea; color: #1f6f43; font-weight: 700; }

@@ -27,7 +27,6 @@ Vercel 배포에서는 PostgreSQL을 연결합니다.
 2. 운영 환경의 `BETTER_AUTH_URL`에 서비스의 HTTPS 주소를 설정합니다. Vercel 기본 도메인을 쓰는 프리뷰는 시스템 환경 변수에서 호스트를 가져옵니다.
 3. 대상 DB에 연결할 수 있는 환경에서 `APP_ENV=production`(프리뷰는 `preview`)을 설정합니다. 새 DB는 `npm run db:init -- --env production`으로 환경을 표시하고, `npm run db:migrate -- --env production`으로 계정 및 앱 스키마를 준비합니다. 기존 DB는 먼저 `npm run db:inspect`로 환경을 확인합니다. 프리뷰는 명령의 `production`도 `preview`로 바꿉니다.
 4. 코드를 배포하기 전에 `npm run db:check`로 마이그레이션 준비 상태를 확인합니다. 미적용·체크섬 불일치가 있으면 종료 코드 1이며 DB는 바꾸지 않습니다. 기존 운영 DB 업그레이드 순서는 [docs/release-readiness-2026-11-18.md](docs/release-readiness-2026-11-18.md)를 따릅니다.
-5. `CRON_SECRET`(16자 이상)을 설정합니다. `vercel.json`의 크론은 Hobby 요금제 한도에 맞춰 하루 1회(19:00 UTC) 백스톱으로만 돌고, 대리 응대 재시도와 만료 임대 회수는 채팅 조회 요청에 얹은 스윕(`server/delegation-kick.js`, 대화방당 10초·전체 60초에 1회)이 처리합니다.
 
 ## AI API 연결 (농농이 · OpenAI 또는 Claude)
 
@@ -70,9 +69,9 @@ Vercel 런타임 로그의 `llm_request_failed`에서 공급자·오류 분류·
 
 `OPENAI_API_KEY`가 설정되면 `/api/voice`(`POST` `action: "live_session"`)가 OpenAI `gpt-live-1` WebRTC 세션을 생성해 전이중(Full-Duplex) 한국어 실시간 음성 대화를 제공합니다. 기본 음성은 한국어 자연 음성 `noeul`입니다.
 
-- **실시간 음성 세션 (`server/gpt-live.js`)**: 브라우저가 만든 WebRTC SDP Offer를 서버가 `POST https://api.openai.com/v1/live/sessions`로 교환하며, 백엔드 조회·예약·거래 전담이 필요할 때는 `<|SpawnThinking|>` 기반 클라이언트 위임(`delegation: { type: "client" }`)으로 `/api/agent`(`inputMode: "voice"`)를 호출합니다.
+- **실시간 음성 세션 (`server/gpt-live.js`)**: 브라우저가 만든 WebRTC SDP Offer를 서버가 `POST https://api.openai.com/v1/live/sessions`로 교환하며, 백엔드 조회·예약이 필요할 때는 `<|SpawnThinking|>` 기반 클라이언트 위임(`delegation: { type: "client" }`)으로 `/api/agent`(`inputMode: "voice"`)를 호출합니다.
 - **음성 → 글 폴백 (`server/voice.js`)**: 실시간 WebRTC를 쓸 수 없는 환경에서는 `/api/voice`가 16kHz 모노 16비트 PCM WAV(최대 30초, 1MB)를 OpenAI `gpt-4o-mini-transcribe`로 인식합니다. 키가 없으면 브라우저 음성 인식(`ko-KR`)으로 전환합니다.
-- **바로 실행**: "구매해줘", "대여 예약해줘", "판매글 올려줘"처럼 분명한 요청이나 한 번의 확인 질문에 대한 "네"(사투리 대답 포함)는 글·음성 모두 승인으로 보고, 서버가 그 자리에서 대여 요청·구매 신청·매물 등록·수정을 실행합니다. 서버는 마지막 사용자 말이 실행 요청인지(`isAffirmative`) 다시 확인하며, 로그인하지 않았거나 조건이 부족하면 확인 카드로 넘깁니다. 거래 전담 위임은 지금처럼 확인 카드로 승인합니다.
+- **바로 실행**: "구매해줘", "대여 예약해줘", "판매글 올려줘"처럼 분명한 요청이나 한 번의 확인 질문에 대한 "네"(사투리 대답 포함)는 글·음성 모두 승인으로 보고, 서버가 그 자리에서 대여 요청·구매 신청·매물 등록·수정을 실행합니다. 서버는 마지막 사용자 말이 실행 요청인지(`isAffirmative`) 다시 확인하며, 로그인하지 않았거나 조건이 부족하면 확인 카드로 넘깁니다.
 
 **환경 변수(모두 선택)**
 

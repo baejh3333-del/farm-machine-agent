@@ -37,11 +37,8 @@ export function progressForwarder(onProgress) {
 // insuranceOffer: 예약 뒤 보험 추천 흐름의 진행 상태, insuranceAsked: 이 대화에서 이미 물었는지.
 export async function askAgent(
   message,
-  { history = [], region, inputMode = "text", delegationId = null, sessionId = null, uiContext, image, savedDraft, photoSummary, insuranceOffer, insuranceAsked = false, fullDelegation, pendingAction = null, onProgress = null } = {},
+  { history = [], region, inputMode = "text", delegationId = null, sessionId = null, uiContext, image, savedDraft, photoSummary, insuranceOffer, insuranceAsked = false, pendingAction = null, onProgress = null } = {},
 ) {
-  const mergedUiContext = uiContext || fullDelegation
-    ? { ...(uiContext || {}), ...(fullDelegation ? { fullDelegation: true } : {}) }
-    : undefined;
   const result = await apiFetch("/api/agent", {
     method: "POST",
     timeoutMs: image ? 50000 : 30000,
@@ -53,7 +50,7 @@ export async function askAgent(
       inputMode: inputMode === "voice" ? "voice" : "text",
       ...(delegationId ? { delegationId } : {}),
       ...(sessionId ? { sessionId } : {}),
-      ...(mergedUiContext ? { uiContext: mergedUiContext } : {}),
+      ...(uiContext ? { uiContext } : {}),
       ...(image ? { image } : {}),
       ...(savedDraft ? { savedDraft } : {}),
       ...(!image && photoSummary ? { photoSummary } : {}),
@@ -68,18 +65,13 @@ export async function askAgent(
   return result;
 }
 
-// 사용자가 원탭 또는 확인 카드로 승인한 작업(대여 요청·구매 신청·매물 등록·거래 전담)을 서버에 실행을 맡긴다.
+// 사용자가 원탭 또는 확인 카드로 승인한 작업(대여 요청·구매 신청·매물 등록)을 서버에 실행을 맡긴다.
 export async function executeAgentAction(pendingAction, requestId, { insuranceAsked = false } = {}) {
   return apiFetch("/api/agent", {
     method: "POST",
     ...(pendingAction?.type === "create_listing" ? { timeoutMs: 45000 } : {}),
     json: { action: "execute", pendingAction, requestId, insuranceAsked },
   });
-}
-
-// 부재중 거래 전담 위임을 서버에 요청한다.
-export async function delegateTransactionAction(pendingAction, requestId = crypto.randomUUID(), options = {}) {
-  return executeAgentAction({ ...pendingAction, type: "delegate_transaction", fullDelegation: true }, requestId, options);
 }
 
 // 날짜 선택 시 기상 예보를 확인한다. 오프라인·오류 시 fail-open으로 null을 반환한다.

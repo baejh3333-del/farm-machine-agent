@@ -16,7 +16,6 @@ import { createPglitePool, setPool } from "../server/db.js";
 import { createListing } from "../server/listings-service.js";
 import { initEnvironment, runMigrations } from "../server/migrator.js";
 import {
-  executeDelegatedTransaction,
   runAgentTurn,
   selectToolsForTurn,
 } from "../server/nongnong-agent.js";
@@ -353,32 +352,32 @@ test("3. agent-session-store는 DB 오류 시 예외를 던지지 않고 null을
   );
 });
 
-test("4. selectToolsForTurn은 기본 턴에 핵심 도구 15개만 포함하고 사진·수리·판매·보험 맥락에서 확장한다", () => {
+test("4. selectToolsForTurn은 기본 턴에 핵심 도구 14개만 포함하고 사진·수리·판매·보험 맥락에서 확장한다", () => {
   const coreOnly = selectToolsForTurn({ text: "고추밭 두둑 관리기 빌릴래요" });
   const coreNames = coreOnly.map((t) => t.name);
-  assert.equal(coreNames.length, 15);
-  assert.ok(coreNames.includes("delegate_transaction"));
+  assert.equal(coreNames.length, 14);
+  assert.ok(!coreNames.includes("delegate_transaction"));
   assert.ok(coreNames.includes("search_listings"));
   assert.ok(!coreNames.includes("note_photo"));
   assert.ok(!coreNames.includes("get_repair_guide"));
   assert.ok(!coreNames.includes("create_listing"));
   assert.ok(!coreNames.includes("get_insurance_info"));
 
-  assert.equal(selectToolsForTurn({ hasImage: true }).length, 25);
-  assert.equal(selectToolsForTurn({ text: "관리기 시동이 안 걸려요" }).length, 25);
-  assert.equal(selectToolsForTurn({ text: "트랙터 팔고 싶어요" }).length, 25);
-  assert.equal(selectToolsForTurn({ text: "보험도 들어야 하나요?" }).length, 25);
-  assert.equal(selectToolsForTurn({ slots: { intent: "sell" } }).length, 25);
+  assert.equal(selectToolsForTurn({ hasImage: true }).length, 24);
+  assert.equal(selectToolsForTurn({ text: "관리기 시동이 안 걸려요" }).length, 24);
+  assert.equal(selectToolsForTurn({ text: "트랙터 팔고 싶어요" }).length, 24);
+  assert.equal(selectToolsForTurn({ text: "보험도 들어야 하나요?" }).length, 24);
+  assert.equal(selectToolsForTurn({ slots: { intent: "sell" } }).length, 24);
 
   process.env.AI_FULL_TOOLS = "1";
   try {
-    assert.equal(selectToolsForTurn({ text: "고추" }).length, 25);
+    assert.equal(selectToolsForTurn({ text: "고추" }).length, 24);
   } finally {
     delete process.env.AI_FULL_TOOLS;
   }
 });
 
-test("5. runAgentTurn은 farmProfile 기본값을 uiCtx에 주입하고 learnedSlots·delegate_transaction pendingAction 및 즉시 실행을 처리한다", async (t) => {
+test("5. runAgentTurn은 farmProfile 기본값을 시스템 프롬프트와 learnedSlots에 반영한다", async (t) => {
   process.env.ANTHROPIC_API_KEY = "test-key";
   t.after(() => {
     delete process.env.ANTHROPIC_API_KEY;
@@ -386,28 +385,11 @@ test("5. runAgentTurn은 farmProfile 기본값을 uiCtx에 주입하고 learnedS
 
   let capturedMeta = null;
   const { call, calls } = scripted([
-    {
-      content: [
-        {
-          type: "tool_use",
-          id: "d1",
-          name: "delegate_transaction",
-          input: {
-            listingId: dbListing.id,
-            start: "2026-11-20",
-            end: "2026-11-21",
-            maxBudget: 60000,
-            allowNegotiation: true,
-            pickupPreference: "오전 9시 직접 인수",
-            autoExecuteTransaction: true,
-          },
-        },
-      ],
-    },
+    { content: [{ type: "text", text: "언제부터 며칠 빌리실 건가요?" }] },
   ]);
 
   const result = await runAgentTurn(
-    "이 매물 농농이가 알아서 조율해 줘",
+    "관리기 빌리고 싶어요",
     {
       user: buyer.user,
       farmProfile: {
@@ -438,154 +420,15 @@ test("5. runAgentTurn은 farmProfile 기본값을 uiCtx에 주입하고 learnedS
   assert.match(calls[0].system, /500평/);
   assert.match(calls[0].system, /오전 작업 선호/);
 
-  // 비긍정 발화이므로 delegate_transaction은 pendingAction 확인 카드로 반환
   assert.equal(result.mode, "agent");
-  assert.equal(result.pendingAction.type, "delegate_transaction");
-  assert.equal(result.pendingAction.listingId, dbListing.id);
-  assert.equal(result.pendingAction.areaPyeong, 500);
-  assert.deepEqual(result.pendingAction.cropIds, ["pepper"]);
-  assert.equal(result.pendingAction.maxBudget, 60000);
-  assert.equal(result.pendingAction.allowNegotiation, true);
-
-  // learnedSlots 추출 확인
   assert.equal(result.learnedSlots.region, "청기면");
   assert.deepEqual(result.learnedSlots.cropIds, ["pepper"]);
   assert.equal(result.learnedSlots.areaPyeong, 500);
-  assert.equal(result.learnedSlots.start, "2026-11-20");
-  assert.equal(result.learnedSlots.end, "2026-11-21");
-  assert.equal(result.learnedSlots.maxPrice, 60000);
   assert.ok(capturedMeta);
-  assert.equal(capturedMeta.stage, "confirming");
-  assert.equal(capturedMeta.toolCalls[0].tool, "delegate_transaction");
-
-  // 긍정 발화 + delegateTransaction deps 연결 시 즉시 실행
-  const immediate = scripted([
-    {
-      content: [
-        {
-          type: "tool_use",
-          id: "d2",
-          name: "delegate_transaction",
-          input: { listingId: dbListing.id, start: "2026-11-24", end: "2026-11-25", maxBudget: 55000 },
-        },
-      ],
-    },
-    { content: [{ type: "text", text: "전담 모드로 시작했어요." }] },
-  ]);
-  const immediateRes = await runAgentTurn(
-    "네 진행해 주세요",
-    { user: buyer.user },
-    {
-      listings: [dbListing],
-      call: immediate.call,
-      today: TODAY,
-      deps: {
-        beforeWrite: async () => {},
-        delegateTransaction: (u, payload, { requestId }) => executeDelegatedTransaction(u, payload, { requestId, pool, today: TODAY }),
-      },
-    },
-  );
-  assert.equal(immediateRes.delegatedTransaction.listingId, dbListing.id);
-  assert.equal(immediateRes.delegatedTransaction.mode, "autonomous");
-  assert.equal(immediateRes.delegatedTransaction.fullDelegation, true);
-  assert.equal(immediateRes.pendingAction, undefined);
+  assert.equal(capturedMeta.stage, "collecting");
 });
 
-test("6. executeDelegatedTransaction은 본인 매물을 차단하고, 타인 매물에 buyer_ai_mode='autonomous'와 fullDelegation 정책을 설정한다", async () => {
-  const { listing: isolatedListing } = await createListing(
-    owner.user,
-    {
-      id: randomUUID(),
-      title: "아세아텍 관리기 AMC-900 전담 테스트",
-      type: "rent",
-      modelId: "asia-amc900",
-      machineType: "cultivator",
-      cropIds: ["pepper"],
-      operations: ["ridge"],
-      areaMin: 300,
-      areaMax: 2000,
-      price: 55000,
-      region: "영양읍",
-      condition: "good",
-      included: "두둑성형기 포함",
-      pickup: "영양읍 농가 직접 인수",
-      description: "테스트 매물",
-    },
-    { pool },
-  );
-
-  const selfRes = await executeDelegatedTransaction(
-    owner.user,
-    { listingId: isolatedListing.id },
-    { requestId: randomUUID(), pool, today: TODAY },
-  );
-  assert.equal(selfRes.outcome, "failed");
-  assert.equal(selfRes.code, "SELF_INQUIRY_FORBIDDEN");
-
-  const reqId = randomUUID();
-  const execRes = await executeDelegatedTransaction(
-    buyer.user,
-    {
-      listingId: isolatedListing.id,
-      start: "2026-11-20",
-      end: "2026-11-21",
-      maxBudget: 60000,
-      allowNegotiation: true,
-      areaPyeong: 500,
-      cropIds: ["pepper"],
-      operations: ["ridge"],
-      region: "청기면",
-      pickupPreference: "직접 인수 희망",
-      autoExecuteTransaction: true,
-    },
-    { requestId: reqId, pool, today: TODAY },
-  );
-
-  assert.equal(execRes.outcome, "completed");
-  assert.equal(execRes.delegatedTransaction.listingId, isolatedListing.id);
-  assert.equal(execRes.delegatedTransaction.mode, "autonomous");
-  assert.equal(execRes.delegatedTransaction.fullDelegation, true);
-  assert.equal(execRes.delegatedTransaction.policy.fullDelegation, true);
-  assert.equal(execRes.delegatedTransaction.policy.autoExecuteTransaction, true);
-  assert.equal(execRes.delegatedTransaction.policy.maxBudget, 60000);
-  assert.equal(execRes.delegatedTransaction.policy.maxConsecutiveAiTurns, 6);
-
-  const convId = execRes.delegatedTransaction.conversationId;
-  const convRow = (
-    await pool.query(
-      `SELECT buyer_ai_mode, buyer_ai_policy, ai_paused_reason, last_seq FROM conversations WHERE id = $1`,
-      [convId],
-    )
-  ).rows[0];
-  assert.equal(convRow.buyer_ai_mode, "autonomous");
-  assert.equal(convRow.buyer_ai_policy.fullDelegation, true);
-  assert.equal(convRow.buyer_ai_policy.targetStart, "2026-11-20");
-  assert.equal(convRow.ai_paused_reason, null);
-  assert.equal(Number(convRow.last_seq), 1);
-
-  const msgRow = (
-    await pool.query(
-      `SELECT sender_id, sender_kind, ai_confidence, body FROM messages WHERE conversation_id = $1 AND seq = 1`,
-      [convId],
-    )
-  ).rows[0];
-  assert.equal(msgRow.sender_id, buyer.user.id);
-  assert.equal(msgRow.sender_kind, "ai_proxy");
-  assert.equal(msgRow.ai_confidence, "high");
-  assert.match(msgRow.body, /아세아텍 관리기/);
-
-  // 동일 requestId 재시도 시 멱등성 유지
-  const retryRes = await executeDelegatedTransaction(
-    buyer.user,
-    { listingId: isolatedListing.id, start: "2026-11-20", end: "2026-11-21" },
-    { requestId: reqId, pool, today: TODAY },
-  );
-  assert.equal(retryRes.outcome, "completed");
-  assert.equal(retryRes.idempotent, true);
-  assert.equal(retryRes.delegatedTransaction.conversationId, convId);
-});
-
-test("7. /api/agent 엔드포인트는 chat에서 세션·농가 프로필을 저장하고 execute로 delegate_transaction을 실행한다", async (t) => {
+test("6. /api/agent 엔드포인트는 chat에서 세션·농가 프로필을 저장한다", async (t) => {
   process.env.OPENAI_API_KEY = "test-openai-key";
   t.after(() => {
     delete process.env.OPENAI_API_KEY;
@@ -595,28 +438,7 @@ test("7. /api/agent 엔드포인트는 chat에서 세션·농가 프로필을 �
   t.mock.method(globalThis, "fetch", async (url, options) => {
     if (String(url).startsWith("https://api.openai.com")) {
       return Response.json({
-        choices: [
-          {
-            message: {
-              content: null,
-              tool_calls: [
-                {
-                  id: "call_delegate_1",
-                  type: "function",
-                  function: {
-                    name: "delegate_transaction",
-                    arguments: JSON.stringify({
-                      listingId: dbListing.id,
-                      start: "2026-11-22",
-                      end: "2026-11-23",
-                      maxBudget: 55000,
-                    }),
-                  },
-                },
-              ],
-            },
-          },
-        ],
+        choices: [{ message: { content: "언제부터 며칠 빌리실 건가요?" } }],
       });
     }
     return realFetch(url, options);
@@ -629,37 +451,19 @@ test("7. /api/agent 엔드포인트는 chat에서 세션·농가 프로필을 �
     json: {
       action: "chat",
       sessionId,
-      message: "입암면 고추밭 400평에 쓸 관리기 전담시켜 줄까요?",
+      message: "입암면 고추밭 400평에 쓸 관리기 빌리고 싶어요",
     },
   });
   assert.equal(chatRes.status, 200);
   assert.equal(chatRes.body.mode, "agent");
   assert.equal(chatRes.body.sessionId, sessionId);
-  assert.equal(chatRes.body.pendingAction.type, "delegate_transaction");
 
   const storedProfile = await loadFarmProfile(buyer.user.id, { pool });
   assert.equal(storedProfile.region, "입암면");
   assert.deepEqual(storedProfile.cropIds, ["pepper"]);
   assert.equal(storedProfile.areaPyeong, 400);
 
-  const sessRow = (await pool.query(`SELECT last_seq, stage, slots FROM agent_sessions WHERE id = $1`, [sessionId])).rows[0];
+  const sessRow = (await pool.query(`SELECT last_seq, slots FROM agent_sessions WHERE id = $1`, [sessionId])).rows[0];
   assert.equal(Number(sessRow.last_seq), 2);
-  assert.equal(sessRow.stage, "confirming");
   assert.equal(sessRow.slots.region, "입암면");
-
-  const execRes = await apiReq(baseUrl, "/api/agent", {
-    method: "POST",
-    cookie: buyer.cookie,
-    json: {
-      action: "execute",
-      requestId: randomUUID(),
-      pendingAction: chatRes.body.pendingAction,
-    },
-  });
-  assert.equal(execRes.status, 200);
-  assert.equal(execRes.body.outcome, "completed");
-  assert.equal(execRes.body.delegatedTransaction.mode, "autonomous");
-  assert.equal(execRes.body.delegatedTransaction.fullDelegation, true);
-
-  await new Promise((resolve) => setTimeout(resolve, 20));
 });

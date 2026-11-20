@@ -18,10 +18,11 @@ import { selectMatchingListings } from "../src/data/recommendation.js";
 import { DIALECT_TO_STANDARD, normalizeDialect } from "../src/data/speech-glossary.js";
 import { checkModelCompatibility, SPEC_BY_ID } from "../src/data/machine-specifications.js";
 import { loadFarmProfile } from "./agent-session-store.js";
-import { sendMessage as sendChatMessage, updateConversationAiPolicy } from "./chat.js";
+import { sendMessage as sendChatMessage } from "./chat.js";
 import { getPool, kstToday } from "./db.js";
 import { HttpError } from "./http.js";
 import { saveDraftPhoto } from "./listing-drafts.js";
+import { cleanOperatorProfile, detectOperatorChoice, hasOperatorService, withOperatorLine } from "./operator-service.js";
 import { fetchListingById, fetchListings } from "./listings-db.js";
 import { createListing as createListingService } from "./listings-service.js";
 import { callLLM, llmEnabled, textOf } from "./llm.js";
@@ -84,10 +85,9 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
    - 매물 검색, 작물 안내, 기상청 날씨, 시세 조회, 제원·수리 안내는 조건이 충분하면 즉시 도구를 호출한다.
    - 대여 날짜가 정해지거나 작업 날짜를 물으면 check_availability와 get_weather(또는 날짜 추천 시 suggest_work_dates)로 예약 가능 여부와 날씨를 확인한다. **비·눈·강풍 등 나쁜 날씨(badWeatherWarning)가 감지되면 반드시 날씨 경고를 먼저 알리고, goodAlternatives에 담긴 맑은 대안 날짜 선택지를 함께 제안한다.**
    - 추천할 때는 핵심 조건(기계명, 지역, 기간 또는 가격, 총 대여료)을 함께 보여 주고, 사용자가 "네/예약해줘"만 답해도 바로 실행할 수 있게 묻는다.
-5. **찜하기 & 1:1 채팅 문의 & 거래 전담 위임 (당근마켓 스타일)**:
+5. **찜하기 & 1:1 채팅 문의 (당근마켓 스타일)**:
    - 사용자가 매물을 찜하고 싶거나 즐겨찾기 추가/해제를 원하면 toggle_favorite 도구를 호출한다.
    - 찜하기·예약·구매 전에 판매자/소유자에게 먼저 물어보고 싶어 하거나 "채팅으로 물어볼래요", "판매자한테 연락할래요"라고 하면 open_listing_chat 도구를 호출해 1:1 채팅 창을 열어 준다(필요하면 prefillMessage에 짧은 첫 인사/질문을 담아 준다).
-   - 사용자가 특정 매물의 거래(문의·일정 조율·가격/조건 협의·예약 진행)를 농농이에게 전담·자동 위임해 달라고 하면 delegate_transaction 도구를 호출한다.
 6. 거래 실행 규칙 (대여 · 구매 · 매물 등록/수정):
    - 사용자가 "구매해줘", "예약해줘", "판매글 올려줘", "응 해줘", "네"처럼 분명히 실행을 요청했고 필수 조건(매물 ID, 대여 시작일/반납일, 판매 가격 등)이 모두 정해졌으면 **확인 질문 없이** create_rental_request / create_purchase_request / create_listing / update_listing 도구를 바로 호출해 처리한다. 음성으로 들어온 요청도 똑같이 처리한다.
    - 확인은 최대 한 번만 한다. 요청이 아직 분명하지 않을 때만 "청기면 DRGH-1400, 320만원으로 구매 신청할까요?"처럼 한 문장으로 묻고, 사용자가 "네"라고 하면 바로 실행한다. 같은 확인을 두 번 하지 않는다.
@@ -170,6 +170,10 @@ const SYSTEM_PROMPT = `당신은 농기계 대여·구매·판매 플랫폼 "모
   3) 수리 흐름에서도 보험 보장이 포함될 수 있으므로, 답변 마지막에 **"보험 추천해드릴까요?"**를 함께 제안한다.
 - 판매·대여 등록을 원하면 초안부터 만들지 않는다. 먼저 사진으로 본 기종을 "사진으로 보면 ○○ 같아요"처럼 알려 주고, 연식·사용시간·같이 드릴 작업기 중 사용자가 아직 말하지 않은 것을 한 번에 짧게 묻는다("모르시면 모른다고 하셔도 돼요"). 답을 받으면(모른다고 해도) estimate_price로 참고가를 보고 prepare_listing_draft로 초안을 보여 준다. prepare_listing_draft가 needsDetails를 돌려주면 그 항목을 묻는다. 사용자가 올리겠다고 긍정하면 create_listing으로 등록한다. 소개글은 사진 인식 결과, 제원, 사용자가 말한 사실만으로 쓰고, 모르는 것은 [확인 필요]로 남긴다. 가격은 "플랫폼 등록 매물 기준 참고가"라고 말한다.
 - 초안 카드에는 제목·소개글·참고가가 이미 보인다. 답변에서 "제목은 ~, 설명은 ~"처럼 카드 내용을 다시 나열하지 않는다. 해요체 2~3문장으로 "말씀해 주신 내용으로 초안을 만들었어요", 참고가 한 번, "이대로 올릴까요?"만 말한다.
+- **대행운영서비스**(생산자가 기계와 함께 작업자를 보내 대신 작업해 주고 하루 추가 요금을 받는 서비스. 대여에만 있다):
+   - 소비자가 대여를 원하면, 필요한 조건(작물·면적·날짜 등)을 물을 때 대행운영서비스 사용 여부도 함께 한 번 묻는다. offer_choices 선택지는 ["대행운영 사용할게요", "대행운영 없이 할게요"]로 주고, 서비스가 무엇인지 한 문장으로 설명한다. [이미 받은 정보]에 있으면 다시 묻지 않는다.
+   - 사용한다면 search_listings·propose_rental_request·create_rental_request에 operatorService=true를, 안 쓴다면 false를 넘긴다. 사용하면 확인 카드와 금액은 "기계 + 작업자" 합계다.
+   - 생산자가 대여글을 올릴 때는 기계 정보(연식·사용시간·작업기)를 받은 뒤 "대행운영서비스를 제공하시겠어요?"라고 묻는다. 선택지는 ["대행운영 제공할게요", "대행운영 안 할게요"]. 제공한다면 작업자 이름, 이력, 하루 추가 요금을 한 번에 묻고, prepare_listing_draft·create_listing의 operatorService에 넣는다. 판매글에는 묻지 않는다.
 - **보험 안내**: 대여 추천·예약 흐름과 고장·수리 안내 흐름 모두에서 **"보험 추천해드릴까요?"**로 먼저 제안할 수 있으며, 사용자가 보험을 묻거나 추천을 원하면 get_insurance_info로 안내한다. 보험료를 확정해 말하지 않고, 보험 가입·결제를 대신하지 않으며, 주민등록번호·카드번호·계좌번호·건강 정보는 묻지 않는다. 보험 때문에 이미 한 예약을 바꾸거나 취소하지 않는다.
 - 웹 검색 도구가 있으면, 위 도구에 없는 사실을 확인할 때만 쓰고 "웹 검색 결과라 확인이 필요해요"라고 밝힌다.
 - 시니어도 읽기 쉽게: 한 문장은 짧게, 어려운 말은 쉬운 말로 풀어 쓴다.`;
@@ -190,6 +194,7 @@ const TOOLS = [
         maxPrice: { type: ["integer", "null"], description: "최대 가격(원). 대여는 하루 대여료" },
         start: { type: ["string", "null"], description: "대여 시작일 YYYY-MM-DD" },
         end: { type: ["string", "null"], description: "반납일 YYYY-MM-DD" },
+        operatorService: { type: ["boolean", "null"], description: "대여에서 대행운영서비스(작업자 동반) 사용 여부. 사용 true면 제공 매물만, false면 제공 안 하는 매물만. 정하지 않았으면 null" },
         delivery: { type: ["string", "null"], enum: [null, "owner_delivery", "self_pickup"], description: "운송 방식 조건. 가져다주는(직접 운송) 매물만 owner_delivery, 직접 가지러 갈 매물만 self_pickup" },
       },
       required: ["transaction"],
@@ -280,6 +285,7 @@ const TOOLS = [
         start: { type: "string", description: "대여 시작일 YYYY-MM-DD" },
         end: { type: "string", description: "반납일 YYYY-MM-DD" },
         note: { type: "string", description: "게시자에게 남길 짧은 메모(선택)" },
+        operatorService: { type: ["boolean", "null"], description: "대행운영서비스(작업자 동반) 사용 여부" },
       },
       required: ["listingId", "start", "end"],
     },
@@ -294,6 +300,7 @@ const TOOLS = [
         start: { type: "string", description: "대여 시작일 YYYY-MM-DD" },
         end: { type: "string", description: "반납일 YYYY-MM-DD" },
         note: { type: "string", description: "게시자에게 남길 짧은 메모(선택)" },
+        operatorService: { type: ["boolean", "null"], description: "대행운영서비스(작업자 동반) 사용 여부" },
       },
       required: ["listingId", "start", "end"],
     },
@@ -306,28 +313,6 @@ const TOOLS = [
       properties: {
         listingId: { type: "string" },
         note: { type: "string", description: "판매자에게 남길 짧은 메모(선택)" },
-      },
-      required: ["listingId"],
-    },
-  },
-  {
-    name: "delegate_transaction",
-    description: "사용자가 특정 매물의 거래(문의·일정 조율·가격/조건 협의·예약 진행)를 농농이에게 전담(완전 자동 위임)시킬 때 호출한다. 상대방이 답장하면 농농이가 사용자의 의도·농장 환경·예산·일정에 맞춰 사용자가 없어도 거래를 자동 진행하며, 정보가 부족한 질문에는 답하지 않고 사용자 확인을 기다린다.",
-    input_schema: {
-      type: "object",
-      properties: {
-        listingId: { type: "string", description: "전담 위임할 매물 ID" },
-        start: { type: ["string", "null"], description: "희망 시작일 YYYY-MM-DD" },
-        end: { type: ["string", "null"], description: "희망 반납일 YYYY-MM-DD" },
-        targetPrice: { type: ["integer", "null"], description: "사용자가 말한 목표 금액(원). 말하지 않았으면 null" },
-        maxBudget: { type: ["integer", "null"], description: "사용자가 말한 최대 예산 상한(원, 운송비 포함 총액 기준). 말하지 않았으면 null — 정가로 채우지 말 것" },
-        budgetUnit: { type: ["string", "null"], enum: [null, "total", "daily"], description: "목표가·예산의 단위. 대여 1일 기준이면 daily, 총액이면 total" },
-        allowNegotiation: { type: ["boolean", "null"], description: "가격 협의 허용 여부" },
-        pickupPreference: { type: ["string", "null"], description: "인수·배송 희망 조건" },
-        transportPayer: { type: ["string", "null"], enum: [null, "buyer", "owner", "none"], description: "운송비 부담 희망. 직접 인수면 none, 모르면 null" },
-        requiredQuestions: { type: ["array", "null"], items: { type: "string" }, description: "거래 전에 판매자에게 꼭 물어볼 질문(최대 8개)" },
-        initialMessage: { type: ["string", "null"], description: "상대방에게 보낼 첫 대리 문의 메시지" },
-        autoExecuteTransaction: { type: ["boolean", "null"], description: "조건 부합 시 대여/구매 예약까지 자동 접수 여부 (기본 true)" },
       },
       required: ["listingId"],
     },
@@ -394,6 +379,11 @@ const TOOLS = [
         condition: { type: ["string", "null"], enum: [null, "good", "used", "repair"] },
         year: { type: ["string", "null"], description: "연식(예: 2019년식)" },
         deposit: { type: ["integer", "null"], description: "대여 보증금(원)" },
+        operatorService: {
+          type: ["object", "null"],
+          description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
+          properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
+        },
         delivery: {
           type: ["object", "null"],
           description: "운송 방식(판매·대여 조건). 사용자가 말한 것만 넣는다. 말하지 않았으면 null로 두고 한 번만 묻는다.",
@@ -425,6 +415,11 @@ const TOOLS = [
         condition: { type: ["string", "null"], enum: [null, "good", "used", "repair"] },
         price: { type: "integer", description: "가격(원). 대여는 하루 대여료" },
         deposit: { type: ["integer", "null"], description: "빌려주기일 때 보증금(원)" },
+        operatorService: {
+          type: ["object", "null"],
+          description: "대여글에서 대행운영서비스를 제공할 때만: 작업자 이름, 이력, 하루 추가 요금(원). 제공하지 않거나 판매글이면 null",
+          properties: { name: { type: "string" }, experience: { type: "string" }, dailyPrice: { type: "integer" } },
+        },
         delivery: {
           type: ["object", "null"],
           description: "운송 방식(판매·대여 조건). 사용자가 말한 것만 넣는다. 말하지 않았으면 null로 두고 한 번만 묻는다.",
@@ -690,6 +685,9 @@ function listingView(item) {
     delivery: deliveryLine(deliveryOf(item), { type: item.type }),
     inspectedAt: item.inspectedAt,
     bookedRanges: (item.booked || []).slice(0, 6),
+    operatorService: hasOperatorService(item)
+      ? { name: item.rentalOperator.name, experience: String(item.rentalOperator.experience).slice(0, 120), dailyPricePerDay: item.rentalOperator.dailyPrice }
+      : null,
   };
 }
 
@@ -795,7 +793,11 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   // 사용자가 말한 지역(input.region)은 꼭 지킬 조건이고, 화면 기준 지역(region)은 거리 정렬 기준이다.
   const requestedRegion = cleanRegion(input?.region);
   const effectiveRegion = requestedRegion || region;
-  const scoped = Array.isArray(listings) ? listings.filter((item) => !userId || item.ownerId !== userId) : [];
+  const operatorWanted = input?.transaction !== "sale" && typeof input?.operatorService === "boolean" ? input.operatorService : null;
+  const scoped = Array.isArray(listings)
+    ? listings.filter((item) => (!userId || item.ownerId !== userId)
+      && (operatorWanted === null || item.type !== "rent" || hasOperatorService(item) === operatorWanted))
+    : [];
   const context = {
     cropIds: cropId ? [cropId] : [],
     operations,
@@ -811,7 +813,7 @@ export function searchListingsTool(input, listings, { region, userId } = {}) {
   const deliveryWanted = ["owner_delivery", "self_pickup"].includes(input?.delivery) ? input.delivery : null;
   const deliveryScoped = deliveryWanted ? scoped.filter((item) => deliveryOf(item).methods.includes(deliveryWanted)) : scoped;
   const selection = selectMatchingListings("", context, deliveryScoped);
-  const what = `${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
+  const what = `${operatorWanted === true ? "대행운영서비스를 제공하는 " : operatorWanted === false ? "대행운영서비스 없는 " : ""}${deliveryWanted === "owner_delivery" ? "직접 운송해 주는 " : deliveryWanted === "self_pickup" ? "직접 픽업할 수 있는 " : ""}${describeSearchTarget({ cropId, operations, machineType, transaction: context.transaction })}`;
   let candidates = selection.candidates;
   let regionFallback = null;
   if (requestedRegion) {
@@ -886,6 +888,11 @@ export function proposeRentalTool(input, listings, today = kstToday()) {
     return { ok: false, reason: "선택한 기간에 이미 확정된 예약이 있습니다.", bookedRanges: listing.booked };
   }
   const note = typeof input?.note === "string" ? input.note.trim().slice(0, 200) : "";
+  const rentalOperator = input?.operatorService === true ? cleanOperatorProfile(listing.rentalOperator) : null;
+  if (input?.operatorService === true && !rentalOperator) {
+    return { ok: false, reason: "이 매물은 대행운영서비스를 제공하지 않는 매물입니다. 대행운영서비스를 제공하는 매물로 다시 찾아 주세요." };
+  }
+  const operatorDailyPrice = rentalOperator?.dailyPrice ?? 0;
   return {
     ok: true,
     proposal: {
@@ -897,7 +904,9 @@ export function proposeRentalTool(input, listings, today = kstToday()) {
       end,
       days,
       dailyPrice: listing.price,
-      totalPrice: listing.price * days,
+      totalPrice: (listing.price + operatorDailyPrice) * days,
+      rentalOperator,
+      operatorDailyPrice,
       note,
     },
   };
@@ -1276,7 +1285,9 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
   const bodyText = grounded
     ? groundListingDescription(input?.description || "", { saidText, observations: photoSummary?.observations, year })
     : input?.description || "";
-  const description = composeListingDescription({ year, deposit, description: bodyText });
+  // 대행운영서비스는 대여글에만: 작업자 정보가 모두 있으면 소개글 맨 위에 "대행운영서비스 제공중"을 적는다.
+  const rentalOperator = type === "rent" ? cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator) : null;
+  const description = withOperatorLine(composeListingDescription({ year, deposit, description: bodyText }), rentalOperator);
   const delivery = resolveDelivery(input?.delivery, { saidText: grounded ? saidText : null, latestText });
   return {
     delivery,
@@ -1295,6 +1306,7 @@ function resolveListingPayload(input, { uiCtx, photoSummary, catalog, saidText =
     areaMax: Number.isSafeInteger(input?.areaMax) && input.areaMax >= 1 ? Math.max(input.areaMin || 300, input.areaMax) : 1500,
     year,
     deposit,
+    rentalOperator,
     description,
   };
 }
@@ -1430,7 +1442,6 @@ const CORE_TOOL_NAMES = new Set([
   "propose_rental_request",
   "create_rental_request",
   "create_purchase_request",
-  "delegate_transaction",
   "toggle_favorite",
   "open_listing_chat",
   "offer_choices",
@@ -1448,7 +1459,6 @@ const BOOKING_FLOW_TOOLS = new Set([
   "offer_choices",
   "toggle_favorite",
   "open_listing_chat",
-  "delegate_transaction",
 ]);
 
 /**
@@ -1599,6 +1609,9 @@ function extractLearnedSlots({ text = "", uiCtx = {}, toolCalls = [] } = {}) {
     const matchedMachine = FALLBACK_MACHINE_PATTERNS.find(([, re]) => re.test(rawText))?.[0];
     if (matchedMachine) slots.machineType = matchedMachine;
 
+    const operatorChoice = detectOperatorChoice(rawText);
+    if (operatorChoice !== null) slots.operatorService = operatorChoice;
+
     if (/(?:사(?:고\s*싶|려|려구|려고|ㄹ래)|살(?:라|래|게|께)|구매|구입)/.test(rawText)) {
       slots.transaction = "sale";
     } else if (/(?:빌리|빌려|빌릴|대여|임대)/.test(rawText)) {
@@ -1681,6 +1694,8 @@ export function applyKnownFactsToSearch(input, { facts = {}, sell = false, spoke
     && facts.transaction === next.transaction) {
     next.maxPrice = facts.maxPrice;
   }
+  // 소비자가 말한 대행운영서비스 사용 여부는 모델이 빠뜨리거나 바꿔도 지킨다.
+  if (!sell && next.transaction === "rent" && typeof facts.operatorService === "boolean") next.operatorService = facts.operatorService;
   return next;
 }
 
@@ -1878,6 +1893,11 @@ export function summarizeKnownFacts(input = {}, precomputed = null) {
     lines.push(`- 기간: ${facts.start}${facts.end && facts.end !== facts.start ? ` ~ ${facts.end}` : ""}`);
   }
   if (Number.isSafeInteger(facts.maxPrice) && facts.maxPrice > 0) lines.push(`- 예산 상한: ${won(facts.maxPrice)}`);
+  if (typeof facts.operatorService === "boolean") {
+    lines.push(sell
+      ? `- 대행운영서비스: ${facts.operatorService ? "제공" : "제공 안 함"}`
+      : `- 대행운영서비스: ${facts.operatorService ? "사용" : "사용 안 함"}`);
+  }
   const lastAssistant = [...(Array.isArray(history) ? history : [])].reverse()
     .find((item) => item?.role === "assistant" && typeof item.content === "string")?.content || "";
   const lastQuestion = lastAssistant.split(/(?<=[.!?。？！])\s+/).filter((part) => /[?？]\s*$/.test(part)).at(-1)?.trim().slice(0, 120) || "";
@@ -2060,6 +2080,33 @@ async function runTurn(
       guide: `아직 초안을 만들지 않았다. ${photo?.machineType ? "사진으로 본 기종을 \"사진으로 보면 ○○ 같아요\"처럼 한 문장으로 말하고, " : ""}needsDetails(${needsDetails.join(", ")})를 한 번에 짧게 묻는다. 예: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." 참고가·제목·소개글은 아직 말하지 않는다. 사용자가 답하면 prepare_listing_draft를 다시 부른다.`,
     };
   };
+  // 대행운영서비스: 사용자가 말한 사용·제공 여부를 모델 입력보다 먼저 지킨다.
+  const operatorChoice = typeof known.facts.operatorService === "boolean" ? known.facts.operatorService : null;
+  const withOperatorChoice = (input) => (operatorChoice === null ? input : { ...(input || {}), operatorService: operatorChoice });
+  const listingInput = (input) => {
+    if (input?.type !== "rent" || operatorChoice !== false) return input;
+    return { ...input, operatorService: null, rentalOperator: null };
+  };
+  // 대여글은 기계 정보를 받은 뒤 대행운영서비스 제공 여부를 묻고, 제공하면 작업자 정보를 받는다(판매글은 묻지 않는다).
+  const askOperatorFirst = (input) => {
+    if (input?.type !== "rent") return null;
+    const profile = cleanOperatorProfile(input?.operatorService ?? input?.rentalOperator);
+    if (operatorChoice === false || (profile && operatorChoice !== false)) return null;
+    if (operatorChoice === null) {
+      return {
+        ok: false,
+        draftCreated: false,
+        needOperatorChoice: true,
+        guide: "아직 초안을 만들지 않았다. \"대행운영서비스를 제공하시겠어요?\"라고 묻고, 기계와 함께 작업자가 가서 대신 작업해 주고 하루 추가 요금을 받는 서비스라고 한 문장으로 설명한다. offer_choices 선택지는 [\"대행운영 제공할게요\", \"대행운영 안 할게요\"]. 답을 받으면 prepare_listing_draft를 다시 부른다.",
+      };
+    }
+    return {
+      ok: false,
+      draftCreated: false,
+      needOperatorProfile: true,
+      guide: "대행운영서비스를 제공한다고 했다. 작업자 이름, 이력(예: 경력 몇 년, 다뤄 본 기계), 하루 추가 요금을 한 번에 짧게 묻는다. 답을 받으면 prepare_listing_draft의 operatorService에 넣어 다시 부른다.",
+    };
+  };
   let writeDone = false;
   let searchedThisTurn = false;
   let repairGuideCalled = false;
@@ -2095,19 +2142,19 @@ async function runTurn(
     }
     out.learnedSlots = learnedSlots;
     const result = { mode: "agent", reply: tidyReply(reply), listingIds: out.listingIds, learnedSlots, ...extra };
-    for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget", "delegatedTransaction"]) {
+    for (const key of ["photoSummary", "repairCenters", "listingDraft", "reservation", "createdListing", "updatedListing", "searchDates", "weatherInfo", "favoriteAction", "chatTarget"]) {
       if (out[key]) result[key] = out[key];
     }
     if (sources.length) result.sources = sources.slice(0, 6);
     if (typeof deps?.onTurnComplete === "function") {
       const intent = (result.createdListing || result.updatedListing || result.listingDraft)
         ? "sell"
-        : (learnedSlots.transaction === "sale" || result.reservation?.kind === "purchase" || result.delegatedTransaction?.type === "sale")
+        : (learnedSlots.transaction === "sale" || result.reservation?.kind === "purchase")
           ? "buy"
-          : (learnedSlots.transaction === "rent" || result.reservation?.kind === "rental" || result.delegatedTransaction?.type === "rent")
+          : (learnedSlots.transaction === "rent" || result.reservation?.kind === "rental")
             ? "rent"
             : null;
-      const stage = (result.reservation || result.createdListing || result.delegatedTransaction)
+      const stage = (result.reservation || result.createdListing)
         ? "submitted"
         : (result.pendingAction || result.listingDraft)
           ? "confirming"
@@ -2307,10 +2354,10 @@ async function runTurn(
     const runSequentialTool = async (block) => {
       let output;
       if (block.name === "propose_rental_request") {
-        output = proposeRentalTool(block.input, await loadCatalog(), today);
+        output = proposeRentalTool(withOperatorChoice(block.input), await loadCatalog(), today);
         if (output.ok) pendingAction = output.proposal;
       } else if (block.name === "create_rental_request") {
-        const prop = proposeRentalTool(block.input, await loadCatalog(), today);
+        const prop = proposeRentalTool(withOperatorChoice(block.input), await loadCatalog(), today);
         if (!prop.ok) {
           output = { ok: false, error: prop.reason, ...(prop.bookedRanges ? { bookedRanges: prop.bookedRanges } : {}) };
         } else if (user && spokenApproval && deps?.createRentalRequest && !writeDone) {
@@ -2323,6 +2370,7 @@ async function runTurn(
               start: prop.proposal.start,
               end: prop.proposal.end,
               note: prop.proposal.note || "농농 채팅으로 신청한 예약입니다.",
+              ...(prop.proposal.rentalOperator ? { rentalOperator: prop.proposal.rentalOperator } : {}),
             });
             const req = created.request || {};
             writeDone = true;
@@ -2422,12 +2470,12 @@ async function runTurn(
       } else if (
         (block.name === "prepare_listing_draft"
           || (block.name === "create_listing" && !(user && spokenApproval && deps?.createListing && !writeDone)))
-        && (output = askDetailsFirst())
+        && (output = askDetailsFirst() || askOperatorFirst(block.input))
       ) {
-        // 세부사항(연식·사용시간·포함 작업기)을 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
+        // 세부사항(연식·사용시간·포함 작업기), 대여글이면 대행운영서비스 제공 여부를 먼저 묻는다. 초안 카드는 답을 받은 뒤에 보인다.
       } else if (block.name === "prepare_listing_draft") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
+        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
         const price = resolved.estimated ?? estimatePrice(catalogRows, { purpose: resolved.type, modelId: resolved.modelId, machineType: resolved.machineType });
         const finalPrice = Number.isSafeInteger(block.input?.price) && block.input.price > 0 ? block.input.price : price.median;
         let photoNote = null;
@@ -2459,6 +2507,7 @@ async function runTurn(
           areaMax: resolved.areaMax,
           year: resolved.year,
           deposit: resolved.deposit,
+          rentalOperator: resolved.rentalOperator,
           delivery: resolved.delivery,
         };
         const needsCheck = /\[확인 필요\]\s*(.+)/.exec(out.listingDraft.description)?.[1]?.split(" · ") || [];
@@ -2476,9 +2525,11 @@ async function runTurn(
           ...(user ? {} : { loginRequired: true, note: "로그인하지 않아 사진은 저장하지 않았어요. 등록하기를 누르면 로그인 후 이어서 등록해요." }),
           ...(photoNote ? { photoNote } : {}),
         };
+      } else if (block.name === "create_listing" && (output = askOperatorFirst(listingInput(block.input)))) {
+        // 대여글을 바로 올리기 전에도 대행운영서비스 제공 여부·작업자 정보부터 받는다.
       } else if (block.name === "create_listing") {
         const catalogRows = await loadCatalog();
-        const resolved = resolveListingPayload(block.input, { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
+        const resolved = resolveListingPayload(listingInput(block.input), { uiCtx, photoSummary: listingPhoto(), catalog: catalogRows, saidText, latestText: text });
         if (resolved.price === null || !Number.isSafeInteger(resolved.price)) {
           output = { ok: false, error: "가격을 정해야 등록할 수 있어요. 희망 가격을 물어보세요." };
         } else if (!resolved.delivery.methods.length) {
@@ -2504,6 +2555,7 @@ async function runTurn(
               description: resolved.description,
               delivery: resolved.delivery,
               pickup: resolved.delivery.pickupPlace,
+              ...(resolved.rentalOperator ? { rentalOperator: resolved.rentalOperator } : {}),
               ...(draft?.photoKey ? { draftPhotoKey: draft.photoKey } : (image?.dataUrl ? { photoDataUrl: image.dataUrl } : {})),
             });
             const listing = result.listing || {};
@@ -2631,71 +2683,6 @@ async function runTurn(
           out.chatTarget = { listingId: item.id, title: item.title, prefill };
           output = { ok: true, listingId: item.id, title: item.title, prefill, note: "판매자·소유자와의 1:1 채팅 창을 열도록 화면에 전달했습니다." };
         }
-      } else if (block.name === "delegate_transaction") {
-        const item = (await loadCatalog()).find((l) => l.id === block.input?.listingId && l.status !== "removed");
-        if (!item) {
-          output = { ok: false, error: "매물을 찾을 수 없습니다.", code: "LISTING_NOT_FOUND" };
-        } else if (user && item.ownerId === user.id) {
-          output = { ok: false, error: "본인이 등록한 매물에는 구매자 전담 거래를 시작할 수 없습니다.", code: "SELF_INQUIRY_FORBIDDEN" };
-        } else if (item.status !== "open") {
-          output = { ok: false, error: "지금은 거래를 진행할 수 없는 매물입니다.", code: "INVALID_LISTING_STATE" };
-        } else {
-          const startRaw = typeof block.input?.start === "string" && DATE.test(block.input.start) ? block.input.start : null;
-          const endRaw = startRaw && typeof block.input?.end === "string" && DATE.test(block.input.end) && block.input.end >= startRaw
-            ? block.input.end
-            : startRaw;
-          // 사용자가 말하지 않은 한도는 정가로 채우지 않는다(미설정 = 가격 결정은 사용자 확인).
-          const positiveInt = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.trunc(Number(v)) : null);
-          const maxBudget = positiveInt(block.input?.maxBudget);
-          const delegationPayload = {
-            type: "delegate_transaction",
-            listingId: item.id,
-            title: item.title,
-            region: uiCtx.region || item.region || null,
-            listingType: item.type,
-            price: item.price,
-            start: startRaw,
-            end: endRaw,
-            maxBudget,
-            targetPrice: positiveInt(block.input?.targetPrice),
-            budgetUnit: block.input?.budgetUnit === "daily" && item.type === "rent" ? "daily" : "total",
-            allowNegotiation: Boolean(block.input?.allowNegotiation),
-            pickupPreference: typeof block.input?.pickupPreference === "string" ? block.input.pickupPreference.trim().slice(0, 100) : "",
-            transportPayer: ["buyer", "owner", "none"].includes(block.input?.transportPayer) ? block.input.transportPayer : null,
-            requiredQuestions: Array.isArray(block.input?.requiredQuestions)
-              ? block.input.requiredQuestions.filter((q) => typeof q === "string" && q.trim()).map((q) => q.trim().slice(0, 80)).slice(0, 8)
-              : [],
-            initialMessage: typeof block.input?.initialMessage === "string" ? block.input.initialMessage.trim().slice(0, 500) : "",
-            autoExecuteTransaction: block.input?.autoExecuteTransaction !== false,
-            areaPyeong: uiCtx.areaPyeong || null,
-            cropIds: Array.isArray(uiCtx.cropIds) ? [...uiCtx.cropIds] : [],
-            operations: Array.isArray(uiCtx.operations) ? [...uiCtx.operations] : [],
-            ownedModelId: uiCtx.selectedOwnedModelId || uiCtx.ownedMachines?.[0]?.modelId || null,
-          };
-          if (user && spokenApproval && deps?.delegateTransaction && !writeDone) {
-            try {
-              await deps.beforeWrite?.("delegate_transaction");
-              const requestId = randomUUID();
-              const executed = await deps.delegateTransaction(user, delegationPayload, { requestId });
-              if (executed?.outcome === "failed") {
-                output = { ok: false, error: executed.message, code: executed.code };
-              } else {
-                writeDone = true;
-                out.delegatedTransaction = executed.delegatedTransaction;
-                output = {
-                  ok: true,
-                  delegatedTransaction: executed.delegatedTransaction,
-                  message: executed.message,
-                };
-              }
-            } catch (error) {
-              output = mapToolError(error, "전담 거래를 시작하지 못했습니다.");
-            }
-          } else {
-            pendingAction = delegationPayload;
-            output = { ok: true, mode: "proposal_created", proposal: pendingAction };
-          }
-        }
       } else if (block.name === "propose_my_page_action") {
         if (!user) {
           output = { ok: false, error: "로그인 후에 마이페이지를 바꿀 수 있어요.", code: "LOGIN_REQUIRED" };
@@ -2762,9 +2749,7 @@ async function runTurn(
     if (pendingAction) {
       const defaultAsk = pendingAction.type === "purchase_request"
         ? "아래 내용으로 구매 신청을 보낼까요? 확인 후 승인해 주세요."
-        : pendingAction.type === "delegate_transaction"
-          ? "아래 조건으로 농농이 거래 전담을 시작할까요? 확인 후 승인해 주세요."
-          : "아래 내용으로 대여 요청을 보낼까요? 확인 후 승인해 주세요.";
+        : "아래 내용으로 대여 요청을 보낼까요? 확인 후 승인해 주세요.";
       return await finish(texts.at(-1) || defaultAsk, { listingIds: [], pendingAction });
     }
     if (choices) {
@@ -2830,7 +2815,6 @@ async function runTurn(
     && !out.updatedListing
     && !out.listingDraft
     && !out.repairCenters
-    && !out.delegatedTransaction
     && !/도와드릴 수 없|관계없는/.test(texts.at(-1))
   ) {
     // 모델이 검색하지 않은 턴에는, 사용자가 직접 찾아 달라고 했거나 아직 카드를 하나도 안 보여 줬을 때만 대신 찾는다.
@@ -2857,13 +2841,11 @@ async function runTurn(
   const settled = settleReply(texts.at(-1) || "", { out, toolCalls });
   if (settled !== null) return await finish(settled);
 
-  const fallbackReply = out.delegatedTransaction
-    ? `'${out.delegatedTransaction.title}' 거래를 농농이 전담 모드로 시작했어요.`
-    : out.reservation
-      ? `${requestDoneMessage(out.reservation, { shownNo: out.shownNo ?? null })}\n신청 번호는 ${out.reservation.number}예요.`
-      : out.createdListing
-        ? `매물 등록을 완료했어요. 등록 번호는 ${out.createdListing.number}이에요.`
-        : "요청을 처리하지 못했어요. 찾으시는 작업을 조금 더 자세히 말씀해 주세요.";
+  const fallbackReply = out.reservation
+    ? `${requestDoneMessage(out.reservation, { shownNo: out.shownNo ?? null })}\n신청 번호는 ${out.reservation.number}예요.`
+    : out.createdListing
+      ? `매물 등록을 완료했어요. 등록 번호는 ${out.createdListing.number}이에요.`
+      : "요청을 처리하지 못했어요. 찾으시는 작업을 조금 더 자세히 말씀해 주세요.";
   return await finish(texts.at(-1) || fallbackReply);
 }
 
@@ -2871,7 +2853,7 @@ async function runTurn(
  * 사용자가 승인한 대여 요청을 실행하고, 실제 저장 상태를 다시 조회해 결과를 분류한다.
  * outcome: completed(요청 저장·확인됨) | partial(저장됐지만 상태 확인 실패) | failed(실행 안 됨)
  */
-/** 확인 카드에서 받은 희망 네고 가격(1일)·대리운용 희망 여부를 정리한다. 둘 다 없으면 null. */
+/** 확인 카드에서 받은 희망 네고 가격(1일)·대행운영서비스 사용 여부를 정리한다. 둘 다 없으면 null. */
 export function rentalTermsOf(action) {
   const price = Number(action?.negotiatedDailyPrice);
   const negotiatedDailyPrice = action?.negotiatedDailyPrice != null && Number.isSafeInteger(price) && price > 0 ? price : null;
@@ -2886,7 +2868,7 @@ function rentalTermsLines(terms, listedDailyPrice) {
     terms.negotiatedDailyPrice !== null
       ? `희망 네고 가격: 1일 ${won(terms.negotiatedDailyPrice)}${listed ? ` (등록가 1일 ${won(listed)})` : ""}`
       : "희망 네고 가격: 없음 (등록가 그대로)",
-    `대리운용: ${terms.operatorWanted ? "희망 (기계 운전·작업까지 맡기고 싶어요)" : "희망 안 함"}`,
+    `대행운영서비스: ${terms.operatorWanted ? "사용 (작업자 동반)" : "사용 안 함"}`,
   ];
 }
 
@@ -2905,12 +2887,14 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
   const terms = rentalTermsOf(action);
   const baseNote = typeof action?.note === "string" ? action.note.trim() : "";
   const termsNote = terms ? rentalTermsLines(terms, action?.dailyPrice).join(" · ") : "";
+  const rentalOperator = cleanOperatorProfile(action?.rentalOperator);
   const created = await createRentalRequest(user, {
     id: requestId,
     listingId: action?.listingId,
     start: action?.start,
     end: action?.end,
     note: [baseNote, termsNote].filter(Boolean).join(" / ").slice(0, 200),
+    ...(rentalOperator ? { rentalOperator } : {}),
   }, options);
 
   let verified = null;
@@ -2928,7 +2912,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
     };
   }
 
-  // 희망 네고 가격·대리운용 희망 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
+  // 희망 네고 가격·대행운영서비스 사용 여부는 게시자에게 채팅으로도 알린다(같은 requestId로 재시도해도 한 번만 전송).
   let conversation = null;
   if (terms) {
     try {
@@ -2944,7 +2928,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
       return {
         outcome: "partial",
         request: verified,
-        message: "대여 요청은 보냈지만 희망 네고 가격·대리운용 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
+        message: "대여 요청은 보냈지만 희망 네고 가격·대행운영서비스 내용을 채팅으로 전하지 못했어요. 거래 채팅에서 게시자에게 직접 알려 주세요.",
       };
     }
   }
@@ -2966,7 +2950,7 @@ export async function executeRentalRequest(user, action, { requestId, today = ks
     },
     message: [
       requestDoneMessage({ kind: "rental", title: verified.listingTitle }, { shownNo: Number(action?.shownNo) }),
-      ...(conversation ? ["희망 네고 가격·대리운용 여부는 게시자 채팅으로 전달했어요."] : []),
+      ...(conversation ? ["희망 네고 가격·대행운영서비스 여부는 게시자 채팅으로 전달했어요."] : []),
       "(+ 교육이수증 필요 여부를 임대사업소·소유자에게 확인해 주세요.)",
     ].join("\n"),
   };
@@ -3042,6 +3026,7 @@ export async function executeListingAction(user, action, { requestId, pool = get
     description: resolved.description,
     delivery: resolved.delivery,
     pickup: resolved.delivery.pickupPlace,
+    ...(resolved.rentalOperator ? { rentalOperator: resolved.rentalOperator } : {}),
     ...(cleanDraft ? { draftPhotoKey: cleanDraft.photoKey } : {}),
     ...(photoDataUrl ? { photoDataUrl } : {}),
   }, { pool });
@@ -3059,120 +3044,5 @@ export async function executeListingAction(user, action, { requestId, pool = get
     listing,
     createdListing,
     message: `매물을 바로 등록했어요! 등록 번호는 ${createdListing.number}이에요.`,
-  };
-}
-
-/**
- * 사용자가 승인한 거래 전담 위임(delegate_transaction)을 실행한다.
- * 1:1 대화방을 생성/조회하고 구매자 autonomous 정책을 저장한 뒤 첫 대리 문의를 전송하고
- * 소유자 AI 대리 응대가 켜져 있으면 즉시 후속 응답을 예약한다.
- */
-export async function executeDelegatedTransaction(
-  user,
-  action,
-  { requestId, pool = getPool(), today = kstToday() } = {},
-) {
-  const listingId = typeof action?.listingId === "string" ? action.listingId.trim() : "";
-  const item = listingId ? await fetchListingById(listingId, { viewerId: user.id, pool }) : null;
-  if (!item) {
-    return { outcome: "failed", code: "LISTING_NOT_FOUND", message: "매물을 찾을 수 없습니다." };
-  }
-  if (item.ownerId === user.id) {
-    return {
-      outcome: "failed",
-      code: "SELF_INQUIRY_FORBIDDEN",
-      message: "본인이 등록한 매물에는 구매자 전담 거래를 시작할 수 없습니다.",
-    };
-  }
-  if (item.status !== "open") {
-    return {
-      outcome: "failed",
-      code: "INVALID_LISTING_STATE",
-      message: "지금은 거래를 진행할 수 없는 매물입니다.",
-    };
-  }
-
-  const targetStart = typeof action?.start === "string" && DATE.test(action.start) ? action.start : null;
-  const targetEnd = targetStart && typeof action?.end === "string" && DATE.test(action.end) && action.end >= targetStart
-    ? action.end
-    : targetStart;
-
-  const positiveInt = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.trunc(Number(v)) : null);
-  // 사용자가 승인한 위임 조건만 저장한다. 말하지 않은 한도는 정가로 채우지 않는다(null = 가격 결정은 사용자 확인).
-  const policy = {
-    fullDelegation: true,
-    autoExecuteTransaction: action?.autoExecuteTransaction !== false,
-    intent: item.type === "sale" ? "sale" : "rent",
-    targetStart,
-    targetEnd,
-    targetPrice: positiveInt(action?.targetPrice),
-    maxBudget: positiveInt(action?.maxBudget),
-    budgetUnit: action?.budgetUnit === "daily" && item.type === "rent" ? "daily" : "total",
-    transportPayer: ["buyer", "owner", "none"].includes(action?.transportPayer) ? action.transportPayer : null,
-    transportFee: null,
-    requiredQuestions: Array.isArray(action?.requiredQuestions)
-      ? action.requiredQuestions.filter((q) => typeof q === "string" && q.trim()).map((q) => q.trim().slice(0, 80)).slice(0, 8)
-      : [],
-    allowNegotiation: Boolean(action?.allowNegotiation),
-    areaPyeong: Number(action?.areaPyeong) > 0 ? Number(action.areaPyeong) : null,
-    cropIds: Array.isArray(action?.cropIds) ? action.cropIds.slice(0, 6) : [],
-    operations: Array.isArray(action?.operations) ? action.operations.slice(0, 6) : [],
-    ownedModelId: typeof action?.ownedModelId === "string" ? action.ownedModelId : null,
-    region: action?.region || item.region || null,
-    pickupPreference: typeof action?.pickupPreference === "string" ? action.pickupPreference.trim().slice(0, 100) : "",
-    maxConsecutiveAiTurns: 6,
-  };
-
-  const defaultBody = item.type === "sale"
-    ? `안녕하세요, '${item.title}' 구매를 희망해 농농이가 대신 문의드립니다. 거래 가능 여부와 인수 조건 확인 부탁드립니다.`
-    : targetStart
-      ? `안녕하세요, '${item.title}' ${targetStart}${targetEnd && targetEnd !== targetStart ? ` ~ ${targetEnd}` : ""} 일정 대여를 희망해 농농이가 대신 문의드립니다. 진행 가능할까요?`
-      : `안녕하세요, '${item.title}' 대여 가능 일정과 조건 확인을 위해 농농이가 대신 문의드립니다.`;
-  const rawInitial = typeof action?.initialMessage === "string" ? action.initialMessage.trim() : "";
-  const initialBody = (rawInitial || defaultBody).slice(0, 500);
-
-  // 1) 대화방을 만들고(구매자 역할) 위임 정책을 먼저 저장한다: 정책 정제·버전 증가·명시적 재개는 chat.js가 담당.
-  //    첫 메시지보다 정책이 먼저 커밋되어야 상대 응답이 즉시 와도 내 AI가 올바른 정책으로 응대한다.
-  const saved = await updateConversationAiPolicy(
-    user,
-    { listingId: item.id, mode: "autonomous", policy, resume: true },
-    { pool },
-  );
-  const savedPolicy = saved?.conversation?.myAiState?.policy || saved?.conversation?.buyerAiPolicy || policy;
-
-  // 2) 첫 대리 문의를 실제로 발송한다(발송 성공 후에만 '연락했어요'로 안내).
-  const sent = await sendChatMessage(
-    user,
-    { id: requestId || randomUUID(), listingId: item.id, body: initialBody },
-    { pool, senderKind: "ai_proxy", aiConfidence: "high" },
-  );
-  const convId = sent.conversation.id;
-  const msgSeq = sent.message.seq;
-
-  if (!sent.idempotent) {
-    const { scheduleDelegatedReply } = await import("./delegated-chat.js");
-    await scheduleDelegatedReply({
-      conversationId: convId,
-      triggerSeq: msgSeq,
-      targetRole: "owner",
-      pool,
-    });
-  }
-
-  return {
-    outcome: "completed",
-    idempotent: Boolean(sent.idempotent),
-    delegatedTransaction: {
-      conversationId: convId,
-      listingId: item.id,
-      title: item.title,
-      region: item.region,
-      type: item.type,
-      mode: "autonomous",
-      fullDelegation: true,
-      policy: savedPolicy,
-      firstMessageSeq: msgSeq,
-    },
-    message: `'${item.title}' 판매자에게 농농이가 첫 문의를 보냈어요. 상대방이 답하면 맡겨 주신 조건 안에서 대신 조율하고, 정하지 않은 가격·모르는 내용은 임의로 정하지 않고 바로 확인을 요청할게요. 신청은 양쪽이 같은 조건에 합의한 뒤에만 접수돼요.`,
   };
 }

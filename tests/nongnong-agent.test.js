@@ -4,6 +4,9 @@ import { test } from "node:test";
 import {
   checkFarmCompatibilityTool,
   cleanUiContext,
+  collectKnownFacts,
+  executeListingAction,
+  summarizeKnownFacts,
   inferBareUsageHours,
   isRepairRequest,
   missingListingDetails,
@@ -390,7 +393,7 @@ test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 �
     return { listingId: "11111111-1111-4111-8111-111111111111", photoKey: "listings/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", photoUrl: "/api/photos?key=x" };
   };
   const first = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "초안을 만들었어요." }] }]);
-  const r1 = await runAgentTurn("빌려주고 싶어요. 연식은 모르고 작업기는 없어요", { image: PHOTO, user: USER }, { listings: LISTINGS, call: first.call, today: TODAY, saveDraft });
+  const r1 = await runAgentTurn("빌려주고 싶어요. 연식은 모르고 작업기는 없어요. 대행운영은 안 할게요", { image: PHOTO, user: USER }, { listings: LISTINGS, call: first.call, today: TODAY, saveDraft });
   assert.equal(saves, 1);
   assert.equal(r1.listingDraft.listingId, "11111111-1111-4111-8111-111111111111");
   assert.equal(r1.listingDraft.type, "rent");
@@ -398,7 +401,7 @@ test("prepare_listing_draft는 로그인+사진이면 저장하고, 두 번째 �
   assert.ok(r1.listingDraft.price > 0);
 
   const second = scripted([{ content: [draftCall] }, { content: [{ type: "text", text: "고쳤어요." }] }]);
-  const r2 = await runAgentTurn("제목만 바꿔 줘", { user: USER, savedDraft: { listingId: r1.listingDraft.listingId, photoKey: r1.listingDraft.photoKey, photoUrl: r1.listingDraft.photoUrl } }, { listings: LISTINGS, call: second.call, today: TODAY, saveDraft });
+  const r2 = await runAgentTurn("제목만 바꿔 줘", { user: USER, history: [{ role: "user", content: "빌려주고 싶어요. 연식은 모르고 작업기는 없어요. 대행운영은 안 할게요" }], savedDraft: { listingId: r1.listingDraft.listingId, photoKey: r1.listingDraft.photoKey, photoUrl: r1.listingDraft.photoUrl } }, { listings: LISTINGS, call: second.call, today: TODAY, saveDraft });
   assert.equal(saves, 1, "같은 대화에서 사진을 다시 저장하지 않는다");
   assert.equal(r2.listingDraft.photoKey, r1.listingDraft.photoKey);
 });
@@ -637,7 +640,7 @@ test("[리뷰] 새 사진을 보내면 이전 초안을 쓰지 않고 새로 저
     { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { type: "rent", title: "관리기", description: "소개", machineType: "cultivator" } }] },
     { content: [{ type: "text", text: "새 초안" }] },
   ]);
-  const result = await runAgentTurn("이것도 빌려줄래요. 연식은 몰라요",{ image: PHOTO, user: USER, savedDraft: old }, { listings: LISTINGS, call, today: TODAY, saveDraft });
+  const result = await runAgentTurn("이것도 빌려줄래요. 연식은 몰라요. 대행운영은 안 할게요",{ image: PHOTO, user: USER, savedDraft: old }, { listings: LISTINGS, call, today: TODAY, saveDraft });
   assert.equal(saves, 1);
   assert.equal(result.listingDraft.listingId, "33333333-3333-4333-8333-333333333333");
 });
@@ -793,7 +796,7 @@ test("음성: 말로 \"네 살게예\"·\"네 올려 주세요\"·\"네 고쳐 �
     { content: [{ type: "text", text: "등록했어요." }] },
   ]);
   // 운송 방식(가지러 오시면 됨)을 앞에서 말해 둔 매물 등록
-  const created = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice", history: [{ role: "user", content: "트랙터 빌려줄게요. 가지러 오시면 돼요." }] }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
+  const created = await runAgentTurn("네 올려 주세요", { user: USER, inputMode: "voice", history: [{ role: "user", content: "트랙터 빌려줄게요. 가지러 오시면 돼요." }, { role: "user", content: "대행운영은 안 할게요" }] }, { listings: LISTINGS, call: listing.call, today: TODAY, deps });
   assert.ok(created.createdListing);
 
   const update = scripted([
@@ -803,21 +806,6 @@ test("음성: 말로 \"네 살게예\"·\"네 올려 주세요\"·\"네 고쳐 �
   const updated = await runAgentTurn("네 고쳐 주세요", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call: update.call, today: TODAY, deps });
   assert.ok(updated.updatedListing);
   assert.deepEqual(writes, ["purchase", "listing", "update"]);
-});
-
-test("음성: 말로 \"네\"라고 해도 거래 전담 위임은 자동 실행하지 않고 확인 카드로 넘긴다", async (t) => {
-  withKey(t, "test");
-  let executed = false;
-  const deps = { beforeWrite: async () => {}, delegateTransaction: async () => { executed = true; return { delegatedTransaction: {} }; } };
-  const { call } = scripted([
-    { content: [{ type: "tool_use", id: "d1", name: "delegate_transaction", input: { listingId: saleItem.id } }] },
-    { content: [{ type: "text", text: "화면의 확인 버튼을 눌러 주세요." }] },
-  ]);
-  const result = await runAgentTurn("네 맡길게예", { user: USER, inputMode: "voice" }, { listings: LISTINGS, call, today: TODAY, deps });
-  assert.equal(executed, false);
-  assert.equal(result.delegatedTransaction, undefined);
-  assert.equal(result.pendingAction.type, "delegate_transaction");
-  assert.equal(result.pendingAction.listingId, saleItem.id);
 });
 
 test("OpenAI로 사진 상담을 하면 같은 모델에 image_url을 보내고 웹 검색 표시는 보내지 않는다", async (t) => {
@@ -922,7 +910,7 @@ test("[통합 오케스트레이터] 구매 신청, 매물 등록, 예약 가능
     { content: [{ type: "tool_use", id: "l1", name: "create_listing", input: { type: "rent", machineType: "cultivator", title: "아세아 관리기 빌려드려요", price: 45000 } }] },
     { content: [{ type: "text", text: "매물을 등록했어요!" }] },
   ]);
-  const r3 = await runAgentTurn("이대로 올려 주세요", { user: USER, uiContext: { region: "청기면", cropIds: ["pepper"] }, history: [{ role: "user", content: "관리기 빌려줄게요. 직접 가져다 드릴 수 있어요." }] }, { listings: LISTINGS, call: sellFlow.call, today: TODAY, deps });
+  const r3 = await runAgentTurn("이대로 올려 주세요", { user: USER, uiContext: { region: "청기면", cropIds: ["pepper"] }, history: [{ role: "user", content: "관리기 빌려줄게요. 직접 가져다 드릴 수 있어요." }, { role: "user", content: "대행운영은 안 할게요" }] }, { listings: LISTINGS, call: sellFlow.call, today: TODAY, deps });
   assert.equal(actions.listing.length, 1);
   assert.equal(actions.listing[0].region, "청기면");
   assert.equal(r3.createdListing.title, "아세아 관리기 빌려드려요");
@@ -1174,6 +1162,9 @@ test("timeoutMs는 공급자 전체의 예산이라 1순위가 예산을 다 쓰
     return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
   });
 
+  // AbortSignal.timeout은 이벤트 루프를 붙잡지 않아, 이 파일만 따로 돌리면 기다리는 중에 러너가 끝나 뒤 테스트가 모두 취소된다.
+  const keepAlive = setTimeout(() => {}, 5000);
+  t.after(() => clearTimeout(keepAlive));
   const started = Date.now();
   const result = await callLLM({ system: "S", messages: [{ role: "user", content: "안녕" }], timeoutMs: 1600 });
   assert.equal(result, null);
@@ -1211,4 +1202,146 @@ test("고장 문의: 모델이 수리센터 도구를 안 불러도 수리센터
   const result = await runAgentTurn("관리기가 작동을 안 해요", { region: "영양읍" }, { listings: LISTINGS, call, today: TODAY, fetchOffices: async () => ({ configured: false, items: [] }) });
   assert.equal(result.repairCenters.length, 3);
   assert.deepEqual(result.listingIds, []);
+});
+
+
+// ───────────── 대행운영서비스: 생산자는 대여글에 제공 여부·작업자 정보, 소비자는 사용 여부로 매물·예약이 갈린다 ─────────────
+
+const OP = { name: "김영수", experience: "관리기·트랙터 15년", dailyPrice: 80000 };
+const OP_LISTINGS = LISTINGS.map((item) => ({ ...item, rentalOperator: null }));
+const opRent = OP_LISTINGS.find((item) => item.id === "mock-cultivator-rent-2");
+opRent.rentalOperator = OP;
+const plainRent = OP_LISTINGS.find((item) => item.id === "mock-cultivator-rent-5");
+const DETAILS_ASKED = [
+  { role: "user", content: "경운기 대여글 올려줘" },
+  { role: "assistant", content: "연식, 사용시간, 같이 드릴 작업기가 있는지 알려 주세요. 모르시면 모른다고 하셔도 돼요." },
+];
+const RENT_DRAFT_INPUT = { type: "rent", title: "아세아 관리기 대여", description: "잘 관리한 관리기예요.", machineType: "cultivator", price: 50000, region: "청기면" };
+const toolResult = (request) => JSON.parse(request.messages.at(-1).content[0].content);
+
+test("대행운영: 말에서 사용·제공 여부를 기억하고, 이미 받은 정보로 다시 묻지 않게 알려 준다", () => {
+  const known = collectKnownFacts({ history: [{ role: "user", content: "트랙터 빌리고 싶어요" }], text: "대행운영 사용할게요" });
+  assert.equal(known.facts.operatorService, true);
+  assert.match(summarizeKnownFacts({ history: [] }, known), /대행운영서비스: 사용/);
+  const no = collectKnownFacts({ history: [], text: "대행운영 없이 할게요" });
+  assert.equal(no.facts.operatorService, false);
+  assert.match(summarizeKnownFacts({ history: [] }, no), /대행운영서비스: 사용 안 함/);
+});
+
+test("대행운영(소비자): 검색은 사용하면 제공 매물만, 안 쓰면 제공 안 하는 매물만 보여 준다", () => {
+  const input = { machineType: "cultivator", transaction: "rent", operations: [] };
+  const withOp = searchListingsTool({ ...input, operatorService: true }, OP_LISTINGS, { region: "청기면" });
+  assert.deepEqual(withOp.results.map((r) => r.id), [opRent.id]);
+  assert.deepEqual(withOp.results[0].operatorService, { name: OP.name, experience: OP.experience, dailyPricePerDay: OP.dailyPrice });
+  const withoutOp = searchListingsTool({ ...input, operatorService: false }, OP_LISTINGS, { region: "청기면" });
+  assert.ok(withoutOp.results.length > 0);
+  assert.ok(withoutOp.results.every((r) => r.id !== opRent.id && r.operatorService === null));
+});
+
+test("대행운영(소비자): 사용한다고 했으면 모델이 조건을 빠뜨려도 서버가 제공 매물만 검색한다", async (t) => {
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "s1", name: "search_listings", input: { machineType: "cultivator", transaction: "rent", operations: [] } }] },
+    { content: [{ type: "text", text: "대행운영 되는 관리기를 찾았어요." }] },
+  ]);
+  const history = [{ role: "user", content: "관리기 11월 20일부터 이틀 빌리고 싶어요" }, { role: "assistant", content: "대행운영서비스를 사용하시겠어요?" }];
+  const result = await runAgentTurn("대행운영 사용할게요", { history, region: "청기면" }, { listings: OP_LISTINGS, call, today: TODAY });
+  assert.deepEqual(toolResult(calls[1]).results.map((r) => r.id), [opRent.id]);
+  assert.deepEqual(result.listingIds, [opRent.id]);
+});
+
+test("대행운영(소비자): 예약 확인 카드와 예약에 작업자와 '기계+작업자' 합계가 들어간다", () => {
+  const ok = proposeRentalTool({ listingId: opRent.id, start: "2026-11-20", end: "2026-11-21", operatorService: true }, OP_LISTINGS, TODAY);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.proposal.rentalOperator, OP);
+  assert.equal(ok.proposal.operatorDailyPrice, OP.dailyPrice);
+  assert.equal(ok.proposal.totalPrice, (opRent.price + OP.dailyPrice) * 2);
+  const plain = proposeRentalTool({ listingId: opRent.id, start: "2026-11-20", end: "2026-11-21", operatorService: false }, OP_LISTINGS, TODAY);
+  assert.equal(plain.proposal.rentalOperator, null);
+  assert.equal(plain.proposal.totalPrice, opRent.price * 2);
+  const missing = proposeRentalTool({ listingId: plainRent.id, start: "2026-11-20", end: "2026-11-21", operatorService: true }, OP_LISTINGS, TODAY);
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /대행운영서비스를 제공하지 않는/);
+});
+
+test("대행운영(소비자): 바로 예약할 때 작업자를 함께 요청한다(대화에서 사용한다고 했으면 모델이 빠뜨려도)", async (t) => {
+  withKey(t, "test");
+  const sent = [];
+  const deps = { beforeWrite: async () => {}, createRentalRequest: async (_user, payload) => { sent.push(payload); return { request: { id: payload.id, days: 2, totalPrice: (opRent.price + OP.dailyPrice) * 2 } }; } };
+  const { call } = scripted([
+    { content: [{ type: "tool_use", id: "r1", name: "create_rental_request", input: { listingId: opRent.id, start: "2026-11-20", end: "2026-11-21" } }] },
+    { content: [{ type: "text", text: "예약 요청을 보냈어요." }] },
+  ]);
+  const history = [{ role: "user", content: "대행운영 사용할게요" }, { role: "assistant", content: "이대로 예약할까요?" }];
+  const result = await runAgentTurn("네 예약해 주세요", { history, user: USER }, { listings: OP_LISTINGS, call, today: TODAY, deps });
+  assert.deepEqual(sent[0].rentalOperator, OP);
+  assert.equal(result.reservation.totalPrice, (opRent.price + OP.dailyPrice) * 2);
+});
+
+test("대행운영(생산자): 대여글은 기계 정보를 받은 뒤 대행운영서비스 제공 여부를 먼저 묻는다", async (t) => {
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: RENT_DRAFT_INPUT }] },
+    { content: [{ type: "text", text: "대행운영서비스를 제공하시겠어요?" }] },
+  ]);
+  const result = await runAgentTurn("2019년식이고 300시간 썼어요. 로터리 같이 드려요", { history: DETAILS_ASKED, user: USER, region: "청기면" }, { listings: OP_LISTINGS, call, today: TODAY });
+  const output = toolResult(calls[1]);
+  assert.equal(output.needOperatorChoice, true);
+  assert.match(output.guide, /대행운영 제공할게요/);
+  assert.equal(result.listingDraft, undefined);
+});
+
+test("대행운영(생산자): 제공한다고 했는데 작업자 정보가 없으면 이름·이력·하루 추가 요금을 한 번에 묻는다", async (t) => {
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: RENT_DRAFT_INPUT }] },
+    { content: [{ type: "text", text: "작업자 정보를 알려 주세요." }] },
+  ]);
+  const history = [...DETAILS_ASKED, { role: "user", content: "2019년식이고 300시간 썼어요. 로터리 같이 드려요" }, { role: "assistant", content: "대행운영서비스를 제공하시겠어요?" }];
+  const result = await runAgentTurn("대행운영 제공할게요", { history, user: USER, region: "청기면" }, { listings: OP_LISTINGS, call, today: TODAY });
+  const output = toolResult(calls[1]);
+  assert.equal(output.needOperatorProfile, true);
+  assert.match(output.guide, /이름.*이력.*하루 추가 요금/);
+  assert.equal(result.listingDraft, undefined);
+});
+
+test("대행운영(생산자): 작업자 정보를 받으면 초안에 '대행운영서비스 제공중'이 적히고, 안 한다면 빠진다", async (t) => {
+  withKey(t, "test");
+  const base = [...DETAILS_ASKED, { role: "user", content: "2019년식이고 300시간 썼어요. 로터리 같이 드려요" }, { role: "assistant", content: "대행운영서비스를 제공하시겠어요?" }];
+  const yes = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { ...RENT_DRAFT_INPUT, operatorService: OP } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const withOp = await runAgentTurn("작업자는 김영수, 관리기·트랙터 15년, 하루 8만원이요", { history: [...base, { role: "user", content: "대행운영 제공할게요" }, { role: "assistant", content: "작업자 이름, 이력, 하루 추가 요금을 알려 주세요." }], user: USER, region: "청기면" }, { listings: OP_LISTINGS, call: yes.call, today: TODAY });
+  assert.deepEqual(withOp.listingDraft.rentalOperator, OP);
+  assert.match(withOp.listingDraft.description, /^✅ 대행운영서비스 제공중 \(작업자 김영수, 하루 \+80,000원\)/);
+
+  const no = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { ...RENT_DRAFT_INPUT, operatorService: OP } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const withoutOp = await runAgentTurn("대행운영 안 할게요", { history: base, user: USER, region: "청기면" }, { listings: OP_LISTINGS, call: no.call, today: TODAY });
+  assert.equal(withoutOp.listingDraft.rentalOperator, null);
+  assert.doesNotMatch(withoutOp.listingDraft.description, /대행운영서비스 제공중/);
+});
+
+test("대행운영(생산자): 판매글에는 대행운영서비스를 묻지도 넣지도 않는다", async (t) => {
+  withKey(t, "test");
+  const { call, calls } = scripted([
+    { content: [{ type: "tool_use", id: "d1", name: "prepare_listing_draft", input: { ...RENT_DRAFT_INPUT, type: "sale", price: 900000, operatorService: OP } }] },
+    { content: [{ type: "text", text: "초안을 만들었어요." }] },
+  ]);
+  const history = [{ role: "user", content: "경운기 판매글 올려줘" }, DETAILS_ASKED[1]];
+  const result = await runAgentTurn("2019년식이고 300시간 썼어요. 로터리 같이 드려요", { history, user: USER, region: "청기면" }, { listings: OP_LISTINGS, call, today: TODAY });
+  assert.equal(toolResult(calls[1]).needOperatorChoice, undefined);
+  assert.equal(result.listingDraft.rentalOperator, null);
+});
+
+test("대행운영(생산자): 초안을 등록할 때 작업자 정보도 함께 등록한다", async () => {
+  let sent = null;
+  const createListing = async (_user, payload) => { sent = payload; return { listing: { id: payload.id, title: payload.title } }; };
+  const result = await executeListingAction(USER, { type: "create_listing", listingType: "rent", machineType: "cultivator", title: "관리기 대여", description: "잘 관리했어요.", price: 50000, region: "청기면", rentalOperator: OP, delivery: { methods: ["self_pickup"], fee: null, area: "", pickupPlace: "청기면 창고" } }, { requestId: "77777777-7777-4777-8777-777777777777", createListing, pool: {} });
+  assert.equal(result.outcome, "completed");
+  assert.deepEqual(sent.rentalOperator, OP);
+  assert.match(sent.description, /^✅ 대행운영서비스 제공중/);
 });

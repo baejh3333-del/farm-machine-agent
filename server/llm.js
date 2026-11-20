@@ -232,7 +232,7 @@ export async function callLLM({ system, messages, tools, toolChoice, maxTokens =
     return null;
   }
   // timeoutMs는 공급자별이 아니라 이 호출 전체의 시간 예산이다. 바깥 signal이 없는 호출자
-  // (delegated-chat, askLLMJson)도 공급자 수만큼 대기 시간이 늘지 않게, 남은 예산 안에서만 다음 공급자로 넘어간다.
+  // (askLLMJson 등)도 공급자 수만큼 대기 시간이 늘지 않게, 남은 예산 안에서만 다음 공급자로 넘어간다.
   const deadline = Date.now() + timeoutMs;
   for (let i = 0; i < providers.length; i += 1) {
     if (signal?.aborted) return null;

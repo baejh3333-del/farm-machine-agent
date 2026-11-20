@@ -12,7 +12,7 @@ export const MENU = [
 // 그래서 메뉴에 마우스를 올려도 화면 전체가 다시 그려지지 않아요(새로고침처럼 보이지 않음).
 function navLinks(root) {
   const host = root && root.getRootNode ? root.getRootNode() : document;
-  return host.querySelectorAll('nav[aria-label="주 메뉴"] a');
+  return host.querySelectorAll('nav[aria-label="주 메뉴"] a, nav[aria-label="상단 메뉴"] a');
 }
 
 export function closeMenu(self) {
@@ -20,6 +20,7 @@ export function closeMenu(self) {
   const root = self._mega;
   if (!root || root.getAttribute('data-open') === '') return;
   root.setAttribute('data-open', '');
+  self._menuByHover = false;
   navLinks(root).forEach(x => x.setAttribute('aria-expanded', 'false'));
 }
 
@@ -37,18 +38,74 @@ export function openMenu(self, e, id, hover) {
   }
   self._menuByHover = !!hover;
   const a = e && e.currentTarget;
-  const box = a && a.closest && a.closest('header');
-  const top = box ? Math.round(box.getBoundingClientRect().bottom) : 72;
-  const left = a && a.getBoundingClientRect ? Math.round(a.getBoundingClientRect().left) - 24 : 0;
+  const box = a && a.closest && (a.closest('header') || a.closest('[data-sticky-header]'));
+  const top = box ? Math.max(0, Math.round(box.getBoundingClientRect().bottom)) : 72;
+  const vw = window.innerWidth || 1440;
+  const mobile = vw <= 768;
+  const rawLeft = a && a.getBoundingClientRect ? Math.round(a.getBoundingClientRect().left) - 24 : 0;
+  const left = Math.min(Math.max(16, vw - 220), Math.max(16, rawLeft));
   const band = root.querySelector('[data-mega]'), col = root.querySelector('[data-mega-col]');
-  if (band) band.style.top = top + 'px';
-  if (col) { col.style.top = top + 'px'; col.style.left = left + 'px'; }
+  if (band) {
+    band.style.top = top + 'px';
+    if (mobile) {
+      band.style.left = '0px';
+      band.style.width = '0px';
+      band.style.height = '0px';
+    } else {
+      band.style.left = '';
+      band.style.width = '';
+      band.style.height = '';
+    }
+  }
+  if (col) {
+    col.style.top = top + 'px';
+    if (mobile) {
+      col.style.left = '0px';
+      col.style.right = '0px';
+      col.style.width = '100%';
+      col.style.minWidth = '0';
+      col.style.boxSizing = 'border-box';
+      col.style.padding = '10px 16px 16px';
+      col.style.background = 'rgba(255,255,255,0.98)';
+      col.style.borderBottom = '1px solid #EEEEEE';
+      col.style.boxShadow = '0 14px 32px rgba(0,0,0,0.12)';
+      col.style.backdropFilter = 'blur(16px)';
+      col.style.webkitBackdropFilter = 'blur(16px)';
+    } else {
+      col.style.left = left + 'px';
+      col.style.right = '';
+      col.style.width = '';
+      col.style.minWidth = '';
+      col.style.boxSizing = '';
+      col.style.padding = '';
+      col.style.background = '';
+      col.style.borderBottom = '';
+      col.style.boxShadow = '';
+      col.style.backdropFilter = '';
+      col.style.webkitBackdropFilter = '';
+    }
+  }
   root.setAttribute('data-open', id);
   const label = a ? a.textContent.trim() : '';
   navLinks(root).forEach(x => x.setAttribute('aria-expanded', x.textContent.trim() === label ? 'true' : 'false'));
   if (!self._menuScroll) {
     self._menuScroll = () => closeMenu(self);
     window.addEventListener('scroll', self._menuScroll, { passive: true });
+    window.addEventListener('resize', self._menuScroll, { passive: true });
+  }
+  if (!self._menuOutside) {
+    self._menuOutside = ev => {
+      const cur = self._mega;
+      if (!cur || cur.getAttribute('data-open') === '') return;
+      const path = ev.composedPath ? ev.composedPath() : [];
+      const curCol = cur.querySelector('[data-mega-col]');
+      if (curCol && path.includes(curCol)) return;
+      for (const link of navLinks(cur)) if (path.includes(link)) return;
+      closeMenu(self);
+    };
+    self._menuKey = ev => { if (ev.key === 'Escape') closeMenu(self); };
+    document.addEventListener('pointerdown', self._menuOutside);
+    document.addEventListener('keydown', self._menuKey);
   }
 }
 

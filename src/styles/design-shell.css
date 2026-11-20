@@ -19,61 +19,119 @@ body:not(.design-page) {
   color: var(--moa-ink);
 }
 
-/* ───────── 머리말 ───────── */
+/* ───────── 머리말 ─────────
+   홈 디자인 화면(src/design/home.html의 <header>)과 똑같이 보이게 맞춘다.
+   내용 폭 1200px 가운데 정렬 · 위아래 14px · 로고 136×36 · 메뉴 15px/500(간격 24px)
+   · 메뉴와 오른쪽 버튼 사이 32px · 오른쪽은 '로그인'/'마이페이지' 테두리 버튼 하나뿐. */
 body:not(.design-page) .sidebar {
   position: sticky;
   top: 0;
   display: flex !important;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 28px;
-  height: 76px;
-  padding: 0 40px;
+  justify-content: space-between;
+  gap: 16px 32px;
+  height: auto;
+  min-height: 0;
+  padding: 14px max(24px, calc((100% - 1200px) / 2));
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.96);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid #EEEEEE;
-  box-shadow: none;
-}
-body:not(.design-page) .sidebar > .brand { margin-right: auto; }
-body:not(.design-page) .sidebar-nav { gap: 6px; justify-content: flex-end; }
-body:not(.design-page) .nav-item {
-  min-height: 76px;
-  padding: 0 14px;
-  border: 0;
+  background: #FFFFFF;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom: 0;
+  box-shadow: 0 1px 0 transparent;
   color: var(--moa-ink);
-  font-size: 16px;
+  letter-spacing: -0.01em;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+/* 내려 읽을 때: 홈에서 스크롤하면 나오는 반투명 머리말과 같은 바탕 */
+body:not(.design-page) .sidebar.is-scrolled {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.06); /* 높이가 늘지 않게 테두리 대신 그림자로 */
+}
+body:not(.design-page) .sidebar > .brand { margin: 0; padding: 0; border: 0; background: transparent; }
+body:not(.design-page) .sidebar .brand-wordmark { display: block; width: 136.4px; height: 36px; }
+
+/* 메뉴: 글자 아래 4px 띄워 밑줄(지금 화면은 초록, 펼친 메뉴는 검정) */
+body:not(.design-page) .sidebar-nav {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 24px;
+  width: auto;
+  margin: 0 0 0 auto;
+  padding: 0;
+  overflow: visible;
+  white-space: nowrap;
+}
+body:not(.design-page) .nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 0;
+  height: auto;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--moa-ink);
+  font: inherit;
+  font-size: 15px;
   font-weight: 500;
+  line-height: inherit;
   letter-spacing: -0.01em;
   box-shadow: inset 0 -2px 0 transparent;
-  transition: box-shadow 0.2s ease;
+  transform: none;
+  transition: box-shadow 0.25s ease, color 0.2s ease;
 }
 body:not(.design-page) .nav-item::after { display: none; }
+body:not(.design-page) .nav-item:hover { color: var(--moa-green); }
+body:not(.design-page) .nav-item:active:not(:disabled) { transform: none; }
 body:not(.design-page) .nav-item.active { color: var(--moa-ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--moa-green); }
+body:not(.design-page) .nav-item.active:hover { color: var(--moa-green); }
 body:not(.design-page) .nav-item[aria-expanded="true"] { box-shadow: inset 0 -2px 0 var(--moa-ink); }
+/* 넓은 화면: 메뉴 영역을 머리말 위아래 끝까지 늘려, 메뉴에서 세부 메뉴로 내려갈 때 닫히지 않게 */
+@media (min-width: 701px) {
+  body:not(.design-page) .sidebar-nav { align-self: stretch; margin-block: -14px; }
+}
 
-/* 세부 메뉴: 올린 메뉴의 항목만, 오른쪽 위 그라데이션 판 위에 */
+/* 세부 메뉴: 올린 메뉴의 항목만, 오른쪽 위 흐린 그라데이션 판 위에 (홈의 data-mega와 같은 값) */
 body:not(.design-page) .nav-submenu {
   position: fixed;
-  inset: 76px 0 auto auto;
+  inset: var(--nav-top, 66px) 0 auto auto;
+  z-index: 44;
   width: min(720px, 54vw);
-  height: 320px;
-  animation: moaShellDrop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  height: 400px;
+  pointer-events: none;
+  animation: none;
 }
 body:not(.design-page) .nav-submenu::before {
   inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.9) 45%, rgba(255, 255, 255, 0) 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 32%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 32%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.94) 45%, rgba(255, 255, 255, 0.6) 75%, rgba(255, 255, 255, 0) 100%);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  -webkit-mask-image: linear-gradient(180deg, #000 50%, transparent 100%), linear-gradient(90deg, transparent 0%, #000 38%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(180deg, #000 50%, transparent 100%), linear-gradient(90deg, transparent 0%, #000 38%);
+  mask-composite: intersect;
+  animation: moaShellDrop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 body:not(.design-page) .nav-columns {
   display: block;
   position: fixed;
-  top: 76px;
+  z-index: 45;
+  top: var(--nav-top, 66px);
   left: var(--nav-col-left, auto);
+  min-width: 200px;
+  max-height: none;
   padding: 22px 24px 28px;
+  pointer-events: auto;
+  animation: moaShellFade 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-body:not(.design-page) .nav-column { display: none; gap: 16px; }
+body:not(.design-page) .nav-column { display: none; flex-direction: column; align-items: flex-start; gap: 16px; }
 body:not(.design-page) .nav-submenu[data-column="browse"] .nav-column[data-column="browse"],
 body:not(.design-page) .nav-submenu[data-column="garage"] .nav-column[data-column="garage"],
 body:not(.design-page) .nav-submenu[data-column="owner"] .nav-column[data-column="owner"] { display: flex; }
@@ -81,35 +139,58 @@ body:not(.design-page) .nav-column h2 { display: none; }
 body:not(.design-page) .nav-submenu-item {
   padding: 0;
   color: var(--moa-ink);
+  font: inherit;
   font-size: 17px;
   font-weight: 600;
+  line-height: inherit;
   white-space: nowrap;
+  transition: color 0.2s ease;
   animation: moaShellFade 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-body:not(.design-page) .nav-submenu-item:hover { color: var(--moa-forest); background: transparent; }
-@keyframes moaShellDrop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-@keyframes moaShellFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+body:not(.design-page) .nav-submenu-item:hover,
+body:not(.design-page) .nav-submenu-item:focus-visible { color: var(--moa-green); background: transparent; text-decoration: none; }
+@keyframes moaShellDrop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+@keyframes moaShellFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-/* 오른쪽: 로그인 · 장바구니 · 내 계정. 동네 선택은 지도 화면에서만 보여요 */
-body:not(.design-page) .topbar-left { display: flex; align-items: center; gap: 10px; }
-body:not(.design-page):not([data-view="map"]) .region-picker-trigger { display: none; }
-body:not(.design-page) .login-button {
-  height: 40px;
+/* 오른쪽: 홈처럼 테두리 버튼 하나. 로그아웃이면 '로그인', 로그인하면 '마이페이지'.
+   동네 선택·장바구니 아이콘은 홈 머리말에 없어서 숨긴다. */
+body:not(.design-page) .topbar-left { display: flex; align-items: center; gap: 0; margin: 0; }
+body:not(.design-page) .region-picker-trigger,
+body:not(.design-page) #headerCartButton { display: none; }
+body:not(.design-page) .header-icon-actions { gap: 0; }
+body:not(.design-page) .login-button:not([hidden]) ~ .header-icon-actions #myPageButton { display: none; }
+body:not(.design-page) .login-button,
+body:not(.design-page) #myPageButton {
+  position: relative;
+  flex: none;
+  width: auto;
+  max-width: none;
+  height: 40px; /* 홈 버튼: 높이 38px + 위아래 테두리 1px */
+  min-height: 0;
   padding: 0 18px;
-  border: 0;
+  border: 1px solid #DDDDDD;
   border-radius: 999px;
-  background: var(--moa-ink);
-  color: #FFFFFF;
-  font-size: 14px;
-  font-weight: 700;
-}
-body:not(.design-page) .header-icon-btn {
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--moa-line);
-  border-radius: 50%;
   background: #FFFFFF;
   color: var(--moa-ink);
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transform: none;
+  transition: color 0.2s ease;
+}
+body:not(.design-page) .login-button[hidden] { display: none; }
+body:not(.design-page) .login-button:hover,
+body:not(.design-page) #myPageButton:hover { background: #FFFFFF; border-color: #DDDDDD; color: var(--moa-green); }
+body:not(.design-page) #myPageButton.active:not(:hover) { background: #FFFFFF; border-color: #DDDDDD; color: var(--moa-ink); }
+body:not(.design-page) #myPageButton svg { display: none; }
+body:not(.design-page) #myPageButton .header-auth-label { display: inline; }
+body:not(.design-page) #myPageButton .mypage-dot { top: -2px; right: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  body:not(.design-page) .nav-submenu::before,
+  body:not(.design-page) .nav-columns { animation: none !important; }
 }
 
 /* 본문 틀 */
@@ -244,16 +325,6 @@ body[data-view="garage"] .moa-tips-garage { display: grid; }
 
 /* ───────── 농기계 호환 (#garageView) ───────── */
 #garageView { max-width: 1240px; margin: 0 auto; padding-top: 56px; }
-#garageView .garage-hero {
-  background: #FFFFFF; border: 0; border-radius: 0; padding: 0 0 32px; box-shadow: none;
-}
-#garageView .garage-hero-mark { display: none; }
-#garageView .garage-eyebrow {
-  height: 30px; padding: 0 12px; border-radius: 999px; background: var(--moa-mint); color: var(--moa-forest);
-  font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; letter-spacing: 0; text-transform: none;
-}
-#garageView .garage-hero h1 { font-size: 40px; line-height: 1.25; font-weight: 800; letter-spacing: -0.035em; color: var(--moa-ink); }
-#garageView .garage-hero p { font-size: 17px; color: var(--moa-sub); }
 #garageView .garage-panel { border: 1px solid #EEEEEE; border-radius: 24px; background: #FFFFFF; box-shadow: none; padding: 26px; }
 #garageView .garage-section-title, #garageView .garage-panel h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--moa-ink); }
 #garageView .garage-tabs { background: var(--moa-gray); border-radius: 999px; padding: 4px; border: 0; }
@@ -276,7 +347,24 @@ body[data-view="map"] .main-content { padding: 0; }
   gap: 24px;
   height: calc(100dvh - 76px - 40px);
 }
+#mapView .header-map-layout.is-list-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+  gap: 0;
+}
 #mapView .header-map-list { border: 0; border-radius: 0; background: #FFFFFF; }
+#mapView .header-map-layout.is-list-collapsed .header-map-list {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  width: min(340px, calc(100% - 32px));
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+#mapView .header-map-layout.is-list-collapsed .header-map-list-head {
+  padding: 14px 16px;
+  border-bottom: 0;
+}
 #mapView .header-map-list-head { padding: 4px 0 16px; border-bottom: 0; }
 #mapView .header-map-list-title strong { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 #mapView .header-map-list-toggle { border-radius: 999px; border: 1.5px solid var(--moa-ink); background: #FFFFFF; color: var(--moa-ink); font-weight: 700; }
@@ -311,7 +399,14 @@ body[data-view="map"] .main-content { padding: 0; }
 #mapView .header-map-floating-card { border-radius: 20px; border: 0; box-shadow: 0 12px 32px rgba(0,0,0,0.18); }
 @media (max-width: 960px) {
   #mapView.header-map-view { padding: 12px 16px; }
-  #mapView .header-map-layout { grid-template-columns: 1fr; height: auto; }
+  #mapView .header-map-layout,
+  #mapView .header-map-layout.is-list-collapsed { grid-template-columns: 1fr; height: auto; gap: 16px; }
+  #mapView .header-map-layout.is-list-collapsed .header-map-list {
+    position: static;
+    width: 100%;
+    box-shadow: none;
+    border: 1px solid #EEEEEE;
+  }
   #mapView .header-map-stage { height: 60vh; }
 }
 

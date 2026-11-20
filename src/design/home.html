@@ -160,7 +160,6 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </section>
 
 <section id="search" style="position: relative">
-<sc-if value="{{ anyOpen }}" hint-placeholder-val="{{ false }}"><div onClick="{{ closePop }}" style="position: fixed; inset: 0; z-index: 30"></div></sc-if>
 
 <div style="position: relative; height: 1000px; margin-top: -312px">
 <img src="/src/design/assets/field.jpg" alt="산 아래 넓게 펼쳐진 배추밭" style="display: block; width: 100%; height: 1000px; object-fit: cover; object-position: center 45%">
@@ -176,6 +175,7 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <button type="button" role="tab" aria-selected="{{ buySel }}" onClick="{{ setBuy }}" style="position: relative; flex: 1 1 0; height: 44px; border: none; border-radius: 999px; background: transparent; font-family: inherit; font-size: 16px; font-weight: 700; color: {{ buyColor }}; cursor: pointer; transition: color 0.2s">중고 구매</button>
 </div>
 <div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">위치</span>
+<button type="button" onClick="{{ openLoc }}" aria-expanded="{{ locOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ locRing }}"><span style="color: {{ locTextColor }}">{{ locText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="#555555" stroke-width="1.6"></path><circle cx="12" cy="10.6" r="2.3" stroke="#555555" stroke-width="1.6"></circle></svg></button>
 <sc-if value="{{ locOpen }}" hint-placeholder-val="{{ false }}">
 <div style="{{ popAt }} width: 420px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 16px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 32px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
@@ -186,9 +186,13 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <div style="margin-top: 8px; padding: 14px 10px 4px; border-top: 1px solid #EEEEEE; display: flex; align-items: center; justify-content: space-between; gap: 12px"><span style="font-size: 14px; font-weight: 700">찾는 범위</span><span style="display: flex; gap: 6px"><sc-for list="{{ radii }}" as="r" hint-placeholder-count="4"><button type="button" onClick="{{ r.pick }}" style="padding: 7px 12px; border-radius: 999px; border: 1px solid {{ r.border }}; background: {{ r.bg }}; color: {{ r.color }}; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer">{{ r.label }}</button></sc-for></span></div>
 </div>
 </sc-if>
-<button type="button" onClick="{{ openLoc }}" aria-expanded="{{ locOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ locRing }}"><span style="color: {{ locTextColor }}">{{ locText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6.5-5.8 6.5-10.2A6.5 6.5 0 0 0 5.5 10.8C5.5 15.2 12 21 12 21z" stroke="#555555" stroke-width="1.6"></path><circle cx="12" cy="10.6" r="2.3" stroke="#555555" stroke-width="1.6"></circle></svg></button></div>
+</div>
 <sc-if value="{{ isRent }}" hint-placeholder-val="{{ true }}">
 <div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">날짜 · 시간</span>
+<div style="display: flex; gap: 8px">
+<button type="button" onClick="{{ openDate }}" aria-expanded="{{ dateOpen }}" style="flex: 1.35 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; box-shadow: {{ dateRing }}"><span style="color: {{ dateTextColor }}">{{ dateText }}</span></button>
+<button type="button" onClick="{{ openTime }}" aria-expanded="{{ timeOpen }}" style="flex: 1 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; box-shadow: {{ timeRing }}"><span style="color: {{ timeTextColor }}">{{ timeShow }}</span></button>
+</div>
 <sc-if value="{{ timeOpen }}" hint-placeholder-val="{{ false }}">
 <div style="{{ popAt }} width: 620px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 24px 28px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 210px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
@@ -227,13 +231,10 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid #EEEEEE"><span></span><span style="display: flex; gap: 8px"><button type="button" onClick="{{ resetDate }}" style="padding: 7px 18px; border: none; border-radius: 12px; background: transparent; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">초기화</button><button type="button" onClick="{{ applyDate }}" style="padding: 7px 22px; border: none; border-radius: 12px; background: #111111; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">적용</button></span></div>
 </div>
 </sc-if>
-<div style="display: flex; gap: 8px">
-<button type="button" onClick="{{ openDate }}" aria-expanded="{{ dateOpen }}" style="flex: 1.35 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; box-shadow: {{ dateRing }}"><span style="color: {{ dateTextColor }}">{{ dateText }}</span></button>
-<button type="button" onClick="{{ openTime }}" aria-expanded="{{ timeOpen }}" style="flex: 1 1 0; min-width: 0; height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 14px; display: flex; align-items: center; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; box-shadow: {{ timeRing }}"><span style="color: {{ timeTextColor }}">{{ timeShow }}</span></button>
-</div>
 </div>
 </sc-if>
 <div style="position: relative; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 13px; font-weight: 500; color: #555555">작업</span>
+<button type="button" onClick="{{ openTask }}" aria-expanded="{{ taskOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ taskRing }}"><span style="color: {{ taskTextColor }}">{{ taskText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#555555" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
 <sc-if value="{{ taskOpen }}" hint-placeholder-val="{{ false }}">
 <div style="{{ popAt }} width: 400px; box-sizing: border-box; background: #FFFFFF; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); padding: 22px">
 <span aria-hidden="true" style="display: {{ arrowDisp }}; position: absolute; top: -7px; left: 32px; width: 14px; height: 14px; background: #FFFFFF; transform: rotate(45deg); border-radius: 3px 0 0 0"></span>
@@ -242,7 +243,7 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #EEEEEE; font-size: 14px; color: #555555">모르면 <b style="color: #111111; text-decoration: underline">농농이에게 물어보기</b></div>
 </div>
 </sc-if>
-<button type="button" onClick="{{ openTask }}" aria-expanded="{{ taskOpen }}" style="height: 50px; border: none; border-radius: 12px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 15px; font-weight: 500; color: #111111; cursor: pointer; box-shadow: {{ taskRing }}"><span style="color: {{ taskTextColor }}">{{ taskText }}</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#555555" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div>
+</div>
 <a href="#search" data-cta="" onClick="{{ doSearch }}" style="height: 52px; border-radius: 12px; background: #1E9B4B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 700; text-decoration: none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="#FFFFFF" stroke-width="2"></circle><path d="M16 16l4.5 4.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg>농기계 찾기</a>
 </div>
 <div style="flex: 1 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
@@ -267,6 +268,8 @@ nav[aria-label="주 메뉴"] a[aria-expanded="true"]{box-shadow:inset 0 -2px 0 #
 </div>
 </div>
 </div>
+<!-- 런타임은 형제 순서(번호)로 바뀐 곳을 맞춰요. 열고 닫히는 팝업을 버튼 앞에 두면 뒤 요소가 통째로 다시 만들어져 화면이 새로고침처럼 깜빡여요. 그래서 팝업은 늘 맨 뒤에 둬요. -->
+<sc-if value="{{ anyOpen }}" hint-placeholder-val="{{ false }}"><div onClick="{{ closePop }}" style="position: fixed; inset: 0; z-index: 30"></div></sc-if>
 </section>
 
 <section style="max-width: 1200px; margin: 0 auto; padding: 96px 24px 120px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; padding-top: 1px; padding-bottom: 192px">

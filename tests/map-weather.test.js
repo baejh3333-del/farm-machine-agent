@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { REGION_COORDS, listingCoords, distanceKm } from "../src/data/farm-machines.js";
 import { KOREA_REGIONS, latLngToKmaGrid, getRegionCoords, findNearestRegion } from "../src/data/korea-regions.js";
 import { getWeatherAndMapConfig } from "../server/weather.js";
-import { runtime } from "../src/core/store.js";
+import { DEFAULT_FALLBACK_REGION, runtime, state } from "../src/core/store.js";
 import {
   CLUSTER_SCALE_THRESHOLD_METERS,
   HEADER_CLUSTER_STEPS,
@@ -270,4 +270,11 @@ test("25m 축척 경계까지는 개별 매물을 유지하고 25m 초과 축소
 
   const fallbackOnlyMap = { getLevel: () => 2 };
   assert.equal(measureMapScaleMeters(fallbackOnlyMap, { clientWidth: 0 }), 50);
+});
+
+test("초기 기본 지역은 수도권(경기도 이천시)이고 가짜 기본 GPS 좌표는 넣지 않는다", () => {
+  assert.equal(DEFAULT_FALLBACK_REGION, "경기도 이천시");
+  assert.equal(state.region, "경기도 이천시");
+  assert.equal(state.regionSource, "default");
+  assert.equal(state.userCoords, null);
 });

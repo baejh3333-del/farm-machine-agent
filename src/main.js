@@ -11,6 +11,7 @@ import {
   state, runtime, blankFilters, persist, apiFetch, allListings, listingById,
   isLoggedIn, activeFavorites, stopChatPolling, bumpAuthEpoch,
   resetAccountRuntimeState, saveGuestFavorites, readGuestFavorites, clearGuestFavorites,
+  DEFAULT_FALLBACK_REGION,
 } from "./core/store.js";
 import {
   initBannerCarousel, initAutoChoreography, trackHeaderHeight,
@@ -639,9 +640,12 @@ function bindEvents() {
     syncRegionSelect(state.region);
   };
 
-  const applyRegionSelection = (nextRegion, { coords = null, notice = "" } = {}) => {
-    state.region = nextRegion;
+  const INITIAL_GPS_SESSION_KEY = "moa-initial-gps-checked";
+
+  const applyRegionSelection = (nextRegion, { coords = null, source = null, notice = "" } = {}) => {
+    state.region = nextRegion || DEFAULT_FALLBACK_REGION;
     state.userCoords = coords;
+    state.regionSource = source || (coords ? "gps" : "manual");
     runtime.userCoords = coords;
     persist(updateBadges);
     updateRegionPickerTrigger();
@@ -654,6 +658,7 @@ function bindEvents() {
     const next = event.target.value;
     applyRegionSelection(next, {
       coords: null,
+      source: "manual",
       notice: `내 동네가 '${next}'(으)로 설정되었습니다.`,
     });
   });
@@ -745,6 +750,7 @@ function bindEvents() {
         closeRegionPicker();
         applyRegionSelection(chosen, {
           coords: null,
+          source: "manual",
           notice: `내 동네가 '${chosen}'(으)로 설정되었습니다.`,
         });
       });
@@ -798,47 +804,92 @@ function bindEvents() {
     if (event.target === regionDialog) closeRegionPicker();
   });
 
-  gpsBtn?.addEventListener("click", () => {
-    if (!navigator.geolocation) {
-      toast("이 브라우저에서는 위치(GPS) 기능을 지원하지 않습니다.");
-      return;
-    }
+  const requestGpsAndApply = ({ silentOnError = false } = {}) =>
+    new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        if (!silentOnError) toast("이 브라우저에서는 위치(GPS) 기능을 지원하지 않습니다.");
+        resolve(false);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            ...(Number.isFinite(pos.coords.accuracy) ? { accuracy: Math.round(pos.coords.accuracy) } : {}),
+            source: "gps",
+          };
+          const nearest = findNearestRegion(coords.lat, coords.lng);
+          const regionName = nearest?.name || state.region || DEFAULT_FALLBACK_REGION;
+          try {
+            sessionStorage.setItem(INITIAL_GPS_SESSION_KEY, "granted");
+          } catch {}
+          applyRegionSelection(regionName, {
+            coords,
+            source: "gps",
+            notice: `현재 GPS 위치(${regionName}) 기준으로 설정되었습니다.`,
+          });
+          resolve(true);
+        },
+        (err) => {
+          try {
+            sessionStorage.setItem(INITIAL_GPS_SESSION_KEY, "denied");
+          } catch {}
+          if (silentOnError) {
+            if (state.regionSource === "default") {
+              state.region = DEFAULT_FALLBACK_REGION;
+              state.userCoords = null;
+              runtime.userCoords = null;
+              updateRegionPickerTrigger();
+              renderAll();
+              refreshWeatherAndMapConfig({ onUpdate: () => catalogViews.renderListings() });
+            }
+          } else if (err?.code === 1) {
+            toast("위치 접근 권한이 거부되었습니다. 시/도를 직접 선택해 주세요.");
+          } else if (err?.code === 3) {
+            toast("위치 확인 시간이 초과되었습니다. 시/도를 직접 선택해 주세요.");
+          } else {
+            toast("현재 위치를 가져오지 못했습니다. 시/도를 직접 선택해 주세요.");
+          }
+          resolve(false);
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    });
+
+  gpsBtn?.addEventListener("click", async () => {
     gpsBtn.disabled = true;
     gpsBtn.textContent = "📍 현재 위치 확인 중...";
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        gpsBtn.disabled = false;
-        gpsBtn.textContent = "📍 내 위치로 자동 설정 (GPS)";
-        const coords = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          ...(Number.isFinite(pos.coords.accuracy) ? { accuracy: Math.round(pos.coords.accuracy) } : {}),
-          source: "gps",
-        };
-        const nearest = findNearestRegion(coords.lat, coords.lng);
-        const regionName = nearest?.name || state.region;
-        closeRegionPicker();
-        applyRegionSelection(regionName, {
-          coords,
-          notice: `현재 GPS 위치(${regionName}) 기준으로 설정되었습니다.`,
-        });
-      },
-      (err) => {
-        gpsBtn.disabled = false;
-        gpsBtn.textContent = "📍 내 위치로 자동 설정 (GPS)";
-        if (err?.code === 1) {
-          toast("위치 접근 권한이 거부되었습니다. 시/도를 직접 선택해 주세요.");
-        } else if (err?.code === 3) {
-          toast("위치 확인 시간이 초과되었습니다. 시/도를 직접 선택해 주세요.");
-        } else {
-          toast("현재 위치를 가져오지 못했습니다. 시/도를 직접 선택해 주세요.");
-        }
-      },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-    );
+    const ok = await requestGpsAndApply({ silentOnError: false });
+    gpsBtn.disabled = false;
+    gpsBtn.textContent = "📍 내 위치로 자동 설정 (GPS)";
+    if (ok) closeRegionPicker();
   });
 
   updateRegionPickerTrigger();
+
+  const maybePromptInitialGps = async () => {
+    if (state.regionSource !== "default") return;
+    let sessionChecked = "";
+    try {
+      sessionChecked = sessionStorage.getItem(INITIAL_GPS_SESSION_KEY) || "";
+    } catch {}
+    if (sessionChecked) return;
+
+    if (navigator.permissions?.query) {
+      try {
+        const perm = await navigator.permissions.query({ name: "geolocation" });
+        if (perm.state === "denied") {
+          try {
+            sessionStorage.setItem(INITIAL_GPS_SESSION_KEY, "denied");
+          } catch {}
+          return;
+        }
+      } catch {}
+    }
+
+    await requestGpsAndApply({ silentOnError: true });
+  };
 
   // 상단 빠른 검색바 연동
   $("searchInput").addEventListener("input", () => catalogViews.renderListings());
@@ -1291,6 +1342,8 @@ function bindEvents() {
   document.querySelectorAll('[data-action="favorites"]:not([data-view])').forEach((button) => {
     button.addEventListener("click", () => setView("favorites"));
   });
+
+  return { maybePromptInitialGps };
 }
 
 // 초기 상태 동기화
@@ -1680,7 +1733,7 @@ $("detailContent").addEventListener("click", (event) => {
 });
 headerNav.bind();
 cartCheckout.bind();
-bindEvents();
+const { maybePromptInitialGps } = bindEvents();
 syncServerTime().then(() => { catalogViews.syncQuickSearchInputs(); renderAll(); });
 trackHeaderHeight();
 $("brandHome")?.addEventListener("click", () => setView("home"));
@@ -1694,6 +1747,9 @@ dealsView.bind();
   if (initialDeals) setView("deals", { ...initialDeals, fromHistory: true });
   else if (new URLSearchParams(location.search).get("view") === "map") setView("map");
   else setView("home");
+}
+if (state.view === "home") {
+  void maybePromptInitialGps();
 }
 window.addEventListener("popstate", () => {
   const target = parseDealsHash(location.hash);
